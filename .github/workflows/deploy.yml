@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,10 +34,3 @@ jobs:
           tag_name: latest
           name: latest
           files: dist.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Trigger deploy
-        run: |
-          curl -X POST https://tnservice.vn/webhook.php \
-          -H "X-Github-Secret: tnservice_secret_key"
