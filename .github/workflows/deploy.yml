@@ -24,14 +24,12 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      - name: Deploy via SFTP
+        uses: appleboy/scp-action@v0.1.7
         with:
-          server: wayland.maychu.cloud
+          host: wayland.maychu.cloud
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          port: 21
-          security: loose
-          local-dir: ./dist/
-          server-dir: ./domains/tnservice.vn/public_html/
+          port: 22
+          source: "dist/*"
+          target: "/home/tnservic69a7/domains/tnservice.vn/public_html"
