@@ -32,5 +32,6 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           port: 21
-          local-dir: dist/
-          server-dir: domains/tnservice.vn/public_html/
+          security: loose
+          local-dir: ./dist/
+          server-dir: ./domains/tnservice.vn/public_html/
