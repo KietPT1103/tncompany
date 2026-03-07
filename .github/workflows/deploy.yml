@@ -33,4 +33,4 @@ jobs:
           protocol: ftps
           port: 21
           local-dir: dist/
-          server-dir: /domains/tnservice.vn/public_html/
+          server-dir: domains/tnservice.vn/public_html/
