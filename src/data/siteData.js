@@ -293,4 +293,4 @@ export const venuesById = venues.reduce((accumulator, venue) => {
 export const routeByHash = pages.reduce((accumulator, page) => {
   accumulator[page.hash] = page.id;
   return accumulator;
-}, {});
+}, {}); 
