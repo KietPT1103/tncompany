@@ -251,6 +251,11 @@ a {
   font-size: clamp(1.8rem, 3.6vw, 2.7rem);
   line-height: 1.08;
   font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+  text-wrap: balance;
+}
+
+.keep-together {
+  white-space: nowrap;
 }
 
 .home-copy {
@@ -601,48 +606,95 @@ a {
   border-radius: 20px;
   overflow: hidden;
   border: 1px solid var(--line);
-  background: linear-gradient(145deg, var(--accent-soft), var(--accent));
+  background: #17110d;
   position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0.35rem;
 }
 
 .hero-image-shell img {
-  position: absolute;
-  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transition: transform 0.5s ease;
+  object-fit: contain;
+  transition: transform 0.35s ease;
 }
 
 .hero-image-shell:hover img {
-  transform: scale(1.05);
+  transform: scale(1.03);
 }
 
-.hero-image-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(20, 13, 9, 0.76), rgba(20, 13, 9, 0.08));
+.hero-image-meta {
+  margin-top: 0.72rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.72rem;
 }
 
-.hero-image-copy {
-  position: absolute;
-  left: 1rem;
-  right: 1rem;
-  bottom: 1rem;
-  color: #fff6e9;
-}
-
-.hero-image-copy p {
+.hero-image-meta p {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
 }
 
-.hero-image-copy h2 {
-  margin: 0.38rem 0 0;
-  font-size: clamp(1.25rem, 3vw, 1.7rem);
+.hero-image-meta h2 {
+  margin: 0.32rem 0 0;
+  font-size: clamp(1.05rem, 2.3vw, 1.35rem);
+  line-height: 1.35;
+  color: var(--ink);
   font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+}
+
+.media-clickable {
+  cursor: zoom-in;
+}
+
+.media-blur-backdrop {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: blur(22px) saturate(1.08);
+  transform: scale(1.08);
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.media-blur-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 12, 9, 0.24);
+}
+
+.media-image-frame {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-chip {
+  position: absolute;
+  right: 0.55rem;
+  top: 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(22, 15, 10, 0.68);
+  color: #fff9f1;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.24rem 0.5rem;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .stats-grid {
@@ -748,22 +800,37 @@ a {
 .carousel-slide {
   min-width: 100%;
   padding: 0.9rem;
+  display: grid;
+  align-content: start;
+  gap: 0.72rem;
 }
 
 .slide-media {
-  min-height: 340px;
+  height: clamp(320px, 42vw, 520px);
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--line);
   position: relative;
+  isolation: isolate;
+  background: #17110d;
+  display: grid;
+  place-items: center;
+}
+
+.slide-media .media-image-frame {
+  width: calc(100% - 0.7rem);
+  height: calc(100% - 0.7rem);
+  overflow: hidden;
 }
 
 .slide-media img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none;
+  max-height: none;
+  object-fit: contain !important;
+  object-position: center;
 }
 
 .tone-cafe {
@@ -779,16 +846,66 @@ a {
 }
 
 .slide-heading {
-  margin: 0.72rem 0 0;
+  margin: 0;
   font-size: clamp(1rem, 2.5vw, 1.3rem);
   color: var(--ink);
   font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+  min-height: calc(1.3em * 2);
 }
 
 .slide-description {
-  margin: 0.42rem 0 0;
+  margin: 0;
   color: var(--muted);
   line-height: 1.66;
+  min-height: calc(1.66em * 2);
+}
+
+.intro-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.intro-card {
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 0.82rem;
+}
+
+.intro-media {
+  min-height: 240px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  position: relative;
+  background: #17110d;
+  padding: 0.28rem;
+}
+
+.intro-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.35s ease;
+}
+
+.intro-media:hover img {
+  transform: scale(1.03);
+}
+
+.intro-card h3 {
+  margin: 0.72rem 0 0;
+  font-size: 1.02rem;
+  font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+}
+
+.intro-card p {
+  margin: 0.45rem 0 0;
+  line-height: 1.6;
+  color: var(--muted);
 }
 
 .carousel-controls {
@@ -946,6 +1063,55 @@ a {
   box-shadow: 0 9px 20px rgba(50, 30, 19, 0.27);
 }
 
+.lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 10, 8, 0.82);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.lightbox-panel {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 2rem);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(8, 6, 5, 0.94);
+  padding: 0.8rem;
+  position: relative;
+  display: grid;
+  gap: 0.58rem;
+}
+
+.lightbox-panel img {
+  width: 100%;
+  max-height: calc(100vh - 9rem);
+  object-fit: contain;
+}
+
+.lightbox-panel p {
+  margin: 0;
+  color: #f5ebdf;
+  font-weight: 600;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 0.32rem;
+  right: 0.32rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(10, 7, 6, 0.78);
+  color: #fff;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .site-footer {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
@@ -996,6 +1162,10 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .intro-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .hero-block {
     grid-template-columns: 1fr;
   }
@@ -1028,6 +1198,7 @@ a {
   .home-business-grid,
   .home-ecosystem-grid,
   .home-legal-grid,
+  .intro-grid,
   .zone-grid,
   .ecosystem-grid {
     grid-template-columns: 1fr;
@@ -1054,7 +1225,11 @@ a {
   }
 
   .slide-media {
-    min-height: 260px;
+    height: clamp(240px, 56vw, 320px);
+  }
+
+  .intro-media {
+    min-height: 220px;
   }
 
   .carousel-controls {
