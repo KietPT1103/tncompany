@@ -1,8 +1,8 @@
 # T&N Company Landing Page (React + Vite)
 
-Landing page gi?i thi?u c�ng ty **C�ng ty TNHH Thuong m?i D?ch v? �?u tu T?ng h?p T-N**.
+Landing page giới thiệu công ty **Công ty TNHH Thương mại Dịch vụ đầu tư Tổng hợp T-N**.
 
-## Ch?y d? �n
+## Chạy dự án
 
 ```bash
 npm install
