@@ -199,7 +199,7 @@ export const venues = [
       "Ông Quan Farm là điểm tham quan dành cho gia đình, nhóm bạn và khách chụp ảnh, nổi bật với nhiều loài thú, các góc check-in và trải nghiệm ngoài trời gần gũi thiên nhiên.",
     address: "267 Đường 30/4, Ninh Kiều, Cần Thơ",
     time: "07:00 - 17:30",
-    contact: "0917 808 226 7899111",
+    contact: "0917 808 226 - 093 997 65 65",
     stats: [
       { label: "Loài thú nổi bật", value: "10+" },
       { label: "Điểm check-in", value: "Nhiều khu" },
