@@ -1,15 +1,6 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getApps, initializeApp } from "firebase/app";
-import {
-  createUserWithEmailAndPassword,
-  getAuth,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, db, firebaseConfigReady, firebaseEnv } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -20,7 +11,9 @@ import {
   Tractor,
   UtensilsCrossed,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { useStore, StoreType } from "@/context/StoreContext";
+import { loginApi, seedDefaultUsersApi, setApiToken } from "@/lib/api";
 
 const CASHIER_ACCOUNTS = ["thungan1", "thungan2", "thungan3"] as const;
 const SERVICE_ACCOUNTS = ["phucvu1"] as const;
@@ -41,17 +34,6 @@ const isAdminAccount = (value: string): value is AdminAccount =>
 const cashierToEmail = (cashier: string) => `${cashier}@cashier.local`;
 const serviceToEmail = (account: string) => `${account}@service.local`;
 const adminToEmail = (account: string) => `${account}@admin.local`;
-const getErrorCode = (error: unknown) => {
-  if (typeof error === "object" && error && "code" in error) {
-    const code = (error as { code?: unknown }).code;
-    return typeof code === "string" ? code : "";
-  }
-  return "";
-};
-const isBootstrapCreateCandidateError = (code: string) =>
-  code === "auth/user-not-found" ||
-  code === "auth/invalid-credential" ||
-  code === "auth/invalid-login-credentials";
 
 export default function LoginPage() {
   const [account, setAccount] = useState("");
@@ -64,6 +46,7 @@ export default function LoginPage() {
   const [seedError, setSeedError] = useState("");
   const quickActionRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const { setStoreId } = useStore();
   const [selectedStore, setSelectedStore] = useState<StoreType>("cafe");
 
@@ -121,110 +104,13 @@ export default function LoginPage() {
     setIsSeedingAccounts(true);
 
     try {
-      if (!firebaseConfigReady) {
-        throw new Error("Thiếu biến môi trường Firebase để thêm tài khoản.");
-      }
-
-      const bootstrapAppName = "__manual-auth-bootstrap__";
-      const bootstrapApp =
-        getApps().find((app) => app.name === bootstrapAppName) ||
-        initializeApp(
-          {
-            apiKey: firebaseEnv.apiKey,
-            authDomain: firebaseEnv.authDomain,
-            projectId: firebaseEnv.projectId,
-            storageBucket: firebaseEnv.storageBucket,
-            messagingSenderId: firebaseEnv.messagingSenderId,
-            appId: firebaseEnv.appId,
-          },
-          bootstrapAppName
-        );
-
-      const bootstrapAuth = getAuth(bootstrapApp);
-      const defaultAccounts = [
-        ...CASHIER_ACCOUNTS.map((username) => ({
-          username,
-          role: "user" as const,
-          email: cashierToEmail(username),
-          password: username,
-        })),
-        ...ADMIN_ACCOUNTS.map((username) => ({
-          username,
-          role: "admin" as const,
-          email: adminToEmail(username),
-          password: ADMIN_DEFAULT_PASSWORD,
-        })),
-      ];
-
-      let createdCount = 0;
-      let updatedCount = 0;
-      let skippedCount = 0;
-
-      for (const entry of defaultAccounts) {
-        let userCredential;
-        let created = false;
-
-        try {
-          userCredential = await signInWithEmailAndPassword(
-            bootstrapAuth,
-            entry.email,
-            entry.password
-          );
-        } catch (error: unknown) {
-          const code = getErrorCode(error);
-          if (!isBootstrapCreateCandidateError(code)) {
-            skippedCount += 1;
-            continue;
-          }
-
-          try {
-            userCredential = await createUserWithEmailAndPassword(
-              bootstrapAuth,
-              entry.email,
-              entry.password
-            );
-            created = true;
-          } catch (createError: unknown) {
-            if (getErrorCode(createError) === "auth/email-already-in-use") {
-              skippedCount += 1;
-              continue;
-            }
-            throw createError;
-          }
-        }
-
-        if (!userCredential?.user) {
-          skippedCount += 1;
-          continue;
-        }
-
-        await setDoc(
-          doc(db, "users", userCredential.user.uid),
-          {
-            role: entry.role,
-            username: entry.username,
-            displayName: entry.username,
-            email: entry.email,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        if (created) {
-          createdCount += 1;
-        } else {
-          updatedCount += 1;
-        }
-      }
-
-      await signOut(bootstrapAuth).catch(() => undefined);
-
+      const result = await seedDefaultUsersApi();
       setSeedResultMessage(
-        `Đã xử lý 4 tài khoản mặc định: tạo mới ${createdCount}, cập nhật ${updatedCount}, bỏ qua ${skippedCount}.`
+        `Đã xử lý ${result.total} tài khoản mặc định: tạo mới ${result.createdCount}, cập nhật ${result.updatedCount}.`
       );
     } catch (seedErr: unknown) {
       console.error(seedErr);
-      setSeedError("Không thể thêm tài khoản mặc định. Vui lòng kiểm tra Firebase.");
+      setSeedError("Không thể thêm tài khoản mặc định. Hãy kiểm tra API và MySQL.");
     } finally {
       setIsSeedingAccounts(false);
     }
@@ -234,12 +120,6 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
-    if (!firebaseConfigReady || !auth || !db) {
-      setError("Thiếu cấu hình Firebase. Hãy thêm biến môi trường trước khi đăng nhập.");
-      setLoading(false);
-      return;
-    }
 
     const rawAccount = account.trim();
     const rawPassword = password.trim();
@@ -254,13 +134,7 @@ export default function LoginPage() {
     const isValidAdminPassword = adminLogin && rawPassword === ADMIN_DEFAULT_PASSWORD;
 
     if (isUsernameStaffLogin && !isValidPassword && !isValidAdminPassword) {
-      setError(
-        serviceLogin
-          ? "Mật khẩu hoặc tên đăng nhập sai."
-          : adminLogin
-          ? "Mật khẩu hoặc tên đăng nhập sai."
-          : "Mật khẩu hoặc tên đăng nhập sai."
-      );
+      setError("Mật khẩu hoặc tên đăng nhập sai.");
       setLoading(false);
       return;
     }
@@ -274,26 +148,9 @@ export default function LoginPage() {
       : rawAccount;
 
     try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        loginEmail,
-        rawPassword
-      );
-
-      if (isUsernameStaffLogin && userCredential?.user) {
-        await setDoc(
-          doc(db, "users", userCredential.user.uid),
-          {
-            role: serviceLogin ? "server" : adminLogin ? "admin" : "user",
-            username: normalizedAccount,
-            displayName: rawAccount || normalizedAccount,
-            email: loginEmail,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-      }
-
+      const { token } = await loginApi(loginEmail, rawPassword);
+      setApiToken(token);
+      await refreshUser();
       setStoreId(serviceLogin ? "restaurant" : selectedStore);
       router.push("/");
     } catch (err: unknown) {
@@ -324,10 +181,10 @@ export default function LoginPage() {
               disabled={isSeedingAccounts}
               className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-gray-800 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-100 dark:hover:bg-slate-800"
             >
-              {isSeedingAccounts ? "Đang thêm tài khoản..." : "Thêm 4 tài khoản mặc định"}
+              {isSeedingAccounts ? "Đang thêm tài khoản..." : "Thêm tài khoản mặc định"}
             </button>
             <p className="px-3 pb-1 pt-2 text-xs text-gray-500 dark:text-slate-400">
-              Bao gồm: thungan1, thungan2, thungan3, admin
+              Bao gồm: thungan1, thungan2, thungan3, phucvu1, admin
             </p>
           </div>
         )}
@@ -410,18 +267,8 @@ export default function LoginPage() {
                 {seedResultMessage}
               </div>
             )}
-            {!firebaseConfigReady && (
-              <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-700">
-                Thiếu cấu hình Firebase. Cần khai báo `VITE_FIREBASE_*` hoặc `NEXT_PUBLIC_FIREBASE_*`.
-              </div>
-            )}
 
-            <Button
-              type="submit"
-              className="w-full"
-              isLoading={loading}
-              disabled={!firebaseConfigReady}
-            >
+            <Button type="submit" className="w-full" isLoading={loading}>
               Đăng nhập vào {stores.find((s) => s.id === selectedStore)?.label}
             </Button>
           </form>

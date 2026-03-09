@@ -1,16 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getReports, Report, updateReport } from "@/services/reportService";
+import {
+  getReports,
+  reportDateToDate,
+  Report,
+  updateReport,
+} from "@/services/reportService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import Link from "next/link";
-import { ArrowLeft, FileText, Search, Calendar, Pencil, Check, X, CheckCircle2, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  Search,
+  Pencil,
+  Check,
+  X,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-
 import RoleGuard from "@/components/RoleGuard";
-
-import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 
 export default function ReportsPage() {
@@ -84,36 +95,28 @@ export default function ReportsPage() {
 
   return (
     <RoleGuard allowedRoles={["admin"]}>
-      <main className="min-h-screen bg-gray-50 p-6 md:p-12 font-sans text-slate-800">
-        <div className="max-w-6xl mx-auto space-y-6">
-          {/* Header */}
-          <div className="flex items-center gap-4 mb-8">
+      <main className="min-h-screen bg-gray-50 p-6 font-sans text-slate-800 md:p-12">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="mb-8 flex items-center gap-4">
             <Link
               href="/"
-              className="p-2 rounded-full hover:bg-white bg-white/50 transition-colors text-gray-600 shadow-sm"
+              className="rounded-full bg-white/50 p-2 text-gray-600 shadow-sm transition-colors hover:bg-white"
               title="Trở về trang chủ"
             >
-              <ArrowLeft className="w-6 h-6" />
+              <ArrowLeft className="h-6 w-6" />
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Lịch sử báo cáo
-              </h1>
-              <p className="text-muted-foreground">
-                Xem lại các bảng tính chi phí đã lưu
-              </p>
+              <h1 className="text-3xl font-bold text-gray-900">Lịch sử báo cáo</h1>
+              <p className="text-muted-foreground">Xem lại các bảng tính chi phí đã lưu</p>
             </div>
           </div>
 
-          {/* Filters */}
           <Card>
-            <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-end">
+            <CardContent className="flex flex-col items-end gap-4 p-4 md:flex-row">
               <div className="w-full md:w-1/3">
-                <label className="text-sm font-medium mb-1 block">
-                  Tìm kiếm tên file
-                </label>
+                <label className="mb-1 block text-sm font-medium">Tìm kiếm tên file</label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                   <Input
                     className="pl-9"
                     placeholder="Nhập tên file..."
@@ -124,9 +127,7 @@ export default function ReportsPage() {
               </div>
 
               <div className="w-full md:w-auto">
-                <label className="text-sm font-medium mb-1 block">
-                  Từ ngày
-                </label>
+                <label className="mb-1 block text-sm font-medium">Từ ngày</label>
                 <Input
                   type="date"
                   value={startDate}
@@ -135,9 +136,7 @@ export default function ReportsPage() {
               </div>
 
               <div className="w-full md:w-auto">
-                <label className="text-sm font-medium mb-1 block">
-                  Đến ngày
-                </label>
+                <label className="mb-1 block text-sm font-medium">Đến ngày</label>
                 <Input
                   type="date"
                   value={endDate}
@@ -147,18 +146,17 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          {/* List */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
+                <FileText className="h-5 w-5 text-blue-600" />
                 Danh sách báo cáo ({filteredReports.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-y">
+                  <thead className="border-y bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left font-medium text-gray-500">
                         Ngày tạo
@@ -186,16 +184,13 @@ export default function ReportsPage() {
                   <tbody className="divide-y">
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center">
+                        <td colSpan={7} className="px-6 py-8 text-center">
                           Đang tải dữ liệu...
                         </td>
                       </tr>
                     ) : filteredReports.length === 0 ? (
                       <tr>
-                        <td
-                          colSpan={6}
-                          className="px-6 py-8 text-center text-gray-500"
-                        >
+                        <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                           Không tìm thấy báo cáo nào
                         </td>
                       </tr>
@@ -203,14 +198,10 @@ export default function ReportsPage() {
                       filteredReports.map((r) => (
                         <tr
                           key={r.id}
-                          className="hover:bg-gray-50/80 transition-colors group"
+                          className="group transition-colors hover:bg-gray-50/80"
                         >
                           <td className="px-6 py-4 text-gray-500">
-                            {r.createdAt?.seconds
-                              ? new Date(
-                                  r.createdAt.seconds * 1000
-                                ).toLocaleString("vi-VN")
-                              : "N/A"}
+                            {reportDateToDate(r.createdAt)?.toLocaleString("vi-VN") || "N/A"}
                           </td>
                           <td className="px-6 py-4 font-medium text-gray-900">
                             {editingId === r.id ? (
@@ -222,39 +213,35 @@ export default function ReportsPage() {
                                 />
                                 <Button
                                   size="icon"
-                                  className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  className="h-8 w-8 text-green-600 hover:bg-green-50 hover:text-green-700"
                                   variant="ghost"
                                   onClick={() => r.id && saveEdit(r.id)}
                                 >
-                                  <Check className="w-4 h-4" />
+                                  <Check className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   size="icon"
-                                  className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
                                   variant="ghost"
                                   onClick={() => setEditingId(null)}
                                 >
-                                  <X className="w-4 h-4" />
+                                  <X className="h-4 w-4" />
                                 </Button>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-2 group/edit">
+                              <div className="group/edit flex items-center gap-2">
                                 <span>{r.fileName}</span>
                                 <button
                                   onClick={() => startEdit(r)}
-                                  className="opacity-0 group-hover/edit:opacity-100 transition-opacity text-gray-400 hover:text-blue-600"
+                                  className="text-gray-400 opacity-0 transition-opacity group-hover/edit:opacity-100 hover:text-blue-600"
                                 >
-                                  <Pencil className="w-3 h-3" />
+                                  <Pencil className="h-3 w-3" />
                                 </button>
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            {r.revenue.toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            {r.totalCost.toLocaleString()}
-                          </td>
+                          <td className="px-6 py-4 text-right">{r.revenue.toLocaleString()}</td>
+                          <td className="px-6 py-4 text-right">{r.totalCost.toLocaleString()}</td>
                           <td
                             className={`px-6 py-4 text-right font-semibold ${
                               r.profit >= 0 ? "text-green-600" : "text-red-600"
@@ -265,13 +252,13 @@ export default function ReportsPage() {
                           <td className="px-6 py-4 text-center">
                             <button
                               onClick={() => handleToggleCashFlow(r)}
-                              className="text-gray-400 hover:text-emerald-600 transition-colors"
+                              className="text-gray-400 transition-colors hover:text-emerald-600"
                               title="Bật/tắt tính vào dòng tiền"
                             >
                               {r.includeInCashFlow !== false ? (
-                                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                               ) : (
-                                <XCircle className="w-5 h-5" />
+                                <XCircle className="h-5 w-5" />
                               )}
                             </button>
                           </td>

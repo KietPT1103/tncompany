@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { getReports, Report } from "@/services/reportService";
+import { getReports, reportDateToDate, Report } from "@/services/reportService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import Link from "next/link";
 import { ArrowLeft, BarChart3, Printer, X, Check, Calendar, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 
-import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 
 import RoleGuard from "@/components/RoleGuard";
@@ -98,8 +97,8 @@ export default function CashFlowPage() {
       // Skip if not included in cash flow
       if (r.includeInCashFlow === false) return;
 
-      if (!r.createdAt?.seconds) return;
-      const date = new Date(r.createdAt.seconds * 1000);
+      const date = reportDateToDate(r.createdAt);
+      if (!date) return;
       const month = date.getMonth(); // 0-11
       const quarterIndex = Math.floor(month / 3);
 

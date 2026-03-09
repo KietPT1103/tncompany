@@ -1,93 +1,66 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { User, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db, firebaseConfigReady } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
+import { clearApiToken, fetchCurrentUser, logoutApi } from "@/lib/api";
+import { AppUser, UserRole } from "@/types/auth";
 
-type Role = "admin" | "user" | "server";
-
-const inferRoleFromEmail = (email?: string | null): Role => {
-  const normalized = (email || "").trim().toLowerCase();
-  if (normalized.endsWith("@service.local")) return "server";
-  if (normalized.endsWith("@cashier.local")) return "user";
-  return "user";
-};
-
-interface AuthContextType {
-  user: User | null;
-  role: Role | null;
+type AuthContextType = {
+  user: AppUser | null;
+  role: UserRole | null;
   loading: boolean;
+  refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
-}
+};
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
   loading: true,
+  refreshUser: async () => {},
   logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<Role | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    if (!firebaseConfigReady || !auth || !db) {
+  const refreshUser = async () => {
+    try {
+      setLoading(true);
+      const { user: currentUser } = await fetchCurrentUser();
+      setUser(currentUser);
+      setRole(currentUser.role);
+    } catch {
+      clearApiToken();
       setUser(null);
       setRole(null);
+    } finally {
       setLoading(false);
-      return undefined;
     }
+  };
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setLoading(true);
-      if (currentUser) {
-        setUser(currentUser);
-        try {
-          // Fetch role from Firestore
-          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-          if (userDoc.exists()) {
-            const storedRole = userDoc.data().role;
-            if (storedRole === "admin" || storedRole === "user" || storedRole === "server") {
-              setRole(storedRole);
-            } else {
-              setRole(inferRoleFromEmail(currentUser.email));
-            }
-          } else {
-            // Fallback by account identity if user document is not ready yet.
-            console.log("No user document found, inferring role from account email");
-            setRole(inferRoleFromEmail(currentUser.email));
-          }
-        } catch (error) {
-          console.error("Error fetching user role:", error);
-          setRole(inferRoleFromEmail(currentUser.email));
-        }
-      } else {
-        setUser(null);
-        setRole(null);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+  useEffect(() => {
+    refreshUser();
   }, []);
 
   const logout = async () => {
-    if (!auth) {
-      router.push("/login");
-      return;
+    try {
+      await logoutApi();
+    } catch {
+      // Ignore logout API failures and clear the local session anyway.
     }
 
-    await signOut(auth);
+    clearApiToken();
+    setUser(null);
+    setRole(null);
     router.push("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, logout }}>
+    <AuthContext.Provider value={{ user, role, loading, refreshUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

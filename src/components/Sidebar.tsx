@@ -11,9 +11,7 @@ import {
   LogOut,
   Menu,
   Package,
-  ReceiptText,
   Tags,
-  Wallet,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -23,10 +21,8 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: Calculator },
   { href: "/reports", label: "Bao cao", icon: FileText },
   { href: "/cash-flow", label: "Dong tien", icon: BarChart3 },
-  { href: "/bills", label: "Hoa don", icon: ReceiptText },
   { href: "/product", label: "San pham", icon: Package },
   { href: "/categories", label: "Danh muc", icon: Tags },
-  { href: "/payroll", label: "Tinh luong", icon: Wallet },
 ];
 
 export default function Sidebar() {

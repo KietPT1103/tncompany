@@ -1,51 +1,20 @@
-import { db } from "@/lib/firebase";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-  serverTimestamp,
-} from "firebase/firestore";
+import { apiRequest } from "@/lib/api";
 
 export type Category = {
   id: string;
   name: string;
   description?: string;
-  order?: number;
+  order?: number | null;
   isHidden?: boolean;
   storeId?: string;
 };
 
-const COLLECTION = "categories";
-type CategoryDoc = {
-  name?: string;
-  description?: string;
-  order?: number;
-  isHidden?: boolean;
-};
-
 export async function getCategories(storeId = "cafe"): Promise<Category[]> {
-  const q = query(
-    collection(db, COLLECTION),
-    where("storeId", "==", storeId),
-    orderBy("name", "asc")
+  const { items } = await apiRequest<{ items: Category[] }>(
+    `/categories.php?storeId=${encodeURIComponent(storeId)}`,
+    { method: "GET" }
   );
-  const snap = await getDocs(q);
-  return snap.docs.map((categoryDoc) => {
-    const data = categoryDoc.data() as CategoryDoc;
-    return {
-      id: categoryDoc.id,
-      name: data.name || categoryDoc.id,
-      description: data.description || "",
-      order: data.order,
-      isHidden: data.isHidden === true,
-    };
-  });
+  return items;
 }
 
 export async function addCategory(
@@ -54,24 +23,22 @@ export async function addCategory(
   storeId = "cafe"
 ) {
   if (!name.trim()) return null;
-  const docRef = await addDoc(collection(db, COLLECTION), {
-    name: name.trim(),
-    description: description?.trim() || "",
-    order: Date.now(),
-    isHidden: false,
-    storeId: storeId,
-    createdAt: serverTimestamp(),
+  const { id } = await apiRequest<{ id: string }>("/categories.php", {
+    method: "POST",
+    body: JSON.stringify({
+      name: name.trim(),
+      description: description?.trim() || "",
+      storeId,
+    }),
   });
-  return docRef.id;
+  return id;
 }
 
 export async function updateCategory(
   categoryId: string,
   data: { name?: string; description?: string; isHidden?: boolean }
 ) {
-  const payload: Record<string, unknown> = {
-    updatedAt: serverTimestamp(),
-  };
+  const payload: Record<string, unknown> = { id: categoryId };
 
   if (data.name !== undefined) {
     const normalizedName = data.name.trim();
@@ -84,13 +51,20 @@ export async function updateCategory(
   if (data.description !== undefined) {
     payload.description = data.description.trim();
   }
+
   if (data.isHidden !== undefined) {
     payload.isHidden = data.isHidden === true;
   }
 
-  await updateDoc(doc(db, COLLECTION, categoryId), payload);
+  await apiRequest<{ updated: boolean }>("/categories.php", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function removeCategory(categoryId: string) {
-  await deleteDoc(doc(db, COLLECTION, categoryId));
+  await apiRequest<{ deleted: boolean }>(
+    `/categories.php?id=${encodeURIComponent(categoryId)}`,
+    { method: "DELETE" }
+  );
 }
