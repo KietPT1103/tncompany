@@ -1,96 +1,50 @@
-import React, { useEffect, useMemo, useState } from "react";
-import "./App.css";
-import AppFooter from "./components/AppFooter";
-import AppHeader from "./components/AppHeader";
-import CompanyHome from "./components/CompanyHome";
-import Lightbox from "./components/Lightbox";
-import VenuePage from "./components/VenuePage";
-import { pages, pagesById, routeByHash, venuesById } from "./data/siteData";
-import { normalizeRoute } from "./utils/navigation";
+import React from "react";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { pages } from "./data/siteData";
+import LandingApp from "./LandingApp";
+import DashboardLayout from "./app/(dashboard)/layout";
+import BillsPage from "./app/(dashboard)/bills/page";
+import CashFlowPage from "./app/(dashboard)/cash-flow/page";
+import CategoryManagementPage from "./app/(dashboard)/categories/page";
+import DashboardPage from "./app/(dashboard)/page";
+import PayrollPage from "./app/(dashboard)/payroll/page";
+import ProductsPage from "./app/(dashboard)/product/page";
+import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
+import ReportsPage from "./app/(dashboard)/reports/page";
+import TimesheetPage from "./app/(dashboard)/timesheet/page";
+import LoginPage from "./app/login/page";
+
+function AdminLayout() {
+  return (
+    <DashboardLayout>
+      <Outlet />
+    </DashboardLayout>
+  );
+}
 
 export default function App() {
-  const [activePageId, setActivePageId] = useState(() => normalizeRoute(window.location.hash));
-  const [heroImageFailed, setHeroImageFailed] = useState(false);
-  const [lightboxImage, setLightboxImage] = useState(null);
-
-  useEffect(() => {
-    const syncFromHash = () => {
-      setActivePageId(normalizeRoute(window.location.hash));
-    };
-
-    if (!routeByHash[window.location.hash]) {
-      window.history.replaceState({}, "", "#/home");
-    }
-
-    syncFromHash();
-    window.addEventListener("hashchange", syncFromHash);
-
-    return () => window.removeEventListener("hashchange", syncFromHash);
-  }, []);
-
-  useEffect(() => {
-    if (!lightboxImage) {
-      return undefined;
-    }
-
-    const onEscape = (event) => {
-      if (event.key === "Escape") {
-        setLightboxImage(null);
-      }
-    };
-
-    window.addEventListener("keydown", onEscape);
-
-    return () => window.removeEventListener("keydown", onEscape);
-  }, [lightboxImage]);
-
-  const activeVenue = useMemo(() => venuesById[activePageId] || null, [activePageId]);
-  const activePage = useMemo(() => pagesById[activePageId] || pagesById.home, [activePageId]);
-  const isHome = activePage.id === "home";
-
-  useEffect(() => {
-    if (activeVenue) {
-      setHeroImageFailed(false);
-    }
-  }, [activeVenue]);
-
-  const jumpToPage = (pageId) => {
-    const targetPage = pagesById[pageId];
-
-    if (!targetPage) {
-      return;
-    }
-
-    if (window.location.hash !== targetPage.hash) {
-      window.location.hash = targetPage.hash;
-    }
-  };
+  const landingHashes = pages.map((page) => page.hash.replace("#", ""));
 
   return (
-    <div className={`app-shell ${isHome ? "theme-home" : `theme-${activeVenue.id}`}`}>
-      <div className="ambient ambient-1" aria-hidden="true" />
-      <div className="ambient ambient-2" aria-hidden="true" />
-      <div className="ambient ambient-3" aria-hidden="true" />
-
-      <AppHeader activePageId={activePage.id} onNavigate={jumpToPage} pages={pages} />
-
-      <main className="page-content">
-        {isHome ? (
-          <CompanyHome onOpenPage={jumpToPage} />
-        ) : (
-          <VenuePage
-            activeVenue={activeVenue}
-            heroImageFailed={heroImageFailed}
-            onHeroImageError={() => setHeroImageFailed(true)}
-            onOpenImage={setLightboxImage}
-            onOpenPage={jumpToPage}
-          />
-        )}
-      </main>
-
-      <Lightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
-
-      <AppFooter isHome={isHome} />
-    </div>
+    <Routes>
+      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<DashboardPage />} />
+        <Route path="reports" element={<ReportsPage />} />
+        <Route path="reports/:id" element={<ReportDetailPage />} />
+        <Route path="cash-flow" element={<CashFlowPage />} />
+        <Route path="product" element={<ProductsPage />} />
+        <Route path="categories" element={<CategoryManagementPage />} />
+        <Route path="payroll" element={<PayrollPage />} />
+        <Route path="timesheet" element={<TimesheetPage />} />
+        <Route path="bills" element={<BillsPage />} />
+        <Route path="pos" element={<Navigate to="/admin/bills" replace />} />
+      </Route>
+      {landingHashes.map((path) => (
+        <Route key={path} path={path} element={<LandingApp />} />
+      ))}
+      <Route path="*" element={<Navigate to="/home" replace />} />
+    </Routes>
   );
 }
