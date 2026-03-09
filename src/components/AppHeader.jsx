@@ -17,7 +17,10 @@ export default function AppHeader({ activePageId, onNavigate, pages }) {
             key={page.id}
             href={page.hash}
             className={activePageId === page.id ? "is-active" : ""}
-            onClick={() => onNavigate(page.id)}
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate(page.id);
+            }}
             title={page.label}
           >
             {page.shortLabel}

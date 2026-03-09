@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import AppFooter from "./components/AppFooter";
 import AppHeader from "./components/AppHeader";
@@ -9,26 +10,22 @@ import { pages, pagesById, routeByHash, venuesById } from "./data/siteData";
 import { normalizeRoute } from "./utils/navigation";
 
 export default function LandingApp() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activePageId, setActivePageId] = useState(() =>
-    normalizeRoute(window.location.hash)
+    normalizeRoute(location.pathname)
   );
   const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => {
-    const syncFromHash = () => {
-      setActivePageId(normalizeRoute(window.location.hash));
-    };
-
-    if (!routeByHash[window.location.hash]) {
-      window.history.replaceState({}, "", "#/home");
+    if (!routeByHash[location.pathname]) {
+      navigate("/home", { replace: true });
+      return;
     }
 
-    syncFromHash();
-    window.addEventListener("hashchange", syncFromHash);
-
-    return () => window.removeEventListener("hashchange", syncFromHash);
-  }, []);
+    setActivePageId(normalizeRoute(location.pathname));
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     if (!lightboxImage) {
@@ -63,8 +60,8 @@ export default function LandingApp() {
       return;
     }
 
-    if (window.location.hash !== targetPage.hash) {
-      window.location.hash = targetPage.hash;
+    if (location.pathname !== targetPage.hash) {
+      navigate(targetPage.hash);
     }
   };
 

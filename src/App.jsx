@@ -23,7 +23,7 @@ function AdminLayout() {
 }
 
 export default function App() {
-  const landingHashes = pages.map((page) => page.hash.replace("#", ""));
+  const landingHashes = pages.map((page) => page.hash);
 
   return (
     <Routes>
