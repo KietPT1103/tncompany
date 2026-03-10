@@ -117,14 +117,17 @@ function auth_find_user_for_login(string $login): ?array
         'SELECT *
          FROM users
          WHERE is_active = 1
-           AND (LOWER(email) = LOWER(:login) OR LOWER(username) = LOWER(:login))
+           AND (
+             LOWER(email) = LOWER(:login_email)
+             OR LOWER(username) = LOWER(:login_username)
+           )
          LIMIT 1'
     );
     $statement->execute([
-        'login' => $login,
+        'login_email' => $login,
+        'login_username' => $login,
     ]);
 
     $row = $statement->fetch();
     return $row ?: null;
 }
-

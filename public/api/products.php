@@ -13,11 +13,16 @@ function products_find_category_id(string $storeId, ?string $rawCategory): ?stri
     }
 
     $statement = db()->prepare(
-        'SELECT id FROM categories WHERE store_id = :store_id AND (id = :raw OR LOWER(name) = LOWER(:raw)) LIMIT 1'
+        'SELECT id
+         FROM categories
+         WHERE store_id = :store_id
+           AND (id = :raw_id OR LOWER(name) = LOWER(:raw_name))
+         LIMIT 1'
     );
     $statement->execute([
         'store_id' => $storeId,
-        'raw' => $value,
+        'raw_id' => $value,
+        'raw_name' => $value,
     ]);
     $row = $statement->fetch();
     if ($row) {
@@ -239,4 +244,3 @@ if ($method === 'DELETE') {
 }
 
 respond_error('Not found', 404);
-
