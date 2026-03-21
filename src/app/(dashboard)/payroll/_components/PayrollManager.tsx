@@ -1,28 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  getPayrolls,
   createPayroll,
-  Payroll,
   deletePayroll,
+  getPayrolls,
+  Payroll,
   updatePayroll,
 } from "@/services/payrolls.firebase";
 import { getEmployees } from "@/services/employees.firebase";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { cn } from "@/lib/utils";
 import {
-  Plus,
-  Table2,
   CalendarDays,
-  ExternalLink,
-  Trash2,
+  CheckCircle2,
   Edit2,
-  Check,
+  ExternalLink,
+  FileSpreadsheet,
+  Plus,
+  Trash2,
   X,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/Card";
+import { formatTimestampDate } from "./payrollShared";
 
 export default function PayrollManager({
   storeId,
@@ -44,15 +45,15 @@ export default function PayrollManager({
 
   async function loadPayrolls() {
     if (!storeId) return;
-    const data = await getPayrolls(storeId);
-    setPayrolls(data);
+    setPayrolls(await getPayrolls(storeId));
   }
 
   async function handleCreate() {
-    if (!newPayrollName) {
-      alert("Vui lòng nhập tên bảng lương (Ví dụ: Tháng 1 - Đợt 1)");
+    if (!newPayrollName.trim()) {
+      alert("Vui lòng nhập tên bảng lương.");
       return;
     }
+
     setLoading(true);
     try {
       const employees = await getEmployees(storeId);
@@ -60,13 +61,14 @@ export default function PayrollManager({
         alert("Chưa có nhân viên nào để tạo bảng lương.");
         return;
       }
-      const payrollId = await createPayroll(storeId, newPayrollName, employees);
+
+      const payrollId = await createPayroll(storeId, newPayrollName.trim(), employees);
       setNewPayrollName("");
       await loadPayrolls();
-      onSelectPayroll(payrollId); // Switch to detail view immediately
+      onSelectPayroll(payrollId);
     } catch (error) {
       console.error(error);
-      alert("Lỗi khi tạo bảng lương");
+      alert("Không thể tạo bảng lương.");
     } finally {
       setLoading(false);
     }
@@ -77,158 +79,189 @@ export default function PayrollManager({
     try {
       await deletePayroll(id);
       await loadPayrolls();
-    } catch (e) {
-      console.error(e);
-      alert("Lỗi khi xóa");
+    } catch (error) {
+      console.error(error);
+      alert("Không thể xóa bảng lương.");
     }
   }
 
   async function handleUpdateName(id: string) {
     if (!editName.trim()) return;
     try {
-      await updatePayroll(id, { name: editName });
-      await loadPayrolls();
+      await updatePayroll(id, { name: editName.trim() });
       setEditingId(null);
+      await loadPayrolls();
     } catch (error) {
       console.error(error);
-      alert("Lỗi khi đổi tên");
+      alert("Không thể cập nhật tên bảng lương.");
     }
   }
 
-  function startEditing(p: Payroll) {
-    setEditingId(p.id!);
-    setEditName(p.name);
-  }
-
-  function handleImport() {
-    router.push("/timesheet");
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 items-end bg-white p-4 rounded-lg border shadow-sm">
-        <div className="flex-1 w-full space-y-2">
-          <label className="text-sm font-medium text-slate-700">
-            Tạo bảng lương mới
-          </label>
-          <div className="flex gap-2">
+    <div className="space-y-5">
+      <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Tạo bảng lương</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Mỗi kỳ lương sẽ lấy danh sách nhân sự hiện có để bạn chỉnh riêng.
+            </p>
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
             <Input
-              placeholder="Ví dụ: Tháng 1 - Đợt 1"
+              placeholder="Ví dụ: Tháng 3 - Đợt 2"
               value={newPayrollName}
-              onChange={(e) => setNewPayrollName(e.target.value)}
+              onChange={(event) => setNewPayrollName(event.target.value)}
+              className="h-11 rounded-2xl border-slate-200 px-4"
             />
             <Button
               onClick={handleCreate}
-              disabled={loading}
-              className="gap-2 shrink-0"
+              isLoading={loading}
+              className="h-11 gap-2 rounded-2xl px-5 whitespace-nowrap"
             >
-              <Plus className="w-4 h-4" />
-              Tạo mới
+              <Plus className="h-4 w-4" />
+              Tạo bảng lương
             </Button>
             <Button
               variant="outline"
-              onClick={handleImport}
-              className="gap-2 shrink-0 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+              className="h-11 gap-2 rounded-2xl whitespace-nowrap"
+              onClick={() => router.push("/timesheet")}
             >
-              <ExternalLink className="w-4 h-4" />
-              Import Chấm Công
+              <ExternalLink className="h-4 w-4" />
+              Import chấm công
             </Button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {payrolls.map((p) => (
-          <Card
-            key={p.id}
-            className="hover:shadow-md transition-shadow cursor-pointer group relative"
-            onClick={() => p.id && onSelectPayroll(p.id)}
-          >
-            <CardContent className="p-5 flex items-start gap-4">
-              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
-                <Table2 className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                {editingId === p.id ? (
-                  <div
-                    className="flex items-center gap-2 mb-2"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="h-8"
-                      autoFocus
-                    />
-                    <Button
-                      size="icon"
-                      className="h-8 w-8 shrink-0"
-                      onClick={() => handleUpdateName(p.id!)}
-                    >
-                      <Check className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 shrink-0"
-                      onClick={() => setEditingId(null)}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <h3 className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors pr-8">
-                    {p.name}
-                  </h3>
-                )}
-                <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
-                  <CalendarDays className="w-3.5 h-3.5" />
-                  {p.createdAt?.toDate
-                    ? p.createdAt.toDate().toLocaleDateString("vi-VN")
-                    : "Vừa xong"}
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full border ${
-                      p.status === "locked"
-                        ? "bg-slate-100 border-slate-200 text-slate-600"
-                        : "bg-emerald-50 border-emerald-100 text-emerald-600"
-                    }`}
-                  >
-                    {p.status === "locked" ? "Đã chốt" : "Đang làm"}
-                  </span>
-                  <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-indigo-500" />
-                </div>
-              </div>
-              <div className="absolute top-2 right-2 flex opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startEditing(p);
-                  }}
-                  className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (p.id) handleDelete(p.id);
-                  }}
-                  className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {payrolls.length === 0 && (
-          <div className="col-span-full py-12 text-center text-slate-500 bg-slate-50 rounded-lg border border-dashed">
-            Chưa có bảng lương nào. Hãy tạo bảng lương đầu tiên!
+      {payrolls.length === 0 ? (
+        <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600">
+            <FileSpreadsheet className="h-6 w-6" />
           </div>
-        )}
-      </div>
+          <h4 className="mt-5 text-lg font-semibold text-slate-900">Chưa có bảng lương nào</h4>
+          <p className="mt-2 text-sm text-slate-500">
+            Tạo kỳ lương đầu tiên để bắt đầu quản lý chấm công và lương nhân sự.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {payrolls.map((payroll) => {
+            const isEditing = editingId === payroll.id;
+            const isLocked = payroll.status === "locked";
+
+            return (
+              <article
+                key={payroll.id}
+                className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        "rounded-2xl p-3",
+                        isLocked
+                          ? "bg-slate-100 text-slate-600"
+                          : "bg-emerald-50 text-emerald-600"
+                      )}
+                    >
+                      <FileSpreadsheet className="h-5 w-5" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      {isEditing ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={editName}
+                            onChange={(event) => setEditName(event.target.value)}
+                            className="h-10 flex-1 rounded-2xl border border-slate-200 px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                            autoFocus
+                          />
+                          <Button
+                            size="icon"
+                            className="h-10 w-10 rounded-2xl"
+                            onClick={() => handleUpdateName(payroll.id!)}
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 rounded-2xl"
+                            onClick={() => setEditingId(null)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <h4 className="truncate text-lg font-semibold text-slate-900">
+                            {payroll.name}
+                          </h4>
+                          <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                            <CalendarDays className="h-4 w-4" />
+                            {formatTimestampDate(payroll.createdAt)}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {!isEditing ? (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 rounded-2xl text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        onClick={() => {
+                          setEditingId(payroll.id || null);
+                          setEditName(payroll.name);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 rounded-2xl text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                        onClick={() => handleDelete(payroll.id!)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {!isEditing ? (
+                  <>
+                    <div className="mt-4 flex items-center justify-between">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+                          isLocked
+                            ? "bg-slate-100 text-slate-600"
+                            : "bg-emerald-50 text-emerald-700"
+                        )}
+                      >
+                        {isLocked ? "Đã chốt" : "Đang mở"}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => payroll.id && onSelectPayroll(payroll.id)}
+                      className="mt-4 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                    >
+                      Mở chi tiết
+                      <ExternalLink className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

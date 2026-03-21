@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -156,7 +156,7 @@ export default function CategoryManagementPage() {
       await loadData();
     } catch (error) {
       console.error(error);
-      alert("Khong the cap nhat trang thai danh muc.");
+      alert("Không thể cập nhật trạng thái danh mục.");
     } finally {
       setUpdatingHiddenId(null);
     }
@@ -222,11 +222,11 @@ export default function CategoryManagementPage() {
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <th className="px-5 py-3 text-left font-medium">Ten danh muc</th>
-                  <th className="px-5 py-3 text-left font-medium">Mo ta</th>
-                  <th className="px-5 py-3 text-center font-medium">So san pham</th>
-                  <th className="px-5 py-3 text-center font-medium">An ban</th>
-                  <th className="px-5 py-3 text-right font-medium">Hanh dong</th>
+                  <th className="px-5 py-3 text-left font-medium">Tên danh mục</th>
+                  <th className="px-5 py-3 text-left font-medium">Mô tả</th>
+                  <th className="px-5 py-3 text-center font-medium">Số sản phẩm</th>
+                  <th className="px-5 py-3 text-center font-medium">Ẩn bán</th>
+                  <th className="px-5 py-3 text-right font-medium">Hành động</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -353,3 +353,5 @@ export default function CategoryManagementPage() {
     </RoleGuard>
   );
 }
+
+

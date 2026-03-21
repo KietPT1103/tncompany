@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -19,10 +19,10 @@ import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: Calculator },
-  { href: "/reports", label: "Bao cao", icon: FileText },
-  { href: "/cash-flow", label: "Dong tien", icon: BarChart3 },
-  { href: "/product", label: "San pham", icon: Package },
-  { href: "/categories", label: "Danh muc", icon: Tags },
+  { href: "/reports", label: "Báo cáo", icon: FileText },
+  { href: "/cash-flow", label: "Dòng tiền", icon: BarChart3 },
+  { href: "/product", label: "Sản phẩm", icon: Package },
+  { href: "/categories", label: "Danh mục", icon: Tags },
 ];
 
 export default function Sidebar() {
@@ -92,7 +92,7 @@ export default function Sidebar() {
             className="flex w-full items-center justify-start gap-3 px-3 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
           >
             <LogOut className="h-5 w-5" />
-            Dang xuat
+            Đăng xuất
           </Button>
         </div>
       </div>
@@ -106,3 +106,5 @@ export default function Sidebar() {
     </>
   );
 }
+
+

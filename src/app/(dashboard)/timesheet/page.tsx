@@ -20,32 +20,14 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { getEmployees, Employee } from "@/services/employees.firebase";
-import { createPayroll, PayrollEntry } from "@/services/payrolls.firebase";
-import { useAuth } from "@/context/AuthContext";
+import { saveImportedPayroll } from "@/services/payrolls.firebase";
 import { useStore } from "@/context/StoreContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { db } from "@/lib/firebase";
 import {
-  collection,
-  doc,
-  writeBatch,
-  serverTimestamp,
-} from "firebase/firestore";
-
-const ROLE_GROUPS: Record<string, string[]> = {
-  Cafe: ["Phục vụ", "Pha chế", "Thu ngân"],
-  Bếp: ["Bếp", "Thu ngân bếp", "Phục vụ bếp", "Rửa chén"],
-  Farm: [
-    "Chăm sóc thú",
-    "Thú Y",
-    "Thu ngân farm",
-    "Soát vé",
-    "Thời vụ",
-    "Bán hàng",
-  ],
-  Chung: ["Leader", "MKT"],
-};
+  getDefaultRoleForStore,
+  getRoleGroupsForStore,
+} from "../payroll/_components/payrollShared";
 
 interface TimesheetRow {
   No: string;
@@ -109,8 +91,9 @@ export default function TimesheetPage() {
 
   // New State for DB integration
   const [dbEmployees, setDbEmployees] = useState<Employee[]>([]);
-  const { storeId, storeName } = useStore();
-  const { user } = useAuth();
+  const { storeId } = useStore();
+  const roleGroups = getRoleGroupsForStore(storeId);
+  const defaultRole = getDefaultRoleForStore(storeId);
   const router = useRouter();
 
   // Fetch employees on mount
@@ -242,22 +225,26 @@ export default function TimesheetPage() {
         return !isNaN(dt.getTime()) && dt >= start && dt <= end;
       });
 
-      // Group by Name
+      // Group by employee code so payroll is tied to EnNo instead of display name
       const grouped: { [key: string]: TimesheetRow[] } = {};
       filtered.forEach((row) => {
-        const name = row.Name || `Unknown_${row.EnNo}`;
-        if (!grouped[name]) grouped[name] = [];
-        grouped[name].push(row);
+        const employeeCode =
+          row.EnNo?.trim() || `unknown_${row.Name || "employee"}`;
+        if (!grouped[employeeCode]) grouped[employeeCode] = [];
+        grouped[employeeCode].push(row);
       });
 
       const summaries: EmployeeSummary[] = [];
 
-      Object.keys(grouped).forEach((name) => {
+      Object.keys(grouped).forEach((employeeCode) => {
         // Sort by Time
-        const rows = grouped[name].sort(
+        const rows = grouped[employeeCode].sort(
           (a, b) =>
             new Date(a.DateTime).getTime() - new Date(b.DateTime).getTime()
         );
+        const displayName =
+          rows.find((row) => row.Name?.trim())?.Name?.trim() ||
+          `Unknown_${employeeCode}`;
 
         let totalHours = 0;
         let weekendHours = 0;
@@ -305,7 +292,7 @@ export default function TimesheetPage() {
                 if (isWeekend) weekendHours += hours;
 
                 shifts.push({
-                  id: `${name}-${i}`,
+                  id: `${employeeCode}-${i}`,
                   date: inTimeStr.split(" ")[0],
                   inTime: inTimeStr,
                   outTime: outTimeStr,
@@ -332,7 +319,7 @@ export default function TimesheetPage() {
 
             // Add Invalid Shift
             shifts.push({
-              id: `${name}-${i}-err`,
+              id: `${employeeCode}-${i}-err`,
               date: rows[i].DateTime.split(" ")[0],
               inTime: rows[i].DateTime,
               outTime: "", // Missing
@@ -345,15 +332,13 @@ export default function TimesheetPage() {
         }
 
         const matchedDbEmp = dbEmployees.find(
-          (dbE) =>
-            dbE.name.toLowerCase() === name.toLowerCase() ||
-            (rows[0]?.EnNo && dbE.name.includes(rows[0].EnNo)) // loosen match
+          (dbE) => dbE.employeeCode?.trim() === employeeCode
         );
 
         summaries.push({
           dbId: matchedDbEmp?.id,
-          Name: name,
-          EnNo: rows[0]?.EnNo || "",
+          Name: displayName,
+          EnNo: employeeCode,
           Role: matchedDbEmp?.role || "",
           Allowance: 0,
           Note: "",
@@ -503,7 +488,52 @@ export default function TimesheetPage() {
 
   const handleSaveToDB = async () => {
     if (!storeId) return;
-    if (summaryData.length === 0) return;
+    if (summaryData.length === 0) {
+      setError("ChÆ°a cÃ³ dá»¯ liá»‡u Ä‘á»ƒ lÆ°u.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const payrollName = `Báº£ng lÆ°Æ¡ng ${startDate} - ${endDate}`;
+      await saveImportedPayroll({
+        storeId,
+        name: payrollName,
+        startDate,
+        endDate,
+        entries: summaryData.map((emp) => ({
+          employeeId: emp.dbId || `manual_${emp.EnNo || Date.now()}`,
+          employeeCode: emp.EnNo,
+          employeeName: emp.Name,
+          role: emp.Role || defaultRole,
+          hourlyRate: emp.SalaryPerHour,
+          totalHours: emp.TotalHours,
+          weekendHours: emp.WeekendHours,
+          salary: emp.TotalSalary,
+          allowances:
+            emp.Allowance > 0
+              ? [{ name: "Phá»¥ cáº¥p", amount: emp.Allowance }]
+              : [],
+          note: emp.Note,
+          salaryType: "hourly",
+          fixedSalary: 0,
+          standardHours: 0,
+          shifts: emp.Shifts,
+        })),
+      });
+      setDbEmployees(await getEmployees(storeId));
+      alert("ÄÃ£ lÆ°u báº£ng lÆ°Æ¡ng vÃ o MySQL thÃ nh cÃ´ng!");
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Lá»—i khi lÆ°u vÃ o MySQL");
+    } finally {
+      setLoading(false);
+    }
+    return;
+    /*
+      setError("Chưa cấu hình Firebase/Firestore để lưu CSDL.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -525,6 +555,8 @@ export default function TimesheetPage() {
           // Update existing employee info (Salary/Role)
           const empRef = doc(db, "employees", employeeId);
           batch.update(empRef, {
+            employeeCode: emp.EnNo,
+            name: emp.Name,
             hourlyRate: emp.SalaryPerHour,
             role: emp.Role,
           });
@@ -533,8 +565,9 @@ export default function TimesheetPage() {
           const newEmpRef = doc(collection(db, "employees"));
           batch.set(newEmpRef, {
             storeId,
+            employeeCode: emp.EnNo,
             name: emp.Name,
-            role: emp.Role || "Nhân viên",
+            role: emp.Role || defaultRole,
             hourlyRate: emp.SalaryPerHour,
             createdAt: serverTimestamp(),
           });
@@ -545,8 +578,9 @@ export default function TimesheetPage() {
         const entryData: PayrollEntry = {
           payrollId: payrollRef.id,
           employeeId: employeeId || "unknown",
+          employeeCode: emp.EnNo,
           employeeName: emp.Name,
-          role: emp.Role || "Nhân viên",
+          role: emp.Role || defaultRole,
           hourlyRate: emp.SalaryPerHour,
           totalHours: emp.TotalHours,
           weekendHours: emp.WeekendHours,
@@ -573,6 +607,7 @@ export default function TimesheetPage() {
     } finally {
       setLoading(false);
     }
+    */
   };
 
   const handleBack = () => {
@@ -721,9 +756,9 @@ export default function TimesheetPage() {
                 onChange={(e) => setFilterRole(e.target.value)}
               >
                 <option value="All">Tất cả vai trò</option>
-                {Object.keys(ROLE_GROUPS).map((group) => (
+                {Object.keys(roleGroups).map((group) => (
                   <optgroup key={group} label={group}>
-                    {ROLE_GROUPS[group].map((role) => (
+                    {roleGroups[group].map((role) => (
                       <option key={role} value={role}>
                         {role}
                       </option>
@@ -848,7 +883,7 @@ export default function TimesheetPage() {
                           }
                         >
                           <option value="">-- Chọn --</option>
-                          {Object.entries(ROLE_GROUPS).map(([group, roles]) => (
+                          {Object.entries(roleGroups).map(([group, roles]) => (
                             <optgroup key={group} label={group}>
                               {roles.map((role) => (
                                 <option key={role} value={role}>

@@ -1,54 +1,61 @@
-import { db } from "@/lib/firebase";
-import {
-  collection,
-  doc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  serverTimestamp,
-  query,
-  where,
-  addDoc,
-} from "firebase/firestore";
+import { apiRequest } from "@/lib/api";
 
 export type Employee = {
   id?: string;
   storeId: string;
+  employeeCode?: string;
   name: string;
   role: string;
   hourlyRate: number;
   createdAt?: any;
 };
 
-const COLLECTION_NAME = "employees";
+type EmployeesResponse = {
+  items: Employee[];
+};
+
+type EmployeeMutationResponse = {
+  id: string;
+};
 
 export async function getEmployees(storeId: string): Promise<Employee[]> {
-  const q = query(
-    collection(db, COLLECTION_NAME),
-    where("storeId", "==", storeId)
+  const response = await apiRequest<EmployeesResponse>(
+    `/employees.php?storeId=${encodeURIComponent(storeId)}`,
+    {
+      method: "GET",
+    }
   );
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee));
+
+  return response.items || [];
 }
 
 export async function addEmployee(employee: Omit<Employee, "id">) {
-  await addDoc(collection(db, COLLECTION_NAME), {
-    ...employee,
-    createdAt: serverTimestamp(),
+  const response = await apiRequest<EmployeeMutationResponse>("/employees.php", {
+    method: "POST",
+    body: JSON.stringify(employee),
   });
+
+  return response.id;
 }
 
 export async function updateEmployee(
   id: string,
   data: Partial<Omit<Employee, "id" | "storeId" | "createdAt">>
 ) {
-  await updateDoc(doc(db, COLLECTION_NAME, id), {
-    ...data,
-    updatedAt: serverTimestamp(),
+  await apiRequest<{ updated: boolean }>("/employees.php", {
+    method: "PATCH",
+    body: JSON.stringify({
+      id,
+      ...data,
+    }),
   });
 }
 
 export async function deleteEmployee(id: string) {
-  await deleteDoc(doc(db, COLLECTION_NAME, id));
+  await apiRequest<{ deleted: boolean }>(
+    `/employees.php?id=${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    }
+  );
 }

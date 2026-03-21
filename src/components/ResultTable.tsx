@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+﻿import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 
@@ -92,7 +92,7 @@ export default function ResultTable({
     <Card className="w-full overflow-hidden border-0 bg-transparent shadow-none ring-0">
       <CardHeader className="px-0 pb-4 pt-0">
         <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-400">
-          Phan tich chi phi
+          Ph?n t?ch chi ph?
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 px-0">
@@ -113,26 +113,26 @@ export default function ResultTable({
 
         <div className="space-y-5">
           <ProgressRow
-            label="Chi phi nguyen lieu (COGS)"
+            label="Chi ph? nguy?n li?u (COGS)"
             value={materialCost}
             colorClass="bg-blue-500"
           />
           <ProgressRow
-            label="Luong nhan vien"
+            label="L??ng nh?n vi?n"
             value={salary}
             colorClass="bg-purple-500"
             field="salary"
             editable={true}
           />
           <ProgressRow
-            label="Dien / Nuoc / Net"
+            label="?i?n / N??c / Net"
             value={electric}
             colorClass="bg-amber-500"
             field="electric"
             editable={true}
           />
           <ProgressRow
-            label="Chi phi khac"
+            label="Chi ph? kh?c"
             value={other}
             colorClass="bg-rose-500"
             field="other"
@@ -142,7 +142,7 @@ export default function ResultTable({
 
         <div className="border-t border-slate-200 pt-4">
           <div className="flex items-center justify-between">
-            <span className="font-medium text-slate-600">Tong chi phi van hanh</span>
+            <span className="font-medium text-slate-600">T?ng chi ph? v?n h?nh</span>
             <span className="text-lg font-bold text-slate-900">{formatMoney(totalCost)}</span>
           </div>
           <div className="mt-1 text-right">
@@ -153,3 +153,4 @@ export default function ResultTable({
     </Card>
   );
 }
+

@@ -1,34 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { Users, FileSpreadsheet, ArrowLeft, Wallet, Menu, ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ArrowLeft, FileSpreadsheet, Users } from "lucide-react";
 import EmployeeManager from "./_components/EmployeeManager";
 import PayrollManager from "./_components/PayrollManager";
 import PayrollDetail from "./_components/PayrollDetail";
-import Link from "next/link";
+
+type PayrollTab = "employee" | "payroll";
+
+const tabs = [
+  { id: "payroll" as const, label: "Bảng lương", icon: FileSpreadsheet },
+  { id: "employee" as const, label: "Nhân sự", icon: Users },
+];
 
 export default function PayrollPage() {
   const { user, role, loading } = useAuth();
   const { storeId, storeName } = useStore();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"employee" | "payroll">("payroll");
-  const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(
-    null
-  );
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  // Auto-collapse sidebar when viewing details
-  useEffect(() => {
-    if (selectedPayrollId) {
-      setIsSidebarOpen(false);
-    } else {
-        setIsSidebarOpen(true);
-    }
-  }, [selectedPayrollId]);
+  const [activeTab, setActiveTab] = useState<PayrollTab>("payroll");
+  const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading) {
@@ -38,130 +34,95 @@ export default function PayrollPage() {
         router.push("/pos");
       }
     }
-  }, [user, role, loading, router]);
+  }, [loading, role, router, user]);
 
   if (loading || !user || !storeId) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-emerald-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="w-5 h-5 text-slate-500" />
+    <div className="min-h-full bg-slate-50">
+      <div className="mx-auto max-w-7xl space-y-5 p-4 lg:p-6">
+        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-3">
+              <Link href="/">
+                <Button variant="ghost" className="h-10 gap-2 px-0 text-slate-500">
+                  <ArrowLeft className="h-4 w-4" />
+                  Về dashboard
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-2xl font-semibold text-slate-900">Tính lương</h1>
+                <p className="mt-1 text-sm text-slate-500">{storeName}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      if (tab.id !== "payroll") setSelectedPayrollId(null);
+                    }}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition",
+                      isActive
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {selectedPayrollId && activeTab === "payroll" ? (
+          <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-lg font-semibold text-slate-900">Chi tiết bảng lương</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Chỉnh giờ công, phụ cấp và thông tin từng nhân viên.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="gap-2 rounded-2xl"
+                onClick={() => setSelectedPayrollId(null)}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Quay lại danh sách
               </Button>
-            </Link>
-            <div className="flex flex-col">
-              <h1 className="text-xl font-bold flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-emerald-600" />
-                Quản lý lương
-              </h1>
-              <span className="text-xs text-slate-500 font-medium ml-7">
-                {storeName}
-              </span>
             </div>
-          </div>
-        </div>
-      </header>
+          </section>
+        ) : null}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex flex-col md:flex-row gap-6 relative transition-all duration-300">
-          {/* Sidebar / Tabs */}
-          <aside 
-            className={`space-y-2 transition-all duration-300 ease-in-out border-r md:border-r-0 md:pr-4 ${
-              isSidebarOpen ? "w-full md:w-64 opacity-100" : "w-0 opacity-0 overflow-hidden md:pr-0"
-            }`}
-          >
-            <div className="flex items-center justify-between md:hidden mb-2">
-                <span className="text-sm font-bold text-slate-500">Menu</span>
-                <Button variant="ghost" size="sm" onClick={() => setIsSidebarOpen(false)}>
-                    <ChevronLeft className="w-4 h-4" />
-                </Button>
-            </div>
-
-            <button
-              onClick={() => {
-                setActiveTab("payroll");
-                setSelectedPayrollId(null);
-                if (window.innerWidth < 768) setIsSidebarOpen(false);
-              }}
-              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 font-medium transition-colors whitespace-nowrap ${
-                activeTab === "payroll"
-                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                  : "hover:bg-white hover:shadow-sm text-slate-600"
-              }`}
-            >
-              <FileSpreadsheet className="w-5 h-5 shrink-0" />
-              Bảng lương
-            </button>
-            <button
-              onClick={() => {
-                 setActiveTab("employee");
-                 if (window.innerWidth < 768) setIsSidebarOpen(false);
-              }}
-              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 font-medium transition-colors whitespace-nowrap ${
-                activeTab === "employee"
-                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                  : "hover:bg-white hover:shadow-sm text-slate-600"
-              }`}
-            >
-              <Users className="w-5 h-5 shrink-0" />
-              Nhân viên
-            </button>
-          </aside>
-
-          {/* Main Content */}
-          <div className="flex-1 min-w-0">
-             {/* Toggle Sidebar Button (Desktop) */}
-            <div className="mb-4 flex items-center gap-2">
-                <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className="text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
-                    title={isSidebarOpen ? "Thu gọn menu" : "Mở menu"}
-                >
-                    {isSidebarOpen ? <ChevronLeft /> : <Menu />}
-                </Button>
-                {!isSidebarOpen && selectedPayrollId && (
-                     <Button 
-                        variant="link" 
-                        onClick={() => setSelectedPayrollId(null)}
-                        className="text-slate-500 hover:text-emerald-600 pl-0 gap-1"
-                    >
-                        <ArrowLeft className="w-4 h-4" /> Quay lại danh sách
-                    </Button>
-                )}
-            </div>
-
-            {activeTab === "employee" ? (
-              <EmployeeManager storeId={storeId} />
-            ) : (
-              <>
-                {selectedPayrollId ? (
-                  <PayrollDetail
-                    payrollId={selectedPayrollId}
-                    onBack={() => setSelectedPayrollId(null)}
-                  />
-                ) : (
-                  <PayrollManager
-                    storeId={storeId}
-                    onSelectPayroll={setSelectedPayrollId}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </main>
+        {activeTab === "employee" ? (
+          <EmployeeManager storeId={storeId} />
+        ) : selectedPayrollId ? (
+          <PayrollDetail
+            payrollId={selectedPayrollId}
+            onBack={() => setSelectedPayrollId(null)}
+          />
+        ) : (
+          <PayrollManager storeId={storeId} onSelectPayroll={setSelectedPayrollId} />
+        )}
+      </div>
     </div>
   );
 }

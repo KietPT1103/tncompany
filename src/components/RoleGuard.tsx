@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
@@ -33,15 +33,15 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center p-8 bg-white rounded-lg shadow-md">
-          <h1 className="text-2xl font-bold text-red-600 mb-2">Truy cap bi tu choi</h1>
-          <p className="text-slate-600 mb-4">Ban khong co quyen truy cap trang nay.</p>
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Truy c?p b? t? ch?i</h1>
+          <p className="text-slate-600 mb-4">B?n kh?ng c? quy?n truy c?p trang n?y.</p>
           <button
             onClick={() =>
               router.push(role === "user" || role === "server" ? "/pos" : "/")
             }
             className="px-4 py-2 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"
           >
-            Quay lai {role === "user" || role === "server" ? "POS" : "Trang chu"}
+            Quay l?i {role === "user" || role === "server" ? "POS" : "Trang ch?"}
           </button>
         </div>
       </div>

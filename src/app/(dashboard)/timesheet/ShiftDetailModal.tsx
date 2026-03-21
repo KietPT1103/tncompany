@@ -331,60 +331,89 @@ export default function ShiftDetailModal({
     onChange: (val: string) => void;
     className?: string;
   }) => {
-    // value expected "HH:mm"
-    const [hh, mm] = value ? value.split(":") : ["", ""];
+    const [hour, setHour] = useState("");
+    const [minute, setMinute] = useState("");
 
-    // Handler for inputs
-    const handleChange = (part: "h" | "m", val: string) => {
-      // Allow only numbers
-      if (!/^\d*$/.test(val)) return;
+    useEffect(() => {
+      const [nextHour, nextMinute] = value ? value.split(":") : ["", ""];
+      setHour(nextHour || "");
+      setMinute(nextMinute || "");
+    }, [value]);
 
-      let newH = part === "h" ? val : hh;
-      let newM = part === "m" ? val : mm;
+    const commitValue = (nextHour: string, nextMinute: string) => {
+      if (!nextHour && !nextMinute) {
+        onChange("");
+        return;
+      }
 
-      // Basic clamping could be done here or on blur
-      // Let's just update local state logic proxy:
-      // We call onChange immediately so parent state updates?
-      // Yes, but we might want to validate max values immediately
-
-      if (part === "h" && parseInt(val) > 23) newH = "23";
-      if (part === "m" && parseInt(val) > 59) newM = "59";
-
-      onChange(`${newH}:${newM}`);
+      if (nextHour.length === 2 && nextMinute.length === 2) {
+        onChange(`${nextHour}:${nextMinute}`);
+      }
     };
 
-    const handleBlur = (part: "h" | "m", val: string) => {
-      // Pad with 0
-      let num = parseInt(val);
-      if (isNaN(num)) num = 0;
+    const handleChange = (part: "h" | "m", rawValue: string) => {
+      if (!/^\d*$/.test(rawValue)) return;
 
-      let display = num.toString().padStart(2, "0");
+      const nextValue = rawValue.slice(0, 2);
+      const nextHour = part === "h" ? nextValue : hour;
+      const nextMinute = part === "m" ? nextValue : minute;
 
-      let newH = part === "h" ? display : hh || "00";
-      let newM = part === "m" ? display : mm || "00";
+      if (part === "h") setHour(nextValue);
+      if (part === "m") setMinute(nextValue);
 
-      onChange(`${newH}:${newM}`);
+      commitValue(nextHour, nextMinute);
+    };
+
+    const handleBlur = (part: "h" | "m") => {
+      const rawHour = part === "h" ? hour : hour;
+      const rawMinute = part === "m" ? minute : minute;
+
+      if (!rawHour && !rawMinute) {
+        setHour("");
+        setMinute("");
+        onChange("");
+        return;
+      }
+
+      const normalizedHour =
+        rawHour === ""
+          ? ""
+          : String(Math.min(23, Math.max(0, Number(rawHour) || 0))).padStart(2, "0");
+      const normalizedMinute =
+        rawMinute === ""
+          ? ""
+          : String(Math.min(59, Math.max(0, Number(rawMinute) || 0))).padStart(2, "0");
+
+      setHour(normalizedHour);
+      setMinute(normalizedMinute);
+
+      if (normalizedHour && normalizedMinute) {
+        onChange(`${normalizedHour}:${normalizedMinute}`);
+        return;
+      }
+
+      onChange("");
     };
 
     return (
       <div className={`flex items-center justify-center gap-1 ${className}`}>
         <input
           type="text"
-          value={hh}
+          value={hour}
           placeholder="HH"
           maxLength={2}
           onChange={(e) => handleChange("h", e.target.value)}
-          onBlur={(e) => handleBlur("h", e.target.value)}
+          onBlur={() => handleBlur("h")}
           className="p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 font-mono bg-white text-center w-[50px]"
         />
         <span className="text-gray-400 font-bold">:</span>
         <input
           type="text"
-          value={mm}
+          value={minute}
           placeholder="MM"
           maxLength={2}
           onChange={(e) => handleChange("m", e.target.value)}
-          onBlur={(e) => handleBlur("m", e.target.value)}
+          onBlur={() => handleBlur("m")}
           className="p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 font-mono bg-white text-center w-[50px]"
         />
       </div>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useMemo } from "react";
 import {
@@ -480,7 +480,7 @@ export default function ProductsPage() {
                           p.isSelling === false ? "text-slate-500" : "text-emerald-700"
                         }`}
                       >
-                        {p.isSelling === false ? "Tam dung" : "Dang ban"}
+                        {p.isSelling === false ? "Tạm dừng" : "Đang bán"}
                       </span>
                     </div>
                   </td>
@@ -739,3 +739,5 @@ export default function ProductsPage() {
     </RoleGuard>
   );
 }
+
+
