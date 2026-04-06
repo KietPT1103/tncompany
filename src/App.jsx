@@ -13,6 +13,15 @@ import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
 import TimesheetPage from "./app/(dashboard)/timesheet/page";
 import LoginPage from "./app/login/page";
+import RoleGuard from "./components/RoleGuard";
+
+function ProtectedLayout({ allowedRoles }) {
+  return (
+    <RoleGuard allowedRoles={allowedRoles}>
+      <Outlet />
+    </RoleGuard>
+  );
+}
 
 function AdminLayout() {
   return (
@@ -29,17 +38,24 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/admin" element={<AdminLayout />}>
-        <Route index element={<DashboardPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="reports/:id" element={<ReportDetailPage />} />
-        <Route path="cash-flow" element={<CashFlowPage />} />
-        <Route path="product" element={<ProductsPage />} />
-        <Route path="categories" element={<CategoryManagementPage />} />
-        <Route path="payroll" element={<PayrollPage />} />
-        <Route path="timesheet" element={<TimesheetPage />} />
-        <Route path="bills" element={<BillsPage />} />
-        <Route path="pos" element={<Navigate to="/admin/bills" replace />} />
+      <Route
+        path="/admin"
+        element={<ProtectedLayout allowedRoles={["admin", "user", "server"]} />}
+      >
+        <Route element={<AdminLayout />}>
+          <Route path="bills" element={<BillsPage />} />
+          <Route path="pos" element={<Navigate to="/admin/bills" replace />} />
+          <Route element={<ProtectedLayout allowedRoles={["admin"]} />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="reports/:id" element={<ReportDetailPage />} />
+            <Route path="cash-flow" element={<CashFlowPage />} />
+            <Route path="product" element={<ProductsPage />} />
+            <Route path="categories" element={<CategoryManagementPage />} />
+            <Route path="payroll" element={<PayrollPage />} />
+            <Route path="timesheet" element={<TimesheetPage />} />
+          </Route>
+        </Route>
       </Route>
       {landingHashes.map((path) => (
         <Route key={path} path={path} element={<LandingApp />} />

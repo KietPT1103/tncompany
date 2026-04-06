@@ -5,6 +5,56 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 
+function payrolls_ensure_column(string $table, string $column, string $definition): void
+{
+    if (!preg_match('/^[a-z_]+$/', $table) || !preg_match('/^[a-z_]+$/', $column)) {
+        throw new InvalidArgumentException('Invalid table or column name');
+    }
+
+    $statement = db()->prepare(
+        'SELECT COLUMN_NAME
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = :table_name
+           AND column_name = :column_name
+         LIMIT 1'
+    );
+    $statement->execute([
+        'table_name' => $table,
+        'column_name' => $column,
+    ]);
+
+    if ($statement->fetch()) {
+        return;
+    }
+
+    db()->exec(sprintf('ALTER TABLE `%s` ADD COLUMN `%s` %s', $table, $column, $definition));
+}
+
+function payrolls_has_monthly_signals(array $source): bool
+{
+    $monthlySalary = (float) ($source['monthlySalary'] ?? ($source['monthly_salary'] ?? 0));
+    $fixedSalary = (float) ($source['fixedSalary'] ?? ($source['fixed_salary'] ?? 0));
+    $expectedWorkDays = (float) ($source['expectedWorkDays'] ?? ($source['expected_work_days'] ?? 0));
+    $standardHours = (float) ($source['standardHours'] ?? ($source['standard_hours'] ?? 0));
+
+    return $monthlySalary > 0 || $fixedSalary > 0 || $expectedWorkDays > 0 || $standardHours > 0;
+}
+
+function payrolls_normalize_salary_type(?string $value, array $source = []): string
+{
+    $normalized = trim((string) $value);
+    if ($normalized === 'fixed') {
+        return 'monthly';
+    }
+
+    if ($normalized === 'monthly' || $normalized === 'hourly') {
+        return $normalized;
+    }
+
+    return payrolls_has_monthly_signals($source) ? 'monthly' : 'hourly';
+}
+
 function payrolls_ensure_tables(): void
 {
     db()->exec(
@@ -15,6 +65,14 @@ function payrolls_ensure_tables(): void
             name VARCHAR(255) NOT NULL,
             role VARCHAR(100) NOT NULL DEFAULT "",
             hourly_rate DECIMAL(12,2) NOT NULL DEFAULT 0,
+            salary_type VARCHAR(20) NOT NULL DEFAULT "hourly",
+            monthly_salary DECIMAL(12,2) NOT NULL DEFAULT 0,
+            expected_work_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+            paid_leave_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+            attendance_bonus_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            attendance_bonus_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+            attendance_bonus_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+            standard_hours DECIMAL(10,2) NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NULL DEFAULT NULL,
             UNIQUE KEY uniq_employee_store_code (store_id, employee_code),
@@ -53,6 +111,12 @@ function payrolls_ensure_tables(): void
             allowances_json LONGTEXT NULL,
             note TEXT NULL,
             salary_type VARCHAR(20) NOT NULL DEFAULT "hourly",
+            monthly_salary DECIMAL(12,2) NOT NULL DEFAULT 0,
+            expected_work_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+            paid_leave_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+            attendance_bonus_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            attendance_bonus_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+            attendance_bonus_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
             fixed_salary DECIMAL(12,2) NOT NULL DEFAULT 0,
             standard_hours DECIMAL(10,2) NOT NULL DEFAULT 0,
             shifts_json LONGTEXT NULL,
@@ -62,8 +126,56 @@ function payrolls_ensure_tables(): void
             KEY idx_entry_employee (employee_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
-}
 
+    payrolls_ensure_column('employees', 'employee_code', "VARCHAR(100) NOT NULL DEFAULT '' AFTER store_id");
+    payrolls_ensure_column('employees', 'salary_type', "VARCHAR(20) NOT NULL DEFAULT 'hourly' AFTER hourly_rate");
+    payrolls_ensure_column('employees', 'monthly_salary', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER salary_type');
+    payrolls_ensure_column('employees', 'expected_work_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER monthly_salary');
+    payrolls_ensure_column('employees', 'paid_leave_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER expected_work_days');
+    payrolls_ensure_column('employees', 'attendance_bonus_enabled', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER paid_leave_days');
+    payrolls_ensure_column('employees', 'attendance_bonus_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_enabled');
+    payrolls_ensure_column('employees', 'attendance_bonus_amount', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_days');
+    payrolls_ensure_column('employees', 'standard_hours', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_amount');
+    payrolls_ensure_column('payrolls', 'source', "VARCHAR(50) NOT NULL DEFAULT 'manual' AFTER status");
+    payrolls_ensure_column('payrolls', 'period_start', 'DATE NULL AFTER source');
+    payrolls_ensure_column('payrolls', 'period_end', 'DATE NULL AFTER period_start');
+    payrolls_ensure_column('payroll_entries', 'employee_code', "VARCHAR(100) NOT NULL DEFAULT '' AFTER employee_id");
+    payrolls_ensure_column('payroll_entries', 'allowances_json', 'LONGTEXT NULL AFTER salary');
+    payrolls_ensure_column('payroll_entries', 'monthly_salary', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER salary_type');
+    payrolls_ensure_column('payroll_entries', 'expected_work_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER monthly_salary');
+    payrolls_ensure_column('payroll_entries', 'paid_leave_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER expected_work_days');
+    payrolls_ensure_column('payroll_entries', 'attendance_bonus_enabled', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER paid_leave_days');
+    payrolls_ensure_column('payroll_entries', 'attendance_bonus_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_enabled');
+    payrolls_ensure_column('payroll_entries', 'attendance_bonus_amount', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_days');
+    payrolls_ensure_column('payroll_entries', 'standard_hours', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER fixed_salary');
+    payrolls_ensure_column('payroll_entries', 'shifts_json', 'LONGTEXT NULL AFTER standard_hours');
+    db()->exec(
+        "UPDATE employees
+         SET salary_type = CASE
+            WHEN salary_type = 'fixed' THEN 'monthly'
+            WHEN TRIM(COALESCE(salary_type, '')) <> '' THEN salary_type
+            WHEN COALESCE(monthly_salary, 0) > 0
+              OR COALESCE(expected_work_days, 0) > 0
+              OR COALESCE(standard_hours, 0) > 0
+            THEN 'monthly'
+            ELSE 'hourly'
+         END"
+    );
+
+    db()->exec(
+        "UPDATE payroll_entries
+         SET salary_type = CASE
+            WHEN salary_type = 'fixed' THEN 'monthly'
+            WHEN TRIM(COALESCE(salary_type, '')) <> '' THEN salary_type
+            WHEN COALESCE(monthly_salary, 0) > 0
+              OR COALESCE(fixed_salary, 0) > 0
+              OR COALESCE(expected_work_days, 0) > 0
+              OR COALESCE(standard_hours, 0) > 0
+            THEN 'monthly'
+            ELSE 'hourly'
+         END"
+    );
+}
 function payrolls_map_row(array $row): array
 {
     return [
@@ -90,7 +202,13 @@ function payrolls_map_entry_row(array $row): array
         'salary' => (float) $row['salary'],
         'allowances' => json_decode((string) ($row['allowances_json'] ?? '[]'), true) ?: [],
         'note' => (string) ($row['note'] ?? ''),
-        'salaryType' => (string) ($row['salary_type'] ?? 'hourly'),
+        'salaryType' => payrolls_normalize_salary_type((string) ($row['salary_type'] ?? ''), $row),
+        'monthlySalary' => (float) (($row['monthly_salary'] ?? 0) ?: ($row['fixed_salary'] ?? 0)),
+        'expectedWorkDays' => (float) ($row['expected_work_days'] ?? 0),
+        'paidLeaveDays' => (float) ($row['paid_leave_days'] ?? 0),
+        'attendanceBonusEnabled' => (bool) ($row['attendance_bonus_enabled'] ?? false),
+        'attendanceBonusDays' => (float) ($row['attendance_bonus_days'] ?? 0),
+        'attendanceBonusAmount' => (float) ($row['attendance_bonus_amount'] ?? 0),
         'fixedSalary' => (float) ($row['fixed_salary'] ?? 0),
         'standardHours' => (float) ($row['standard_hours'] ?? 0),
         'shifts' => json_decode((string) ($row['shifts_json'] ?? '[]'), true) ?: [],
@@ -101,14 +219,29 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
 {
     $employeeId = trim((string) ($employee['employeeId'] ?? $employee['id'] ?? ''));
     $employeeCode = trim((string) ($employee['employeeCode'] ?? ''));
-    $name = trim((string) ($employee['employeeName'] ?? $employee['name'] ?? 'Nhân viên'));
+    $name = trim((string) ($employee['employeeName'] ?? $employee['name'] ?? 'Nhan vien'));
     $role = trim((string) ($employee['role'] ?? ''));
     $hourlyRate = (float) ($employee['hourlyRate'] ?? 0);
+    $salaryType = payrolls_normalize_salary_type((string) ($employee['salaryType'] ?? ''), $employee);
+    $monthlySalary = (float) ($employee['monthlySalary'] ?? ($employee['fixedSalary'] ?? 0));
+    $expectedWorkDays = (float) ($employee['expectedWorkDays'] ?? ($salaryType === 'monthly' ? 30 : 0));
+    $paidLeaveDays = (float) ($employee['paidLeaveDays'] ?? 0);
+    $attendanceBonusEnabled = !empty($employee['attendanceBonusEnabled']) ? 1 : 0;
+    $attendanceBonusDays = (float) ($employee['attendanceBonusDays'] ?? 0);
+    $attendanceBonusAmount = (float) ($employee['attendanceBonusAmount'] ?? 0);
+    $standardHours = (float) ($employee['standardHours'] ?? 0);
 
     if ($employeeId !== '' && strpos($employeeId, 'manual_') !== 0) {
         $update = db()->prepare(
             'UPDATE employees
-             SET employee_code = :employee_code, name = :name, role = :role, hourly_rate = :hourly_rate, updated_at = NOW()
+             SET employee_code = :employee_code, name = :name, role = :role, hourly_rate = :hourly_rate,
+                 salary_type = :salary_type, monthly_salary = :monthly_salary,
+                 expected_work_days = :expected_work_days, paid_leave_days = :paid_leave_days,
+                 attendance_bonus_enabled = :attendance_bonus_enabled,
+                 attendance_bonus_days = :attendance_bonus_days,
+                 attendance_bonus_amount = :attendance_bonus_amount,
+                 standard_hours = :standard_hours,
+                 updated_at = NOW()
              WHERE id = :id'
         );
         $update->execute([
@@ -117,6 +250,14 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
             'name' => $name,
             'role' => $role,
             'hourly_rate' => $hourlyRate,
+            'salary_type' => $salaryType,
+            'monthly_salary' => $monthlySalary,
+            'expected_work_days' => $expectedWorkDays,
+            'paid_leave_days' => $paidLeaveDays,
+            'attendance_bonus_enabled' => $attendanceBonusEnabled,
+            'attendance_bonus_days' => $attendanceBonusDays,
+            'attendance_bonus_amount' => $attendanceBonusAmount,
+            'standard_hours' => $standardHours,
         ]);
         return $employeeId;
     }
@@ -135,7 +276,14 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
         if ($existingId !== '') {
             $update = db()->prepare(
                 'UPDATE employees
-                 SET name = :name, role = :role, hourly_rate = :hourly_rate, updated_at = NOW()
+                 SET name = :name, role = :role, hourly_rate = :hourly_rate,
+                     salary_type = :salary_type, monthly_salary = :monthly_salary,
+                     expected_work_days = :expected_work_days, paid_leave_days = :paid_leave_days,
+                     attendance_bonus_enabled = :attendance_bonus_enabled,
+                     attendance_bonus_days = :attendance_bonus_days,
+                     attendance_bonus_amount = :attendance_bonus_amount,
+                     standard_hours = :standard_hours,
+                     updated_at = NOW()
                  WHERE id = :id'
             );
             $update->execute([
@@ -143,6 +291,14 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
                 'name' => $name,
                 'role' => $role,
                 'hourly_rate' => $hourlyRate,
+                'salary_type' => $salaryType,
+                'monthly_salary' => $monthlySalary,
+                'expected_work_days' => $expectedWorkDays,
+                'paid_leave_days' => $paidLeaveDays,
+                'attendance_bonus_enabled' => $attendanceBonusEnabled,
+                'attendance_bonus_days' => $attendanceBonusDays,
+                'attendance_bonus_amount' => $attendanceBonusAmount,
+                'standard_hours' => $standardHours,
             ]);
             return $existingId;
         }
@@ -150,8 +306,15 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
 
     $newId = uuidv4();
     $insert = db()->prepare(
-        'INSERT INTO employees (id, store_id, employee_code, name, role, hourly_rate, created_at)
-         VALUES (:id, :store_id, :employee_code, :name, :role, :hourly_rate, NOW())'
+        'INSERT INTO employees (
+            id, store_id, employee_code, name, role, hourly_rate, salary_type, monthly_salary,
+            expected_work_days, paid_leave_days, attendance_bonus_enabled, attendance_bonus_days,
+            attendance_bonus_amount, standard_hours, created_at
+         ) VALUES (
+            :id, :store_id, :employee_code, :name, :role, :hourly_rate, :salary_type, :monthly_salary,
+            :expected_work_days, :paid_leave_days, :attendance_bonus_enabled, :attendance_bonus_days,
+            :attendance_bonus_amount, :standard_hours, NOW()
+         )'
     );
     $insert->execute([
         'id' => $newId,
@@ -160,23 +323,38 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
         'name' => $name,
         'role' => $role,
         'hourly_rate' => $hourlyRate,
+        'salary_type' => $salaryType,
+        'monthly_salary' => $monthlySalary,
+        'expected_work_days' => $expectedWorkDays,
+        'paid_leave_days' => $paidLeaveDays,
+        'attendance_bonus_enabled' => $attendanceBonusEnabled,
+        'attendance_bonus_days' => $attendanceBonusDays,
+        'attendance_bonus_amount' => $attendanceBonusAmount,
+        'standard_hours' => $standardHours,
     ]);
 
     return $newId;
 }
-
 function payrolls_insert_entry(string $payrollId, string $employeeId, array $entry): string
 {
     $entryId = uuidv4();
+    $salaryType = payrolls_normalize_salary_type((string) ($entry['salaryType'] ?? ''), $entry);
+    $monthlySalary = (float) ($entry['monthlySalary'] ?? ($entry['fixedSalary'] ?? 0));
+    $expectedWorkDays = (float) ($entry['expectedWorkDays'] ?? ($salaryType === 'monthly' ? 30 : 0));
+
     $statement = db()->prepare(
         'INSERT INTO payroll_entries (
             id, payroll_id, employee_id, employee_code, employee_name, role,
             hourly_rate, total_hours, weekend_hours, salary, allowances_json, note,
-            salary_type, fixed_salary, standard_hours, shifts_json, created_at
+            salary_type, monthly_salary, expected_work_days, paid_leave_days,
+            attendance_bonus_enabled, attendance_bonus_days, attendance_bonus_amount,
+            fixed_salary, standard_hours, shifts_json, created_at
          ) VALUES (
             :id, :payroll_id, :employee_id, :employee_code, :employee_name, :role,
             :hourly_rate, :total_hours, :weekend_hours, :salary, :allowances_json, :note,
-            :salary_type, :fixed_salary, :standard_hours, :shifts_json, NOW()
+            :salary_type, :monthly_salary, :expected_work_days, :paid_leave_days,
+            :attendance_bonus_enabled, :attendance_bonus_days, :attendance_bonus_amount,
+            :fixed_salary, :standard_hours, :shifts_json, NOW()
          )'
     );
     $statement->execute([
@@ -184,7 +362,7 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
         'payroll_id' => $payrollId,
         'employee_id' => $employeeId,
         'employee_code' => trim((string) ($entry['employeeCode'] ?? '')),
-        'employee_name' => trim((string) ($entry['employeeName'] ?? 'Nhân viên')),
+        'employee_name' => trim((string) ($entry['employeeName'] ?? 'Nhan vien')),
         'role' => trim((string) ($entry['role'] ?? '')),
         'hourly_rate' => (float) ($entry['hourlyRate'] ?? 0),
         'total_hours' => (float) ($entry['totalHours'] ?? 0),
@@ -192,8 +370,14 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
         'salary' => (float) ($entry['salary'] ?? 0),
         'allowances_json' => json_encode($entry['allowances'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         'note' => (string) ($entry['note'] ?? ''),
-        'salary_type' => (string) ($entry['salaryType'] ?? 'hourly'),
-        'fixed_salary' => (float) ($entry['fixedSalary'] ?? 0),
+        'salary_type' => $salaryType,
+        'monthly_salary' => $monthlySalary,
+        'expected_work_days' => $expectedWorkDays,
+        'paid_leave_days' => (float) ($entry['paidLeaveDays'] ?? 0),
+        'attendance_bonus_enabled' => !empty($entry['attendanceBonusEnabled']) ? 1 : 0,
+        'attendance_bonus_days' => (float) ($entry['attendanceBonusDays'] ?? 0),
+        'attendance_bonus_amount' => (float) ($entry['attendanceBonusAmount'] ?? 0),
+        'fixed_salary' => $monthlySalary,
         'standard_hours' => (float) ($entry['standardHours'] ?? 0),
         'shifts_json' => json_encode($entry['shifts'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
     ]);
@@ -226,7 +410,9 @@ if ($method === 'GET') {
 
         respond_ok([
             'items' => array_map(
-                static fn(array $row): array => payrolls_map_entry_row($row),
+                static function (array $row): array {
+                    return payrolls_map_entry_row($row);
+                },
                 $statement->fetchAll()
             ),
         ]);
@@ -245,7 +431,9 @@ if ($method === 'GET') {
 
     respond_ok([
         'items' => array_map(
-            static fn(array $row): array => payrolls_map_row($row),
+            static function (array $row): array {
+                return payrolls_map_row($row);
+            },
             $statement->fetchAll()
         ),
     ]);
@@ -311,6 +499,8 @@ if ($method === 'POST') {
         } else {
             foreach ($employees as $employee) {
                 $employeeId = trim((string) ($employee['id'] ?? ''));
+                $salaryType = payrolls_normalize_salary_type((string) ($employee['salaryType'] ?? ''), $employee);
+                $monthlySalary = (float) ($employee['monthlySalary'] ?? 0);
                 $entry = [
                     'employeeId' => $employeeId !== '' ? $employeeId : uuidv4(),
                     'employeeCode' => (string) ($employee['employeeCode'] ?? ''),
@@ -322,9 +512,15 @@ if ($method === 'POST') {
                     'salary' => 0,
                     'allowances' => [],
                     'note' => '',
-                    'salaryType' => 'hourly',
-                    'fixedSalary' => 0,
-                    'standardHours' => 0,
+                    'salaryType' => $salaryType,
+                    'monthlySalary' => $monthlySalary,
+                    'expectedWorkDays' => (float) ($employee['expectedWorkDays'] ?? ($salaryType === 'monthly' ? 30 : 0)),
+                    'paidLeaveDays' => (float) ($employee['paidLeaveDays'] ?? 0),
+                    'attendanceBonusEnabled' => !empty($employee['attendanceBonusEnabled']),
+                    'attendanceBonusDays' => (float) ($employee['attendanceBonusDays'] ?? 0),
+                    'attendanceBonusAmount' => (float) ($employee['attendanceBonusAmount'] ?? 0),
+                    'fixedSalary' => $monthlySalary,
+                    'standardHours' => (float) ($employee['standardHours'] ?? 0),
                     'shifts' => [],
                 ];
                 payrolls_insert_entry($payrollId, $entry['employeeId'], $entry);
@@ -355,6 +551,8 @@ if ($method === 'PATCH') {
         }
 
         $fieldMap = [
+            'employeeId' => 'employee_id',
+            'employeeCode' => 'employee_code',
             'employeeName' => 'employee_name',
             'role' => 'role',
             'hourlyRate' => 'hourly_rate',
@@ -363,6 +561,12 @@ if ($method === 'PATCH') {
             'salary' => 'salary',
             'note' => 'note',
             'salaryType' => 'salary_type',
+            'monthlySalary' => 'monthly_salary',
+            'expectedWorkDays' => 'expected_work_days',
+            'paidLeaveDays' => 'paid_leave_days',
+            'attendanceBonusEnabled' => 'attendance_bonus_enabled',
+            'attendanceBonusDays' => 'attendance_bonus_days',
+            'attendanceBonusAmount' => 'attendance_bonus_amount',
             'fixedSalary' => 'fixed_salary',
             'standardHours' => 'standard_hours',
         ];
@@ -375,7 +579,25 @@ if ($method === 'PATCH') {
             }
 
             $fields[] = sprintf('%s = :%s', $column, $payloadKey);
-            $params[$payloadKey] = $body[$payloadKey];
+            if ($payloadKey === 'salaryType') {
+                $params[$payloadKey] = payrolls_normalize_salary_type((string) $body[$payloadKey], $body);
+            } elseif ($payloadKey === 'attendanceBonusEnabled') {
+                $params[$payloadKey] = !empty($body[$payloadKey]) ? 1 : 0;
+            } elseif ($payloadKey === 'fixedSalary') {
+                $params[$payloadKey] = (float) $body[$payloadKey];
+            } else {
+                $params[$payloadKey] = $body[$payloadKey];
+            }
+        }
+
+        if (!array_key_exists('salaryType', $body) && payrolls_has_monthly_signals($body)) {
+            $fields[] = 'salary_type = :salary_type_sync';
+            $params['salary_type_sync'] = 'monthly';
+        }
+
+        if (array_key_exists('monthlySalary', $body) && !array_key_exists('fixedSalary', $body)) {
+            $fields[] = 'fixed_salary = :fixed_salary_sync';
+            $params['fixed_salary_sync'] = (float) $body['monthlySalary'];
         }
 
         if (array_key_exists('allowances', $body)) {
@@ -481,3 +703,4 @@ if ($method === 'DELETE') {
 }
 
 respond_error('Not found', 404);
+

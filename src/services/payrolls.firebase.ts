@@ -19,6 +19,11 @@ export interface Shift {
   isValid: boolean;
 }
 
+export type PayrollAllowance = {
+  name: string;
+  amount: number;
+};
+
 export type PayrollEntry = {
   id?: string;
   payrollId: string;
@@ -30,9 +35,15 @@ export type PayrollEntry = {
   totalHours: number;
   weekendHours: number;
   salary: number;
-  allowances?: { name: string; amount: number }[];
+  allowances?: PayrollAllowance[];
   note: string;
-  salaryType?: "hourly" | "fixed";
+  salaryType?: "hourly" | "monthly" | "fixed";
+  monthlySalary?: number;
+  expectedWorkDays?: number;
+  paidLeaveDays?: number;
+  attendanceBonusEnabled?: boolean;
+  attendanceBonusDays?: number;
+  attendanceBonusAmount?: number;
   fixedSalary?: number;
   standardHours?: number;
   shifts?: Shift[];

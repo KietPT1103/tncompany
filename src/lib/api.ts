@@ -1,6 +1,9 @@
 import { AppUser } from "@/types/auth";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
+const LOCAL_API_FALLBACK_BASE = (
+  import.meta.env.VITE_LOCAL_API_BASE_URL || "http://127.0.0.1:8000/api"
+).replace(/\/$/, "");
 const TOKEN_KEY = "tn_company_api_token";
 
 type ApiEnvelope<T> = {
@@ -9,6 +12,93 @@ type ApiEnvelope<T> = {
   error?: string;
   meta?: Record<string, unknown>;
 };
+
+class ApiTransportError extends Error {
+  retryable: boolean;
+
+  constructor(message: string, retryable = false) {
+    super(message);
+    this.name = "ApiTransportError";
+    this.retryable = retryable;
+  }
+}
+
+function canUseLocalApiFallback() {
+  if (typeof window === "undefined") return false;
+  if (API_BASE !== "/api") return false;
+
+  const hostname = window.location.hostname.toLowerCase();
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+function buildRequestUrls(path: string) {
+  const primaryUrl = `${API_BASE}${path}`;
+  if (!canUseLocalApiFallback()) {
+    return [primaryUrl];
+  }
+
+  const localFallbackUrl = `${LOCAL_API_FALLBACK_BASE}${path}`;
+  return localFallbackUrl === primaryUrl
+    ? [primaryUrl]
+    : [primaryUrl, localFallbackUrl];
+}
+
+function buildNetworkError(requestUrl: string) {
+  let hostname = "";
+  let pathname = requestUrl;
+
+  try {
+    const parsed = new URL(requestUrl, typeof window !== "undefined" ? window.location.origin : undefined);
+    hostname = parsed.hostname;
+    pathname = parsed.pathname;
+  } catch {
+    pathname = requestUrl;
+  }
+
+  if (hostname === "127.0.0.1" || hostname === "localhost") {
+    return new Error(
+      `Khong ket noi duoc API local ${requestUrl}. Hay chay PHP local bang npm run dev:full hoac php -S 127.0.0.1:8000 -t public.`
+    );
+  }
+
+  return new Error(`Khong ket noi duoc API ${pathname}.`);
+}
+
+function buildApiTransportError(response: Response, rawBody: string) {
+  const status = `${response.status} ${response.statusText}`.trim();
+  let pathname = response.url;
+
+  try {
+    pathname = new URL(response.url).pathname;
+  } catch {
+    pathname = response.url;
+  }
+
+  if (response.status === 404) {
+    return new ApiTransportError(
+      `Khong tim thay endpoint API ${pathname} (${status}). Neu dang chay local, hay kiem tra Vite proxy hoac dung npm run dev:full.`,
+      true
+    );
+  }
+
+  const normalizedBody = rawBody.replace(/\s+/g, " ").trim();
+  const looksHtml =
+    normalizedBody.startsWith("<!DOCTYPE html") ||
+    normalizedBody.startsWith("<html") ||
+    normalizedBody.startsWith("<");
+
+  if (looksHtml) {
+    return new ApiTransportError(
+      `API ${pathname} tra ve HTML thay vi JSON (${status}). Neu dang chay local, hay kiem tra Vite proxy hoac dung npm run dev:full.`,
+      true
+    );
+  }
+
+  return new ApiTransportError(
+    `API ${pathname} tra ve du lieu khong hop le (${status}).`,
+    response.status === 404
+  );
+}
 
 export function getApiToken() {
   if (typeof window === "undefined") return "";
@@ -26,7 +116,26 @@ export function clearApiToken() {
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
-  const payload = (await response.json()) as ApiEnvelope<T>;
+  const rawBody = await response.text();
+  const trimmedBody = rawBody.trim();
+  const contentType = response.headers.get("content-type") || "";
+  const expectsJson =
+    contentType.includes("application/json") ||
+    contentType.includes("+json") ||
+    trimmedBody.startsWith("{") ||
+    trimmedBody.startsWith("[");
+
+  if (!expectsJson) {
+    throw buildApiTransportError(response, rawBody);
+  }
+
+  let payload: ApiEnvelope<T>;
+  try {
+    payload = JSON.parse(trimmedBody) as ApiEnvelope<T>;
+  } catch {
+    throw buildApiTransportError(response, rawBody);
+  }
+
   if (!response.ok || !payload?.ok) {
     throw new Error(payload?.error || `API request failed with ${response.status}`);
   }
@@ -40,22 +149,52 @@ export async function apiRequest<T>(
 ) {
   const headers = new Headers(options.headers || {});
   headers.set("Content-Type", "application/json");
+  headers.set("Accept", "application/json");
 
   const token = useAuth ? getApiToken() : "";
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const requestUrls = buildRequestUrls(path);
+  let lastError: Error | null = null;
 
-  if (response.status === 401) {
-    clearApiToken();
+  for (let index = 0; index < requestUrls.length; index += 1) {
+    const requestUrl = requestUrls[index];
+
+    try {
+      const response = await fetch(requestUrl, {
+        ...options,
+        cache: options.cache ?? "no-store",
+        headers,
+      });
+
+      if (response.status === 401) {
+        clearApiToken();
+      }
+
+      return await parseResponse<T>(response);
+    } catch (error) {
+      lastError =
+        error instanceof TypeError
+          ? buildNetworkError(requestUrl)
+          : error instanceof Error
+          ? error
+          : new Error("API request failed unexpectedly.");
+
+      const canRetry =
+        index < requestUrls.length - 1 &&
+        (error instanceof ApiTransportError ? error.retryable : true);
+
+      if (canRetry) {
+        continue;
+      }
+
+      throw lastError;
+    }
   }
 
-  return parseResponse<T>(response);
+  throw lastError || new Error("API request failed unexpectedly.");
 }
 
 export async function loginApi(login: string, password: string) {

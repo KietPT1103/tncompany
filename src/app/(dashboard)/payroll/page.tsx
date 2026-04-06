@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, FileSpreadsheet, Users } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import EmployeeManager from "./_components/EmployeeManager";
 import PayrollManager from "./_components/PayrollManager";
 import PayrollDetail from "./_components/PayrollDetail";
@@ -23,8 +24,10 @@ export default function PayrollPage() {
   const { user, role, loading } = useAuth();
   const { storeId, storeName } = useStore();
   const router = useRouter();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<PayrollTab>("payroll");
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(null);
+  const [employeeRefreshKey, setEmployeeRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!loading) {
@@ -35,6 +38,15 @@ export default function PayrollPage() {
       }
     }
   }, [loading, role, router, user]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const openPayrollId = params.get("openPayroll");
+    if (openPayrollId) {
+      setActiveTab("payroll");
+      setSelectedPayrollId(openPayrollId);
+    }
+  }, [location.search]);
 
   if (loading || !user || !storeId) {
     return (
@@ -91,33 +103,13 @@ export default function PayrollPage() {
           </div>
         </section>
 
-        {selectedPayrollId && activeTab === "payroll" ? (
-          <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-lg font-semibold text-slate-900">Chi tiết bảng lương</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Chỉnh giờ công, phụ cấp và thông tin từng nhân viên.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                className="gap-2 rounded-2xl"
-                onClick={() => setSelectedPayrollId(null)}
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Quay lại danh sách
-              </Button>
-            </div>
-          </section>
-        ) : null}
-
         {activeTab === "employee" ? (
-          <EmployeeManager storeId={storeId} />
+          <EmployeeManager storeId={storeId} refreshKey={employeeRefreshKey} />
         ) : selectedPayrollId ? (
           <PayrollDetail
             payrollId={selectedPayrollId}
             onBack={() => setSelectedPayrollId(null)}
+            onEmployeesChanged={() => setEmployeeRefreshKey((current) => current + 1)}
           />
         ) : (
           <PayrollManager storeId={storeId} onSelectPayroll={setSelectedPayrollId} />

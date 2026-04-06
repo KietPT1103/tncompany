@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn, preventNumberInputScroll } from "@/lib/utils";
 
 export interface InputProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -8,7 +8,7 @@ export interface InputProps
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, label, error, ...props }, ref) => {
+  ({ className, type, label, error, onWheel, ...props }, ref) => {
     return (
       <div className="w-full space-y-1">
         {label && (
@@ -24,6 +24,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             className
           )}
           ref={ref}
+          onWheel={(event) => {
+            if (type === "number") {
+              preventNumberInputScroll(event);
+            }
+            onWheel?.(event);
+          }}
           {...props}
         />
         {error && (

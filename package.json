@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "vite:dev": "vite",
+    "api:dev": "php -S 127.0.0.1:8000 -t public",
+    "dev:full": "node scripts/dev-full.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },

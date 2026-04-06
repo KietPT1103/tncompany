@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,7 +12,6 @@ import {
 import { getEmployees } from "@/services/employees.firebase";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { cn } from "@/lib/utils";
 import {
   CalendarDays,
   CheckCircle2,
@@ -35,6 +34,7 @@ export default function PayrollManager({
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [newPayrollName, setNewPayrollName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const router = useRouter();
@@ -45,7 +45,14 @@ export default function PayrollManager({
 
   async function loadPayrolls() {
     if (!storeId) return;
-    setPayrolls(await getPayrolls(storeId));
+    try {
+      setLoadError("");
+      setPayrolls(await getPayrolls(storeId));
+    } catch (error) {
+      console.error(error);
+      setPayrolls([]);
+      setLoadError(error instanceof Error ? error.message : "Không tải được danh sách bảng lương.");
+    }
   }
 
   async function handleCreate() {
@@ -64,6 +71,7 @@ export default function PayrollManager({
 
       const payrollId = await createPayroll(storeId, newPayrollName.trim(), employees);
       setNewPayrollName("");
+      setLoadError("");
       await loadPayrolls();
       onSelectPayroll(payrollId);
     } catch (error) {
@@ -115,19 +123,11 @@ export default function PayrollManager({
               onChange={(event) => setNewPayrollName(event.target.value)}
               className="h-11 rounded-2xl border-slate-200 px-4"
             />
-            <Button
-              onClick={handleCreate}
-              isLoading={loading}
-              className="h-11 gap-2 rounded-2xl px-5 whitespace-nowrap"
-            >
+            <Button onClick={handleCreate} isLoading={loading} className="h-11 gap-2 rounded-2xl px-5 whitespace-nowrap">
               <Plus className="h-4 w-4" />
               Tạo bảng lương
             </Button>
-            <Button
-              variant="outline"
-              className="h-11 gap-2 rounded-2xl whitespace-nowrap"
-              onClick={() => router.push("/timesheet")}
-            >
+            <Button variant="outline" className="h-11 gap-2 rounded-2xl whitespace-nowrap" onClick={() => router.push("/timesheet")}>
               <ExternalLink className="h-4 w-4" />
               Import chấm công
             </Button>
@@ -135,73 +135,50 @@ export default function PayrollManager({
         </div>
       </section>
 
+      {loadError ? <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{loadError}</div> : null}
+
       {payrolls.length === 0 ? (
         <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600">
             <FileSpreadsheet className="h-6 w-6" />
           </div>
           <h4 className="mt-5 text-lg font-semibold text-slate-900">Chưa có bảng lương nào</h4>
-          <p className="mt-2 text-sm text-slate-500">
-            Tạo kỳ lương đầu tiên để bắt đầu quản lý chấm công và lương nhân sự.
-          </p>
+          <p className="mt-2 text-sm text-slate-500">Tạo kỳ lương đầu tiên để bắt đầu quản lý chấm công và lương nhân sự.</p>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-4">
           {payrolls.map((payroll) => {
             const isEditing = editingId === payroll.id;
-            const isLocked = payroll.status === "locked";
 
             return (
-              <article
-                key={payroll.id}
-                className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={cn(
-                        "rounded-2xl p-3",
-                        isLocked
-                          ? "bg-slate-100 text-slate-600"
-                          : "bg-emerald-50 text-emerald-600"
-                      )}
-                    >
+              <article key={payroll.id} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="flex min-w-0 items-start gap-4">
+                    <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
                       <FileSpreadsheet className="h-5 w-5" />
                     </div>
 
                     <div className="min-w-0 flex-1">
                       {isEditing ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            value={editName}
-                            onChange={(event) => setEditName(event.target.value)}
-                            className="h-10 flex-1 rounded-2xl border border-slate-200 px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                            autoFocus
-                          />
-                          <Button
-                            size="icon"
-                            className="h-10 w-10 rounded-2xl"
-                            onClick={() => handleUpdateName(payroll.id!)}
-                          >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input value={editName} onChange={(event) => setEditName(event.target.value)} className="h-10 min-w-[280px] flex-1 rounded-2xl border border-slate-200 px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" autoFocus />
+                          <Button size="icon" className="h-10 w-10 rounded-2xl" onClick={() => handleUpdateName(payroll.id!)}>
                             <CheckCircle2 className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-10 w-10 rounded-2xl"
-                            onClick={() => setEditingId(null)}
-                          >
+                          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl" onClick={() => setEditingId(null)}>
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
                       ) : (
                         <>
-                          <h4 className="truncate text-lg font-semibold text-slate-900">
-                            {payroll.name}
-                          </h4>
-                          <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-                            <CalendarDays className="h-4 w-4" />
-                            {formatTimestampDate(payroll.createdAt)}
+                          <button type="button" onClick={() => payroll.id && onSelectPayroll(payroll.id)} className="min-w-0 text-left text-xl font-semibold text-slate-900 transition hover:text-emerald-700">
+                            <span className="block truncate">{payroll.name}</span>
+                          </button>
+                          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                            <span className="inline-flex items-center gap-2">
+                              <CalendarDays className="h-4 w-4" />
+                              {formatTimestampDate(payroll.createdAt)}
+                            </span>
                           </div>
                         </>
                       )}
@@ -209,54 +186,20 @@ export default function PayrollManager({
                   </div>
 
                   {!isEditing ? (
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 rounded-2xl text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                        onClick={() => {
-                          setEditingId(payroll.id || null);
-                          setEditName(payroll.name);
-                        }}
-                      >
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <Button variant="outline" className="gap-2 rounded-2xl" onClick={() => payroll.id && onSelectPayroll(payroll.id)}>
+                        <ExternalLink className="h-4 w-4" />
+                        Mở chi tiết
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => { setEditingId(payroll.id || null); setEditName(payroll.name); }}>
                         <Edit2 className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 rounded-2xl text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                        onClick={() => handleDelete(payroll.id!)}
-                      >
+                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl text-slate-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => handleDelete(payroll.id!)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   ) : null}
                 </div>
-
-                {!isEditing ? (
-                  <>
-                    <div className="mt-4 flex items-center justify-between">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                          isLocked
-                            ? "bg-slate-100 text-slate-600"
-                            : "bg-emerald-50 text-emerald-700"
-                        )}
-                      >
-                        {isLocked ? "Đã chốt" : "Đang mở"}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => payroll.id && onSelectPayroll(payroll.id)}
-                      className="mt-4 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-                    >
-                      Mở chi tiết
-                      <ExternalLink className="h-4 w-4" />
-                    </button>
-                  </>
-                ) : null}
               </article>
             );
           })}

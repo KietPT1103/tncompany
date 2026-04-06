@@ -72,7 +72,7 @@ export default function AdminSidebar() {
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [showStoreMenu]);
 
-  if (loading || role === "user" || role === "server") {
+  if (loading || !role || role === "user" || role === "server") {
     return null;
   }
 

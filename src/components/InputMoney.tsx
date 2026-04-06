@@ -8,6 +8,7 @@ type InputMoneyProps = {
   className?: string;
   placeholder?: string;
   autoFocus?: boolean;
+  onBlur?: () => void;
 };
 
 export default function InputMoney({
@@ -16,7 +17,8 @@ export default function InputMoney({
   value,
   className,
   placeholder = "0",
-  autoFocus
+  autoFocus,
+  onBlur,
 }: InputMoneyProps) {
   const formatValue = (val: number | undefined) => {
     if (val === undefined || val === null) return "";
@@ -29,8 +31,7 @@ export default function InputMoney({
       set(0);
       return;
     }
-    
-    // Only allow numbers
+
     if (!/^\d*$/.test(rawValue)) return;
 
     const num = Number(rawValue);
@@ -40,8 +41,10 @@ export default function InputMoney({
   };
 
   return (
-    <div className="space-y-1.5 w-full">
-      {label && <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</label>}
+    <div className="w-full space-y-1.5">
+      {label ? (
+        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</label>
+      ) : null}
       <div className="relative">
         <Input
           type="text"
@@ -50,13 +53,16 @@ export default function InputMoney({
           value={formatValue(value)}
           onChange={handleChange}
           autoFocus={autoFocus}
+          onBlur={onBlur}
           className={cn(
-            "text-right font-mono pr-8 text-base", 
-            "focus-visible:ring-primary/20 focus-visible:border-primary",
+            "pr-8 text-right font-mono text-base",
+            "focus-visible:border-primary focus-visible:ring-primary/20",
             className
           )}
         />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium select-none">đ</span>
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 select-none text-sm font-medium text-slate-400">
+          đ
+        </span>
       </div>
     </div>
   );

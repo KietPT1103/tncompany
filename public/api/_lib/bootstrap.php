@@ -6,6 +6,9 @@ ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 set_exception_handler(static function (Throwable $exception): void {
     http_response_code(500);

@@ -9,6 +9,8 @@ The admin core has been moved to PHP/MySQL for these modules:
 - products
 - reports
 - cash-flow
+- employees
+- payroll
 
 ## Files
 
@@ -23,14 +25,17 @@ The admin core has been moved to PHP/MySQL for these modules:
 - `public/api/categories.php`
 - `public/api/products.php`
 - `public/api/reports.php`
+- `public/api/employees.php`
+- `public/api/payrolls.php`
 
 ## Hosting setup
 
 1. Copy `public/api/config.php.example` to `public/api/config.php`.
 2. Fill the real MySQL credentials in `public/api/config.php`.
 3. Import `database/schema.sql` into phpMyAdmin.
-4. Open `/api/health.php` on the deployed domain to verify MySQL is reachable.
-5. Open `/api/auth.php?action=seed` with a `POST` request from the login page quick action to create default users.
+4. If the database already existed before the monthly-salary update, run `database/payroll_salary_columns_patch.sql` once on that database.
+5. Open `/api/health.php` on the deployed domain to verify MySQL is reachable.
+6. Open `/api/auth.php?action=seed` with a `POST` request from the login page quick action to create default users.
 
 ## Default accounts
 

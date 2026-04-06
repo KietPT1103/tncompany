@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useStore, StoreType } from "@/context/StoreContext";
 import { loginApi, seedDefaultUsersApi, setApiToken } from "@/lib/api";
+import { AppUser } from "@/types/auth";
 
 const CASHIER_ACCOUNTS = ["thungan1", "thungan2", "thungan3"] as const;
 const SERVICE_ACCOUNTS = ["phucvu1"] as const;
@@ -34,6 +35,12 @@ const isAdminAccount = (value: string): value is AdminAccount =>
 const cashierToEmail = (cashier: string) => `${cashier}@cashier.local`;
 const serviceToEmail = (account: string) => `${account}@service.local`;
 const adminToEmail = (account: string) => `${account}@admin.local`;
+
+const isValidStoreId = (value: string | null | undefined): value is StoreType =>
+  value === "cafe" || value === "restaurant" || value === "bakery" || value === "farm";
+
+const getRedirectAfterLogin = (user: AppUser) =>
+  user.role === "admin" ? "/" : "/bills";
 
 export default function LoginPage() {
   const [account, setAccount] = useState("");
@@ -148,11 +155,17 @@ export default function LoginPage() {
       : rawAccount;
 
     try {
-      const { token } = await loginApi(loginEmail, rawPassword);
+      const { token, user } = await loginApi(loginEmail, rawPassword);
       setApiToken(token);
       await refreshUser();
-      setStoreId(serviceLogin ? "restaurant" : selectedStore);
-      router.push("/");
+      setStoreId(
+        serviceLogin
+          ? "restaurant"
+          : isValidStoreId(user.storeId)
+          ? user.storeId
+          : selectedStore
+      );
+      router.push(getRedirectAfterLogin(user));
     } catch (err: unknown) {
       console.error(err);
       setError("Đăng nhập thất bại. Vui lòng kiểm tra tài khoản và mật khẩu.");

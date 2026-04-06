@@ -22,14 +22,16 @@ if ($method === 'GET') {
     ]);
 
     $rows = array_map(
-        static fn(array $row): array => [
-            'id' => (string) $row['id'],
-            'storeId' => (string) $row['store_id'],
-            'name' => (string) $row['name'],
-            'description' => $row['description'] ?: '',
-            'order' => $row['sort_order'] !== null ? (int) $row['sort_order'] : null,
-            'isHidden' => (bool) $row['is_hidden'],
-        ],
+        static function (array $row): array {
+            return [
+                'id' => (string) $row['id'],
+                'storeId' => (string) $row['store_id'],
+                'name' => (string) $row['name'],
+                'description' => $row['description'] ?: '',
+                'order' => $row['sort_order'] !== null ? (int) $row['sort_order'] : null,
+                'isHidden' => (bool) $row['is_hidden'],
+            ];
+        },
         $statement->fetchAll()
     );
 
@@ -143,4 +145,3 @@ if ($method === 'DELETE') {
 }
 
 respond_error('Not found', 404);
-

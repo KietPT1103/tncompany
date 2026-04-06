@@ -18,13 +18,15 @@ function reports_map_details(string $reportId): array
     ]);
 
     return array_map(
-        static fn(array $row): array => [
-            'product_code' => (string) $row['product_code'],
-            'product_name' => (string) $row['product_name'],
-            'quantity' => (float) $row['quantity'],
-            'costUnit' => (float) $row['cost_unit'],
-            'cost' => (float) $row['cost'],
-        ],
+        static function (array $row): array {
+            return [
+                'product_code' => (string) $row['product_code'],
+                'product_name' => (string) $row['product_name'],
+                'quantity' => (float) $row['quantity'],
+                'costUnit' => (float) $row['cost_unit'],
+                'cost' => (float) $row['cost'],
+            ];
+        },
         $statement->fetchAll()
     );
 }
@@ -97,7 +99,9 @@ if ($method === 'GET') {
 
     respond_ok([
         'items' => array_map(
-            static fn(array $row): array => reports_map_row($row, false),
+            static function (array $row): array {
+                return reports_map_row($row, false);
+            },
             $statement->fetchAll()
         ),
     ]);
