@@ -146,15 +146,15 @@ const DEFAULT_COLUMNS: VisibleColumns = {
 
 
 const COLUMN_OPTIONS: { key: keyof VisibleColumns; label: string }[] = [
-  { key: "name", label: "NhÃ¢n viÃªn" },
-  { key: "role", label: "Vai trÃ²" },
-  { key: "hours", label: "Giá» lÃ m" },
-  { key: "workDays", label: "NgÃ y cÃ´ng" },
-  { key: "rate", label: "ÄÆ¡n giÃ¡" },
-  { key: "weekend", label: "Cuá»‘i tuáº§n" },
-  { key: "allowance", label: "Phá»¥ cáº¥p" },
-  { key: "total", label: "Tá»•ng lÆ°Æ¡ng" },
-  { key: "note", label: "Ghi chÃº" },
+  { key: "name", label: "Nhân viên" },
+  { key: "role", label: "Vai trò" },
+  { key: "hours", label: "Giờ làm" },
+  { key: "workDays", label: "Ngày công" },
+  { key: "rate", label: "Đơn giá" },
+  { key: "weekend", label: "Cuối tuần" },
+  { key: "allowance", label: "Phụ cấp" },
+  { key: "total", label: "Tổng lương" },
+  { key: "note", label: "Ghi chú" },
 ];
 
 
@@ -683,7 +683,7 @@ useEffect(() => {
 
   async function handleAddExistingEmployee(employee: Employee) {
 
-    if (!employee.id) throw new Error("KhÃ´ng tÃ¬m tháº¥y nhÃ¢n viÃªn Ä‘Ã£ lÆ°u.");
+    if (!employee.id) throw new Error("Không tìm thấy nhân viên đã lưu.");
     await addPayrollEntry(payrollId, {
 
       employeeId: employee.id,
@@ -736,13 +736,13 @@ useEffect(() => {
 
   async function handleCreateEmployee(payload: { employeeCode: string; hourlyRate: number; name: string; role: string; salaryType: "hourly" | "monthly"; monthlySalary: number; expectedWorkDays: number; paidLeaveDays: number; standardHours: number; }) {
 
-    if (!storeId) throw new Error("ChÆ°a chá»n cá»­a hÃ ng.");
+    if (!storeId) throw new Error("Chưa chọn cửa hàng.");
 
     const normalizedCode = payload.employeeCode.trim().toLowerCase();
 
     if (savedEmployees.some((employee) => (employee.employeeCode || "").trim().toLowerCase() === normalizedCode)) {
 
-      throw new Error("MÃ£ nhÃ¢n viÃªn Ä‘Ã£ tá»“n táº¡i.");
+      throw new Error("Mã nhân viên đã tồn tại.");
 
     }
 
@@ -797,7 +797,7 @@ useEffect(() => {
 
   async function handleDeleteEntry(entryId: string) {
 
-    if (!confirm("Báº¡n cÃ³ cháº¯c muá»‘n xÃ³a nhÃ¢n viÃªn nÃ y khá»i báº£ng lÆ°Æ¡ng?")) return;
+    if (!confirm("Bạn có chắc muốn xóa nhân viên này khỏi bảng lương?")) return;
 
     try {
 
@@ -809,7 +809,7 @@ useEffect(() => {
 
       console.error(error);
 
-      alert("KhÃ´ng thá»ƒ xÃ³a dÃ²ng lÆ°Æ¡ng.");
+      alert("Không thể xóa dòng lương.");
 
     }
 
@@ -939,24 +939,24 @@ useEffect(() => {
 
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">PAYROLL DETAIL</p>
 
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Chi tiáº¿t báº£ng lÆ°Æ¡ng</h2>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Chi tiết bảng lương</h2>
 
-            <p className="mt-2 text-sm leading-6 text-slate-500">NhÃ¢n sá»± lÆ°Æ¡ng thÃ¡ng Ä‘Æ°á»£c lÃ m ná»•i báº­t, tá»± tÃ­nh ngÃ y cÃ´ng, nghá»‰ phÃ©p vÃ  chuyÃªn cáº§n ngay trÃªn tá»«ng dÃ²ng.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Nhân sự lương tháng được làm nổi bật, tự tính ngày công, nghỉ phép và chuyên cần ngay trên từng dòng.</p>
           </div>
 
-          <Button variant="outline" className="rounded-2xl" onClick={onBack}>Danh sÃ¡ch báº£ng lÆ°Æ¡ng</Button>
+          <Button variant="outline" className="rounded-2xl" onClick={onBack}>Danh sách bảng lương</Button>
 
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
 
-          <div className="rounded-[24px] bg-slate-900 p-5 text-white"><p className="text-sm text-slate-300">NhÃ¢n viÃªn</p><p className="mt-4 text-3xl font-semibold">{entries.length}</p></div>
+          <div className="rounded-[24px] bg-slate-900 p-5 text-white"><p className="text-sm text-slate-300">Nhân viên</p><p className="mt-4 text-3xl font-semibold">{entries.length}</p></div>
 
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">LÆ°Æ¡ng thÃ¡ng</p><p className="mt-4 text-2xl font-semibold text-sky-700">{monthlyEntries}</p></div>
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Lương tháng</p><p className="mt-4 text-2xl font-semibold text-sky-700">{monthlyEntries}</p></div>
 
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Tá»•ng giá»</p><p className="mt-4 text-2xl font-semibold text-slate-900">{formatHours(filteredHours)}h</p></div>
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Tổng giờ</p><p className="mt-4 text-2xl font-semibold text-slate-900">{formatHours(filteredHours)}h</p></div>
           <div className="rounded-[24px] border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Tong ngay cong</p><p className="mt-4 text-2xl font-semibold text-slate-900">{filteredWorkDays}</p></div>
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Tá»•ng lÆ°Æ¡ng</p><p className="mt-4 text-2xl font-semibold text-slate-900">{formatCurrency(filteredTotal)}</p></div>
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Tổng lương</p><p className="mt-4 text-2xl font-semibold text-slate-900">{formatCurrency(filteredTotal)}</p></div>
         </div>
 
       </section>
@@ -973,8 +973,8 @@ useEffect(() => {
 
               <div>
 
-                <h3 className="text-lg font-semibold text-slate-900">Báº£ng lÆ°Æ¡ng Ä‘ang hiá»ƒn thá»‹</h3>
-                <p className="mt-1 text-sm text-slate-500">{filteredEntries.length}/{entries.length} nhÃ¢n viÃªn theo bá»™ lá»c hiá»‡n táº¡i.</p>
+                <h3 className="text-lg font-semibold text-slate-900">Bảng lương đang hiển thị</h3>
+                <p className="mt-1 text-sm text-slate-500">{filteredEntries.length}/{entries.length} nhân viên theo bộ lọc hiện tại.</p>
               </div>
 
               <div className="flex flex-col gap-3 xl:items-end">
@@ -985,13 +985,13 @@ useEffect(() => {
 
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
-                    <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="TÃ¬m theo mÃ£, tÃªn hoáº·c vai trÃ²" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                    <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Tìm theo mã, tên hoặc vai trò" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
 
                   </div>
 
                   <select value={filterRole} onChange={(event) => setFilterRole(event.target.value)} className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100">
 
-                    <option value="All">Táº¥t cáº£ vai trÃ²</option>
+                    <option value="All">Tất cả vai trò</option>
 
                     {Object.entries(roleGroups).map(([group, roles]) => <optgroup key={group} label={group}>{roles.map((role) => <option key={role} value={role}>{role}</option>)}</optgroup>)}
 
@@ -999,14 +999,14 @@ useEffect(() => {
 
                   <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100">
 
-                    <option value="hours_desc">Giá» lÃ m giáº£m dáº§n</option>
+                    <option value="hours_desc">Giờ làm giảm dần</option>
 
-                    <option value="salary_desc">Tá»•ng lÆ°Æ¡ng giáº£m dáº§n</option>
-                    <option value="days_desc">NgÃ y cÃ´ng giáº£m dáº§n</option>
+                    <option value="salary_desc">Tổng lương giáº£m dáº§n</option>
+                    <option value="days_desc">Ngày công giảm dần</option>
 
-                    <option value="name_asc">TÃªn A-Z</option>
+                    <option value="name_asc">Tên A-Z</option>
 
-                    <option value="role_asc">Vai trÃ² A-Z</option>
+                    <option value="role_asc">Vai trò A-Z</option>
 
                   </select>
 
@@ -1016,12 +1016,12 @@ useEffect(() => {
 
                   <div className="relative">
 
-                    <Button variant="outline" className="gap-2 rounded-2xl" onClick={() => setShowColumns((current) => !current)}><Columns3 className="h-4 w-4" />Cá»™t hiá»ƒn thá»‹</Button>
+                    <Button variant="outline" className="gap-2 rounded-2xl" onClick={() => setShowColumns((current) => !current)}><Columns3 className="h-4 w-4" />Cột hiển thị</Button>
                     {showColumns ? <div className="absolute right-0 top-14 z-20 w-60 rounded-[24px] border border-slate-200 bg-white p-4 shadow-xl"><div className="space-y-3">{COLUMN_OPTIONS.map((option) => <label key={option.key} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-700"><span>{option.label}</span><input type="checkbox" checked={visibleColumns[option.key]} onChange={(event) => setVisibleColumns((current) => ({ ...current, [option.key]: event.target.checked }))} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" /></label>)}</div></div> : null}
 
                   </div>
 
-                  <Button className="gap-2 rounded-2xl" onClick={() => setShowAddDialog(true)}><Plus className="h-4 w-4" />ThÃªm nhÃ¢n viÃªn</Button>
+                  <Button className="gap-2 rounded-2xl" onClick={() => setShowAddDialog(true)}><Plus className="h-4 w-4" />Thêm nhân viên</Button>
 
                 </div>
 
@@ -1039,21 +1039,21 @@ useEffect(() => {
 
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.16em] text-slate-400">
 
-                  {visibleColumns.name ? <th className="pb-3 pr-4 w-[280px]">NhÃ¢n viÃªn</th> : null}
+                  {visibleColumns.name ? <th className="pb-3 pr-4 w-[280px]">Nhân viên</th> : null}
 
-                  {visibleColumns.role ? <th className="pb-3 pr-4 w-[160px]">Vai trÃ²</th> : null}
+                  {visibleColumns.role ? <th className="pb-3 pr-4 w-[160px]">Vai trò</th> : null}
 
-                  {visibleColumns.hours ? <th className="pb-3 pr-4 w-[150px] text-right">Giá» lÃ m</th> : null}
+                  {visibleColumns.hours ? <th className="pb-3 pr-4 w-[150px] text-right">Giờ làm</th> : null}
 
-                  {visibleColumns.workDays ? <th className="pb-3 pr-4 w-[160px]">NgÃ y cÃ´ng</th> : null}
+                  {visibleColumns.workDays ? <th className="pb-3 pr-4 w-[160px]">Ngày công</th> : null}
 
-                  {visibleColumns.rate ? <th className="pb-3 pr-4 w-[220px]">ÄÆ¡n giÃ¡</th> : null}
+                  {visibleColumns.rate ? <th className="pb-3 pr-4 w-[220px]">Đơn giá</th> : null}
 
-                  {visibleColumns.weekend ? <th className="pb-3 pr-4 w-[140px] text-right">Cuá»‘i tuáº§n</th> : null}
-                  {visibleColumns.allowance ? <th className="pb-3 pr-4 w-[180px]">Phá»¥ cáº¥p</th> : null}
+                  {visibleColumns.weekend ? <th className="pb-3 pr-4 w-[140px] text-right">Cuối tuần</th> : null}
+                  {visibleColumns.allowance ? <th className="pb-3 pr-4 w-[180px]">Phụ cấp</th> : null}
 
-                  {visibleColumns.total ? <th className="pb-3 pr-4 w-[170px] text-right">Tá»•ng lÆ°Æ¡ng</th> : null}
-                  {visibleColumns.note ? <th className="pb-3 w-[220px]">Ghi chÃº</th> : null}
+                  {visibleColumns.total ? <th className="pb-3 pr-4 w-[170px] text-right">Tổng lương</th> : null}
+                  {visibleColumns.note ? <th className="pb-3 w-[220px]">Ghi chú</th> : null}
 
                 </tr>
 
@@ -1071,22 +1071,22 @@ useEffect(() => {
 
                     <tr key={entry.id} className={cn("align-top", isMonthly && "bg-sky-50/30")}>
 
-                      {visibleColumns.name ? <td className="py-4 pr-4"><div className={cn("rounded-[24px] border bg-slate-50 p-3", isMonthly ? "border-sky-200 bg-sky-50/70" : "border-slate-200")}><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="flex items-center gap-2">{hasInvalidShift(entry) ? <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700"><AlertCircle className="h-4 w-4" /></span> : null}<input value={entry.employeeName} onChange={(event) => applyEntryPatch(entry.id!, { employeeName: event.target.value }, { name: event.target.value })} onBlur={() => debouncedUpdate.flush()} className="h-10 w-full rounded-2xl border border-transparent bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" /></div><div className="mt-3 flex flex-wrap items-center gap-2"><span className="inline-flex rounded-full bg-slate-900 px-3 py-1 font-mono text-xs font-semibold text-white">{entry.employeeCode || "ChÆ°a cÃ³ mÃ£"}</span><span className={cn("inline-flex rounded-full px-3 py-1 text-xs font-semibold", isMonthly ? "bg-sky-100 text-sky-800 ring-1 ring-sky-200" : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200")}>{isMonthly ? "LÆ°Æ¡ng thÃ¡ng" : "Theo giá»"}</span>{savingId === entry.id ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs text-slate-600"><Loader2 className="h-3 w-3 animate-spin" />Äang lÆ°u</span> : null}</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="icon" className="h-9 w-9 rounded-2xl text-slate-500 hover:bg-slate-200" onClick={() => { setSettingsEntryId(entry.id || null); const entrySalaryType = resolvePayrollSalaryType(entry); setSettingsData({ salaryType: entrySalaryType, monthlySalary: entry.monthlySalary || entry.fixedSalary || 0, expectedWorkDays: entrySalaryType === "monthly" ? entry.expectedWorkDays || 30 : 30, paidLeaveDays: entrySalaryType === "monthly" ? entry.paidLeaveDays || 0 : 0, standardHours: entrySalaryType === "monthly" ? entry.standardHours || 0 : 0, overtimeRate: entry.hourlyRate || 0 }); }}><Settings2 className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="h-9 w-9 rounded-2xl text-rose-500 hover:bg-rose-50" onClick={() => handleDeleteEntry(entry.id!)}><Trash2 className="h-4 w-4" /></Button></div></div></div></td> : null}
+                      {visibleColumns.name ? <td className="py-4 pr-4"><div className={cn("rounded-[24px] border bg-slate-50 p-3", isMonthly ? "border-sky-200 bg-sky-50/70" : "border-slate-200")}><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="flex items-center gap-2">{hasInvalidShift(entry) ? <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700"><AlertCircle className="h-4 w-4" /></span> : null}<input value={entry.employeeName} onChange={(event) => applyEntryPatch(entry.id!, { employeeName: event.target.value }, { name: event.target.value })} onBlur={() => debouncedUpdate.flush()} className="h-10 w-full rounded-2xl border border-transparent bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" /></div><div className="mt-3 flex flex-wrap items-center gap-2"><span className="inline-flex rounded-full bg-slate-900 px-3 py-1 font-mono text-xs font-semibold text-white">{entry.employeeCode || "Chưa có mã"}</span><span className={cn("inline-flex rounded-full px-3 py-1 text-xs font-semibold", isMonthly ? "bg-sky-100 text-sky-800 ring-1 ring-sky-200" : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200")}>{isMonthly ? "Lương tháng" : "Theo giờ"}</span>{savingId === entry.id ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs text-slate-600"><Loader2 className="h-3 w-3 animate-spin" />Đang lưu</span> : null}</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="icon" className="h-9 w-9 rounded-2xl text-slate-500 hover:bg-slate-200" onClick={() => { setSettingsEntryId(entry.id || null); const entrySalaryType = resolvePayrollSalaryType(entry); setSettingsData({ salaryType: entrySalaryType, monthlySalary: entry.monthlySalary || entry.fixedSalary || 0, expectedWorkDays: entrySalaryType === "monthly" ? entry.expectedWorkDays || 30 : 30, paidLeaveDays: entrySalaryType === "monthly" ? entry.paidLeaveDays || 0 : 0, standardHours: entrySalaryType === "monthly" ? entry.standardHours || 0 : 0, overtimeRate: entry.hourlyRate || 0 }); }}><Settings2 className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="h-9 w-9 rounded-2xl text-rose-500 hover:bg-rose-50" onClick={() => handleDeleteEntry(entry.id!)}><Trash2 className="h-4 w-4" /></Button></div></div></div></td> : null}
 
                       {visibleColumns.role ? <td className="py-4 pr-4"><RoleSelect roleGroups={roleGroups} value={entry.role || defaultRole} onChange={(value) => applyEntryPatch(entry.id!, { role: value }, { role: value }, { immediate: true })} /></td> : null}
 
                       {visibleColumns.hours ? <td className="py-4 pr-4 text-right"><div className="flex items-center justify-end gap-2"><input type="number" onWheel={preventNumberInputScroll} value={entry.totalHours || ""} onChange={(event) => applyEntryPatch(entry.id!, { totalHours: Number(event.target.value) || 0 })} onBlur={() => debouncedUpdate.flush()} className="h-10 w-24 rounded-2xl border border-slate-200 bg-white px-3 text-right outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 no-spin" /><Button variant="outline" size="icon" className="h-10 w-10 rounded-2xl" onClick={() => { setCurrentShiftEntry(entry); setShiftModalOpen(true); }}><CalendarClock className="h-4 w-4" /></Button></div></td> : null}
 
-                      {visibleColumns.workDays ? <td className="py-4 pr-4"><div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3"><div className="text-lg font-semibold text-slate-900">{breakdown.workingDays}{isMonthly ? <span className="text-sm text-slate-500"> / {entry.expectedWorkDays || 30}</span> : null}</div><div className="mt-1 text-xs leading-5 text-slate-500">{isMonthly ? <>Nghá»‰ thiáº¿u {breakdown.absentDays} ngÃ y, vÆ°á»£t phÃ©p {breakdown.unpaidLeaveDays} ngÃ y.</> : <>Tá»± tÃ­nh tá»« dá»¯ liá»‡u cháº¥m cÃ´ng.</>}</div></div></td> : null}
-                      {visibleColumns.rate ? <td className="py-4 pr-4">{isMonthly ? <div className="rounded-[24px] border border-sky-200 bg-sky-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">LÆ°Æ¡ng thÃ¡ng</div><div className="mt-2 text-lg font-semibold text-slate-900">{formatCurrency(entry.monthlySalary || 0)}</div><div className="mt-2 text-xs leading-5 text-slate-500">PhÃ©p {entry.paidLeaveDays || 0} ngÃ y. OT sau {formatHours(entry.standardHours || 0)}h, {formatCurrency(entry.hourlyRate || 0)}/h.</div></div> : <div className="ml-auto max-w-[180px]"><InputMoney value={entry.hourlyRate} set={(value) => applyEntryPatch(entry.id!, { hourlyRate: value }, { hourlyRate: value })} onBlur={() => debouncedUpdate.flush()} className="h-10 rounded-2xl" /></div>}</td> : null}
+                      {visibleColumns.workDays ? <td className="py-4 pr-4"><div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3"><div className="text-lg font-semibold text-slate-900">{breakdown.workingDays}{isMonthly ? <span className="text-sm text-slate-500"> / {entry.expectedWorkDays || 30}</span> : null}</div><div className="mt-1 text-xs leading-5 text-slate-500">{isMonthly ? <>Nghỉ thiếu {breakdown.absentDays} ngày, vượt phép {breakdown.unpaidLeaveDays} ngày.</> : <>Tự tính từ dữ liệu chấm công.</>}</div></div></td> : null}
+                      {visibleColumns.rate ? <td className="py-4 pr-4">{isMonthly ? <div className="rounded-[24px] border border-sky-200 bg-sky-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Lương tháng</div><div className="mt-2 text-lg font-semibold text-slate-900">{formatCurrency(entry.monthlySalary || 0)}</div><div className="mt-2 text-xs leading-5 text-slate-500">Phép {entry.paidLeaveDays || 0} ngày. OT sau {formatHours(entry.standardHours || 0)}h, {formatCurrency(entry.hourlyRate || 0)}/h.</div></div> : <div className="ml-auto max-w-[180px]"><InputMoney value={entry.hourlyRate} set={(value) => applyEntryPatch(entry.id!, { hourlyRate: value }, { hourlyRate: value })} onBlur={() => debouncedUpdate.flush()} className="h-10 rounded-2xl" /></div>}</td> : null}
 
-                      {visibleColumns.weekend ? <td className="py-4 pr-4 text-right">{isMonthly ? <div className="rounded-[20px] border border-sky-200 bg-white px-4 py-3 text-xs font-medium text-sky-700">KhÃ´ng tÃ­nh</div> : <input type="number" onWheel={preventNumberInputScroll} value={entry.weekendHours || ""} onChange={(event) => applyEntryPatch(entry.id!, { weekendHours: Number(event.target.value) || 0 })} onBlur={() => debouncedUpdate.flush()} className="ml-auto h-10 w-24 rounded-2xl border border-slate-200 bg-white px-3 text-right outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 no-spin" />}</td> : null}
+                      {visibleColumns.weekend ? <td className="py-4 pr-4 text-right">{isMonthly ? <div className="rounded-[20px] border border-sky-200 bg-white px-4 py-3 text-xs font-medium text-sky-700">Không tính</div> : <input type="number" onWheel={preventNumberInputScroll} value={entry.weekendHours || ""} onChange={(event) => applyEntryPatch(entry.id!, { weekendHours: Number(event.target.value) || 0 })} onBlur={() => debouncedUpdate.flush()} className="ml-auto h-10 w-24 rounded-2xl border border-slate-200 bg-white px-3 text-right outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 no-spin" />}</td> : null}
 
-                      {visibleColumns.allowance ? <td className="py-4 pr-4"><button onClick={() => { setAllowanceEntryId(entry.id || null); setEditAllowances(entry.allowances || []); setAttendanceBonusEnabled(entry.attendanceBonusEnabled || false); setAttendanceBonusDays(entry.attendanceBonusDays || 0); setAttendanceBonusAmount(entry.attendanceBonusAmount || 0); }} className="w-full rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50"><div className="text-xs uppercase tracking-[0.16em] text-slate-400">{(entry.allowances || []).length} khoáº£n{entry.attendanceBonusEnabled ? " + chuyÃªn cáº§n" : ""}</div><div className="mt-1 font-semibold text-slate-900">{formatCurrency(getAllowanceTotal(entry) + getAttendanceBonusValue(entry))}</div></button></td> : null}
+                      {visibleColumns.allowance ? <td className="py-4 pr-4"><button onClick={() => { setAllowanceEntryId(entry.id || null); setEditAllowances(entry.allowances || []); setAttendanceBonusEnabled(entry.attendanceBonusEnabled || false); setAttendanceBonusDays(entry.attendanceBonusDays || 0); setAttendanceBonusAmount(entry.attendanceBonusAmount || 0); }} className="w-full rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50"><div className="text-xs uppercase tracking-[0.16em] text-slate-400">{(entry.allowances || []).length} khoản{entry.attendanceBonusEnabled ? " + chuyên cần" : ""}</div><div className="mt-1 font-semibold text-slate-900">{formatCurrency(getAllowanceTotal(entry) + getAttendanceBonusValue(entry))}</div></button></td> : null}
 
-                      {visibleColumns.total ? <td className="py-4 pr-4 text-right"><div className="font-semibold text-emerald-700">{formatCurrency(entry.salary || 0)}</div>{isMonthly ? <div className="mt-1 text-xs leading-5 text-slate-500">{breakdown.overtimeHours > 0 ? `OT ${formatHours(breakdown.overtimeHours)}h: ${formatCurrency(breakdown.overtimePay)} - Trá»« phÃ©p ${formatCurrency(breakdown.deduction)}` : `Trá»« phÃ©p ${formatCurrency(breakdown.deduction)}`}</div> : <div className="mt-1 text-xs leading-5 text-slate-500">{formatHours(entry.totalHours || 0)}h x {formatCurrency(entry.hourlyRate || 0)}</div>}</td> : null}
+                      {visibleColumns.total ? <td className="py-4 pr-4 text-right"><div className="font-semibold text-emerald-700">{formatCurrency(entry.salary || 0)}</div>{isMonthly ? <div className="mt-1 text-xs leading-5 text-slate-500">{breakdown.overtimeHours > 0 ? `OT ${formatHours(breakdown.overtimeHours)}h: ${formatCurrency(breakdown.overtimePay)} - Trừ phép ${formatCurrency(breakdown.deduction)}` : `Trừ phép ${formatCurrency(breakdown.deduction)}`}</div> : <div className="mt-1 text-xs leading-5 text-slate-500">{formatHours(entry.totalHours || 0)}h x {formatCurrency(entry.hourlyRate || 0)}</div>}</td> : null}
 
-                      {visibleColumns.note ? <td className="py-4"><input value={entry.note || ""} onChange={(event) => applyEntryPatch(entry.id!, { note: event.target.value })} onBlur={() => debouncedUpdate.flush()} placeholder="Ghi chÃº thÃªm" className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" /></td> : null}
+                      {visibleColumns.note ? <td className="py-4"><input value={entry.note || ""} onChange={(event) => applyEntryPatch(entry.id!, { note: event.target.value })} onBlur={() => debouncedUpdate.flush()} placeholder="Ghi chú thêm" className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" /></td> : null}
 
                     </tr>
 
@@ -1094,7 +1094,7 @@ useEffect(() => {
 
                 })}
 
-                {filteredEntries.length === 0 ? <tr><td colSpan={Math.max(visibleCount, 1)} className="py-16 text-center text-slate-500">KhÃ´ng cÃ³ nhÃ¢n viÃªn phÃ¹ há»£p vá»›i bá»™ lá»c hiá»‡n táº¡i.</td></tr> : null}
+                {filteredEntries.length === 0 ? <tr><td colSpan={Math.max(visibleCount, 1)} className="py-16 text-center text-slate-500">Không có nhân viên phù hợp với bộ lọc hiện tại.</td></tr> : null}
               </tbody>
 
             </table>
@@ -1103,14 +1103,14 @@ useEffect(() => {
 
           <div className="flex flex-col gap-4 border-t border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
 
-            <p className="text-sm text-slate-500">CÃ³ {warnings} dÃ²ng cáº§n kiá»ƒm tra láº¡i dá»¯ liá»‡u cháº¥m cÃ´ng.</p>
+            <p className="text-sm text-slate-500">Có {warnings} dòng cần kiểm tra lại dữ liệu chấm công.</p>
             <div className="flex flex-wrap gap-5 text-sm">
 
-              <div>Giá» lÃ m: <span className="font-semibold text-slate-900">{formatHours(filteredHours)}h</span></div>
+              <div>Giờ làm: <span className="font-semibold text-slate-900">{formatHours(filteredHours)}h</span></div>
 
-              <div>NgÃ y cÃ´ng: <span className="font-semibold text-slate-900">{filteredWorkDays}</span></div>
+              <div>Ngày công: <span className="font-semibold text-slate-900">{filteredWorkDays}</span></div>
 
-              <div>Tá»•ng lÆ°Æ¡ng: <span className="font-semibold text-emerald-700">{formatCurrency(filteredTotal)}</span></div>
+              <div>Tổng lương: <span className="font-semibold text-emerald-700">{formatCurrency(filteredTotal)}</span></div>
             </div>
 
           </div>
