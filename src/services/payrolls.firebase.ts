@@ -22,6 +22,7 @@ export interface Shift {
 export type PayrollAllowance = {
   name: string;
   amount: number;
+  period?: "all" | "1" | "2";
 };
 
 export type PayrollEntry = {

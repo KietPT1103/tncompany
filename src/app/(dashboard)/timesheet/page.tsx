@@ -62,6 +62,12 @@ function calculateEmployeeTotal(employee: EmployeeSummary) {
 
 export default function TimesheetPage() {
   const [file, setFile] = useState<File | null>(null);
+  const [mode, setMode] = useState<'month' | 'custom'>('custom');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [selectedPeriod, setSelectedPeriod] = useState<1 | 2>(1);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [summaryData, setSummaryData] = useState<EmployeeSummary[]>([]);
@@ -89,6 +95,16 @@ export default function TimesheetPage() {
   const defaultRole = getDefaultRoleForStore(storeId);
   const router = useRouter();
 
+  const formatLocalDate = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+      date.getDate()
+    ).padStart(2, '0')}`;
+  };
+
+  const formatLocalMonth = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
   React.useEffect(() => {
     if (!storeId) return;
     getEmployees(storeId)
@@ -102,6 +118,22 @@ export default function TimesheetPage() {
         );
       });
   }, [storeId]);
+
+  React.useEffect(() => {
+    if (mode === 'month' && selectedMonth) {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const startOfMonth = new Date(year, month - 1, 1);
+      const endOfMonth = new Date(year, month, 0);
+
+      if (selectedPeriod === 1) {
+        setStartDate(formatLocalDate(startOfMonth));
+        setEndDate(formatLocalDate(new Date(year, month - 1, 15)));
+      } else {
+        setStartDate(formatLocalDate(new Date(year, month - 1, 16)));
+        setEndDate(formatLocalDate(endOfMonth));
+      }
+    }
+  }, [mode, selectedMonth, selectedPeriod]);
 
   const filteredData = useMemo(() => {
     return [...summaryData]
@@ -210,7 +242,8 @@ export default function TimesheetPage() {
         grouped[employeeCode].push(row);
       });
 
-      const summaries: EmployeeSummary[] = Object.keys(grouped).map((employeeCode) => {
+      const summaries: EmployeeSummary[] = [];
+      for (const employeeCode of Object.keys(grouped)) {
         const rows = grouped[employeeCode].sort(
           (left, right) => new Date(left.DateTime).getTime() - new Date(right.DateTime).getTime()
         );
@@ -280,6 +313,11 @@ export default function TimesheetPage() {
           (employee) => employee.employeeCode?.trim() === employeeCode
         );
 
+        // Skip full-time employees in period 1
+        if (mode === 'month' && selectedPeriod === 1 && matchedDbEmployee?.monthlySalary > 0) {
+          continue;
+        }
+
         const summary: EmployeeSummary = {
           dbId: matchedDbEmployee?.id,
           Name: displayName,
@@ -294,9 +332,18 @@ export default function TimesheetPage() {
           Errors: errors,
           Shifts: shifts,
         };
-        summary.TotalSalary = calculateEmployeeTotal(summary);
-        return summary;
-      });
+
+        // For full-time employees in period 2, use monthly salary
+        if (mode === 'month' && selectedPeriod === 2 && matchedDbEmployee?.monthlySalary > 0) {
+          summary.TotalSalary = matchedDbEmployee.monthlySalary;
+          summary.TotalHours = 0;
+          summary.WeekendHours = 0;
+        } else {
+          summary.TotalSalary = calculateEmployeeTotal(summary);
+        }
+
+        summaries.push(summary);
+      }
 
       summaries.sort((left, right) => (left.Role || "").localeCompare(right.Role || ""));
       setSummaryData(summaries);
@@ -410,27 +457,39 @@ export default function TimesheetPage() {
     setError("");
     setLoading(true);
     try {
+      const payrollName = mode === 'month' 
+        ? `Bảng lương tháng ${new Date(selectedMonth + '-01').toLocaleDateString('vi-VN', { year: 'numeric', month: 'long' })} - Đợt ${selectedPeriod}`
+        : `Bảng lương ${startDate} - ${endDate}`;
+      
       const payrollId = await saveImportedPayroll({
         storeId,
-        name: `Bảng lương ${startDate} - ${endDate}`,
+        name: payrollName,
         startDate,
         endDate,
-        entries: summaryData.map((employee) => ({
-          employeeId: employee.dbId || `manual_${employee.EnNo || Date.now()}`,
-          employeeCode: employee.EnNo,
-          employeeName: employee.Name,
-          role: employee.Role || defaultRole,
-          hourlyRate: employee.SalaryPerHour,
-          totalHours: employee.TotalHours,
-          weekendHours: employee.WeekendHours,
-          salary: employee.TotalSalary,
-          allowances: employee.Allowance > 0 ? [{ name: "Phụ cấp", amount: employee.Allowance }] : [],
-          note: employee.Note,
-          salaryType: "hourly",
-          fixedSalary: 0,
-          standardHours: 0,
-          shifts: employee.Shifts,
-        })) as Array<Partial<PayrollEntry>>,
+        entries: summaryData.map((employee) => {
+          const matchedDbEmployee = dbEmployees.find(
+            (emp) => emp.employeeCode?.trim() === employee.EnNo
+          );
+          const isFullTime = matchedDbEmployee?.monthlySalary > 0;
+          const salaryType = (mode === 'month' && selectedPeriod === 2 && isFullTime) ? 'monthly' : 'hourly';
+          
+          return {
+            employeeId: employee.dbId || `manual_${employee.EnNo || Date.now()}`,
+            employeeCode: employee.EnNo,
+            employeeName: employee.Name,
+            role: employee.Role || defaultRole,
+            hourlyRate: employee.SalaryPerHour,
+            totalHours: employee.TotalHours,
+            weekendHours: employee.WeekendHours,
+            salary: employee.TotalSalary,
+            allowances: employee.Allowance > 0 ? [{ name: "Phụ cấp", amount: employee.Allowance }] : [],
+            note: employee.Note,
+            salaryType,
+            fixedSalary: salaryType === 'monthly' ? matchedDbEmployee?.monthlySalary || 0 : 0,
+            standardHours: 0,
+            shifts: employee.Shifts,
+          };
+        }) as Array<Partial<PayrollEntry>>,
       });
 
       setSavedPayrollId(payrollId);
@@ -509,18 +568,86 @@ export default function TimesheetPage() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Từ Ngày (00:00)</label>
-          <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <label className="text-sm font-medium text-gray-700">Chọn thời gian</label>
+          <div className="space-y-2">
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="month"
+                  checked={mode === 'month'}
+                  onChange={(e) => setMode(e.target.value as 'month')}
+                />
+                Tháng
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="custom"
+                  checked={mode === 'custom'}
+                  onChange={(e) => setMode(e.target.value as 'custom')}
+                />
+                Tuỳ chọn
+              </label>
+            </div>
+            {mode === 'month' ? (
+              <div className="flex gap-2">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Chọn tháng</option>
+                  {Array.from({ length: 12 }, (_, i) => {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() - i);
+                    const value = formatLocalMonth(date);
+                    const label = date.toLocaleDateString('vi-VN', { year: 'numeric', month: 'long' });
+                    return <option key={value} value={value}>{label}</option>;
+                  })}
+                </select>
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => setSelectedPeriod(Number(e.target.value) as 1 | 2)}
+                  className="w-20 rounded-md border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value={1}>Đợt 1</option>
+                  <option value={2}>Đợt 2</option>
+                </select>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  placeholder="Từ ngày"
+                  className="flex-1"
+                />
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  placeholder="Đến ngày"
+                  className="flex-1"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Đến Ngày (23:59)</label>
-          <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          <label className="text-sm font-medium text-gray-700">Thời gian đã chọn</label>
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-2 text-sm text-gray-600">
+            {startDate && endDate ? `${startDate} đến ${endDate}` : 'Chưa chọn'}
+          </div>
         </div>
 
         <Button
           onClick={processData}
-          disabled={loading}
+          disabled={loading || !file || !startDate || !endDate}
           className="bg-indigo-600 text-white shadow-lg shadow-indigo-200 transition-all hover:scale-105 hover:bg-indigo-700"
         >
           {loading ? (
@@ -621,7 +748,11 @@ export default function TimesheetPage() {
               {savedPayrollId ? (
                 <Button
                   variant="outline"
-                  onClick={() => router.push(`/payroll?openPayroll=${savedPayrollId}`)}
+                  onClick={() =>
+                    router.push(`/payroll?openPayroll=${encodeURIComponent(
+                      savedPayrollId
+                    )}`)
+                  }
                   className="h-9 shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
                 >
                   <Calculator className="mr-2 h-4 w-4" /> Mở bảng lương vừa lưu

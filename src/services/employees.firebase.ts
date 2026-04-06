@@ -1,5 +1,11 @@
 import { apiRequest } from "@/lib/api";
 
+export type EmployeeAllowance = {
+  name: string;
+  amount: number;
+  period?: "all" | "1" | "2";
+};
+
 export type Employee = {
   id?: string;
   storeId: string;
@@ -15,6 +21,7 @@ export type Employee = {
   attendanceBonusDays?: number;
   attendanceBonusAmount?: number;
   standardHours?: number;
+  allowances?: EmployeeAllowance[];
   createdAt?: any;
 };
 

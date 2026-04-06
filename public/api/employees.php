@@ -65,6 +65,7 @@ function employees_ensure_table(): void
     employees_ensure_column('employees', 'attendance_bonus_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_enabled');
     employees_ensure_column('employees', 'attendance_bonus_amount', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_days');
     employees_ensure_column('employees', 'standard_hours', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_amount');
+    employees_ensure_column('employees', 'allowances_json', 'LONGTEXT NULL AFTER standard_hours');
 
     db()->exec(
         "UPDATE employees
@@ -120,6 +121,7 @@ function employees_map_row(array $row): array
         'attendanceBonusDays' => (float) ($row['attendance_bonus_days'] ?? 0),
         'attendanceBonusAmount' => (float) ($row['attendance_bonus_amount'] ?? 0),
         'standardHours' => (float) ($row['standard_hours'] ?? 0),
+        'allowances' => json_decode((string) ($row['allowances_json'] ?? '[]'), true) ?: [],
         'createdAt' => $row['created_at'],
     ];
 }
@@ -134,7 +136,7 @@ if ($method === 'GET') {
     $statement = db()->prepare(
         'SELECT id, store_id, employee_code, name, role, hourly_rate, salary_type, monthly_salary,
                 expected_work_days, paid_leave_days, attendance_bonus_enabled, attendance_bonus_days,
-                attendance_bonus_amount, standard_hours, created_at
+                attendance_bonus_amount, standard_hours, allowances_json, created_at
          FROM employees
          WHERE store_id = :store_id
          ORDER BY employee_code ASC, name ASC'
@@ -172,11 +174,11 @@ if ($method === 'POST') {
         'INSERT INTO employees (
             id, store_id, employee_code, name, role, hourly_rate, salary_type, monthly_salary,
             expected_work_days, paid_leave_days, attendance_bonus_enabled, attendance_bonus_days,
-            attendance_bonus_amount, standard_hours, created_at
+            attendance_bonus_amount, standard_hours, allowances_json, created_at
          ) VALUES (
             :id, :store_id, :employee_code, :name, :role, :hourly_rate, :salary_type, :monthly_salary,
             :expected_work_days, :paid_leave_days, :attendance_bonus_enabled, :attendance_bonus_days,
-            :attendance_bonus_amount, :standard_hours, NOW()
+            :attendance_bonus_amount, :standard_hours, :allowances_json, NOW()
          )'
     );
     $statement->execute([
@@ -194,6 +196,7 @@ if ($method === 'POST') {
         'attendance_bonus_days' => (float) ($body['attendanceBonusDays'] ?? 0),
         'attendance_bonus_amount' => (float) ($body['attendanceBonusAmount'] ?? 0),
         'standard_hours' => (float) ($body['standardHours'] ?? 0),
+        'allowances_json' => json_encode($body['allowances'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
     ]);
 
     respond_ok([
@@ -308,6 +311,11 @@ if ($method === 'PATCH') {
         $params['standard_hours'] = (float) $body['standardHours'];
     }
 
+    if (array_key_exists('allowances', $body)) {
+        $fields[] = 'allowances_json = :allowances_json';
+        $params['allowances_json'] = json_encode($body['allowances'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
     if ($fields === []) {
         respond_error('No changes provided', 422);
     }
@@ -321,7 +329,7 @@ if ($method === 'PATCH') {
     $verifyStatement = db()->prepare(
         'SELECT id, store_id, employee_code, name, role, hourly_rate, salary_type, monthly_salary,
                 expected_work_days, paid_leave_days, attendance_bonus_enabled, attendance_bonus_days,
-                attendance_bonus_amount, standard_hours, created_at
+                attendance_bonus_amount, standard_hours, allowances_json, created_at
          FROM employees
          WHERE id = :id
          LIMIT 1'

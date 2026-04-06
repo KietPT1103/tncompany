@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS employees (
   attendance_bonus_days DECIMAL(10,2) NOT NULL DEFAULT 0,
   attendance_bonus_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
   standard_hours DECIMAL(15,3) NOT NULL DEFAULT 0,
+  allowances_json LONGTEXT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_employees_store_code (store_id, employee_code),

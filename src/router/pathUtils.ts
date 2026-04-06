@@ -27,23 +27,27 @@ export function normalizeAdminHref(href: string) {
     return `${ADMIN_PREFIX}/bills`;
   }
 
+  const queryIndex = href.search(/[?#]/);
+  const pathname = queryIndex >= 0 ? href.slice(0, queryIndex) : href;
+  const suffix = queryIndex >= 0 ? href.slice(queryIndex) : "";
+
   const shouldPrefix = ADMIN_PATHS.some((path) => {
     if (path === "/") {
-      return href === "/";
+      return pathname === "/";
     }
 
-    return href === path || href.startsWith(`${path}/`);
+    return pathname === path || pathname.startsWith(`${path}/`);
   });
 
   if (!shouldPrefix) {
     return href;
   }
 
-  if (href === "/") {
-    return ADMIN_PREFIX;
+  if (pathname === "/") {
+    return `${ADMIN_PREFIX}${suffix}`;
   }
 
-  return `${ADMIN_PREFIX}${href}`;
+  return `${ADMIN_PREFIX}${pathname}${suffix}`;
 }
 
 export function denormalizeAdminPathname(pathname: string) {
