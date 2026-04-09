@@ -20,6 +20,14 @@ function seed_default_users(): array
             'store_id' => null,
         ],
         [
+            'username' => 'manager',
+            'email' => 'manager@admin.local',
+            'display_name' => 'manager',
+            'password' => 'manager123',
+            'role' => 'manager',
+            'store_id' => 'cafe',
+        ],
+        [
             'username' => 'thungan1',
             'email' => 'thungan1@cashier.local',
             'display_name' => 'thungan1',
@@ -141,4 +149,3 @@ if ($method === 'POST' && $action === 'seed') {
 }
 
 respond_error('Not found', 404);
-

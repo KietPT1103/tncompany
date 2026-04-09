@@ -183,6 +183,8 @@ function payrolls_map_row(array $row): array
         'storeId' => (string) $row['store_id'],
         'name' => (string) $row['name'],
         'status' => (string) $row['status'],
+        'startDate' => $row['period_start'],
+        'endDate' => $row['period_end'],
         'createdAt' => $row['created_at'],
     ];
 }
@@ -390,7 +392,7 @@ payrolls_ensure_tables();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require(['admin']);
+    auth_require(['admin', 'manager']);
 
     $resource = trim((string) ($_GET['resource'] ?? ''));
     if ($resource === 'entries') {
@@ -420,7 +422,7 @@ if ($method === 'GET') {
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
-        'SELECT id, store_id, name, status, created_at
+        'SELECT id, store_id, name, status, period_start, period_end, created_at
          FROM payrolls
          WHERE store_id = :store_id
          ORDER BY created_at DESC'
@@ -440,7 +442,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    auth_require(['admin']);
+    auth_require(['admin', 'manager']);
 
     $body = read_json_body();
     $resource = trim((string) ($body['resource'] ?? ''));
@@ -539,7 +541,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PATCH') {
-    auth_require(['admin']);
+    auth_require(['admin', 'manager']);
 
     $body = read_json_body();
     $resource = trim((string) ($body['resource'] ?? ''));
@@ -643,6 +645,16 @@ if ($method === 'PATCH') {
         $params['status'] = trim((string) $body['status']);
     }
 
+    if (array_key_exists('startDate', $body)) {
+        $fields[] = 'period_start = :period_start';
+        $params['period_start'] = $body['startDate'] ?: null;
+    }
+
+    if (array_key_exists('endDate', $body)) {
+        $fields[] = 'period_end = :period_end';
+        $params['period_end'] = $body['endDate'] ?: null;
+    }
+
     if ($fields === []) {
         respond_error('No changes provided', 422);
     }
@@ -659,7 +671,7 @@ if ($method === 'PATCH') {
 }
 
 if ($method === 'DELETE') {
-    auth_require(['admin']);
+    auth_require(['admin', 'manager']);
 
     $entryId = trim((string) ($_GET['entryId'] ?? ''));
     if ($entryId !== '') {

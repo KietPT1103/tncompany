@@ -130,7 +130,7 @@ employees_ensure_table();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require(['admin']);
+    auth_require(['admin', 'manager']);
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(

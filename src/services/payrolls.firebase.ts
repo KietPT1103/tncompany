@@ -6,6 +6,8 @@ export type Payroll = {
   storeId: string;
   name: string;
   status: "draft" | "locked";
+  startDate?: string;
+  endDate?: string;
   createdAt?: any;
 };
 

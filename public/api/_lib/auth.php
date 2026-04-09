@@ -5,6 +5,78 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/response.php';
 
+function auth_ensure_column(string $table, string $column, string $definition): void
+{
+    if (!preg_match('/^[a-z_]+$/', $table) || !preg_match('/^[a-z_]+$/', $column)) {
+        throw new InvalidArgumentException('Invalid table or column name');
+    }
+
+    $statement = db()->prepare(
+        'SELECT COLUMN_NAME
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = :table_name
+           AND column_name = :column_name
+         LIMIT 1'
+    );
+    $statement->execute([
+        'table_name' => $table,
+        'column_name' => $column,
+    ]);
+
+    if ($statement->fetch()) {
+        return;
+    }
+
+    db()->exec(sprintf('ALTER TABLE `%s` ADD COLUMN `%s` %s', $table, $column, $definition));
+}
+
+function auth_ensure_tables(): void
+{
+    db()->exec(
+        'CREATE TABLE IF NOT EXISTS users (
+            id VARCHAR(36) PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            username VARCHAR(100) NULL,
+            display_name VARCHAR(255) NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            role VARCHAR(30) NOT NULL DEFAULT "user",
+            store_id VARCHAR(50) NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NULL DEFAULT NULL,
+            UNIQUE KEY uniq_users_email (email),
+            UNIQUE KEY uniq_users_username (username),
+            KEY idx_users_role (role),
+            KEY idx_users_store (store_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    db()->exec(
+        'CREATE TABLE IF NOT EXISTS api_tokens (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id VARCHAR(36) NOT NULL,
+            token_hash VARCHAR(64) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_api_token_hash (token_hash),
+            KEY idx_api_tokens_user (user_id),
+            KEY idx_api_tokens_expires (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    auth_ensure_column('users', 'username', 'VARCHAR(100) NULL AFTER email');
+    auth_ensure_column('users', 'display_name', 'VARCHAR(255) NULL AFTER username');
+    auth_ensure_column('users', 'role', 'VARCHAR(30) NOT NULL DEFAULT "user" AFTER password_hash');
+    auth_ensure_column('users', 'store_id', 'VARCHAR(50) NULL AFTER role');
+    auth_ensure_column('users', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER store_id');
+    auth_ensure_column('users', 'created_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER is_active');
+    auth_ensure_column('users', 'updated_at', 'DATETIME NULL DEFAULT NULL AFTER created_at');
+    auth_ensure_column('api_tokens', 'created_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER expires_at');
+}
+
+auth_ensure_tables();
+
 function auth_bearer_token(): ?string
 {
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';

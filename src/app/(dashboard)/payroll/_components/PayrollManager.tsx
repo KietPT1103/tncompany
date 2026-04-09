@@ -13,6 +13,7 @@ import { getEmployees } from "@/services/employees.firebase";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
+  CalendarRange,
   CalendarDays,
   CheckCircle2,
   Edit2,
@@ -116,7 +117,7 @@ export default function PayrollManager({
             </p>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
             <Input
               placeholder="Ví dụ: Tháng 3 - Đợt 2"
               value={newPayrollName}
@@ -130,6 +131,10 @@ export default function PayrollManager({
             <Button variant="outline" className="h-11 gap-2 rounded-2xl whitespace-nowrap" onClick={() => router.push("/timesheet")}>
               <ExternalLink className="h-4 w-4" />
               Import chấm công
+            </Button>
+            <Button variant="outline" className="h-11 gap-2 rounded-2xl whitespace-nowrap" onClick={() => router.push("/payroll-estimate")}>
+              <CalendarRange className="h-4 w-4" />
+              Ước lượng theo lịch
             </Button>
           </div>
         </div>

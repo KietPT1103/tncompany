@@ -7,14 +7,17 @@ import { cn } from "@/lib/utils";
 import {
   BarChart3,
   CakeSlice,
+  CalendarDays,
   Calculator,
   Check,
   ChevronsUpDown,
   Coffee,
   FileText,
+  KeyRound,
   LogOut,
   Menu,
   Package,
+  PanelLeftClose,
   Tags,
   Tractor,
   UtensilsCrossed,
@@ -32,6 +35,11 @@ const navItems = [
   { href: "/product", label: "Sản phẩm", icon: Package },
   { href: "/categories", label: "Danh mục", icon: Tags },
   { href: "/payroll", label: "Tính lương", icon: Wallet },
+  { href: "/payroll-estimate", label: "Ước lượng lương", icon: CalendarDays },
+];
+
+const adminExtraNavItems = [
+  { href: "/accounts", label: "Tài khoản", icon: KeyRound },
 ];
 
 const storeOptions: {
@@ -46,7 +54,13 @@ const storeOptions: {
   { id: "farm", icon: Tractor, label: "Farm", note: "Khu trải nghiệm" },
 ];
 
-export default function AdminSidebar() {
+export default function AdminSidebar({
+  collapsed = false,
+  onToggleCollapsed,
+}: {
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+}) {
   const pathname = usePathname();
   const { logout, role, loading } = useAuth();
   const { setStoreId, storeId, storeName } = useStore();
@@ -76,6 +90,11 @@ export default function AdminSidebar() {
     return null;
   }
 
+  const visibleNavItems =
+    role === "manager"
+      ? navItems.filter((item) => item.href === "/payroll-estimate")
+      : [...navItems, ...adminExtraNavItems];
+
   const currentStore =
     storeOptions.find((option) => option.id === storeId) || storeOptions[0];
   const CurrentStoreIcon = currentStore.icon;
@@ -91,16 +110,32 @@ export default function AdminSidebar() {
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex h-screen w-64 flex-col border-r border-slate-200 bg-white transition-transform duration-200 ease-in-out lg:static lg:translate-x-0",
-          isOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-slate-200 bg-white transition-all duration-200 ease-in-out lg:static lg:translate-x-0",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+          collapsed
+            ? "w-64 lg:w-0 lg:min-w-0 lg:-translate-x-full lg:overflow-hidden lg:border-r-0"
+            : "w-64"
         )}
       >
         <div className="border-b border-slate-100 px-6 py-5">
-          <div className="flex items-center gap-2 text-xl font-bold text-primary">
-            <div className="rounded-lg bg-primary/10 p-1.5">
-              <Calculator className="h-6 w-6" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xl font-bold text-primary">
+              <div className="rounded-lg bg-primary/10 p-1.5">
+                <Calculator className="h-6 w-6" />
+              </div>
+              <span>Cost Ong Quan</span>
             </div>
-            <span>Cost Ong Quan</span>
+
+            {onToggleCollapsed ? (
+              <button
+                type="button"
+                onClick={onToggleCollapsed}
+                className="hidden rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 lg:inline-flex"
+                aria-label="Ẩn sidebar"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
 
           <div ref={storeMenuRef} className="relative mt-4">
@@ -172,7 +207,7 @@ export default function AdminSidebar() {
         </div>
 
         <div className="flex-1 space-y-1 overflow-y-auto px-3 py-6">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive =
               pathname === item.href ||
               (item.href !== "/" && pathname.startsWith(`${item.href}/`));

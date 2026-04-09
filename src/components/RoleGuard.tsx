@@ -37,11 +37,22 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
           <p className="text-slate-600 mb-4">B?n kh?ng c? quy?n truy c?p trang n?y.</p>
           <button
             onClick={() =>
-              router.push(role === "user" || role === "server" ? "/pos" : "/")
+              router.push(
+                role === "user" || role === "server"
+                  ? "/pos"
+                  : role === "manager"
+                  ? "/payroll-estimate"
+                  : "/"
+              )
             }
             className="px-4 py-2 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"
           >
-            Quay l?i {role === "user" || role === "server" ? "POS" : "Trang ch?"}
+            Quay l?i{" "}
+            {role === "user" || role === "server"
+              ? "POS"
+              : role === "manager"
+              ? "Ước lượng lương"
+              : "Trang ch?"}
           </button>
         </div>
       </div>

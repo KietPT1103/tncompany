@@ -40,7 +40,11 @@ const isValidStoreId = (value: string | null | undefined): value is StoreType =>
   value === "cafe" || value === "restaurant" || value === "bakery" || value === "farm";
 
 const getRedirectAfterLogin = (user: AppUser) =>
-  user.role === "admin" ? "/" : "/bills";
+  user.role === "admin"
+    ? "/"
+    : user.role === "manager"
+    ? "/payroll-estimate"
+    : "/bills";
 
 export default function LoginPage() {
   const [account, setAccount] = useState("");
@@ -197,7 +201,7 @@ export default function LoginPage() {
               {isSeedingAccounts ? "Đang thêm tài khoản..." : "Thêm tài khoản mặc định"}
             </button>
             <p className="px-3 pb-1 pt-2 text-xs text-gray-500 dark:text-slate-400">
-              Bao gồm: thungan1, thungan2, thungan3, phucvu1, admin
+              Bao gồm: thungan1, thungan2, thungan3, phucvu1, admin, manager
             </p>
           </div>
         )}
@@ -246,7 +250,7 @@ export default function LoginPage() {
                 onChange={(e) => setAccount(e.target.value)}
                 required
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-400"
-                placeholder="Ví dụ: Thungan1, Phucvu1 hoặc email admin"
+                placeholder="Ví dụ: manager, Thungan1 hoặc email admin"
               />
             </div>
             <div className="space-y-2">
