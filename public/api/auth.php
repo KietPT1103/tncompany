@@ -67,6 +67,8 @@ function seed_default_users(): array
         'INSERT INTO users (id, email, username, display_name, password_hash, role, store_id, is_active)
          VALUES (:id, :email, :username, :display_name, :password_hash, :role, :store_id, 1)
          ON DUPLICATE KEY UPDATE
+           email = VALUES(email),
+           username = VALUES(username),
            display_name = VALUES(display_name),
            password_hash = VALUES(password_hash),
            role = VALUES(role),

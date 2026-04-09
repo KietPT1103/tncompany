@@ -70,9 +70,6 @@ function auth_ensure_tables(): void
     auth_ensure_column('users', 'role', 'VARCHAR(30) NOT NULL DEFAULT "user" AFTER password_hash');
     auth_ensure_column('users', 'store_id', 'VARCHAR(50) NULL AFTER role');
     auth_ensure_column('users', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER store_id');
-    auth_ensure_column('users', 'created_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER is_active');
-    auth_ensure_column('users', 'updated_at', 'DATETIME NULL DEFAULT NULL AFTER created_at');
-    auth_ensure_column('api_tokens', 'created_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER expires_at');
 }
 
 auth_ensure_tables();
@@ -121,6 +118,31 @@ function auth_delete_token(?string $token): void
     ]);
 }
 
+function auth_normalize_role(array $row): string
+{
+    $role = strtolower(trim((string) ($row['role'] ?? '')));
+    if (in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
+        return $role;
+    }
+
+    $username = strtolower(trim((string) ($row['username'] ?? '')));
+    $email = strtolower(trim((string) ($row['email'] ?? '')));
+
+    if ($username === 'admin' || $email === 'admin@admin.local') {
+        return 'admin';
+    }
+
+    if ($username === 'manager' || $email === 'manager@admin.local') {
+        return 'manager';
+    }
+
+    if ($username === 'phucvu1' || substr($email, -14) === '@service.local') {
+        return 'server';
+    }
+
+    return 'user';
+}
+
 function auth_map_user(array $row): array
 {
     return [
@@ -129,7 +151,7 @@ function auth_map_user(array $row): array
         'email' => (string) $row['email'],
         'username' => $row['username'] ?: null,
         'displayName' => $row['display_name'] ?: ($row['username'] ?: $row['email']),
-        'role' => (string) $row['role'],
+        'role' => auth_normalize_role($row),
         'storeId' => $row['store_id'] ?: null,
     ];
 }
@@ -193,11 +215,28 @@ function auth_find_user_for_login(string $login): ?array
              LOWER(email) = LOWER(:login_email)
              OR LOWER(username) = LOWER(:login_username)
            )
+         ORDER BY
+           CASE
+             WHEN LOWER(email) = LOWER(:priority_email) THEN 0
+             WHEN LOWER(username) = LOWER(:priority_username) THEN 1
+             ELSE 2
+           END,
+           CASE
+             WHEN LOWER(TRIM(COALESCE(role, ""))) IN ("admin", "manager", "user", "server") THEN 0
+             ELSE 1
+           END,
+           CASE
+             WHEN LOWER(TRIM(COALESCE(username, ""))) IN ("admin", "manager") THEN 0
+             ELSE 1
+           END,
+           id DESC
          LIMIT 1'
     );
     $statement->execute([
         'login_email' => $login,
         'login_username' => $login,
+        'priority_email' => $login,
+        'priority_username' => $login,
     ]);
 
     $row = $statement->fetch();

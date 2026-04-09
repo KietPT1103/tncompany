@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useStore, StoreType } from "@/context/StoreContext";
 import { loginApi, seedDefaultUsersApi, setApiToken } from "@/lib/api";
-import { AppUser } from "@/types/auth";
+import { AppUser, normalizeUserRole } from "@/types/auth";
 
 const CASHIER_ACCOUNTS = ["thungan1", "thungan2", "thungan3"] as const;
 const SERVICE_ACCOUNTS = ["phucvu1"] as const;
@@ -40,11 +40,11 @@ const isValidStoreId = (value: string | null | undefined): value is StoreType =>
   value === "cafe" || value === "restaurant" || value === "bakery" || value === "farm";
 
 const getRedirectAfterLogin = (user: AppUser) =>
-  user.role === "admin"
-    ? "/"
-    : user.role === "manager"
-    ? "/payroll-estimate"
-    : "/bills";
+  normalizeUserRole(user) === "admin"
+    ? "/admin"
+    : normalizeUserRole(user) === "manager"
+    ? "/admin/payroll-estimate"
+    : "/admin/bills";
 
 export default function LoginPage() {
   const [account, setAccount] = useState("");
@@ -169,7 +169,12 @@ export default function LoginPage() {
           ? user.storeId
           : selectedStore
       );
-      router.push(getRedirectAfterLogin(user));
+      const nextPath = getRedirectAfterLogin(user);
+      if (typeof window !== "undefined") {
+        window.location.replace(nextPath);
+        return;
+      }
+      router.push(nextPath);
     } catch (err: unknown) {
       console.error(err);
       setError("Đăng nhập thất bại. Vui lòng kiểm tra tài khoản và mật khẩu.");

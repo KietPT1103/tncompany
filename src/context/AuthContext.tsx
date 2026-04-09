@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { clearApiToken, fetchCurrentUser, logoutApi } from "@/lib/api";
-import { AppUser, UserRole } from "@/types/auth";
+import { AppUser, normalizeUserRole, UserRole } from "@/types/auth";
 
 type AuthContextType = {
   user: AppUser | null;
@@ -31,8 +31,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       const { user: currentUser } = await fetchCurrentUser();
-      setUser(currentUser);
-      setRole(currentUser.role);
+      const normalizedRole = normalizeUserRole(currentUser);
+      setUser(
+        normalizedRole
+          ? {
+              ...currentUser,
+              role: normalizedRole,
+            }
+          : currentUser
+      );
+      setRole(normalizedRole);
     } catch {
       clearApiToken();
       setUser(null);

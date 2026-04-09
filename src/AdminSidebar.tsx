@@ -90,6 +90,7 @@ export default function AdminSidebar({
     return null;
   }
 
+  const effectiveCollapsed = role === "manager" ? false : collapsed;
   const visibleNavItems =
     role === "manager"
       ? navItems.filter((item) => item.href === "/payroll-estimate")
@@ -112,7 +113,7 @@ export default function AdminSidebar({
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-slate-200 bg-white transition-all duration-200 ease-in-out lg:static lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full",
-          collapsed
+          effectiveCollapsed
             ? "w-64 lg:w-0 lg:min-w-0 lg:-translate-x-full lg:overflow-hidden lg:border-r-0"
             : "w-64"
         )}
@@ -126,7 +127,7 @@ export default function AdminSidebar({
               <span>Cost Ong Quan</span>
             </div>
 
-            {onToggleCollapsed ? (
+            {onToggleCollapsed && role !== "manager" ? (
               <button
                 type="button"
                 onClick={onToggleCollapsed}

@@ -15,8 +15,8 @@ function users_map_row(array $row): array
         'role' => (string) $row['role'],
         'storeId' => $row['store_id'] !== null ? (string) $row['store_id'] : null,
         'isActive' => (bool) ($row['is_active'] ?? false),
-        'createdAt' => $row['created_at'] ?? null,
-        'updatedAt' => $row['updated_at'] ?? null,
+        'createdAt' => null,
+        'updatedAt' => null,
     ];
 }
 
@@ -25,14 +25,16 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
     $statement = db()->query(
-        'SELECT id, email, username, display_name, role, store_id, is_active, created_at, updated_at
+        'SELECT id, email, username, display_name, role, store_id, is_active
          FROM users
-         ORDER BY created_at DESC, email ASC'
+         ORDER BY email ASC'
     );
 
     respond_ok([
         'items' => array_map(
-            static fn(array $row): array => users_map_row($row),
+            static function (array $row): array {
+                return users_map_row($row);
+            },
             $statement->fetchAll()
         ),
     ]);
@@ -58,9 +60,9 @@ if ($method === 'POST') {
     $id = uuidv4();
     $statement = db()->prepare(
         'INSERT INTO users (
-            id, email, username, display_name, password_hash, role, store_id, is_active, created_at
+            id, email, username, display_name, password_hash, role, store_id, is_active
          ) VALUES (
-            :id, :email, :username, :display_name, :password_hash, :role, :store_id, :is_active, NOW()
+            :id, :email, :username, :display_name, :password_hash, :role, :store_id, :is_active
          )'
     );
     $statement->execute([
@@ -75,7 +77,7 @@ if ($method === 'POST') {
     ]);
 
     $find = db()->prepare(
-        'SELECT id, email, username, display_name, role, store_id, is_active, created_at, updated_at
+        'SELECT id, email, username, display_name, role, store_id, is_active
          FROM users WHERE id = :id LIMIT 1'
     );
     $find->execute(['id' => $id]);
@@ -152,7 +154,6 @@ if ($method === 'PATCH') {
         respond_error('Không có dữ liệu cần cập nhật.', 422);
     }
 
-    $fields[] = 'updated_at = NOW()';
     $statement = db()->prepare(
         sprintf('UPDATE users SET %s WHERE id = :id', implode(', ', $fields))
     );
@@ -164,7 +165,7 @@ if ($method === 'PATCH') {
     }
 
     $find = db()->prepare(
-        'SELECT id, email, username, display_name, role, store_id, is_active, created_at, updated_at
+        'SELECT id, email, username, display_name, role, store_id, is_active
          FROM users WHERE id = :id LIMIT 1'
     );
     $find->execute(['id' => $id]);

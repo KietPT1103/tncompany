@@ -39,10 +39,10 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
             onClick={() =>
               router.push(
                 role === "user" || role === "server"
-                  ? "/pos"
+                  ? "/admin/bills"
                   : role === "manager"
-                  ? "/payroll-estimate"
-                  : "/"
+                  ? "/admin/payroll-estimate"
+                  : "/admin"
               )
             }
             className="px-4 py-2 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"

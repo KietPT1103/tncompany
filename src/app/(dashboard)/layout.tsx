@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PanelLeftOpen } from "lucide-react";
 import AdminSidebar from "@/AdminSidebar";
+import { useAuth } from "@/context/AuthContext";
 
 const SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
 
@@ -16,15 +17,22 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { role } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(
+        window.localStorage.setItem(
       SIDEBAR_STORAGE_KEY,
       sidebarCollapsed ? "1" : "0"
     );
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (role === "manager") {
+      setSidebarCollapsed(false);
+    }
+  }, [role]);
 
   return (
     <div className="flex h-screen bg-[#F8FAFC]">
@@ -34,7 +42,7 @@ export default function DashboardLayout({
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        {sidebarCollapsed ? (
+        {sidebarCollapsed && role !== "manager" ? (
           <button
             type="button"
             onClick={() => setSidebarCollapsed(false)}
