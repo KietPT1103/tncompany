@@ -9,3 +9,4 @@ dist.zip
 .env.test
 !.env.local.example
 public/api/config.php
+tmp-opt/

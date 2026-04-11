@@ -37,17 +37,33 @@ export const coreCapabilities = [
   "Vận hành mô hình F&B theo hệ sinh thái Ông Quan",
 ];
 
-const venueGalleryFiles = {
-  cafe: Object.keys(import.meta.glob("../../public/uploads/cafe/*.{png,jpg,jpeg,webp,avif}")).map((path) =>
-    path.replace("../../public", "")
+function createAssetLookup(globMap) {
+  return Object.fromEntries(
+    Object.entries(globMap).map(([path, assetUrl]) => [path.split("/").pop(), assetUrl])
+  );
+}
+
+const optimizedVenueAssets = {
+  cafe: createAssetLookup(
+    import.meta.glob("../optimized-media/cafe/*.jpg", { eager: true, import: "default" })
   ),
-  hotpot: Object.keys(import.meta.glob("../../public/uploads/lau/*.{png,jpg,jpeg,webp,avif}")).map((path) =>
-    path.replace("../../public", "")
+  hotpot: createAssetLookup(
+    import.meta.glob("../optimized-media/lau/*.jpg", { eager: true, import: "default" })
   ),
-  farm: Object.keys(import.meta.glob("../../public/uploads/farm/*.{png,jpg,jpeg,webp,avif}")).map((path) =>
-    path.replace("../../public", "")
+  farm: createAssetLookup(
+    import.meta.glob("../optimized-media/farm/*.jpg", { eager: true, import: "default" })
   ),
 };
+
+const venueGalleryFiles = {
+  cafe: Object.values(optimizedVenueAssets.cafe),
+  hotpot: Object.values(optimizedVenueAssets.hotpot),
+  farm: Object.values(optimizedVenueAssets.farm),
+};
+
+function getOptimizedAsset(folderKey, fileName) {
+  return optimizedVenueAssets[folderKey][fileName];
+}
 
 function shuffleItems(items) {
   const shuffled = [...items];
@@ -102,7 +118,7 @@ export const venues = [
       "Không gian mở rộng liên tục theo từng giai đoạn.",
     ],
     discoveryNote: "Bạn có thể tiếp tục cập nhật thêm ảnh cho các khu mới.",
-    heroImage: "/uploads/cafe/cafe-hero.png",
+    heroImage: getOptimizedAsset("cafe", "cafe-hero.jpg"),
     heroAlt: "Không gian Tiệm cà phê Ông Quan",
     slides: createVenueSlides({
       folderKey: "cafe",
@@ -154,7 +170,7 @@ export const venues = [
       "Các món lẩu và món ăn kèm dễ kết hợp thành nhiều set khác nhau.",
     ],
     discoveryNote: "Tiệm lẩu tập trung vào sự đa dạng món để phục vụ tốt nhiều nhu cầu trong ngày.",
-    heroImage: "/uploads/lau/lau1.jpg",
+    heroImage: getOptimizedAsset("hotpot", "lau1.jpg"),
     heroAlt: "Không gian Tiệm lẩu Ông Quan",
     introEyebrow: "Ảnh theo nhóm món",
     introTitle: "Một vài hình ảnh món nổi bật tại Tiệm lẩu Ông Quan",
@@ -162,21 +178,21 @@ export const venues = [
       {
         title: "Nhóm món lẩu",
         description: "Các món lẩu chủ lực của tiệm, phù hợp khách đi nhóm.",
-        image: "/uploads/lau/lautiemsachuy.jpg",
+        image: getOptimizedAsset("hotpot", "lautiemsachuy.jpg"),
         alt: "Lẩu tiềm sa chùy tại Tiệm lẩu Ông Quan",
         tone: "tone-hotpot",
       },
       {
         title: "Nhóm món ăn sáng",
         description: "Các món sáng phục vụ nhanh, tiện cho khách ghé quán sớm.",
-        image: "/uploads/lau/ansang1.jpg",
+        image: getOptimizedAsset("hotpot", "ansang1.jpg"),
         alt: "Khu ăn sáng tại Tiệm lẩu Ông Quan",
         tone: "tone-hotpot",
       },
       {
         title: "Nhóm món nướng và ăn kèm",
         description: "Các món bổ sung giúp bữa ăn đa dạng và phong phú hơn.",
-        image: "/uploads/lau/comchien.jpg",
+        image: getOptimizedAsset("hotpot", "comchien.jpg"),
         alt: "Đồ nướng và món ăn kèm tại Tiệm lẩu Ông Quan",
         tone: "tone-hotpot",
       },
@@ -235,7 +251,7 @@ export const venues = [
       "Các khu thú và góc check-in tạo điểm khác biệt cho toàn hệ sinh thái Ông Quan.",
     ],
     discoveryNote: "Ông Quan Farm được định vị là điểm tham quan trải nghiệm hơn là khu canh tác.",
-    heroImage: "/uploads/farm/farm1.jpg",
+    heroImage: getOptimizedAsset("farm", "farm1.jpg"),
     heroAlt: "Ông Quan Farm",
     introEyebrow: "Ảnh theo điểm tham quan",
     introTitle: "Một vài góc trải nghiệm tại Ông Quan Farm",
@@ -243,21 +259,21 @@ export const venues = [
       {
         title: "Không gian tham quan chính",
         description: "Khu nổi bật dành cho khách dạo chơi và chụp ảnh.",
-        image: "/uploads/farm/farm6.jpg",
+        image: getOptimizedAsset("farm", "farm6.jpg"),
         alt: "Không gian tham quan chính tại Ông Quan Farm",
         tone: "tone-farm",
       },
       {
         title: "Khu thú và trải nghiệm",
         description: "Gần gũi hơn với các loài thú và hoạt động ngoài trời.",
-        image: "/uploads/farm/farm7.jpg",
+        image: getOptimizedAsset("farm", "farm7.jpg"),
         alt: "Khu thú và trải nghiệm tại Ông Quan Farm",
         tone: "tone-farm",
       },
       {
         title: "Góc check-in ngoài trời",
         description: "Phù hợp chụp ảnh, thư giãn và tham quan cuối tuần.",
-        image: "/uploads/farm/farm8.jpg",
+        image: getOptimizedAsset("farm", "farm8.jpg"),
         alt: "Góc check-in ngoài trời tại Ông Quan Farm",
         tone: "tone-farm",
       },
@@ -271,7 +287,7 @@ export const venues = [
 ];
 
 export const pages = [
-  { id: "home", hash: "/home", label: "Trang chủ", shortLabel: "Trang chủ" },
+  { id: "home", hash: "/", label: "Trang chủ", shortLabel: "Trang chủ" },
   ...venues.map((venue) => ({
     id: venue.id,
     hash: venue.hash,

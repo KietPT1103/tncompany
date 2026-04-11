@@ -34,6 +34,7 @@ function VenueHero({ activeVenue, heroImageFailed, onHeroImageError, onOpenImage
           ariaLabel={`Phóng to ảnh chính: ${activeVenue.name}`}
           caption={activeVenue.name}
           className="hero-image-shell"
+          fetchPriority="high"
           loading="eager"
           onError={onHeroImageError}
           onOpenImage={onOpenImage}

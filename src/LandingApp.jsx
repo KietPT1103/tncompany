@@ -20,7 +20,7 @@ export default function LandingApp() {
 
   useEffect(() => {
     if (!routeByHash[location.pathname]) {
-      navigate("/home", { replace: true });
+      navigate("/", { replace: true });
       return;
     }
 

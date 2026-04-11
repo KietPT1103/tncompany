@@ -7,6 +7,8 @@ export default function ClickableImage({
   blurBackdrop = false,
   caption,
   className,
+  decoding = "async",
+  fetchPriority,
   imageClassName,
   loading = "lazy",
   onError,
@@ -34,7 +36,15 @@ export default function ClickableImage({
       ) : null}
       {showImage ? (
         <div className="media-image-frame">
-          <img className={imageClassName} src={src} alt={alt} loading={loading} onError={onError} />
+          <img
+            className={imageClassName}
+            src={src}
+            alt={alt}
+            loading={loading}
+            decoding={decoding}
+            fetchPriority={fetchPriority}
+            onError={onError}
+          />
         </div>
       ) : null}
     </div>

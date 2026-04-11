@@ -50,10 +50,10 @@ export default function ImageCarousel({ slides, onOpenImage }) {
               <ClickableImage
                 alt={slide.alt}
                 ariaLabel={`Phóng to ảnh: ${slide.title}`}
-                blurBackdrop
+                blurBackdrop={index === activeIndex}
                 caption={slide.title}
                 className={`slide-media ${slide.tone}`}
-                loading="lazy"
+                loading={index === activeIndex ? "eager" : "lazy"}
                 onError={() => onImageError(index)}
                 onOpenImage={onOpenImage}
                 showImage={!failedImages[index]}
