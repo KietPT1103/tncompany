@@ -9,7 +9,10 @@
     "api:dev": "php -S 127.0.0.1:8000 -t public",
     "dev:full": "node scripts/dev-full.mjs",
     "build": "vite build && vite build --ssr src/prerender/entry-server.jsx --outDir dist-ssr && node scripts/prerender.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:social-listening": "php scripts/social-listening-classification-test.php",
+    "seed:social-listening": "php scripts/social-listening-seed.php",
+    "report:social-listening": "php scripts/social-listening-report.php"
   },
   "dependencies": {
     "clsx": "^2.1.1",

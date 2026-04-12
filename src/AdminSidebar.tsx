@@ -16,6 +16,7 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  MessageSquareText,
   Package,
   PanelLeftClose,
   Tags,
@@ -36,6 +37,7 @@ const navItems = [
   { href: "/categories", label: "Danh mục", icon: Tags },
   { href: "/payroll", label: "Tính lương", icon: Wallet },
   { href: "/payroll-estimate", label: "Ước lượng lương", icon: CalendarDays },
+  { href: "/social-listening", label: "Social Listening", icon: MessageSquareText },
 ];
 
 const adminExtraNavItems = [
