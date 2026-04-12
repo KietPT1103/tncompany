@@ -1,4 +1,5 @@
 import React from "react";
+import { companyFaqs, companySeoSections } from "../data/seoContent";
 import {
   businessAreas,
   company,
@@ -6,7 +7,87 @@ import {
   coreCapabilities,
   legalTimeline,
   pagesById,
+  venues,
 } from "../data/siteData";
+
+function SeoTextSections({ sections }) {
+  if (!sections?.length) {
+    return null;
+  }
+
+  return (
+    <section className="home-section">
+      <div className="section-head">
+        <p className="eyebrow">{"Nội dung giới thiệu"}</p>
+      </div>
+      <div className="seo-copy-grid">
+        {sections.map((section) => (
+          <article className="seo-copy-card" key={section.title}>
+            <h3>{section.title}</h3>
+            {section.paragraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SeoFaqSection({ faqs }) {
+  if (!faqs?.length) {
+    return null;
+  }
+
+  return (
+    <section className="home-section">
+      <div className="section-head">
+        <p className="eyebrow">{"Câu hỏi thường gặp"}</p>
+      </div>
+      <div className="faq-grid">
+        {faqs.map((item) => (
+          <article className="faq-card" key={item.question}>
+            <h3>{item.question}</h3>
+            <p>{item.answer}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HomeEcosystemLinks({ onOpenPage }) {
+  return (
+    <section className="home-section">
+      <div className="section-head">
+        <p className="eyebrow">{"Điểm nổi bật"}</p>
+        <h2>{"3 trang chính trong hệ sinh thái Ông Quan"}</h2>
+      </div>
+      <div className="home-ecosystem-grid">
+        {venues.map((venue) => (
+          <article className="home-ecosystem-card" key={venue.id}>
+            <p>{venue.tag}</p>
+            <h3>{venue.name}</h3>
+            <span>{venue.description}</span>
+            <a
+              href={venue.hash}
+              onClick={(event) => {
+                if (!onOpenPage) {
+                  return;
+                }
+
+                event.preventDefault();
+                onOpenPage(venue.id);
+              }}
+            >
+              {"M\u1edf trang n\u00e0y"}
+            </a>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function CompanyHome({ onOpenPage }) {
   return (
@@ -99,6 +180,8 @@ export default function CompanyHome({ onOpenPage }) {
         </article>
       </section>
 
+      <HomeEcosystemLinks onOpenPage={onOpenPage} />
+
       <section className="home-section">
         <div className="section-head">
           <p className="eyebrow">Danh mục đăng ký</p>
@@ -129,6 +212,9 @@ export default function CompanyHome({ onOpenPage }) {
           ))}
         </div>
       </section>
+
+      <SeoTextSections sections={companySeoSections} />
+      <SeoFaqSection faqs={companyFaqs} />
     </div>
   );
 }

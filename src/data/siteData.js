@@ -1,6 +1,6 @@
 export const company = {
   name: "Công ty TNHH Thương mại Dịch vụ Đầu tư Tổng hợp T-N",
-  shortName: "T&N Company",
+  shortName: "T&N Services",
   enterpriseCode: "1801702806",
   foundedDate: "06/05/2021",
   latestUpdate: "Đăng ký thay đổi lần 2: 14/12/2025",
@@ -35,6 +35,36 @@ export const coreCapabilities = [
   "Kinh doanh bất động sản và quản lý tài sản",
   "Xây dựng, lắp đặt hệ thống kỹ thuật công trình",
   "Vận hành mô hình F&B theo hệ sinh thái Ông Quan",
+];
+
+export const companySeoSections = [
+  {
+    title: "T&N Services táº¡i Cáº§n ThÆ¡",
+    paragraphs: [
+      "T&N Services vÃ¢n hÃ nh há»‡ sinh thÃ¡i Ã”ng Quan táº¡i Cáº§n ThÆ¡ vá»›i Ä‘á»‹nh hÆ°á»›ng phÃ¡t triá»ƒn cÃ¡c Ä‘iá»ƒm Ä‘áº¿n cÃ³ tráº£i nghiá»‡m rÃµ rÃ ng, dá»… tiáº¿p cáº­n vÃ  phá»¥c vá»¥ Ä‘Æ°á»£c nhiá»u nhÃ³m khÃ¡ch khÃ¡c nhau.",
+      "Tá»« cÃ  phÃª, tiá»‡m láº©u Ä‘áº¿n farm tham quan, má»—i mÃ´ hÃ¬nh Ä‘á»u Ä‘Æ°á»£c xÃ¢y dá»±ng theo nhu cáº§u thá»±c táº¿ cá»§a khÃ¡ch Ä‘á»‹a phÆ°Æ¡ng láº«n khÃ¡ch ghÃ© Cáº§n ThÆ¡ cuá»‘i tuáº§n, Æ°u tiÃªn khÃ´ng gian, dá»‹ch vá»¥ vÃ  kháº£ nÄƒng quay láº¡i nhiá»u láº§n.",
+    ],
+  },
+  {
+    title: "Há»‡ sinh thÃ¡i tráº£i nghiá»‡m táº¡i cÃ¹ng má»™t Ä‘á»‹a chá»‰",
+    paragraphs: [
+      "Táº¡i khu vá»±c 267 Ä‘Æ°á»ng 30/4, Ninh Kiá»u, khÃ¡ch cÃ³ thá»ƒ tiáº¿p cáº­n nhiá»u mÃ´ hÃ¬nh trong cÃ¹ng há»‡ sinh thÃ¡i: quÃ¡n cÃ  phÃª cho gáº·p gá»¡ vÃ  chá»¥p áº£nh, tiá»‡m láº©u cho Äƒn sÃ¡ng Ä‘áº¿n Äƒn tá»‘i, vÃ  farm cho tham quan ngoÃ i trá»i.",
+      "CÃ¡ch tá»• chá»©c nÃ y giÃºp website khÃ´ng chá»‰ giá»›i thiá»‡u doanh nghiá»‡p mÃ  cÃ²n tráº£ lá»i rÃµ tá»«ng nhu cáº§u tÃ¬m kiáº¿m nhÆ° cÃ  phÃª Cáº§n ThÆ¡, tiá»‡m láº©u Cáº§n ThÆ¡ hay Ä‘iá»‹a Ä‘iá»ƒm tham quan phÃ¹ há»£p gia Ä‘Ã¬nh táº¡i Cáº§n ThÆ¡.",
+    ],
+  },
+];
+
+export const companyFaqs = [
+  {
+    question: "T&N Services Ä‘ang váº­n hÃ nh nhá»¯ng mÃ´ hÃ¬nh nÃ o táº¡i Cáº§n ThÆ¡?",
+    answer:
+      "T&N Services hiá»‡n giá»›i thiá»‡u há»‡ sinh thÃ¡i Ã”ng Quan gá»“m Tiá»‡m cÃ  phÃª Ã”ng Quan, Tiá»‡m láº©u Ã”ng Quan vÃ  Ã”ng Quan Farm táº¡i khu vá»±c Ä‘Æ°á»ng 30/4, quáº­n Ninh Kiá»u, Cáº§n ThÆ¡.",
+  },
+  {
+    question: "Website nÃ y phÃ¹ há»£p Ä‘á»ƒ tÃ¬m thÃ´ng tin gÃ¬?",
+    answer:
+      "Trang web phÃ¹ há»£p Ä‘á»ƒ xem nhanh thÃ´ng tin doanh nghiá»‡p, Ä‘á»‹a chá»‰, giá» hoáº¡t Ä‘á»™ng, mÃ´ táº£ khÃ´ng gian, hÃ¬nh áº£nh thá»±c táº¿ vÃ  Ä‘á»‹nh hÆ°á»›ng tráº£i nghiá»‡m cá»§a tá»«ng Ä‘iá»ƒm trong há»‡ sinh thÃ¡i Ã”ng Quan.",
+  },
 ];
 
 function createAssetLookup(globMap) {

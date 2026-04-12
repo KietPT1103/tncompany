@@ -1,0 +1,16 @@
+{
+  "name": "T&N Services",
+  "short_name": "T&N",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6fbf8",
+  "theme_color": "#1f8f63",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

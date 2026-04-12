@@ -1,7 +1,56 @@
 import React from "react";
+import { venueSeoContentById } from "../data/seoContent";
 import { venues } from "../data/siteData";
 import ClickableImage from "./ClickableImage";
 import ImageCarousel from "./ImageCarousel";
+
+function VenueSeoSections({ sections }) {
+  if (!sections?.length) {
+    return null;
+  }
+
+  return (
+    <section className="section-stack">
+      <div className="section-head">
+        <p className="eyebrow">{"N\u1ed9i dung m\u1edf r\u1ed9ng"}</p>
+        <h2>{"Th\u00f4ng tin b\u1ed5 sung cho t\u00ecm ki\u1ebfm \u0111\u1ecba ph\u01b0\u01a1ng"}</h2>
+      </div>
+      <div className="seo-copy-grid">
+        {sections.map((section) => (
+          <article className="seo-copy-card" key={section.title}>
+            <h3>{section.title}</h3>
+            {section.paragraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function VenueFaqs({ faqs }) {
+  if (!faqs?.length) {
+    return null;
+  }
+
+  return (
+    <section className="section-stack">
+      <div className="section-head">
+        <p className="eyebrow">{"C\u00e2u h\u1ecfi th\u01b0\u1eddng g\u1eb7p"}</p>
+        <h2>{"FAQ v\u1ec1 \u0111\u1ecba \u0111i\u1ec3m n\u00e0y"}</h2>
+      </div>
+      <div className="faq-grid">
+        {faqs.map((item) => (
+          <article className="faq-card" key={item.question}>
+            <h3>{item.question}</h3>
+            <p>{item.answer}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function VenueHero({ activeVenue, heroImageFailed, onHeroImageError, onOpenImage }) {
   return (
@@ -189,6 +238,8 @@ export default function VenuePage({
   onOpenImage,
   onOpenPage,
 }) {
+  const seoContent = venueSeoContentById[activeVenue.id] || {};
+
   return (
     <>
       <VenueHero
@@ -210,6 +261,8 @@ export default function VenuePage({
       </section>
 
       <VenueHighlights activeVenue={activeVenue} />
+      <VenueSeoSections sections={seoContent.sections} />
+      <VenueFaqs faqs={seoContent.faqs} />
       <VenueEcosystem activeVenue={activeVenue} onOpenPage={onOpenPage} />
     </>
   );
