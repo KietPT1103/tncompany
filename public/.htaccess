@@ -3,6 +3,12 @@ RewriteEngine On
 # Let the PHP API handle its own requests.
 RewriteRule ^api/ - [L]
 
+# Canonicalize the legacy home path.
+RewriteRule ^home/?$ / [R=301,L]
+
+# Serve prerendered public pages without forcing a trailing slash.
+RewriteRule ^(ca-phe-ong-quan|tiem-lau-ong-quan|ong-quan-farm)$ $1/index.html [L]
+
 # Serve real files and directories as-is.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d

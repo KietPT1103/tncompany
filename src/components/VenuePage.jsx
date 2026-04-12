@@ -162,9 +162,19 @@ function VenueEcosystem({ activeVenue, onOpenPage }) {
             <p className="card-tag">{venue.tag}</p>
             <h3>{venue.name}</h3>
             <p>{venue.description}</p>
-            <button type="button" onClick={() => onOpenPage(venue.id)}>
+            <a
+              href={venue.hash}
+              onClick={(event) => {
+                if (!onOpenPage) {
+                  return;
+                }
+
+                event.preventDefault();
+                onOpenPage(venue.id);
+              }}
+            >
               {venue.id === activeVenue.id ? "Đang hiển thị" : "Mở trang này"}
-            </button>
+            </a>
           </article>
         ))}
       </div>

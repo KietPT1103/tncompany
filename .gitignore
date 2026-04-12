@@ -10,3 +10,4 @@ dist.zip
 !.env.local.example
 public/api/config.php
 tmp-opt/
+dist-ssr/

@@ -1,12 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
-import AppFooter from "./components/AppFooter";
-import AppHeader from "./components/AppHeader";
-import CompanyHome from "./components/CompanyHome";
 import Lightbox from "./components/Lightbox";
-import VenuePage from "./components/VenuePage";
-import { pages, pagesById, routeByHash, venuesById } from "./data/siteData";
+import PublicSiteShell from "./components/PublicSiteShell";
+import { pagesById, routeByHash, venuesById } from "./data/siteData";
 import { normalizeRoute } from "./utils/navigation";
 
 export default function LandingApp() {
@@ -45,7 +42,6 @@ export default function LandingApp() {
 
   const activeVenue = useMemo(() => venuesById[activePageId] || null, [activePageId]);
   const activePage = useMemo(() => pagesById[activePageId] || pagesById.home, [activePageId]);
-  const isHome = activePage.id === "home";
 
   useEffect(() => {
     if (activeVenue) {
@@ -66,30 +62,15 @@ export default function LandingApp() {
   };
 
   return (
-    <div className={`app-shell ${isHome ? "theme-home" : `theme-${activeVenue.id}`}`}>
-      <div className="ambient ambient-1" aria-hidden="true" />
-      <div className="ambient ambient-2" aria-hidden="true" />
-      <div className="ambient ambient-3" aria-hidden="true" />
-
-      <AppHeader activePageId={activePage.id} onNavigate={jumpToPage} pages={pages} />
-
-      <main className="page-content">
-        {isHome ? (
-          <CompanyHome onOpenPage={jumpToPage} />
-        ) : (
-          <VenuePage
-            activeVenue={activeVenue}
-            heroImageFailed={heroImageFailed}
-            onHeroImageError={() => setHeroImageFailed(true)}
-            onOpenImage={setLightboxImage}
-            onOpenPage={jumpToPage}
-          />
-        )}
-      </main>
-
+    <>
+      <PublicSiteShell
+        pathname={activePage.hash}
+        heroImageFailed={heroImageFailed}
+        onHeroImageError={() => setHeroImageFailed(true)}
+        onNavigate={jumpToPage}
+        onOpenImage={setLightboxImage}
+      />
       <Lightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
-
-      <AppFooter isHome={isHome} />
-    </div>
+    </>
   );
 }

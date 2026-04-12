@@ -5,6 +5,7 @@ import {
   companyHighlights,
   coreCapabilities,
   legalTimeline,
+  pagesById,
 } from "../data/siteData";
 
 export default function CompanyHome({ onOpenPage }) {
@@ -20,9 +21,20 @@ export default function CompanyHome({ onOpenPage }) {
             T&N hoạt động trong các mảng đầu tư, thương mại, dịch vụ và vận hành hệ sinh thái kinh doanh tại Cần Thơ.
           </p>
           <div className="home-actions">
-            <button type="button" className="home-btn" onClick={() => onOpenPage("cafe")}>
+            <a
+              href={pagesById.cafe.hash}
+              className="home-btn"
+              onClick={(event) => {
+                if (!onOpenPage) {
+                  return;
+                }
+
+                event.preventDefault();
+                onOpenPage("cafe");
+              }}
+            >
               Xem Tiệm cà phê Ông Quan
-            </button>
+            </a>
           </div>
         </article>
 

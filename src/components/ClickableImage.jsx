@@ -42,7 +42,7 @@ export default function ClickableImage({
             alt={alt}
             loading={loading}
             decoding={decoding}
-            fetchPriority={fetchPriority}
+            fetchpriority={fetchPriority}
             onError={onError}
           />
         </div>

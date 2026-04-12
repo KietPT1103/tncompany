@@ -18,6 +18,10 @@ export default function AppHeader({ activePageId, onNavigate, pages }) {
             href={page.hash}
             className={activePageId === page.id ? "is-active" : ""}
             onClick={(event) => {
+              if (!onNavigate) {
+                return;
+              }
+
               event.preventDefault();
               onNavigate(page.id);
             }}
