@@ -13,6 +13,7 @@ import SalaryEstimatePage from "./app/(dashboard)/payroll-estimate-page";
 import ProductsPage from "./app/(dashboard)/product/page";
 import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
+import SocialListeningPage from "./app/(dashboard)/social-listening/page";
 import TimesheetPage from "./app/(dashboard)/timesheet/page";
 import LoginPage from "./app/login/page";
 import RoleGuard from "./components/RoleGuard";
@@ -92,6 +93,7 @@ export default function App() {
               <Route path="categories" element={<CategoryManagementPage />} />
               <Route path="accounts" element={<AccountManagementPage />} />
               <Route path="payroll" element={<PayrollPage />} />
+              <Route path="social-listening" element={<SocialListeningPage />} />
               <Route path="timesheet" element={<TimesheetPage />} />
             </Route>
           </Route>

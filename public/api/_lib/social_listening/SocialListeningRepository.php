@@ -184,7 +184,12 @@ final class SocialListeningRepository
         );
         $statement->execute($params);
 
-        return array_map(fn (array $row): array => $this->mapCommentRow($row), $statement->fetchAll());
+        return array_map(
+            function (array $row): array {
+                return $this->mapCommentRow($row);
+            },
+            $statement->fetchAll()
+        );
     }
 
     public function fetchTotalCount(array $filters = []): int
@@ -215,11 +220,13 @@ final class SocialListeningRepository
 
         $labels = SocialListeningConfig::brandLabels();
         return array_map(
-            static fn (array $row): array => [
-                'brandGroup' => (string) $row['brand_group'],
-                'brandLabel' => $labels[(string) $row['brand_group']] ?? (string) $row['brand_group'],
-                'count' => (int) $row['total'],
-            ],
+            static function (array $row) use ($labels): array {
+                return [
+                    'brandGroup' => (string) $row['brand_group'],
+                    'brandLabel' => $labels[(string) $row['brand_group']] ?? (string) $row['brand_group'],
+                    'count' => (int) $row['total'],
+                ];
+            },
             $statement->fetchAll()
         );
     }
@@ -275,11 +282,13 @@ final class SocialListeningRepository
 
         $topicRules = SocialListeningConfig::topicRules();
         return array_map(
-            static fn (array $row): array => [
-                'topicTag' => (string) $row['topic_tag'],
-                'label' => $topicRules[(string) $row['topic_tag']]['label'] ?? (string) $row['topic_tag'],
-                'count' => (int) $row['total'],
-            ],
+            static function (array $row) use ($topicRules): array {
+                return [
+                    'topicTag' => (string) $row['topic_tag'],
+                    'label' => $topicRules[(string) $row['topic_tag']]['label'] ?? (string) $row['topic_tag'],
+                    'count' => (int) $row['total'],
+                ];
+            },
             $statement->fetchAll()
         );
     }
@@ -333,11 +342,13 @@ final class SocialListeningRepository
     public function fetchTimeSeries(array $filters = [], string $granularity = 'day'): array
     {
         [$whereClause, $params] = $this->buildWhereClause($filters);
-        $bucketExpression = match ($granularity) {
-            'week' => "DATE_FORMAT(comment_date, '%x-W%v')",
-            'month' => "DATE_FORMAT(comment_date, '%Y-%m')",
-            default => "DATE_FORMAT(comment_date, '%Y-%m-%d')",
-        };
+        if ($granularity === 'week') {
+            $bucketExpression = "DATE_FORMAT(comment_date, '%x-W%v')";
+        } elseif ($granularity === 'month') {
+            $bucketExpression = "DATE_FORMAT(comment_date, '%Y-%m')";
+        } else {
+            $bucketExpression = "DATE_FORMAT(comment_date, '%Y-%m-%d')";
+        }
 
         $statement = db()->prepare(
             "SELECT {$bucketExpression} AS bucket, brand_group, COUNT(*) AS total
@@ -382,14 +393,16 @@ final class SocialListeningRepository
         $statement->execute();
 
         return array_map(
-            static fn (array $row): array => [
-                'id' => (string) $row['id'],
-                'platform' => (string) $row['platform'],
-                'reportMonth' => (string) $row['report_month'],
-                'title' => (string) $row['title'],
-                'totalComments' => (int) $row['total_comments'],
-                'generatedAt' => (string) $row['generated_at'],
-            ],
+            static function (array $row): array {
+                return [
+                    'id' => (string) $row['id'],
+                    'platform' => (string) $row['platform'],
+                    'reportMonth' => (string) $row['report_month'],
+                    'title' => (string) $row['title'],
+                    'totalComments' => (int) $row['total_comments'],
+                    'generatedAt' => (string) $row['generated_at'],
+                ];
+            },
             $statement->fetchAll()
         );
     }

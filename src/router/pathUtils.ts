@@ -9,6 +9,7 @@ const ADMIN_PATHS = [
   "/accounts",
   "/payroll",
   "/payroll-estimate",
+  "/social-listening",
   "/timesheet",
   "/pos",
 ];

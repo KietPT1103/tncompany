@@ -40,7 +40,9 @@ function social_listening_request_filters(): array
         'sentiment' => trim((string) ($_GET['sentiment'] ?? '')) ?: null,
         'topicTag' => trim((string) ($_GET['topicTag'] ?? '')) ?: null,
         'limit' => (int) ($_GET['limit'] ?? 50),
-    ], static fn (mixed $value): bool => $value !== null && $value !== '');
+    ], static function ($value): bool {
+        return $value !== null && $value !== '';
+    });
 }
 
 if ($method === 'GET' && $action === 'dashboard') {

@@ -205,6 +205,20 @@ export default function SocialListeningPage() {
   const exports = generatedReport?.exports ?? null;
   const delta = dashboard?.overview.comparison.delta ?? 0;
   const percent = dashboard?.overview.comparison.percentChange;
+  const totalComments = dashboard?.overview.totalComments ?? 0;
+  const overallSentiment = dashboard?.sentiment.overall ?? {
+    positive: 0,
+    neutral: 0,
+    negative: 0,
+    total: 0,
+    positiveRate: 0,
+    neutralRate: 0,
+    negativeRate: 0,
+  };
+  const brandBreakdown = dashboard?.overview.brandBreakdown ?? [];
+  const topTopics = dashboard?.topics.topTopics ?? [];
+  const topKeywords = dashboard?.topics.topKeywords ?? [];
+  const repeatedIssues = dashboard?.alerts.repeatedIssues ?? [];
 
   return (
     <RoleGuard allowedRoles={["admin"]}>
@@ -349,20 +363,20 @@ export default function SocialListeningPage() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <StatCard
                   title="Tổng comment"
-                  value={dashboard?.overview.totalComments || 0}
+                  value={totalComments}
                   note={`Tháng ${month}`}
                   icon={<MessageSquareText className="h-5 w-5" />}
                 />
                 <StatCard
                   title="Tỷ lệ negative"
-                  value={`${dashboard?.sentiment.overall.negativeRate || 0}%`}
-                  note={`${dashboard?.sentiment.overall.negative || 0} comment tiêu cực`}
+                  value={`${overallSentiment.negativeRate}%`}
+                  note={`${overallSentiment.negative} comment tiêu cực`}
                   icon={<TriangleAlert className="h-5 w-5" />}
                 />
                 <StatCard
                   title="So với tháng trước"
                   value={delta >= 0 ? `+${delta}` : delta}
-                  note={percent === null ? "Không có dữ liệu so sánh" : `${percent}%`}
+                  note={percent == null ? "Không có dữ liệu so sánh" : `${percent}%`}
                   icon={<BarChart3 className="h-5 w-5" />}
                 />
                 <StatCard
@@ -384,9 +398,9 @@ export default function SocialListeningPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {dashboard?.overview.brandBreakdown.length ? (
-                      dashboard.overview.brandBreakdown.map((row) => {
-                        const total = Math.max(1, dashboard.overview.totalComments);
+                    {brandBreakdown.length ? (
+                      brandBreakdown.map((row) => {
+                        const total = Math.max(1, totalComments);
                         const width = (row.count / total) * 100;
 
                         return (
@@ -420,20 +434,20 @@ export default function SocialListeningPage() {
                     {[
                       {
                         label: "Positive",
-                        value: dashboard?.sentiment.overall.positive || 0,
-                        rate: dashboard?.sentiment.overall.positiveRate || 0,
+                        value: overallSentiment.positive,
+                        rate: overallSentiment.positiveRate,
                         color: "bg-emerald-500",
                       },
                       {
                         label: "Neutral",
-                        value: dashboard?.sentiment.overall.neutral || 0,
-                        rate: dashboard?.sentiment.overall.neutralRate || 0,
+                        value: overallSentiment.neutral,
+                        rate: overallSentiment.neutralRate,
                         color: "bg-slate-400",
                       },
                       {
                         label: "Negative",
-                        value: dashboard?.sentiment.overall.negative || 0,
-                        rate: dashboard?.sentiment.overall.negativeRate || 0,
+                        value: overallSentiment.negative,
+                        rate: overallSentiment.negativeRate,
                         color: "bg-rose-500",
                       },
                     ].map((row) => (
@@ -509,7 +523,7 @@ export default function SocialListeningPage() {
                       <div>
                         <div className="text-sm font-semibold text-slate-700">Topic nổi bật</div>
                         <div className="mt-3 space-y-2">
-                          {dashboard?.topics.topTopics.map((topic) => (
+                          {topTopics.map((topic) => (
                             <div
                               key={topic.topicTag}
                               className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-3"
@@ -524,7 +538,7 @@ export default function SocialListeningPage() {
                       <div>
                         <div className="text-sm font-semibold text-slate-700">Keyword nổi bật</div>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {dashboard?.topics.topKeywords.map((keyword) => (
+                          {topKeywords.map((keyword) => (
                             <span
                               key={keyword.keyword}
                               className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700"
@@ -542,8 +556,8 @@ export default function SocialListeningPage() {
                       <CardTitle className="text-xl text-slate-900">Vấn đề lặp lại</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {dashboard?.alerts.repeatedIssues.length ? (
-                        dashboard.alerts.repeatedIssues.map((issue) => (
+                      {repeatedIssues.length ? (
+                        repeatedIssues.map((issue) => (
                           <div
                             key={`${issue.type}-${issue.label}`}
                             className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3"

@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 final class SocialListeningBrandClassifier
 {
-    public function __construct(
-        private readonly SocialListeningTextNormalizer $normalizer
-    ) {
+    /** @var SocialListeningTextNormalizer */
+    private $normalizer;
+
+    public function __construct(SocialListeningTextNormalizer $normalizer)
+    {
+        $this->normalizer = $normalizer;
     }
 
     public function classify(string $text): array
@@ -80,7 +83,9 @@ final class SocialListeningBrandClassifier
             'confidence' => $confidence,
             'scores' => $scores,
             'matchedKeywords' => $primaryKeywords,
-            'matchedGroups' => array_keys(array_filter($scores, static fn (int $value): bool => $value > 0)),
+            'matchedGroups' => array_keys(array_filter($scores, static function (int $value): bool {
+                return $value > 0;
+            })),
             'hasGeneralBrand' => $hasGeneralBrand,
         ];
     }

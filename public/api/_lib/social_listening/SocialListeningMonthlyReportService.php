@@ -4,10 +4,18 @@ declare(strict_types=1);
 
 final class SocialListeningMonthlyReportService
 {
+    /** @var SocialListeningAnalyticsService */
+    private $analyticsService;
+
+    /** @var SocialListeningRepository */
+    private $repository;
+
     public function __construct(
-        private readonly SocialListeningAnalyticsService $analyticsService,
-        private readonly SocialListeningRepository $repository
+        SocialListeningAnalyticsService $analyticsService,
+        SocialListeningRepository $repository
     ) {
+        $this->analyticsService = $analyticsService;
+        $this->repository = $repository;
     }
 
     public function generate(string $month, bool $persist = true): array
@@ -25,7 +33,7 @@ final class SocialListeningMonthlyReportService
         $recommendations = $this->buildRecommendations($dashboard);
 
         $report = [
-            'title' => 'TikTok Social Listening Ông Quan - ' . $month,
+            'title' => 'TikTok Social Listening Ong Quan - ' . $month,
             'month' => $month,
             'generatedAt' => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
             'range' => $range,
@@ -71,11 +79,11 @@ final class SocialListeningMonthlyReportService
 
         $negativeRate = (float) ($dashboard['sentiment']['overall']['negativeRate'] ?? 0);
         if ($negativeRate >= 25) {
-            $recommendations[] = 'Tỷ lệ bình luận tiêu cực khá cao. Nên ưu tiên phản hồi các comment âm tính và tổng hợp thành guideline truyền thông nội bộ.';
+            $recommendations[] = 'Ty le binh luan tieu cuc kha cao. Nen uu tien phan hoi cac comment am tinh va tong hop thanh guideline truyen thong noi bo.';
         }
 
         if ($recommendations === []) {
-            $recommendations[] = 'Chưa có tín hiệu nổi bật vượt ngưỡng. Tiếp tục theo dõi theo tháng và giữ nhịp nội dung FAQ định kỳ.';
+            $recommendations[] = 'Chua co tin hieu noi bat vuot nguong. Tiep tuc theo doi theo thang va giu nhip noi dung FAQ dinh ky.';
         }
 
         return array_values(array_unique($recommendations));
@@ -113,31 +121,44 @@ final class SocialListeningMonthlyReportService
         $deltaText = $deltaValue >= 0 ? '+' . $deltaValue : (string) $deltaValue;
         $percentText = $comparison['percentChange'] === null ? 'N/A' : $comparison['percentChange'] . '%';
 
-        return implode("\n", [
+        $markdownLines = [
             '# ' . $report['title'],
             '',
-            '## Tổng quan',
-            '- Tổng số comment: ' . ($report['overview']['totalComments'] ?? 0),
-            '- So với tháng trước: ' . $deltaText . ' (' . $percentText . ')',
-            ...$brandLines,
+            '## Tong quan',
+            '- Tong so comment: ' . ($report['overview']['totalComments'] ?? 0),
+            '- So voi thang truoc: ' . $deltaText . ' (' . $percentText . ')',
+        ];
+        $markdownLines = array_merge($markdownLines, $brandLines);
+        $markdownLines = array_merge($markdownLines, [
             '',
             '## Sentiment',
             '- Positive: ' . ($report['sentiment']['overall']['positive'] ?? 0),
             '- Neutral: ' . ($report['sentiment']['overall']['neutral'] ?? 0),
             '- Negative: ' . ($report['sentiment']['overall']['negative'] ?? 0),
             '',
-            '## Chủ đề nổi bật',
-            ...$topicLines,
-            '',
-            '## Keyword nổi bật',
-            ...$keywordLines,
-            '',
-            '## Comment tiêu cực cần chú ý',
-            ...($negativeLines !== [] ? $negativeLines : ['- Không có comment tiêu cực nổi bật']),
-            '',
-            '## Đề xuất điều hướng',
-            ...$recommendationLines,
+            '## Chu de noi bat',
         ]);
+        $markdownLines = array_merge($markdownLines, $topicLines);
+        $markdownLines = array_merge($markdownLines, [
+            '',
+            '## Keyword noi bat',
+        ]);
+        $markdownLines = array_merge($markdownLines, $keywordLines);
+        $markdownLines = array_merge($markdownLines, [
+            '',
+            '## Comment tieu cuc can chu y',
+        ]);
+        $markdownLines = array_merge(
+            $markdownLines,
+            $negativeLines !== [] ? $negativeLines : ['- Khong co comment tieu cuc noi bat']
+        );
+        $markdownLines = array_merge($markdownLines, [
+            '',
+            '## De xuat dieu huong',
+        ]);
+        $markdownLines = array_merge($markdownLines, $recommendationLines);
+
+        return implode("\n", $markdownLines);
     }
 
     private function renderHtml(array $report): string
@@ -156,9 +177,9 @@ final class SocialListeningMonthlyReportService
             . htmlspecialchars($report['title'])
             . '</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#0f172a}h1,h2{color:#111827}.card{border:1px solid #e2e8f0;border-radius:16px;padding:16px;margin-bottom:16px;background:#fff}ul{padding-left:20px}</style></head><body>'
             . '<h1>' . htmlspecialchars($report['title']) . '</h1>'
-            . '<div class="card"><h2>Tổng quan</h2><p>Tổng số comment: <strong>' . (int) ($report['overview']['totalComments'] ?? 0) . '</strong></p></div>'
-            . '<div class="card"><h2>Chủ đề nổi bật</h2><ul>' . $topicItems . '</ul></div>'
-            . '<div class="card"><h2>Đề xuất điều hướng</h2><ul>' . $recommendationItems . '</ul></div>'
+            . '<div class="card"><h2>Tong quan</h2><p>Tong so comment: <strong>' . (int) ($report['overview']['totalComments'] ?? 0) . '</strong></p></div>'
+            . '<div class="card"><h2>Chu de noi bat</h2><ul>' . $topicItems . '</ul></div>'
+            . '<div class="card"><h2>De xuat dieu huong</h2><ul>' . $recommendationItems . '</ul></div>'
             . '</body></html>';
     }
 
@@ -184,7 +205,7 @@ final class SocialListeningMonthlyReportService
         $lines = [];
         foreach ($rows as $row) {
             $lines[] = implode(',', array_map(
-                static function (mixed $value): string {
+                static function ($value): string {
                     $escaped = str_replace('"', '""', (string) $value);
                     return '"' . $escaped . '"';
                 },

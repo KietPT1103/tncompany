@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 final class SocialListeningAnalyticsService
 {
-    public function __construct(
-        private readonly SocialListeningRepository $repository
-    ) {
+    /** @var SocialListeningRepository */
+    private $repository;
+
+    public function __construct(SocialListeningRepository $repository)
+    {
+        $this->repository = $repository;
     }
 
     public function buildDashboard(array $filters, string $granularity = 'day'): array
@@ -42,7 +45,9 @@ final class SocialListeningAnalyticsService
             ],
             'sentiment' => [
                 'overall' => $this->appendPercentages($sentimentTotals),
-                'byBrand' => array_map(fn (array $row): array => $this->appendPercentages($row), $sentimentByBrand),
+                'byBrand' => array_map(function (array $row): array {
+                    return $this->appendPercentages($row);
+                }, $sentimentByBrand),
             ],
             'topics' => [
                 'topTopics' => $topTopics,
@@ -148,7 +153,9 @@ final class SocialListeningAnalyticsService
             ];
         }
 
-        usort($issues, static fn (array $left, array $right): int => $right['count'] <=> $left['count']);
+        usort($issues, static function (array $left, array $right): int {
+            return $right['count'] <=> $left['count'];
+        });
         return array_slice($issues, 0, 8);
     }
 }

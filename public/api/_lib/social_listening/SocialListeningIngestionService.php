@@ -4,11 +4,23 @@ declare(strict_types=1);
 
 final class SocialListeningIngestionService
 {
+    /** @var SocialListeningBrandClassifier */
+    private $brandClassifier;
+
+    /** @var SocialListeningSignalTagger */
+    private $signalTagger;
+
+    /** @var SocialListeningRepository */
+    private $repository;
+
     public function __construct(
-        private readonly SocialListeningBrandClassifier $brandClassifier,
-        private readonly SocialListeningSignalTagger $signalTagger,
-        private readonly SocialListeningRepository $repository
+        SocialListeningBrandClassifier $brandClassifier,
+        SocialListeningSignalTagger $signalTagger,
+        SocialListeningRepository $repository
     ) {
+        $this->brandClassifier = $brandClassifier;
+        $this->signalTagger = $signalTagger;
+        $this->repository = $repository;
     }
 
     public function ingest(array $items, array $options = []): array
@@ -65,20 +77,22 @@ final class SocialListeningIngestionService
 
         $result = $this->repository->upsertComments($processedRows);
         $result['items'] = array_map(
-            static fn (array $row): array => [
-                'commentId' => $row['comment_id'],
-                'videoId' => $row['video_id'],
-                'brandGroup' => $row['brand_group'],
-                'sentiment' => $row['sentiment'],
-                'topicTags' => $row['topic_tags'],
-            ],
+            static function (array $row): array {
+                return [
+                    'commentId' => $row['comment_id'],
+                    'videoId' => $row['video_id'],
+                    'brandGroup' => $row['brand_group'],
+                    'sentiment' => $row['sentiment'],
+                    'topicTags' => $row['topic_tags'],
+                ];
+            },
             $processedRows
         );
 
         return $result;
     }
 
-    private function nullableString(mixed $value): ?string
+    private function nullableString($value): ?string
     {
         $normalized = trim((string) $value);
         return $normalized === '' ? null : $normalized;
@@ -93,7 +107,7 @@ final class SocialListeningIngestionService
 
         try {
             return (new DateTimeImmutable($trimmed))->format('Y-m-d H:i:s');
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
             return null;
         }
     }

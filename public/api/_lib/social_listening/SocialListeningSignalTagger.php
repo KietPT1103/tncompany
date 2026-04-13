@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 final class SocialListeningSignalTagger
 {
-    public function __construct(
-        private readonly SocialListeningTextNormalizer $normalizer
-    ) {
+    /** @var SocialListeningTextNormalizer */
+    private $normalizer;
+
+    public function __construct(SocialListeningTextNormalizer $normalizer)
+    {
+        $this->normalizer = $normalizer;
     }
 
     public function tag(string $text): array
@@ -61,6 +64,11 @@ final class SocialListeningSignalTagger
             return count($topicMatches[$right]) <=> count($topicMatches[$left]);
         });
 
+        $mergedTopicKeywords = [];
+        foreach (array_values($topicMatches) as $topicKeywords) {
+            $mergedTopicKeywords = array_merge($mergedTopicKeywords, $topicKeywords);
+        }
+
         return [
             'normalizedText' => $content,
             'sentiment' => $sentiment,
@@ -72,7 +80,7 @@ final class SocialListeningSignalTagger
             'matchedKeywords' => array_values(array_unique(array_merge(
                 $positiveHits,
                 $negativeHits,
-                ...array_values($topicMatches)
+                $mergedTopicKeywords
             ))),
         ];
     }
