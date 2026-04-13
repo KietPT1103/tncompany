@@ -1,11 +1,11 @@
 export const company = {
   name: "Công ty TNHH Thương mại Dịch vụ Đầu tư Tổng hợp T-N",
-  shortName: "T&N Services",
+  shortName: "T&N Company",
   enterpriseCode: "1801702806",
   foundedDate: "06/05/2021",
   latestUpdate: "Đăng ký thay đổi lần 2: 14/12/2025",
   capital: "1.000.000.000 đồng",
-  headquarters: "Số 267, đường 30/4, phường Ninh Kiều, thành phố Cần Thơ",
+  headquarters: "701/78 đường 30/4, phường Hưng Lợi, quận Ninh Kiều, thành phố Cần Thơ",
   phone: "0337 336 138",
   legalRep: "Lê Đức Trọng",
 };
@@ -127,9 +127,9 @@ export const venues = [
     headline: "Không gian chính của hệ sinh thái Ông Quan",
     description:
       "Tiệm cà phê Ông Quan có nhiều khu trải nghiệm: Hội An, Nhà bên suối, Nhà gia Tiên và nhiều khu mới đang chờ đón.",
-    address: "267 Đường 30/4, Ninh Kiều, Cần Thơ",
+    address: "701/78 Đường 30/4, phường Hưng Lợi, quận Ninh Kiều, Cần Thơ",
     time: "07:00 - 22:00",
-    contact: "077 277 0789",
+    contact: "0772 770 789",
     stats: [
       { label: "Diện tích phục vụ", value: "1km+" },
       { label: "Món signature", value: "Trà sữa Ông Quan" },
@@ -166,9 +166,9 @@ export const venues = [
     headline: "Lẩu, đồ ăn sáng và đồ nướng đa dạng cho nhiều khung giờ",
     description:
       "Tiệm lẩu phục vụ nhiều nhóm món đa dạng, từ các món lẩu đặc trưng, đồ ăn sáng đến đồ nướng và món ăn kèm cho nhóm bạn, gia đình.",
-    address: "267 Đường 30/4, Ninh Kiều, Cần Thơ",
+    address: "701/78 Đường 30/4, phường Hưng Lợi, quận Ninh Kiều, Cần Thơ",
     time: "07:00 - 22:00",
-    contact: "093 997 65 65",
+    contact: "0939 976 565",
     stats: [
       { label: "Sức chứa", value: "220 khách" },
       { label: "Nhóm món chính", value: "3 nhóm" },
@@ -243,9 +243,9 @@ export const venues = [
     headline: "Điểm tham quan với nhiều loài thú và không gian trải nghiệm ngoài trời",
     description:
       "Ông Quan Farm là điểm tham quan dành cho gia đình, nhóm bạn và khách chụp ảnh, nổi bật với nhiều loài thú, các góc check-in và trải nghiệm ngoài trời gần gũi thiên nhiên.",
-    address: "267 Đường 30/4, Ninh Kiều, Cần Thơ",
+    address: "701/78 Đường 30/4, phường Hưng Lợi, quận Ninh Kiều, Cần Thơ",
     time: "07:00 - 17:30",
-    contact: "0917 808 226 - 093 997 65 65",
+    contact: "0772 770 789",
     stats: [
       { label: "Loài thú nổi bật", value: "10+" },
       { label: "Điểm check-in", value: "Nhiều khu" },

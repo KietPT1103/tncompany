@@ -6,7 +6,7 @@ export default function AppHeader({ activePageId, onNavigate, pages }) {
       <div className="brand">
         <span className="brand-mark">T&N</span>
         <div>
-          <p className="brand-title">T&N Services</p>
+          <p className="brand-title">T&N Company</p>
           <p className="brand-sub">Trang chủ doanh nghiệp & hệ sinh thái Ông Quan</p>
         </div>
       </div>

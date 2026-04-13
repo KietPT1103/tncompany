@@ -14,11 +14,15 @@ const BRAND_LOGO = toAbsoluteUrl("/favicon.svg");
 function buildAddress() {
   return {
     "@type": "PostalAddress",
-    streetAddress: "267 \u0110\u01b0\u1eddng 30/4",
+    streetAddress: "701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i",
     addressLocality: "Ninh Ki\u1ec1u",
     addressRegion: "C\u1ea7n Th\u01a1",
     addressCountry: "VN",
   };
+}
+
+function buildHomepageAddressText() {
+  return "701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1";
 }
 
 function buildFaqSchema(pageUrl, faqs) {
@@ -106,24 +110,24 @@ const venueMetaOverrides = {
   cafe: {
     title: "Ti\u1ec7m c\u00e0 ph\u00ea \u00d4ng Quan C\u1ea7n Th\u01a1 | Qu\u00e1n cafe \u0111\u1eb9p t\u1ea1i Ninh Ki\u1ec1u",
     description:
-      "Kh\u00e1m ph\u00e1 Ti\u1ec7m c\u00e0 ph\u00ea \u00d4ng Quan t\u1ea1i 267 \u0110\u01b0\u1eddng 30/4, Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1. Xem kh\u00f4ng gian cafe, h\u00ecnh \u1ea3nh th\u1ef1c t\u1ebf, gi\u1edd m\u1edf c\u1eeda v\u00e0 th\u00f4ng tin li\u00ean h\u1ec7.",
+      "Kh\u00e1m ph\u00e1 Ti\u1ec7m c\u00e0 ph\u00ea \u00d4ng Quan t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1. Xem kh\u00f4ng gian cafe, h\u00ecnh \u1ea3nh th\u1ef1c t\u1ebf, gi\u1edd m\u1edf c\u1eeda v\u00e0 th\u00f4ng tin li\u00ean h\u1ec7.",
   },
   hotpot: {
     title: "Ti\u1ec7m l\u1ea9u \u00d4ng Quan C\u1ea7n Th\u01a1 | L\u1ea9u, \u0103n s\u00e1ng v\u00e0 m\u00f3n n\u01b0\u1edbng t\u1ea1i Ninh Ki\u1ec1u",
     description:
-      "Ti\u1ec7m l\u1ea9u \u00d4ng Quan ph\u1ee5c v\u1ee5 l\u1ea9u, \u0103n s\u00e1ng v\u00e0 m\u00f3n n\u01b0\u1edbng t\u1ea1i 267 \u0110\u01b0\u1eddng 30/4, Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1. Xem menu n\u1ed5i b\u1eadt, khung gi\u1edd v\u00e0 h\u00ecnh \u1ea3nh th\u1ef1c t\u1ebf.",
+      "Ti\u1ec7m l\u1ea9u \u00d4ng Quan ph\u1ee5c v\u1ee5 l\u1ea9u v\u00e0 m\u00f3n n\u01b0\u1edbng t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1. Xem menu n\u1ed5i b\u1eadt, khung gi\u1edd v\u00e0 h\u00ecnh \u1ea3nh th\u1ef1c t\u1ebf.",
   },
   farm: {
     title: "\u00d4ng Quan Farm C\u1ea7n Th\u01a1 | \u0110i\u1ec3m tham quan, check-in v\u00e0 vui ch\u01a1i gia \u0111\u00ecnh",
     description:
-      "\u00d4ng Quan Farm l\u00e0 \u0111i\u1ec3m tham quan t\u1ea1i 267 \u0110\u01b0\u1eddng 30/4, Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1, ph\u00f9 h\u1ee3p cho gia \u0111\u00ecnh, nh\u00f3m b\u1ea1n v\u00e0 kh\u00e1ch ch\u1ee5p \u1ea3nh. Xem khu th\u00fa, g\u00f3c check-in v\u00e0 gi\u1edd tham quan.",
+      "\u00d4ng Quan Farm l\u00e0 \u0111i\u1ec3m tham quan t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1, ph\u00f9 h\u1ee3p cho gia \u0111\u00ecnh, nh\u00f3m b\u1ea1n v\u00e0 kh\u00e1ch ch\u1ee5p \u1ea3nh. Xem khu th\u00fa, g\u00f3c check-in v\u00e0 gi\u1edd tham quan.",
   },
 };
 
 const homepageSeo = {
   title: "T&N Company | H\u1ec7 sinh th\u00e1i \u00d4ng Quan g\u1ed3m cafe, l\u1ea9u v\u00e0 farm t\u1ea1i C\u1ea7n Th\u01a1",
   description:
-    "Kh\u00e1m ph\u00e1 h\u1ec7 sinh th\u00e1i \u00d4ng Quan t\u1ea1i 267 \u0110\u01b0\u1eddng 30/4, Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1: ti\u1ec7m c\u00e0 ph\u00ea, ti\u1ec7m l\u1ea9u v\u00e0 farm tham quan. Xem h\u00ecnh \u1ea3nh, gi\u1edd m\u1edf c\u1eeda v\u00e0 th\u00f4ng tin li\u00ean h\u1ec7.",
+    `Kh\u00e1m ph\u00e1 h\u1ec7 sinh th\u00e1i \u00d4ng Quan t\u1ea1i ${buildHomepageAddressText()}: ti\u1ec7m c\u00e0 ph\u00ea, ti\u1ec7m l\u1ea9u v\u00e0 farm tham quan. Xem h\u00ecnh \u1ea3nh, gi\u1edd m\u1edf c\u1eeda v\u00e0 th\u00f4ng tin li\u00ean h\u1ec7.`,
 };
 
 const publicSeoByPath = {
