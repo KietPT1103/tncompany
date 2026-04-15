@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -26,6 +27,104 @@ interface ShiftDetailModalProps {
   employeeId: string;
   initialShifts: Shift[];
 }
+
+const TimeSelect = ({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  className?: string;
+}) => {
+  const [hour, setHour] = useState("");
+  const [minute, setMinute] = useState("");
+
+  useEffect(() => {
+    const [nextHour, nextMinute] = value ? value.split(":") : ["", ""];
+    setHour(nextHour || "");
+    setMinute(nextMinute || "");
+  }, [value]);
+
+  const commitValue = (nextHour: string, nextMinute: string) => {
+    if (!nextHour && !nextMinute) {
+      onChange("");
+      return;
+    }
+
+    if (nextHour.length === 2 && nextMinute.length === 2) {
+      onChange(`${nextHour}:${nextMinute}`);
+    }
+  };
+
+  const handleChange = (part: "h" | "m", rawValue: string) => {
+    if (!/^\d*$/.test(rawValue)) return;
+
+    const nextValue = rawValue.slice(0, 2);
+    const nextHour = part === "h" ? nextValue : hour;
+    const nextMinute = part === "m" ? nextValue : minute;
+
+    if (part === "h") setHour(nextValue);
+    if (part === "m") setMinute(nextValue);
+
+    commitValue(nextHour, nextMinute);
+  };
+
+  const handleBlur = (part: "h" | "m") => {
+    const rawHour = hour;
+    const rawMinute = minute;
+
+    if (!rawHour && !rawMinute) {
+      setHour("");
+      setMinute("");
+      onChange("");
+      return;
+    }
+
+    const normalizedHour =
+      rawHour === ""
+        ? ""
+        : String(Math.min(23, Math.max(0, Number(rawHour) || 0))).padStart(2, "0");
+    const normalizedMinute =
+      rawMinute === ""
+        ? ""
+        : String(Math.min(59, Math.max(0, Number(rawMinute) || 0))).padStart(2, "0");
+
+    setHour(normalizedHour);
+    setMinute(normalizedMinute);
+
+    if (normalizedHour && normalizedMinute) {
+      onChange(`${normalizedHour}:${normalizedMinute}`);
+      return;
+    }
+
+    onChange("");
+  };
+
+  return (
+    <div className={`flex items-center justify-center gap-1 ${className}`}>
+      <input
+        type="text"
+        value={hour}
+        placeholder="HH"
+        maxLength={2}
+        onChange={(e) => handleChange("h", e.target.value)}
+        onBlur={() => handleBlur("h")}
+        className="p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 font-mono bg-white text-center w-[50px]"
+      />
+      <span className="text-gray-400 font-bold">:</span>
+      <input
+        type="text"
+        value={minute}
+        placeholder="MM"
+        maxLength={2}
+        onChange={(e) => handleChange("m", e.target.value)}
+        onBlur={() => handleBlur("m")}
+        className="p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 font-mono bg-white text-center w-[50px]"
+      />
+    </div>
+  );
+};
 
 export default function ShiftDetailModal({
   isOpen,
@@ -320,104 +419,6 @@ export default function ShiftDetailModal({
     const hh = String(d.getHours()).padStart(2, "0");
     const mm = String(d.getMinutes()).padStart(2, "0");
     return `${hh}:${mm}`;
-  };
-
-  const TimeSelect = ({
-    value,
-    onChange,
-    className,
-  }: {
-    value: string;
-    onChange: (val: string) => void;
-    className?: string;
-  }) => {
-    const [hour, setHour] = useState("");
-    const [minute, setMinute] = useState("");
-
-    useEffect(() => {
-      const [nextHour, nextMinute] = value ? value.split(":") : ["", ""];
-      setHour(nextHour || "");
-      setMinute(nextMinute || "");
-    }, [value]);
-
-    const commitValue = (nextHour: string, nextMinute: string) => {
-      if (!nextHour && !nextMinute) {
-        onChange("");
-        return;
-      }
-
-      if (nextHour.length === 2 && nextMinute.length === 2) {
-        onChange(`${nextHour}:${nextMinute}`);
-      }
-    };
-
-    const handleChange = (part: "h" | "m", rawValue: string) => {
-      if (!/^\d*$/.test(rawValue)) return;
-
-      const nextValue = rawValue.slice(0, 2);
-      const nextHour = part === "h" ? nextValue : hour;
-      const nextMinute = part === "m" ? nextValue : minute;
-
-      if (part === "h") setHour(nextValue);
-      if (part === "m") setMinute(nextValue);
-
-      commitValue(nextHour, nextMinute);
-    };
-
-    const handleBlur = (part: "h" | "m") => {
-      const rawHour = part === "h" ? hour : hour;
-      const rawMinute = part === "m" ? minute : minute;
-
-      if (!rawHour && !rawMinute) {
-        setHour("");
-        setMinute("");
-        onChange("");
-        return;
-      }
-
-      const normalizedHour =
-        rawHour === ""
-          ? ""
-          : String(Math.min(23, Math.max(0, Number(rawHour) || 0))).padStart(2, "0");
-      const normalizedMinute =
-        rawMinute === ""
-          ? ""
-          : String(Math.min(59, Math.max(0, Number(rawMinute) || 0))).padStart(2, "0");
-
-      setHour(normalizedHour);
-      setMinute(normalizedMinute);
-
-      if (normalizedHour && normalizedMinute) {
-        onChange(`${normalizedHour}:${normalizedMinute}`);
-        return;
-      }
-
-      onChange("");
-    };
-
-    return (
-      <div className={`flex items-center justify-center gap-1 ${className}`}>
-        <input
-          type="text"
-          value={hour}
-          placeholder="HH"
-          maxLength={2}
-          onChange={(e) => handleChange("h", e.target.value)}
-          onBlur={() => handleBlur("h")}
-          className="p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 font-mono bg-white text-center w-[50px]"
-        />
-        <span className="text-gray-400 font-bold">:</span>
-        <input
-          type="text"
-          value={minute}
-          placeholder="MM"
-          maxLength={2}
-          onChange={(e) => handleChange("m", e.target.value)}
-          onBlur={() => handleBlur("m")}
-          className="p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 font-mono bg-white text-center w-[50px]"
-        />
-      </div>
-    );
   };
 
   return (

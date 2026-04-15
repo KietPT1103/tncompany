@@ -58,7 +58,7 @@ export default function PayrollPage() {
 
   return (
     <div className="min-h-full bg-slate-50">
-      <div className="mx-auto max-w-7xl space-y-5 p-4 lg:p-6">
+      <div className="mx-auto max-w-screen-2xl space-y-5 p-4 lg:p-6">
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-3">
