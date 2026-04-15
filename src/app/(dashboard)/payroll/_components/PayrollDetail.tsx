@@ -83,6 +83,8 @@ type VisibleColumns = {
   total: boolean;
 
   note: boolean;
+
+  action: boolean;
 };
 
 const DEFAULT_COLUMNS: VisibleColumns = {
@@ -103,6 +105,8 @@ const DEFAULT_COLUMNS: VisibleColumns = {
   total: true,
 
   note: true,
+
+  action: true,
 };
 
 const COLUMN_OPTIONS: { key: keyof VisibleColumns; label: string }[] = [
@@ -115,6 +119,7 @@ const COLUMN_OPTIONS: { key: keyof VisibleColumns; label: string }[] = [
   { key: "allowance", label: "Phụ cấp" },
   { key: "total", label: "Tổng lương" },
   { key: "note", label: "Ghi chú" },
+  { key: "action", label: "Tác vụ" },
 ];
 
 function RoleSelect({
@@ -148,11 +153,12 @@ function RoleSelect({
     </select>
   );
 }
-
 const hasInvalidShift = (entry: PayrollEntry) =>
   (entry.shifts || []).some(
     (shift) => !shift.isValid || !shift.inTime || !shift.outTime,
   );
+
+const hasEntryError = (entry: PayrollEntry) => hasInvalidShift(entry);
 
 const isEmployeeAlreadyInPayroll = (
   entry: PayrollEntry,
@@ -359,6 +365,8 @@ export default function PayrollDetail({
   const entrySaveQueuesRef = useRef<Record<string, Promise<void>>>({});
 
   const [hasLoadedColumnPrefs, setHasLoadedColumnPrefs] = useState(false);
+
+  const [filterError, setFilterError] = useState(false);
 
   useEffect(() => {
     loadEntries();
@@ -896,10 +904,8 @@ export default function PayrollDetail({
   }
 
   const filteredEntries = entries
-
     .filter((entry) => {
       const keyword = searchTerm.trim().toLowerCase();
-
       const code = (entry.employeeCode || "").toLowerCase();
 
       const matchesSearch =
@@ -908,11 +914,12 @@ export default function PayrollDetail({
         code.includes(keyword) ||
         entry.role.toLowerCase().includes(keyword);
 
-      return (
-        matchesSearch && (filterRole === "All" || entry.role === filterRole)
-      );
-    })
+      const matchesRole = filterRole === "All" || entry.role === filterRole;
 
+      const matchesError = !filterError || hasEntryError(entry);
+
+      return matchesSearch && matchesRole && matchesError;
+    })
     .sort((left, right) => {
       if (sortBy === "name_asc")
         return left.employeeName.localeCompare(right.employeeName, "vi");
@@ -1044,7 +1051,7 @@ export default function PayrollDetail({
               </div>
 
               <div className="flex flex-col gap-3 xl:items-end">
-                <div className="grid gap-3 md:grid-cols-3 xl:w-[760px]">
+                <div className="grid gap-3 md:grid-cols-4 xl:w-[760px]">
                   <div className="relative md:col-span-3 xl:col-span-1">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
@@ -1073,7 +1080,20 @@ export default function PayrollDetail({
                       </optgroup>
                     ))}
                   </select>
-
+                  <Button
+                    variant={filterError ? "default" : "outline"}
+                    className={cn(
+                      "h-11 gap-2 rounded-2xl",
+                      filterError
+                        ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                        : "text-slate-600",
+                    )}
+                    onClick={() => setFilterError((current) => !current)}
+                    title="Chỉ hiện nhân viên có lỗi hoặc thiếu dữ liệu"
+                  >
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Lỗi</span>
+                  </Button>
                   <select
                     value={sortBy}
                     onChange={(event) => setSortBy(event.target.value)}
@@ -1098,7 +1118,6 @@ export default function PayrollDetail({
                       onClick={() => setShowColumns((current) => !current)}
                     >
                       <Columns3 className="h-4 w-4" />
-                      Cột hiển thị
                     </Button>
                     {showColumns ? (
                       <div className="absolute right-0 top-14 z-20 w-60 rounded-[24px] border border-slate-200 bg-white p-4 shadow-xl">
@@ -1140,50 +1159,49 @@ export default function PayrollDetail({
           </div>
 
           <div className="overflow-x-auto px-6 py-5">
-            <table className="min-w-[1500px] w-full table-fixed text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.16em] text-slate-400">
+            <table className="w-full min-w-[980px] text-sm border-separate border-spacing-0">
+              <thead className="bg-slate-50">
+                <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
                   {visibleColumns.name ? (
-                    <th className="pb-3 pr-4 w-[280px]">Nhân viên</th>
+                    <th className="px-4 py-3 text-left">Tên nhân viên</th>
                   ) : null}
-
                   {visibleColumns.role ? (
-                    <th className="pb-3 pr-4 w-[120px]">Vai trò</th>
+                    <th className="px-4 py-3 text-left">Vai trò</th>
                   ) : null}
-
                   {visibleColumns.hours ? (
-                    <th className="pb-3 pr-4 w-[150px] text-right">Giờ làm</th>
+                    <th className="px-4 py-3 text-center">Số giờ</th>
                   ) : null}
 
                   {visibleColumns.workDays ? (
-                    <th className="pb-3 pr-4 w-[160px]">Ngày công</th>
+                    <th className="pb-3 pr-4 text-center">Ngày công</th>
                   ) : null}
 
                   {visibleColumns.rate ? (
-                    <th className="pb-3 pr-4 w-[120px]">Đơn giá</th>
+                    <th className="px-4 py-3 text-center">Lương/h</th>
                   ) : null}
-
                   {visibleColumns.weekend ? (
-                    <th className="pb-3 pr-4 w-[140px] text-right">
-                      Cuối tuần
-                    </th>
+                    <th className="px-4 py-3 text-center">Bonus</th>
                   ) : null}
                   {visibleColumns.allowance ? (
-                    <th className="pb-3 pr-4 w-[180px]">Phụ cấp</th>
+                    <th className="pb-3 pr-4 text-center">Phụ cấp</th>
                   ) : null}
 
                   {visibleColumns.total ? (
-                    <th className="pb-3 pr-4 w-[170px] text-right sticky right-0 bg-white z-20">
-                      Tổng lương
+                    <th className="px-4 py-3 text-right text-emerald-700">
+                      Tổng tiền
                     </th>
                   ) : null}
                   {visibleColumns.note ? (
-                    <th className="pb-3 w-[220px]">Ghi chú</th>
+                    <th className="px-4 py-3 text-left">Ghi chú</th>
+                  ) : null}
+
+                  {visibleColumns.action ? (
+                    <th className="px-4 py-3 text-center w-[96px]">Tác vụ</th>
                   ) : null}
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {filteredEntries.map((entry) => {
                   const breakdown = getPayrollBreakdown(entry);
 
@@ -1192,110 +1210,42 @@ export default function PayrollDetail({
                   return (
                     <tr
                       key={entry.id}
-                      className={cn("align-top", isMonthly && "bg-sky-50/30")}
+                      className={cn(
+                        "align-top transition-colors",
+                        isMonthly ? "bg-sky-50/40" : "bg-white",
+                        hasEntryError(entry) && "bg-red-50/60",
+                      )}
                     >
                       {visibleColumns.name ? (
-                        <td className="py-4 pr-4">
-                          <div
-                            className={cn(
-                              "rounded-[24px] border bg-slate-50 p-3",
-                              isMonthly
-                                ? "border-sky-200 bg-sky-50/70"
-                                : "border-slate-200",
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  {hasInvalidShift(entry) ? (
-                                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                                      <AlertCircle className="h-4 w-4" />
-                                    </span>
-                                  ) : null}
-                                  <input
-                                    value={entry.employeeName}
-                                    onChange={(event) =>
-                                      applyEntryPatch(
-                                        entry.id!,
-                                        { employeeName: event.target.value },
-                                        { name: event.target.value },
-                                      )
-                                    }
-                                    onBlur={() => debouncedUpdate.flush()}
-                                    className="h-10 w-full rounded-2xl border border-transparent bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                                  />
-                                </div>
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                  <span className="inline-flex rounded-full bg-slate-900 px-3 py-1 font-mono text-xs font-semibold text-white">
-                                    {entry.employeeCode || "Chưa có mã"}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                                      isMonthly
-                                        ? "bg-sky-100 text-sky-800 ring-1 ring-sky-200"
-                                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-                                    )}
-                                  >
-                                    {isMonthly ? "Lương tháng" : "Theo giờ"}
-                                  </span>
-                                  {savingId === entry.id ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs text-slate-600">
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                      Đang lưu
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-9 w-9 rounded-2xl text-slate-500 hover:bg-slate-200"
-                                  onClick={() => {
-                                    setSettingsEntryId(entry.id || null);
-                                    const entrySalaryType =
-                                      resolvePayrollSalaryType(entry);
-                                    setSettingsData({
-                                      salaryType: entrySalaryType,
-                                      monthlySalary:
-                                        entry.monthlySalary ||
-                                        entry.fixedSalary ||
-                                        0,
-                                      expectedWorkDays:
-                                        entrySalaryType === "monthly"
-                                          ? entry.expectedWorkDays || 30
-                                          : 30,
-                                      paidLeaveDays:
-                                        entrySalaryType === "monthly"
-                                          ? entry.paidLeaveDays || 0
-                                          : 0,
-                                      standardHours:
-                                        entrySalaryType === "monthly"
-                                          ? entry.standardHours || 0
-                                          : 0,
-                                      overtimeRate: entry.hourlyRate || 0,
-                                    });
-                                  }}
-                                >
-                                  <Settings2 className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-9 w-9 rounded-2xl text-rose-500 hover:bg-rose-50"
-                                  onClick={() => handleDeleteEntry(entry.id!)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
+                        <td
+                          className={cn(
+                            "px-4 py-4 border-b border-slate-500 align-middle",
+                            isMonthly && "bg-sky-50/40",
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {hasInvalidShift(entry) ? (
+                              <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
+                            ) : null}
+
+                            <input
+                              value={entry.employeeName}
+                              onChange={(event) =>
+                                applyEntryPatch(
+                                  entry.id!,
+                                  { employeeName: event.target.value },
+                                  { name: event.target.value },
+                                )
+                              }
+                              onBlur={() => debouncedUpdate.flush()}
+                              className="min-w-0 w-full bg-transparent font-semibold text-slate-900 outline-none"
+                            />
                           </div>
                         </td>
                       ) : null}
 
                       {visibleColumns.role ? (
-                        <td className="py-4 pr-4">
+                        <td className="px-4 py-4 border-b border-slate-500">
                           <RoleSelect
                             roleGroups={roleGroups}
                             value={entry.role || defaultRole}
@@ -1312,8 +1262,8 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.hours ? (
-                        <td className="py-4 pr-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="px-4 py-4 border-b border-slate-500 text-center">
+                          <div className="inline-flex items-center gap-2">
                             <input
                               type="number"
                               onWheel={preventNumberInputScroll}
@@ -1324,12 +1274,12 @@ export default function PayrollDetail({
                                 })
                               }
                               onBlur={() => debouncedUpdate.flush()}
-                              className="h-10 w-24 rounded-2xl border border-slate-200 bg-white px-3 text-right outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 no-spin"
+                              className="h-9 w-24 rounded-xl border border-slate-200 px-3 text-center outline-none"
                             />
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-10 w-10 rounded-2xl"
+                              className="h-9 w-9 rounded-xl"
                               onClick={() => {
                                 setCurrentShiftEntry(entry);
                                 setShiftModalOpen(true);
@@ -1342,7 +1292,7 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.workDays ? (
-                        <td className="py-4 pr-4">
+                        <td className="py-4 pr-4 border-b border-slate-200">
                           <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
                             <div className="text-lg font-semibold text-slate-900">
                               {breakdown.workingDays}
@@ -1366,66 +1316,45 @@ export default function PayrollDetail({
                           </div>
                         </td>
                       ) : null}
+
                       {visibleColumns.rate ? (
-                        <td className="py-4 pr-4">
-                          {isMonthly ? (
-                            <div className="rounded-[24px] border border-sky-200 bg-sky-50 px-4 py-3">
-                              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
-                                Lương tháng
-                              </div>
-                              <div className="mt-2 text-lg font-semibold text-slate-900">
-                                {formatCurrency(entry.monthlySalary || 0)}
-                              </div>
-                              <div className="mt-2 text-xs leading-5 text-slate-500">
-                                Phép {entry.paidLeaveDays || 0} ngày. OT sau{" "}
-                                {formatHours(entry.standardHours || 0)}h,{" "}
-                                {formatCurrency(entry.hourlyRate || 0)}/h.
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="ml-auto max-w-[180px]">
-                              <InputMoney
-                                value={entry.hourlyRate}
-                                set={(value) =>
-                                  applyEntryPatch(
-                                    entry.id!,
-                                    { hourlyRate: value },
-                                    { hourlyRate: value },
-                                  )
-                                }
-                                onBlur={() => debouncedUpdate.flush()}
-                                className="h-10 rounded-2xl"
-                              />
-                            </div>
-                          )}
+                        <td className="px-4 py-4 border-b border-slate-500 text-center">
+                          <div className="mx-auto max-w-[120px]">
+                            <InputMoney
+                              value={entry.hourlyRate}
+                              set={(value) =>
+                                applyEntryPatch(
+                                  entry.id!,
+                                  { hourlyRate: value },
+                                  { hourlyRate: value },
+                                )
+                              }
+                              onBlur={() => debouncedUpdate.flush()}
+                              className="h-9 rounded-xl text-center"
+                            />
+                          </div>
                         </td>
                       ) : null}
 
                       {visibleColumns.weekend ? (
-                        <td className="py-4 pr-4 text-right">
-                          {isMonthly ? (
-                            <div className="rounded-[20px] border border-sky-200 bg-white px-4 py-3 text-xs font-medium text-sky-700">
-                              Không tính
-                            </div>
-                          ) : (
-                            <input
-                              type="number"
-                              onWheel={preventNumberInputScroll}
-                              value={entry.weekendHours || ""}
-                              onChange={(event) =>
-                                applyEntryPatch(entry.id!, {
-                                  weekendHours: Number(event.target.value) || 0,
-                                })
-                              }
-                              onBlur={() => debouncedUpdate.flush()}
-                              className="ml-auto h-10 w-24 rounded-2xl border border-slate-200 bg-white px-3 text-right outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 no-spin"
-                            />
-                          )}
+                        <td className="px-4 py-4 border-b border-slate-500 text-center">
+                          <input
+                            type="number"
+                            onWheel={preventNumberInputScroll}
+                            value={entry.weekendHours || ""}
+                            onChange={(event) =>
+                              applyEntryPatch(entry.id!, {
+                                weekendHours: Number(event.target.value) || 0,
+                              })
+                            }
+                            onBlur={() => debouncedUpdate.flush()}
+                            className="h-9 w-24 rounded-xl border border-slate-200 px-3 text-center outline-none"
+                          />
                         </td>
                       ) : null}
 
                       {visibleColumns.allowance ? (
-                        <td className="py-4 pr-4">
+                        <td className="py-4 pr-4 border-b border-slate-200">
                           <button
                             onClick={() => {
                               setAllowanceEntryId(entry.id || null);
@@ -1459,27 +1388,19 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.total ? (
-                        <td className="sticky right-0 z-10 py-4 pr-4 text-right bg-white shadow-[-8px_0_12px_rgba(0,0,0,0.05)]">
-                          <div className="font-semibold text-emerald-700">
+                        <td className="px-4 py-4 border-b border-slate-500 text-right">
+                          <div className="font-bold text-emerald-600">
                             {formatCurrency(entry.salary || 0)}
                           </div>
-
-                          {isMonthly ? (
-                            <div className="mt-1 text-xs leading-5 text-slate-500">
-                              {breakdown.overtimeHours > 0
-                                ? `OT ${formatHours(breakdown.overtimeHours)}h: ${formatCurrency(breakdown.overtimePay)} - Trừ phép ${formatCurrency(breakdown.deduction)}`
-                                : `Trừ phép ${formatCurrency(breakdown.deduction)}`}
-                            </div>
-                          ) : (
-                            <div className="mt-1 text-xs leading-5 text-slate-500">
-                              {formatHours(entry.totalHours || 0)}h x{" "}
-                              {formatCurrency(entry.hourlyRate || 0)}
-                            </div>
-                          )}
+                          <div className="mt-1 text-xs text-slate-400">
+                            {formatHours(entry.totalHours || 0)}h x{" "}
+                            {formatCurrency(entry.hourlyRate || 0)}
+                          </div>
                         </td>
                       ) : null}
+
                       {visibleColumns.note ? (
-                        <td className="py-4">
+                        <td className="px-4 py-4 border-b border-slate-500">
                           <input
                             value={entry.note || ""}
                             onChange={(event) =>
@@ -1488,9 +1409,57 @@ export default function PayrollDetail({
                               })
                             }
                             onBlur={() => debouncedUpdate.flush()}
-                            placeholder="Ghi chú thêm"
-                            className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                            placeholder="Ghi chú..."
+                            className="w-full bg-transparent text-sm italic text-slate-400 outline-none"
                           />
+                        </td>
+                      ) : null}
+
+                      {visibleColumns.action ? (
+                        <td className="px-4 py-4 border-b border-slate-500 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 rounded-xl text-slate-500 hover:bg-slate-100"
+                              onClick={() => {
+                                setSettingsEntryId(entry.id || null);
+                                const entrySalaryType =
+                                  resolvePayrollSalaryType(entry);
+                                setSettingsData({
+                                  salaryType: entrySalaryType,
+                                  monthlySalary:
+                                    entry.monthlySalary ||
+                                    entry.fixedSalary ||
+                                    0,
+                                  expectedWorkDays:
+                                    entrySalaryType === "monthly"
+                                      ? entry.expectedWorkDays || 30
+                                      : 30,
+                                  paidLeaveDays:
+                                    entrySalaryType === "monthly"
+                                      ? entry.paidLeaveDays || 0
+                                      : 0,
+                                  standardHours:
+                                    entrySalaryType === "monthly"
+                                      ? entry.standardHours || 0
+                                      : 0,
+                                  overtimeRate: entry.hourlyRate || 0,
+                                });
+                              }}
+                            >
+                              <Settings2 className="h-4 w-4" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 rounded-xl text-rose-500 hover:bg-rose-50"
+                              onClick={() => handleDeleteEntry(entry.id!)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </td>
                       ) : null}
                     </tr>

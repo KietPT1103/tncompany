@@ -859,7 +859,7 @@ export default function TimesheetPage() {
                         />
                       </td>
                       <td className="px-6 py-4 text-right font-mono font-bold text-green-700">
-                        {employee.TotalSalary.toLocaleString("vi-VN")} ?
+                        {employee.TotalSalary.toLocaleString("vi-VN")} đ
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
