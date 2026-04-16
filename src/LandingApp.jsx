@@ -4,7 +4,7 @@ import "./App.css";
 import Lightbox from "./components/Lightbox";
 import PublicSiteShell from "./components/PublicSiteShell";
 import { pagesById, routeByHash, venuesById } from "./data/siteData";
-import { normalizeRoute } from "./utils/navigation";
+import { normalizePathname, normalizeRoute } from "./utils/navigation";
 
 export default function LandingApp() {
   const location = useLocation();
@@ -16,12 +16,14 @@ export default function LandingApp() {
   const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => {
-    if (!routeByHash[location.pathname]) {
+    const normalizedPath = normalizePathname(location.pathname);
+
+    if (!routeByHash[normalizedPath]) {
       navigate("/", { replace: true });
       return;
     }
 
-    setActivePageId(normalizeRoute(location.pathname));
+    setActivePageId(normalizeRoute(normalizedPath));
   }, [location.pathname, navigate]);
 
   useEffect(() => {

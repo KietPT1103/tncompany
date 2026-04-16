@@ -59,8 +59,8 @@ export default function App() {
     <>
       <SeoManager />
       <Routes>
-        <Route path="/" element={<LandingApp />} />
         <Route path="/about" element={<LandingApp />} />
+        <Route path="/" element={<LandingApp />} />
         <Route path="/ca-phe-ong-quan" element={<Navigate to="/" replace />} />
         <Route path="/home" element={<Navigate to="/about" replace />} />
         <Route path="/login" element={<LoginPage />} />

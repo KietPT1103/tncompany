@@ -317,13 +317,13 @@ export const venues = [
 ];
 
 export const pages = [
-  { id: "home", hash: "/about", label: "Giới thiệu", shortLabel: "Giới thiệu" },
   ...venues.map((venue) => ({
     id: venue.id,
     hash: venue.hash,
     label: venue.navLabel,
     shortLabel: venue.shortLabel,
   })),
+  { id: "home", hash: "/about", label: "Về chúng tôi", shortLabel: "Về chúng tôi" },
 ];
 
 export const pagesById = pages.reduce((accumulator, page) => {

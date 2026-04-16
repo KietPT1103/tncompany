@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import { useRouter } from "next/navigation";
@@ -62,12 +61,15 @@ export default function PayrollPage() {
         <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-3">
-              <Link href="/">
-                <Button variant="ghost" className="h-10 gap-2 px-0 text-slate-500">
-                  <ArrowLeft className="h-4 w-4" />
-                  Về dashboard
-                </Button>
-              </Link>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 gap-2 px-0 text-slate-500"
+                onClick={() => router.back()}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Quay lại
+              </Button>
               <div>
                 <h1 className="text-2xl font-semibold text-slate-900">Tính lương</h1>
                 <p className="mt-1 text-sm text-slate-500">{storeName}</p>
