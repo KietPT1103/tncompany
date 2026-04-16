@@ -119,7 +119,7 @@ function createVenueSlides({ folderKey, tone, venueName }) {
 export const venues = [
   {
     id: "cafe",
-    hash: "/ca-phe-ong-quan",
+    hash: "/",
     navLabel: "Tiệm cà phê Ông Quan",
     shortLabel: "Cà phê",
     tag: "Quán chính",
@@ -317,7 +317,7 @@ export const venues = [
 ];
 
 export const pages = [
-  { id: "home", hash: "/", label: "Trang chủ", shortLabel: "Trang chủ" },
+  { id: "home", hash: "/about", label: "Giới thiệu", shortLabel: "Giới thiệu" },
   ...venues.map((venue) => ({
     id: venue.id,
     hash: venue.hash,

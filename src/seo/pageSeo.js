@@ -131,10 +131,10 @@ const homepageSeo = {
 };
 
 const publicSeoByPath = {
-  "/": {
+  "/about": {
     title: homepageSeo.title,
     description: homepageSeo.description,
-    canonical: toAbsoluteUrl("/"),
+    canonical: toAbsoluteUrl("/about"),
     image: DEFAULT_OG_IMAGE,
     siteName: company.shortName,
     openGraphType: "website",
@@ -164,7 +164,7 @@ const publicSeoByPath = {
 
 export function getSeoForPath(pathname) {
   if (pathname === "/home") {
-    return publicSeoByPath["/"];
+    return publicSeoByPath["/about"];
   }
 
   if (pathname === "/login" || pathname.startsWith("/admin") || pathname.startsWith("/api")) {
