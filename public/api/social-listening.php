@@ -13,7 +13,6 @@ $repository = $services['repository'];
 $analyticsService = $services['analyticsService'];
 $ingestionService = $services['ingestionService'];
 $monthlyReportService = $services['monthlyReportService'];
-$mockFactory = $services['mockFactory'];
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = trim((string) ($_GET['action'] ?? ($_POST['action'] ?? 'dashboard')));
 
@@ -82,18 +81,6 @@ if ($method === 'POST' && $action === 'ingest') {
         'result' => $ingestionService->ingest($items, [
             'collectedAt' => trim((string) ($body['collectedAt'] ?? '')) ?: null,
         ]),
-    ], 201);
-}
-
-if ($method === 'POST' && $action === 'seed') {
-    $body = read_json_body();
-    $month = trim((string) ($body['month'] ?? date('Y-m')));
-    $count = max(6, min(120, (int) ($body['count'] ?? 24)));
-    $items = $mockFactory->makeMonthSeed($month, $count);
-
-    respond_ok([
-        'seededMonth' => $month,
-        'result' => $ingestionService->ingest($items),
     ], 201);
 }
 

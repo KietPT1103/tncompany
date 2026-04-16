@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import TikTokSearchPage from "./TikTokSearchPage";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -101,7 +102,7 @@ function StatCard({
   );
 }
 
-export default function SocialListeningPage() {
+function LegacySocialListeningPage() {
   const [month, setMonth] = useState(getDefaultMonth);
   const [brandGroup, setBrandGroup] = useState("");
   const [sentiment, setSentiment] = useState("");
@@ -631,3 +632,5 @@ export default function SocialListeningPage() {
     </RoleGuard>
   );
 }
+
+export default TikTokSearchPage;

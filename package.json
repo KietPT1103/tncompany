@@ -11,8 +11,8 @@
     "build": "vite build && vite build --ssr src/prerender/entry-server.jsx --outDir dist-ssr && node scripts/prerender.mjs",
     "preview": "vite preview",
     "test:social-listening": "php scripts/social-listening-classification-test.php",
-    "seed:social-listening": "php scripts/social-listening-seed.php",
-    "report:social-listening": "php scripts/social-listening-report.php"
+    "report:social-listening": "php scripts/social-listening-report.php",
+    "worker:tiktok-social-listening": "php scripts/tiktok-social-listening-worker.php --daemon 5"
   },
   "dependencies": {
     "clsx": "^2.1.1",

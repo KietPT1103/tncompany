@@ -25,14 +25,16 @@ class ApiTransportError extends Error {
 
 function canUseLocalApiFallback() {
   if (typeof window === "undefined") return false;
+  if (!LOCAL_API_FALLBACK_BASE) return false;
   if (API_BASE !== "/api") return false;
 
   const hostname = window.location.hostname.toLowerCase();
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
 
-function buildRequestUrls(path: string) {
+function buildRequestUrls(path: string, options: RequestInit = {}) {
   const primaryUrl = `${API_BASE}${path}`;
+
   if (!canUseLocalApiFallback()) {
     return [primaryUrl];
   }
@@ -156,7 +158,7 @@ export async function apiRequest<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const requestUrls = buildRequestUrls(path);
+  const requestUrls = buildRequestUrls(path, options);
   let lastError: Error | null = null;
 
   for (let index = 0; index < requestUrls.length; index += 1) {

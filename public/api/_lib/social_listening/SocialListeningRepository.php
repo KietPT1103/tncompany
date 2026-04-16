@@ -7,12 +7,18 @@ final class SocialListeningRepository
     public function ensureSchema(): void
     {
         db()->exec(
-            'CREATE TABLE IF NOT EXISTS social_listening_comments (
+             'CREATE TABLE IF NOT EXISTS social_listening_comments (
                 id VARCHAR(64) PRIMARY KEY,
                 platform VARCHAR(32) NOT NULL DEFAULT "tiktok",
+                search_id VARCHAR(64) NULL,
+                keyword VARCHAR(255) NULL,
                 comment_id VARCHAR(128) NOT NULL,
                 video_id VARCHAR(128) NOT NULL,
                 author_name VARCHAR(255) NULL,
+                username VARCHAR(255) NULL,
+                video_username VARCHAR(255) NULL,
+                video_url TEXT NULL,
+                share_url TEXT NULL,
                 author_id VARCHAR(128) NULL,
                 comment_text TEXT NOT NULL,
                 normalized_text TEXT NOT NULL,
@@ -33,12 +39,14 @@ final class SocialListeningRepository
                 processing_version VARCHAR(32) NOT NULL DEFAULT "rule-v1",
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY uniq_social_platform_comment (platform, comment_id),
+                UNIQUE KEY uniq_social_platform_comment (platform, search_id, comment_id),
                 KEY idx_social_comment_date (comment_date),
                 KEY idx_social_report_month (report_month),
                 KEY idx_social_brand_date (brand_group, comment_date),
                 KEY idx_social_sentiment_date (sentiment, comment_date),
-                KEY idx_social_video (video_id)
+                KEY idx_social_video (video_id),
+                KEY idx_social_comment_search (search_id),
+                KEY idx_social_comment_keyword (keyword)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
 
@@ -88,20 +96,28 @@ final class SocialListeningRepository
         $existingIds = $this->fetchExistingCommentIds($rows);
         $statement = db()->prepare(
             'INSERT INTO social_listening_comments (
-                id, platform, comment_id, video_id, author_name, author_id, comment_text,
+                id, platform, search_id, keyword, comment_id, video_id, author_name, username,
+                video_username, video_url, share_url, author_id, comment_text,
                 normalized_text, parent_comment_id, platform_created_at, collected_at,
                 comment_date, report_month, like_count, raw_metadata, brand_group,
                 brand_confidence, brand_scores_json, matched_keywords_json, sentiment,
                 sentiment_score, topic_tags_json, processing_version
             ) VALUES (
-                :id, :platform, :comment_id, :video_id, :author_name, :author_id, :comment_text,
+                :id, :platform, :search_id, :keyword, :comment_id, :video_id, :author_name, :username,
+                :video_username, :video_url, :share_url, :author_id, :comment_text,
                 :normalized_text, :parent_comment_id, :platform_created_at, :collected_at,
                 :comment_date, :report_month, :like_count, :raw_metadata, :brand_group,
                 :brand_confidence, :brand_scores_json, :matched_keywords_json, :sentiment,
                 :sentiment_score, :topic_tags_json, :processing_version
             ) ON DUPLICATE KEY UPDATE
+                search_id = VALUES(search_id),
+                keyword = VALUES(keyword),
                 video_id = VALUES(video_id),
                 author_name = VALUES(author_name),
+                username = VALUES(username),
+                video_username = VALUES(video_username),
+                video_url = VALUES(video_url),
+                share_url = VALUES(share_url),
                 author_id = VALUES(author_id),
                 comment_text = VALUES(comment_text),
                 normalized_text = VALUES(normalized_text),
@@ -157,7 +173,7 @@ final class SocialListeningRepository
 
         $updatedCount = 0;
         foreach ($rows as $row) {
-            $key = $row['platform'] . '|' . $row['comment_id'];
+            $key = $row['platform'] . '|' . (string) ($row['search_id'] ?? '') . '|' . $row['comment_id'];
             if (isset($existingIds[$key])) {
                 $updatedCount++;
             }
@@ -478,29 +494,53 @@ final class SocialListeningRepository
 
     private function fetchExistingCommentIds(array $rows): array
     {
-        $commentIds = [];
+        $grouped = [];
         foreach ($rows as $row) {
-            $commentIds[] = (string) $row['comment_id'];
+            $searchId = (string) ($row['search_id'] ?? '');
+            $grouped[$searchId][] = (string) $row['comment_id'];
         }
 
-        $commentIds = array_values(array_unique($commentIds));
-        if ($commentIds === []) {
+        if ($grouped === []) {
             return [];
         }
 
-        $placeholders = implode(', ', array_fill(0, count($commentIds), '?'));
+        $conditions = [];
+        $params = [SocialListeningConfig::PLATFORM];
+
+        foreach ($grouped as $searchId => $commentIds) {
+            $commentIds = array_values(array_unique($commentIds));
+            if ($commentIds === []) {
+                continue;
+            }
+
+            $placeholders = implode(', ', array_fill(0, count($commentIds), '?'));
+            if ($searchId === '') {
+                $conditions[] = "(search_id IS NULL AND comment_id IN ({$placeholders}))";
+                $params = array_merge($params, $commentIds);
+                continue;
+            }
+
+            $conditions[] = "(search_id = ? AND comment_id IN ({$placeholders}))";
+            $params[] = $searchId;
+            $params = array_merge($params, $commentIds);
+        }
+
+        if ($conditions === []) {
+            return [];
+        }
+
         $statement = db()->prepare(
-            "SELECT platform, comment_id
+            "SELECT platform, COALESCE(search_id, '') AS search_id, comment_id
              FROM social_listening_comments
              WHERE platform = ?
-               AND comment_id IN ({$placeholders})"
+               AND (" . implode(' OR ', $conditions) . ')'
         );
 
-        $statement->execute(array_merge([SocialListeningConfig::PLATFORM], $commentIds));
+        $statement->execute($params);
         $existing = [];
 
         foreach ($statement->fetchAll() as $row) {
-            $existing[(string) $row['platform'] . '|' . (string) $row['comment_id']] = true;
+            $existing[(string) $row['platform'] . '|' . (string) $row['search_id'] . '|' . (string) $row['comment_id']] = true;
         }
 
         return $existing;
@@ -516,9 +556,22 @@ final class SocialListeningRepository
         return [
             'id' => (string) $row['id'],
             'platform' => (string) $row['platform'],
+            'searchId' => $row['search_id'] ?: null,
+            'keyword' => $row['keyword'] ?: null,
             'commentId' => (string) $row['comment_id'],
             'videoId' => (string) $row['video_id'],
             'authorName' => $row['author_name'] ?: null,
+            'username' => ($row['username'] ?: ($row['author_name'] ?: null)),
+            'videoUsername' => $row['video_username'] ?: null,
+            'videoUrl' => $row['video_url'] ?: null,
+            'shareUrl' => $row['share_url'] ?: null,
+            'postUrl' => TikTokUrlHelper::buildDirectUrl(
+                (string) ($row['keyword'] ?? ''),
+                $row['share_url'] ?: null,
+                $row['video_url'] ?: null,
+                $row['video_username'] ?: null,
+                (string) $row['video_id']
+            ),
             'authorId' => $row['author_id'] ?: null,
             'commentText' => (string) $row['comment_text'],
             'normalizedText' => (string) $row['normalized_text'],

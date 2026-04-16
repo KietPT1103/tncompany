@@ -1,5 +1,104 @@
 import { apiRequest } from "@/lib/api";
 
+export type TikTokSearchRecord = {
+  id: string;
+  platform: string;
+  keyword: string;
+  date_from: string;
+  date_to: string;
+  status: string;
+  provider?: string | null;
+  progress_message?: string | null;
+  requested_by?: string | null;
+  total_videos: number;
+  total_comments: number;
+  queued_jobs: number;
+  processed_jobs: number;
+  failed_jobs?: number;
+  active_jobs?: number;
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  is_terminal?: boolean;
+};
+
+export type TikTokCommentRecord = {
+  id: string;
+  comment_id: string;
+  content: string;
+  username: string;
+  created_at: string;
+  video_id: string;
+  video_url?: string | null;
+  share_url?: string | null;
+  video_username?: string | null;
+  keyword: string;
+  post_url: string;
+};
+
+export type TikTokCommentPagination = {
+  page: number;
+  per_page: number;
+  total: number;
+  from: number;
+  to: number;
+  last_page: number;
+};
+
+function buildParams(params: Record<string, string | number | undefined | null>) {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    searchParams.set(key, String(value));
+  });
+
+  return searchParams.toString();
+}
+
+export async function createTikTokSearch(input: {
+  keyword: string;
+  date_from: string;
+  date_to: string;
+}) {
+  return apiRequest<{ search: TikTokSearchRecord }>("/tiktok/search.php", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getTikTokSearchStatus(searchId: string) {
+  const query = buildParams({
+    search_id: searchId,
+  });
+
+  return apiRequest<{ search: TikTokSearchRecord }>(`/tiktok/status.php?${query}`, {
+    method: "GET",
+  });
+}
+
+export async function getTikTokComments(params: {
+  search_id: string;
+  page?: number;
+  per_page?: number;
+}) {
+  const query = buildParams({
+    search_id: params.search_id,
+    page: params.page || 1,
+    per_page: params.per_page || 10,
+  });
+
+  return apiRequest<{
+    search: TikTokSearchRecord;
+    items: TikTokCommentRecord[];
+    pagination: TikTokCommentPagination;
+  }>(`/tiktok/comments.php?${query}`, {
+    method: "GET",
+  });
+}
+
 export type SocialListeningComment = {
   id: string;
   commentId: string;
@@ -27,7 +126,6 @@ export type SocialListeningComment = {
 };
 
 export type SocialListeningDashboard = {
-  filters: Record<string, unknown>;
   overview: {
     totalComments: number;
     brandBreakdown: Array<{
@@ -51,17 +149,6 @@ export type SocialListeningDashboard = {
       neutralRate: number;
       negativeRate: number;
     };
-    byBrand: Array<{
-      brandGroup: string;
-      brandLabel: string;
-      positive: number;
-      neutral: number;
-      negative: number;
-      total: number;
-      positiveRate: number;
-      neutralRate: number;
-      negativeRate: number;
-    }>;
   };
   topics: {
     topTopics: Array<{
@@ -75,21 +162,12 @@ export type SocialListeningDashboard = {
     }>;
   };
   alerts: {
-    negativeComments: SocialListeningComment[];
     repeatedIssues: Array<{
       type: "topic" | "keyword";
       label: string;
       count: number;
     }>;
   };
-  timeSeries: Array<{
-    bucket: string;
-    total: number;
-    brands: Array<{
-      brandGroup: string;
-      count: number;
-    }>;
-  }>;
 };
 
 export type SocialListeningSavedReport = {
@@ -114,16 +192,6 @@ export type SocialListeningGeneratedReport = {
     csv: string;
   };
 };
-
-function buildParams(params: Record<string, string | number | undefined | null>) {
-  const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") return;
-    searchParams.set(key, String(value));
-  });
-
-  return searchParams.toString();
-}
 
 export async function getSocialListeningDashboard(params: {
   month?: string;
@@ -199,39 +267,6 @@ export async function listSocialListeningReports(limit = 12) {
   return response.items || [];
 }
 
-export async function getSocialListeningReport(month: string) {
-  const query = buildParams({
-    action: "reports",
-    month,
-  });
-
-  const response = await apiRequest<{ item: SocialListeningSavedReport | null }>(
-    `/social-listening.php?${query}`,
-    {
-      method: "GET",
-    }
-  );
-
-  return response.item;
-}
-
-export async function seedSocialListeningData(month: string, count = 24) {
-  return apiRequest<{
-    seededMonth: string;
-    result: {
-      processed: number;
-      inserted: number;
-      updated: number;
-    };
-  }>("/social-listening.php?action=seed", {
-    method: "POST",
-    body: JSON.stringify({
-      month,
-      count,
-    }),
-  });
-}
-
 export async function generateSocialListeningReport(month: string, persist = true) {
   return apiRequest<SocialListeningGeneratedReport>(
     "/social-listening.php?action=generate-report",
@@ -243,4 +278,8 @@ export async function generateSocialListeningReport(month: string, persist = tru
       }),
     }
   );
+}
+
+export async function seedSocialListeningData(_month?: string, _count?: number) {
+  throw new Error("Seed mock data đã bị vô hiệu hóa. Module này chỉ chấp nhận dữ liệu TikTok thật.");
 }
