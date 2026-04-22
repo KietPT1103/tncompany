@@ -16,9 +16,10 @@ Agent không chụp màn hình, không ghi phím bấm, không lấy mật khẩ
 - `file_changed`: sửa file trong thư mục theo dõi.
 - `file_deleted`: xóa file trong thư mục theo dõi.
 - `file_renamed`: đổi tên file trong thư mục theo dõi.
+- `browser_tab_active`: tab trình duyệt đang active thay đổi, ví dụ mở/chuyển tab trong Chrome, Edge, Firefox, Brave, Opera.
 - `dns_domain`: domain xuất hiện trong DNS cache của máy, dùng để biết máy có truy cập domain nào.
 
-Phần domain là mức DNS/domain, không phải full URL. Ví dụ log `youtube.com`, không log nội dung trang hay query URL.
+Phần tab trình duyệt ghi tiêu đề tab đang active, không đọc mật khẩu và không đọc nội dung trong trang. Phần domain là mức DNS/domain, không phải full URL. Ví dụ log `youtube.com`, không log nội dung trang hay query URL.
 
 ## Cài database
 

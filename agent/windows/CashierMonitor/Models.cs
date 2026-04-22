@@ -9,10 +9,22 @@ public sealed class AgentConfig
     public string ApiKey { get; set; } = "";
     public int SyncIntervalSeconds { get; set; } = 30;
     public int ProcessPollSeconds { get; set; } = 2;
+    public int BrowserPollSeconds { get; set; } = 1;
     public int DnsPollSeconds { get; set; } = 20;
     public int MaxBatchSize { get; set; } = 100;
     public List<string> WatchPaths { get; set; } = DefaultWatchPaths();
     public List<string> IgnoreProcessNames { get; set; } = ["cashiermonitor"];
+    public List<string> BrowserProcessNames { get; set; } =
+    [
+        "chrome",
+        "msedge",
+        "firefox",
+        "brave",
+        "opera",
+        "operagx",
+        "vivaldi",
+        "iexplore"
+    ];
 
     public static List<string> DefaultWatchPaths() =>
     [

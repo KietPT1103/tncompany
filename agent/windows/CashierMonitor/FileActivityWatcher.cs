@@ -15,9 +15,8 @@ public sealed class FileActivityWatcher : IDisposable
 
     public void Start()
     {
-        foreach (var configuredPath in _config.WatchPaths)
+        foreach (var path in ResolveWatchPaths())
         {
-            var path = Paths.ExpandPath(configuredPath);
             if (!Directory.Exists(path))
             {
                 AgentLog.Info($"Skipping missing watch path: {path}");
@@ -49,6 +48,58 @@ public sealed class FileActivityWatcher : IDisposable
 
             _watchers.Add(watcher);
             AgentLog.Info($"Watching path: {path}");
+        }
+    }
+
+    private IEnumerable<string> ResolveWatchPaths()
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var configuredPath in _config.WatchPaths)
+        {
+            AddPath(paths, Paths.ExpandPath(configuredPath));
+        }
+
+        foreach (var userProfile in EnumerateUserProfiles())
+        {
+            AddPath(paths, Path.Combine(userProfile, "Desktop"));
+            AddPath(paths, Path.Combine(userProfile, "Downloads"));
+            AddPath(paths, Path.Combine(userProfile, "Documents"));
+            AddPath(paths, Path.Combine(userProfile, "OneDrive", "Desktop"));
+            AddPath(paths, Path.Combine(userProfile, "OneDrive", "Downloads"));
+            AddPath(paths, Path.Combine(userProfile, "OneDrive", "Documents"));
+        }
+
+        return paths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void AddPath(HashSet<string> paths, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var normalized = Path.GetFullPath(path.Trim().Trim('"'));
+        if (Directory.Exists(normalized))
+        {
+            paths.Add(normalized);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateUserProfiles()
+    {
+        var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? @"C:";
+        var usersRoot = Path.Combine(systemDrive, "Users");
+
+        if (!Directory.Exists(usersRoot)) yield break;
+
+        foreach (var directory in Directory.EnumerateDirectories(usersRoot))
+        {
+            var name = Path.GetFileName(directory);
+            if (string.Equals(name, "All Users", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(name, "Default", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(name, "Default User", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(name, "Public", StringComparison.OrdinalIgnoreCase)) continue;
+
+            yield return directory;
         }
     }
 

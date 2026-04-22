@@ -33,6 +33,7 @@ public static class ConfigLoader
 
         config.SyncIntervalSeconds = Math.Max(10, config.SyncIntervalSeconds);
         config.ProcessPollSeconds = Math.Max(1, config.ProcessPollSeconds);
+        config.BrowserPollSeconds = Math.Max(1, config.BrowserPollSeconds);
         config.DnsPollSeconds = Math.Max(10, config.DnsPollSeconds);
         config.MaxBatchSize = Math.Clamp(config.MaxBatchSize, 1, 500);
         config.WatchPaths = config.WatchPaths

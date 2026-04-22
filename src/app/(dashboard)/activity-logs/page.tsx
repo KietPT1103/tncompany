@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, Clock3, Monitor, RefreshCcw, Search } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Monitor,
+  RefreshCcw,
+  Search,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { getActivityLogs, ActivityLog, ActivityMachine } from "@/services/activityLogService";
@@ -14,9 +23,12 @@ const EVENT_OPTIONS = [
   { value: "file_changed", label: "Sửa file" },
   { value: "file_deleted", label: "Xóa file" },
   { value: "file_renamed", label: "Đổi tên file" },
+  { value: "browser_tab_active", label: "Tab trình duyệt" },
   { value: "dns_domain", label: "Truy cập domain" },
   { value: "agent_started", label: "Agent chạy" },
 ];
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 300];
 
 function formatDateTime(value: string) {
   const date = new Date(value.replace(" ", "T"));
@@ -27,12 +39,21 @@ function formatDateTime(value: string) {
   }).format(date);
 }
 
+function getTodayInputValue() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function eventLabel(eventType: string) {
   return EVENT_OPTIONS.find((option) => option.value === eventType)?.label || eventType;
 }
 
 function eventBadgeClass(eventType: string) {
   if (eventType.includes("deleted")) return "bg-rose-50 text-rose-700 border-rose-100";
+  if (eventType.includes("browser")) return "bg-violet-50 text-violet-700 border-violet-100";
   if (eventType.includes("file")) return "bg-blue-50 text-blue-700 border-blue-100";
   if (eventType.includes("dns")) return "bg-amber-50 text-amber-700 border-amber-100";
   if (eventType.includes("app")) return "bg-emerald-50 text-emerald-700 border-emerald-100";
@@ -99,8 +120,10 @@ export default function ActivityLogsPage() {
   const [machines, setMachines] = useState<ActivityMachine[]>([]);
   const [machineId, setMachineId] = useState("");
   const [eventType, setEventType] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(getTodayInputValue);
+  const [endDate, setEndDate] = useState(getTodayInputValue);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -114,6 +137,12 @@ export default function ActivityLogsPage() {
     }),
     [machineId, eventType, startDate, endDate]
   );
+
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const pageStartIndex = (page - 1) * pageSize;
+  const pageItems = items.slice(pageStartIndex, pageStartIndex + pageSize);
+  const pageStart = items.length ? pageStartIndex + 1 : 0;
+  const pageEnd = Math.min(items.length, pageStartIndex + pageSize);
 
   async function loadData() {
     setLoading(true);
@@ -134,6 +163,14 @@ export default function ActivityLogsPage() {
   useEffect(() => {
     void loadData();
   }, [filters]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, pageSize]);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [totalPages]);
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -168,7 +205,7 @@ export default function ActivityLogsPage() {
 
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
               <label className="space-y-1.5">
                 <span className="text-xs font-semibold uppercase text-slate-500">Máy</span>
                 <select
@@ -226,6 +263,21 @@ export default function ActivityLogsPage() {
                   {items.length} dòng log
                 </div>
               </div>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-semibold uppercase text-slate-500">Dòng/trang</span>
+                <select
+                  value={pageSize}
+                  onChange={(event) => setPageSize(Number(event.target.value))}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500"
+                >
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option} dòng
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </CardContent>
         </Card>
@@ -238,6 +290,38 @@ export default function ActivityLogsPage() {
         ) : null}
 
         <Card className="overflow-hidden border-slate-200 shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-slate-500">
+              Hiển thị {pageStart}-{pageEnd} trong {items.length} dòng log
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                className="gap-1.5"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Trước
+              </Button>
+              <div className="min-w-24 rounded-lg bg-slate-100 px-3 py-2 text-center text-sm font-semibold text-slate-700">
+                {page}/{totalPages}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
+                className="gap-1.5"
+              >
+                Sau
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[920px] text-left">
               <thead className="bg-slate-100 text-xs uppercase text-slate-500">
@@ -256,8 +340,8 @@ export default function ActivityLogsPage() {
                       Đang tải log...
                     </td>
                   </tr>
-                ) : items.length ? (
-                  items.map((item) => <LogRow key={`${item.machineId}-${item.eventId}`} item={item} />)
+                ) : pageItems.length ? (
+                  pageItems.map((item) => <LogRow key={`${item.machineId}-${item.eventId}`} item={item} />)
                 ) : (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
@@ -267,6 +351,31 @@ export default function ActivityLogsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-slate-500">
+              Trang {page} trên {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+              >
+                Trước
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
+              >
+                Sau
+              </Button>
+            </div>
           </div>
         </Card>
       </div>
