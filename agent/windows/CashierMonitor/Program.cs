@@ -43,6 +43,7 @@ internal static class Program
             };
 
             var processWatcher = new ProcessWatcher(config, queue);
+            var activeWindowWatcher = new ActiveWindowWatcher(config, queue);
             var browserWindowWatcher = new BrowserWindowWatcher(config, queue);
             var dnsWatcher = new DnsWatcher(config, queue);
             var syncWorker = new SyncWorker(config, queue);
@@ -51,6 +52,7 @@ internal static class Program
 
             await Task.WhenAll(
                 processWatcher.RunAsync(cancellation.Token),
+                activeWindowWatcher.RunAsync(cancellation.Token),
                 browserWindowWatcher.RunAsync(cancellation.Token),
                 dnsWatcher.RunAsync(cancellation.Token),
                 syncWorker.RunAsync(cancellation.Token));

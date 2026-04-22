@@ -17,6 +17,7 @@ import { getActivityLogs, ActivityLog, ActivityMachine } from "@/services/activi
 
 const EVENT_OPTIONS = [
   { value: "", label: "Tất cả sự kiện" },
+  { value: "app_active", label: "Cửa sổ active" },
   { value: "app_opened", label: "Mở app" },
   { value: "app_closed", label: "Đóng app" },
   { value: "file_created", label: "Tạo file" },

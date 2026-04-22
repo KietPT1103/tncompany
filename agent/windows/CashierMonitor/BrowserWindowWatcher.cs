@@ -1,7 +1,3 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Text;
-
 namespace CashierMonitor;
 
 public sealed class BrowserWindowWatcher
@@ -40,17 +36,12 @@ public sealed class BrowserWindowWatcher
 
     private void CaptureActiveBrowserTab()
     {
-        var handle = GetForegroundWindow();
-        if (handle == IntPtr.Zero) return;
+        var activeWindow = WindowInfo.GetActiveWindow();
+        if (activeWindow == null) return;
 
-        var title = GetWindowTitle(handle);
-        if (string.IsNullOrWhiteSpace(title)) return;
-
-        _ = GetWindowThreadProcessId(handle, out var processId);
-        if (processId == 0) return;
-
-        using var process = Process.GetProcessById((int) processId);
-        var processName = process.ProcessName;
+        var title = activeWindow.Title;
+        var processId = activeWindow.ProcessId;
+        var processName = activeWindow.ProcessName;
         if (!_browserProcessNames.Contains(processName.ToLowerInvariant())) return;
 
         var tabTitle = NormalizeTabTitle(title, processName);
@@ -65,7 +56,7 @@ public sealed class BrowserWindowWatcher
             EventType = "browser_tab_active",
             Action = "active_tab",
             AppName = processName,
-            ProcessId = (int) processId,
+            ProcessId = processId,
             Target = tabTitle,
             Details = new Dictionary<string, string?>
             {
@@ -73,16 +64,6 @@ public sealed class BrowserWindowWatcher
                 ["browser"] = processName,
             },
         });
-    }
-
-    private static string GetWindowTitle(IntPtr handle)
-    {
-        var length = GetWindowTextLength(handle);
-        if (length <= 0) return "";
-
-        var builder = new StringBuilder(length + 1);
-        _ = GetWindowText(handle, builder, builder.Capacity);
-        return builder.ToString().Trim();
     }
 
     private static string NormalizeTabTitle(string title, string processName)
@@ -112,16 +93,4 @@ public sealed class BrowserWindowWatcher
         yield return " - Vivaldi";
         yield return $" - {processName}";
     }
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowTextLength(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 }
