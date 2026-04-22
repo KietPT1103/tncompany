@@ -7,6 +7,7 @@ namespace CashierMonitor;
 public static class Installer
 {
     private const string RunName = "TNCompanyCashierMonitor";
+    private const string ScheduledTaskName = "TNCompanyCashierMonitor";
 
     public static int Install(string[] args)
     {
@@ -53,6 +54,7 @@ public static class Installer
             JsonSerializer.Serialize(config, AgentJsonContext.Default.AgentConfig));
 
         RegisterStartup(targetExe);
+        RegisterScheduledTask(targetExe);
         StartDetached(targetExe);
 
         AgentLog.Info($"Installed to {targetExe}");
@@ -62,6 +64,7 @@ public static class Installer
         Console.WriteLine($"Installed EXE: {targetExe}");
         Console.WriteLine($"Config: {Paths.ConfigPath}");
         Console.WriteLine($"Agent log: {Paths.LogPath}");
+        Console.WriteLine($"Scheduled task: {ScheduledTaskName}");
         return 0;
     }
 
@@ -69,6 +72,7 @@ public static class Installer
     {
         RemoveStartup(Registry.LocalMachine);
         RemoveStartup(Registry.CurrentUser);
+        RemoveScheduledTask();
         AgentLog.Info("Removed startup registration. Delete ProgramData files after stopping the running process.");
         Console.WriteLine("CashierMonitor startup registration removed.");
         return 0;
@@ -98,6 +102,47 @@ public static class Installer
         AgentLog.Info("Registered HKCU startup.");
     }
 
+    private static void RegisterScheduledTask(string targetExe)
+    {
+        var taskCommand = $"\"{targetExe}\"";
+        var result = RunSchtasks(
+            "/Create",
+            "/TN",
+            ScheduledTaskName,
+            "/SC",
+            "ONLOGON",
+            "/TR",
+            taskCommand,
+            "/RL",
+            "HIGHEST",
+            "/F");
+
+        if (result == 0)
+        {
+            AgentLog.Info("Registered scheduled task startup.");
+            return;
+        }
+
+        AgentLog.Info("Scheduled task with highest privileges failed, retrying without /RL HIGHEST.");
+        result = RunSchtasks(
+            "/Create",
+            "/TN",
+            ScheduledTaskName,
+            "/SC",
+            "ONLOGON",
+            "/TR",
+            taskCommand,
+            "/F");
+
+        if (result == 0)
+        {
+            AgentLog.Info("Registered scheduled task startup without highest privileges.");
+            return;
+        }
+
+        AgentLog.Info("Scheduled task registration failed.");
+    }
+
     private static void RemoveStartup(RegistryKey root)
     {
         try
@@ -110,6 +155,58 @@ public static class Installer
         catch (Exception exception)
         {
             AgentLog.Error(exception, "Startup removal failed");
+        }
+    }
+
+    private static void RemoveScheduledTask()
+    {
+        var result = RunSchtasks("/Delete", "/TN", ScheduledTaskName, "/F");
+        if (result == 0)
+        {
+            AgentLog.Info("Removed scheduled task startup.");
+        }
+    }
+
+    private static int RunSchtasks(params string[] arguments)
+    {
+        try
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = "schtasks.exe",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+
+            foreach (var argument in arguments)
+            {
+                process.StartInfo.ArgumentList.Add(argument);
+            }
+
+            process.Start();
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            if (!string.IsNullOrWhiteSpace(output))
+            {
+                AgentLog.Info($"schtasks output: {output.Trim()}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                AgentLog.Info($"schtasks error: {error.Trim()}");
+            }
+
+            return process.ExitCode;
+        }
+        catch (Exception exception)
+        {
+            AgentLog.Error(exception, "schtasks command failed");
+            return -1;
         }
     }
 

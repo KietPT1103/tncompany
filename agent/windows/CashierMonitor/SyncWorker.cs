@@ -1,4 +1,5 @@
-using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 
 namespace CashierMonitor;
 
@@ -51,10 +52,11 @@ public sealed class SyncWorker
             Events = batch,
         };
 
-        using var response = await _httpClient.PostAsJsonAsync(
+        var json = JsonSerializer.Serialize(payload, AgentJsonContext.Default.LogBatch);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync(
             _config.ServerUrl,
-            payload,
-            AgentJsonContext.Default.LogBatch,
+            content,
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)

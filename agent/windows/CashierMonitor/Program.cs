@@ -50,23 +50,42 @@ internal static class Program
 
             AgentLog.Info($"Agent started for {config.MachineId}");
 
-            await Task.WhenAll(
-                processWatcher.RunAsync(cancellation.Token),
-                activeWindowWatcher.RunAsync(cancellation.Token),
-                browserWindowWatcher.RunAsync(cancellation.Token),
-                dnsWatcher.RunAsync(cancellation.Token),
-                syncWorker.RunAsync(cancellation.Token));
+            _ = RunBackgroundTask("process watcher", () => processWatcher.RunAsync(cancellation.Token));
+            _ = RunBackgroundTask("active window watcher", () => activeWindowWatcher.RunAsync(cancellation.Token));
+            _ = RunBackgroundTask("browser window watcher", () => browserWindowWatcher.RunAsync(cancellation.Token));
+            _ = RunBackgroundTask("DNS watcher", () => dnsWatcher.RunAsync(cancellation.Token));
+            _ = RunBackgroundTask("sync worker", () => syncWorker.RunAsync(cancellation.Token));
+
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellation.Token);
 
             return 0;
         }
         catch (OperationCanceledException)
         {
+            AgentLog.Info("Agent stopped by cancellation.");
             return 0;
         }
         catch (Exception exception)
         {
             AgentLog.Error(exception, "Fatal agent error");
             return 1;
+        }
+    }
+
+    private static async Task RunBackgroundTask(string name, Func<Task> runAsync)
+    {
+        try
+        {
+            await runAsync();
+            AgentLog.Info($"{name} stopped.");
+        }
+        catch (OperationCanceledException)
+        {
+            AgentLog.Info($"{name} stopped by cancellation.");
+        }
+        catch (Exception exception)
+        {
+            AgentLog.Error(exception, $"{name} crashed");
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 
 namespace CashierMonitor;
 
@@ -12,7 +13,7 @@ public sealed class EventQueue
         lock (_gate)
         {
             Paths.EnsureDataDirectory();
-            File.AppendAllText(Paths.QueuePath, json + Environment.NewLine);
+            File.AppendAllText(Paths.QueuePath, json + Environment.NewLine, Encoding.UTF8);
         }
     }
 
@@ -23,7 +24,7 @@ public sealed class EventQueue
             if (!File.Exists(Paths.QueuePath)) return [];
 
             var batch = new List<ActivityEvent>();
-            foreach (var line in File.ReadLines(Paths.QueuePath))
+            foreach (var line in File.ReadLines(Paths.QueuePath, Encoding.UTF8))
             {
                 if (batch.Count >= maxCount) break;
                 if (string.IsNullOrWhiteSpace(line)) continue;
@@ -54,7 +55,7 @@ public sealed class EventQueue
         {
             if (!File.Exists(Paths.QueuePath)) return;
 
-            var lines = File.ReadAllLines(Paths.QueuePath);
+            var lines = File.ReadAllLines(Paths.QueuePath, Encoding.UTF8);
             var remaining = lines
                 .Where(line => !string.IsNullOrWhiteSpace(line))
                 .Skip(sentCount)
@@ -66,7 +67,7 @@ public sealed class EventQueue
                 return;
             }
 
-            File.WriteAllLines(Paths.QueuePath, remaining);
+            File.WriteAllLines(Paths.QueuePath, remaining, Encoding.UTF8);
         }
     }
 }
