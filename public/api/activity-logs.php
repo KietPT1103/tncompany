@@ -34,13 +34,10 @@ function activity_ensure_tables(): void
             app_name VARCHAR(255) NULL,
             process_id INT NULL,
             target VARCHAR(1024) NULL,
-            details_json JSON NULL,
+            details_json LONGTEXT NULL,
             UNIQUE KEY uniq_activity_event (machine_id, event_id),
             KEY idx_activity_machine_time (machine_id, event_time),
-            KEY idx_activity_type_time (event_type, event_time),
-            CONSTRAINT fk_activity_logs_machine
-                FOREIGN KEY (machine_id) REFERENCES activity_machines(machine_id)
-                ON DELETE CASCADE
+            KEY idx_activity_type_time (event_type, event_time)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
 }
@@ -51,7 +48,7 @@ function activity_agent_key(): string
     return is_string($key) ? trim($key) : '';
 }
 
-function activity_to_sql_datetime(mixed $value): string
+function activity_to_sql_datetime($value): string
 {
     if (!is_string($value) || trim($value) === '') {
         return (new DateTimeImmutable())->format('Y-m-d H:i:s');
@@ -59,12 +56,12 @@ function activity_to_sql_datetime(mixed $value): string
 
     try {
         return (new DateTimeImmutable($value))->format('Y-m-d H:i:s');
-    } catch (Throwable) {
+    } catch (Throwable $exception) {
         return (new DateTimeImmutable())->format('Y-m-d H:i:s');
     }
 }
 
-function activity_trim_string(mixed $value, int $maxLength): ?string
+function activity_trim_string($value, int $maxLength): ?string
 {
     if ($value === null) {
         return null;
@@ -130,7 +127,13 @@ function activity_map_log(array $row): array
     ];
 }
 
-activity_ensure_tables();
+try {
+    activity_ensure_tables();
+} catch (Throwable $exception) {
+    respond_error('Cannot prepare activity log tables', 500, [
+        'details' => $exception->getMessage(),
+    ]);
+}
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
@@ -250,12 +253,14 @@ if ($method === 'GET') {
     respond_ok([
         'items' => array_map('activity_map_log', $statement->fetchAll()),
         'machines' => array_map(
-            static fn (array $row): array => [
+            static function (array $row): array {
+                return [
                 'machineId' => (string) $row['machine_id'],
                 'displayName' => $row['display_name'] ?: null,
                 'isActive' => (bool) $row['is_active'],
                 'lastSeenAt' => $row['last_seen_at'] ?: null,
-            ],
+                ];
+            },
             $machines
         ),
     ]);

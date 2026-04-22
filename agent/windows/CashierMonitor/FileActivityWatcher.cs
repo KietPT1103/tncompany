@@ -43,7 +43,7 @@ public sealed class FileActivityWatcher : IDisposable
                     "file_renamed",
                     "renamed",
                     args.FullPath,
-                    new Dictionary<string, object?> { ["oldPath"] = args.OldFullPath });
+                    new Dictionary<string, string?> { ["oldPath"] = args.OldFullPath });
             watcher.Error += (_, args) =>
                 AgentLog.Error(args.GetException(), $"File watcher error on {path}");
 
@@ -64,7 +64,7 @@ public sealed class FileActivityWatcher : IDisposable
         string eventType,
         string action,
         string target,
-        Dictionary<string, object?>? details = null)
+        Dictionary<string, string?>? details = null)
     {
         try
         {

@@ -25,7 +25,7 @@ internal static class Program
                 EventType = "agent_started",
                 Action = "started",
                 Target = config.MachineId,
-                Details = new Dictionary<string, object?>
+                Details = new Dictionary<string, string?>
                 {
                     ["machineName"] = Environment.MachineName,
                     ["osVersion"] = Environment.OSVersion.VersionString,

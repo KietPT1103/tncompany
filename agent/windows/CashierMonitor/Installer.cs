@@ -18,6 +18,7 @@ public static class Installer
         if (string.IsNullOrWhiteSpace(serverUrl) || string.IsNullOrWhiteSpace(apiKey))
         {
             AgentLog.Info("Install failed: --server-url and --api-key are required.");
+            Console.Error.WriteLine("Install failed: --server-url and --api-key are required.");
             return 2;
         }
 
@@ -55,6 +56,12 @@ public static class Installer
         StartDetached(targetExe);
 
         AgentLog.Info($"Installed to {targetExe}");
+        Console.WriteLine("CashierMonitor installed.");
+        Console.WriteLine($"Machine ID: {machineId}");
+        Console.WriteLine($"Server URL: {serverUrl}");
+        Console.WriteLine($"Installed EXE: {targetExe}");
+        Console.WriteLine($"Config: {Paths.ConfigPath}");
+        Console.WriteLine($"Agent log: {Paths.LogPath}");
         return 0;
     }
 
@@ -63,6 +70,7 @@ public static class Installer
         RemoveStartup(Registry.LocalMachine);
         RemoveStartup(Registry.CurrentUser);
         AgentLog.Info("Removed startup registration. Delete ProgramData files after stopping the running process.");
+        Console.WriteLine("CashierMonitor startup registration removed.");
         return 0;
     }
 

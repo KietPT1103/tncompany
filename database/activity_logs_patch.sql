@@ -22,11 +22,8 @@ CREATE TABLE IF NOT EXISTS activity_logs (
   app_name VARCHAR(255) NULL,
   process_id INT NULL,
   target VARCHAR(1024) NULL,
-  details_json JSON NULL,
+  details_json LONGTEXT NULL,
   UNIQUE KEY uniq_activity_event (machine_id, event_id),
   KEY idx_activity_machine_time (machine_id, event_time),
-  KEY idx_activity_type_time (event_type, event_time),
-  CONSTRAINT fk_activity_logs_machine
-    FOREIGN KEY (machine_id) REFERENCES activity_machines(machine_id)
-    ON DELETE CASCADE
+  KEY idx_activity_type_time (event_type, event_time)
 );

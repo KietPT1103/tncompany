@@ -32,7 +32,7 @@ public sealed class ActivityEvent
     public string? AppName { get; set; }
     public int? ProcessId { get; set; }
     public string? Target { get; set; }
-    public Dictionary<string, object?>? Details { get; set; }
+    public Dictionary<string, string?>? Details { get; set; }
 }
 
 public sealed class LogBatch
