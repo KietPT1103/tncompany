@@ -11,3 +11,5 @@ dist.zip
 public/api/config.php
 tmp-opt/
 dist-ssr/
+bin/
+obj/

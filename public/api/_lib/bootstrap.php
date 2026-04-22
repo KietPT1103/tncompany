@@ -63,7 +63,7 @@ $config = require $configPath;
 date_default_timezone_set($config['timezone'] ?? 'Asia/Ho_Chi_Minh');
 
 header('Access-Control-Allow-Origin: ' . ($config['cors_origin'] ?? '*'));
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Agent-Key');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {

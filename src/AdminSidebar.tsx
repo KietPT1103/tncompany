@@ -17,6 +17,7 @@ import {
   LogOut,
   Menu,
   MessageSquareText,
+  Monitor,
   Package,
   PanelLeftClose,
   Tags,
@@ -38,6 +39,7 @@ const navItems = [
   { href: "/payroll", label: "Tính lương", icon: Wallet },
   { href: "/payroll-estimate", label: "Ước lượng lương", icon: CalendarDays },
   { href: "/social-listening", label: "Social Listening", icon: MessageSquareText },
+  { href: "/activity-logs", label: "Nhật ký máy", icon: Monitor },
 ];
 
 const adminExtraNavItems = [
