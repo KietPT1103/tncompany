@@ -1,0 +1,29 @@
+{
+  "machineId": "MAY-THU-NGAN-01",
+  "serverUrl": "https://your-domain.com/api/activity-logs.php",
+  "apiKey": "replace-with-machine-api-key",
+  "syncIntervalSeconds": 30,
+  "processPollSeconds": 2,
+  "browserPollSeconds": 1,
+  "dnsPollSeconds": 20,
+  "maxBatchSize": 100,
+  "watchPaths": [
+    "%USERPROFILE%\\Desktop",
+    "%USERPROFILE%\\Downloads",
+    "%USERPROFILE%\\Documents",
+    "C:\\Users\\Public\\Desktop"
+  ],
+  "ignoreProcessNames": [
+    "cashiermonitor"
+  ],
+  "browserProcessNames": [
+    "chrome",
+    "msedge",
+    "firefox",
+    "brave",
+    "opera",
+    "operagx",
+    "vivaldi",
+    "iexplore"
+  ]
+}
