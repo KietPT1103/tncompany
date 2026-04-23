@@ -2,15 +2,15 @@ import * as React from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { normalizeAdminHref } from "@/router/pathUtils";
 
-type LinkProps = React.ComponentPropsWithoutRef<typeof RouterLink> & {
+type LinkProps = Omit<React.ComponentPropsWithoutRef<typeof RouterLink>, "to"> & {
   href: string;
 };
 
 const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
-  ({ href, to, ...props }, ref) => (
+  ({ href, ...props }, ref) => (
     <RouterLink
       ref={ref}
-      to={normalizeAdminHref(typeof href === "string" ? href : String(to || ""))}
+      to={normalizeAdminHref(href)}
       {...props}
     />
   )

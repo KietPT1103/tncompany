@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -17,7 +17,7 @@ import { getActivityLogs, ActivityLog, ActivityMachine } from "@/services/activi
 
 const EVENT_OPTIONS = [
   { value: "", label: "Tất cả sự kiện" },
-  { value: "app_active", label: "Cửa sổ active" },
+  { value: "app_active", label: "Cửa sổ đang dùng" },
   { value: "app_opened", label: "Mở app" },
   { value: "app_closed", label: "Đóng app" },
   { value: "file_created", label: "Tạo file" },
@@ -30,10 +30,12 @@ const EVENT_OPTIONS = [
 ];
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 300];
+const FETCH_LIMIT_OPTIONS = [200, 500, 1000];
 
 function formatDateTime(value: string) {
   const date = new Date(value.replace(" ", "T"));
   if (Number.isNaN(date.getTime())) return value;
+
   return new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "short",
     timeStyle: "medium",
@@ -61,6 +63,14 @@ function eventBadgeClass(eventType: string) {
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
+function formatDetails(details: ActivityLog["details"]) {
+  if (!details || Object.keys(details).length === 0) {
+    return "";
+  }
+
+  return JSON.stringify(details, null, 2);
+}
+
 function MachineCard({ machine }: { machine: ActivityMachine }) {
   return (
     <Card className="border-slate-200 shadow-sm">
@@ -74,7 +84,9 @@ function MachineCard({ machine }: { machine: ActivityMachine }) {
               </div>
             </div>
             <div className="mt-2 text-xs text-slate-500">
-              {machine.lastSeenAt ? `Lần cuối: ${formatDateTime(machine.lastSeenAt)}` : "Chưa có log"}
+              {machine.lastSeenAt
+                ? `Lần cuối: ${formatDateTime(machine.lastSeenAt)}`
+                : "Chưa có log"}
             </div>
           </div>
           <span
@@ -90,29 +102,72 @@ function MachineCard({ machine }: { machine: ActivityMachine }) {
   );
 }
 
-function LogRow({ item }: { item: ActivityLog }) {
+function LogRow({
+  item,
+  expanded,
+  onToggleExpanded,
+}: {
+  item: ActivityLog;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+}) {
+  const detailsText = formatDetails(item.details);
+
   return (
-    <tr className="border-b border-slate-100 align-top hover:bg-slate-50">
-      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">
-        <div className="flex items-center gap-2">
-          <Clock3 className="h-4 w-4 text-slate-400" />
-          {formatDateTime(item.eventTime)}
-        </div>
-      </td>
-      <td className="px-4 py-3 text-sm font-semibold text-slate-900">{item.machineId}</td>
-      <td className="px-4 py-3">
-        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${eventBadgeClass(item.eventType)}`}>
-          {eventLabel(item.eventType)}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-sm text-slate-700">
-        <div className="font-medium">{item.target || item.appName || item.action || "-"}</div>
-        {item.appName && item.target !== item.appName ? (
-          <div className="mt-1 text-xs text-slate-500">{item.appName}</div>
-        ) : null}
-      </td>
-      <td className="px-4 py-3 text-sm text-slate-500">{item.processId || "-"}</td>
-    </tr>
+    <Fragment>
+      <tr className="border-b border-slate-100 align-top hover:bg-slate-50">
+        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">
+          <div className="flex items-center gap-2">
+            <Clock3 className="h-4 w-4 text-slate-400" />
+            {formatDateTime(item.eventTime)}
+          </div>
+        </td>
+        <td className="px-4 py-3 text-sm font-semibold text-slate-900">{item.machineId}</td>
+        <td className="px-4 py-3">
+          <span
+            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${eventBadgeClass(
+              item.eventType
+            )}`}
+          >
+            {eventLabel(item.eventType)}
+          </span>
+        </td>
+        <td className="px-4 py-3 text-sm text-slate-700">
+          <div className="font-medium">{item.target || item.appName || item.action || "-"}</div>
+          {item.appName && item.target !== item.appName ? (
+            <div className="mt-1 text-xs text-slate-500">{item.appName}</div>
+          ) : null}
+        </td>
+        <td className="px-4 py-3 text-sm text-slate-500">
+          <div>{item.processId ?? "-"}</div>
+          <div className="mt-1 text-xs">Nhận: {formatDateTime(item.receivedAt)}</div>
+        </td>
+        <td className="px-4 py-3 text-right text-sm">
+          {detailsText ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onToggleExpanded}
+              className="h-8 px-2 text-slate-600"
+            >
+              {expanded ? "Ẩn" : "Chi tiết"}
+            </Button>
+          ) : (
+            <span className="text-slate-400">-</span>
+          )}
+        </td>
+      </tr>
+      {expanded && detailsText ? (
+        <tr className="border-b border-slate-100 bg-slate-50">
+          <td colSpan={6} className="px-4 py-3">
+            <pre className="max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700">
+              {detailsText}
+            </pre>
+          </td>
+        </tr>
+      ) : null}
+    </Fragment>
   );
 }
 
@@ -123,8 +178,10 @@ export default function ActivityLogsPage() {
   const [eventType, setEventType] = useState("");
   const [startDate, setStartDate] = useState(getTodayInputValue);
   const [endDate, setEndDate] = useState(getTodayInputValue);
+  const [fetchLimit, setFetchLimit] = useState(500);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -134,9 +191,9 @@ export default function ActivityLogsPage() {
       eventType,
       startDate: startDate ? `${startDate} 00:00:00` : undefined,
       endDate: endDate ? `${endDate} 23:59:59` : undefined,
-      limit: 300,
+      limit: fetchLimit,
     }),
-    [machineId, eventType, startDate, endDate]
+    [machineId, eventType, startDate, endDate, fetchLimit]
   );
 
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
@@ -167,6 +224,7 @@ export default function ActivityLogsPage() {
 
   useEffect(() => {
     setPage(1);
+    setExpandedLogId(null);
   }, [filters, pageSize]);
 
   useEffect(() => {
@@ -206,7 +264,7 @@ export default function ActivityLogsPage() {
 
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
               <label className="space-y-1.5">
                 <span className="text-xs font-semibold uppercase text-slate-500">Máy</span>
                 <select
@@ -258,12 +316,20 @@ export default function ActivityLogsPage() {
                 />
               </label>
 
-              <div className="flex items-end">
-                <div className="flex h-10 w-full items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm text-slate-600">
-                  <Search className="h-4 w-4" />
-                  {items.length} dòng log
-                </div>
-              </div>
+              <label className="space-y-1.5">
+                <span className="text-xs font-semibold uppercase text-slate-500">Giới hạn tải</span>
+                <select
+                  value={fetchLimit}
+                  onChange={(event) => setFetchLimit(Number(event.target.value))}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500"
+                >
+                  {FETCH_LIMIT_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option} log
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <label className="space-y-1.5">
                 <span className="text-xs font-semibold uppercase text-slate-500">Dòng/trang</span>
@@ -279,6 +345,13 @@ export default function ActivityLogsPage() {
                   ))}
                 </select>
               </label>
+
+              <div className="flex items-end">
+                <div className="flex h-10 w-full items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm text-slate-600">
+                  <Search className="h-4 w-4" />
+                  {items.length} dòng log
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -324,28 +397,38 @@ export default function ActivityLogsPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left">
+            <table className="w-full min-w-[1080px] text-left">
               <thead className="bg-slate-100 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Thời gian</th>
                   <th className="px-4 py-3">Máy</th>
                   <th className="px-4 py-3">Sự kiện</th>
                   <th className="px-4 py-3">Mục tiêu</th>
-                  <th className="px-4 py-3">PID</th>
+                  <th className="px-4 py-3">PID / nhận lúc</th>
+                  <th className="px-4 py-3 text-right">Chi tiết</th>
                 </tr>
               </thead>
               <tbody className="bg-white">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
                       Đang tải log...
                     </td>
                   </tr>
                 ) : pageItems.length ? (
-                  pageItems.map((item) => <LogRow key={`${item.machineId}-${item.eventId}`} item={item} />)
+                  pageItems.map((item) => (
+                    <LogRow
+                      key={`${item.machineId}-${item.eventId}`}
+                      item={item}
+                      expanded={expandedLogId === item.id}
+                      onToggleExpanded={() =>
+                        setExpandedLogId((currentId) => (currentId === item.id ? null : item.id))
+                      }
+                    />
+                  ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
                       Chưa có log phù hợp bộ lọc.
                     </td>
                   </tr>

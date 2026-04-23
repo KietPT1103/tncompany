@@ -6,6 +6,7 @@ import DashboardLayout from "./app/(dashboard)/layout";
 import BillsPage from "./app/(dashboard)/bills/page";
 import CashFlowPage from "./app/(dashboard)/cash-flow/page";
 import AccountManagementPage from "./app/(dashboard)/accounts-page";
+import ActivityLogsPage from "./app/(dashboard)/activity-logs/page";
 import CategoryManagementPage from "./app/(dashboard)/categories/page";
 import DashboardPage from "./app/(dashboard)/page";
 import PayrollPage from "./app/(dashboard)/payroll/page";
@@ -94,6 +95,7 @@ export default function App() {
               <Route path="product" element={<ProductsPage />} />
               <Route path="categories" element={<CategoryManagementPage />} />
               <Route path="accounts" element={<AccountManagementPage />} />
+              <Route path="activity-logs" element={<ActivityLogsPage />} />
               <Route path="payroll" element={<PayrollPage />} />
               <Route path="social-listening" element={<SocialListeningPage />} />
               <Route path="timesheet" element={<TimesheetPage />} />

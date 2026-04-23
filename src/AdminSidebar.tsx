@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
+  Activity,
   BarChart3,
   CakeSlice,
   CalendarDays,
@@ -41,6 +42,7 @@ const navItems = [
 ];
 
 const adminExtraNavItems = [
+  { href: "/activity-logs", label: "Nhật ký máy", icon: Activity },
   { href: "/accounts", label: "Tài khoản", icon: KeyRound },
 ];
 

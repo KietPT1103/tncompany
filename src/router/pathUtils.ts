@@ -7,6 +7,7 @@ const ADMIN_PATHS = [
   "/product",
   "/categories",
   "/accounts",
+  "/activity-logs",
   "/payroll",
   "/payroll-estimate",
   "/social-listening",
