@@ -12,16 +12,27 @@ function db(): PDO
 
     global $config;
 
-    $dsn = sprintf(
-        'mysql:host=%s;dbname=%s;charset=utf8mb4',
-        $config['db_host'] ?? 'localhost',
-        $config['db_name'] ?? ''
-    );
+    $driver = $config['db_driver'] ?? 'mysql';
+    $dsn = '';
+
+    if ($driver === 'sqlite') {
+        $path = $config['db_database'] ?? ':memory:';
+        if ($path !== ':memory:' && !is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        $dsn = 'sqlite:' . $path;
+    } else {
+        $dsn = sprintf(
+            'mysql:host=%s;dbname=%s;charset=utf8mb4',
+            $config['db_host'] ?? 'localhost',
+            $config['db_name'] ?? ''
+        );
+    }
 
     $pdo = new PDO(
         $dsn,
-        $config['db_user'] ?? '',
-        $config['db_password'] ?? '',
+        $driver === 'sqlite' ? null : ($config['db_user'] ?? ''),
+        $driver === 'sqlite' ? null : ($config['db_password'] ?? ''),
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
