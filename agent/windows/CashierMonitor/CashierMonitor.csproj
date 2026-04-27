@@ -13,4 +13,10 @@
     <Version>0.1.0</Version>
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="key.cs" />
+    <Compile Remove="obj\**\*.cs" />
+    <Compile Remove="buildobj\**\*.cs" />
+  </ItemGroup>
 </Project>

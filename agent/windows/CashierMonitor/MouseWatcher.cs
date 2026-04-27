@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace CashierMonitor;
@@ -23,12 +25,26 @@ public sealed class MouseWatcher : IDisposable
 
     public void Dispose()
     {
-        UnhookWindowsHookEx(_hookId);
+        if (_hookId != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_hookId);
+            _hookId = IntPtr.Zero;
+        }
     }
 
     private IntPtr SetHook(LowLevelMouseProc proc)
     {
-        return SetWindowsHookEx(WH_MOUSE_LL, proc, IntPtr.Zero, 0);
+        using var currentProcess = Process.GetCurrentProcess();
+        using var currentModule = currentProcess.MainModule;
+        var moduleName = currentModule?.ModuleName;
+        var moduleHandle = string.IsNullOrWhiteSpace(moduleName) ? IntPtr.Zero : GetModuleHandle(moduleName);
+        var hookId = SetWindowsHookEx(WH_MOUSE_LL, proc, moduleHandle, 0);
+        if (hookId == IntPtr.Zero)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to install mouse hook.");
+        }
+
+        return hookId;
     }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)

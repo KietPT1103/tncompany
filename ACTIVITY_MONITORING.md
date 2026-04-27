@@ -130,15 +130,35 @@ Start-Sleep -Seconds 2
 .\CashierMonitor.exe --install --machine-id MAY-THU-NGAN-01 --server-url https://tnservice.vn/api/activity-logs.php --api-key may-thu-ngan-01
 ```
 
-Hoặc nhanh hơn, dùng script tự động (cần quyền Admin):
+Hoặc nhanh hơn, dùng bộ update tự động (cần quyền Admin):
 
 ```powershell
-# Copy file upgrade-agent.ps1 tới Desktop trước
-cd Desktop
-.\upgrade-agent.ps1
+# Sau khi build, lấy cả thư mục update-bundle
+agent\windows\CashierMonitor\bin\Release\net8.0-windows\win-x64\update-bundle
 ```
 
-Script sẽ hỏi Machine ID và API Key, rồi tự động:
+Copy cả thư mục `update-bundle` sang máy cashier, rồi chỉ cần chạy:
+
+```text
+update-agent.cmd
+```
+
+Bundle sẽ tự xin quyền Admin, tự đọc `Machine ID`, `API Key`, `Server URL` từ:
+
+```text
+C:\ProgramData\TNCompany\CashierMonitor\config.json
+```
+
+Nếu máy đã cài sẵn agent thì script sẽ:
+1. Dừng `CashierMonitor.exe` đang chạy
+2. Ghi đè file `C:\ProgramData\TNCompany\CashierMonitor\CashierMonitor.exe`
+3. Chạy lại agent mới
+
+Không cần nhập lại key hay ID.
+
+Chỉ khi cài mới hoặc thiếu config thì script mới hỏi tiếp.
+
+Sau đó bundle sẽ tự động:
 1. Gỡ cài version cũ
 2. Cài đặt version mới
 3. Khởi động service
