@@ -27,6 +27,14 @@ export type ActivityLogFilters = {
   startDate?: string;
   endDate?: string;
   limit?: number;
+  offset?: number;
+};
+
+export type ActivityLogResponse = {
+  items: ActivityLog[];
+  machines: ActivityMachine[];
+  hasMore: boolean;
+  nextOffset: number | null;
 };
 
 export async function getActivityLogs(filters: ActivityLogFilters = {}) {
@@ -37,11 +45,40 @@ export async function getActivityLogs(filters: ActivityLogFilters = {}) {
   if (filters.startDate) params.set("startDate", filters.startDate);
   if (filters.endDate) params.set("endDate", filters.endDate);
   params.set("limit", String(filters.limit ?? 200));
+  if (filters.offset !== undefined) params.set("offset", String(filters.offset));
 
-  return apiRequest<{
-    items: ActivityLog[];
-    machines: ActivityMachine[];
-  }>(`/activity-logs.php?${params.toString()}`, {
+  return apiRequest<ActivityLogResponse>(`/activity-logs.php?${params.toString()}`, {
     method: "GET",
   });
+}
+
+export async function getAllActivityLogs(filters: ActivityLogFilters = {}, batchSize = 1000) {
+  const items: ActivityLog[] = [];
+  let machines: ActivityMachine[] = [];
+  let offset = 0;
+
+  while (true) {
+    const response = await getActivityLogs({
+      ...filters,
+      limit: batchSize,
+      offset,
+    });
+
+    if (machines.length === 0) {
+      machines = response.machines;
+    }
+
+    items.push(...response.items);
+
+    if (!response.hasMore || response.items.length === 0) {
+      break;
+    }
+
+    offset = response.nextOffset ?? offset + response.items.length;
+  }
+
+  return {
+    items,
+    machines,
+  };
 }

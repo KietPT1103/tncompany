@@ -214,6 +214,7 @@ if ($method === 'GET') {
     $machineId = trim((string) ($_GET['machineId'] ?? ''));
     $eventType = trim((string) ($_GET['eventType'] ?? ''));
     $limit = max(1, min(1000, (int) ($_GET['limit'] ?? 200)));
+    $offset = max(0, (int) ($_GET['offset'] ?? 0));
     $startDate = trim((string) ($_GET['startDate'] ?? ''));
     $endDate = trim((string) ($_GET['endDate'] ?? ''));
 
@@ -240,9 +241,12 @@ if ($method === 'GET') {
         $params['end_date'] = activity_to_sql_datetime($endDate);
     }
 
-    $sql .= ' ORDER BY event_time DESC, id DESC LIMIT ' . $limit;
+    $sql .= ' ORDER BY event_time DESC, id DESC LIMIT ' . ($limit + 1) . ' OFFSET ' . $offset;
     $statement = db()->prepare($sql);
     $statement->execute($params);
+    $rows = $statement->fetchAll();
+    $hasMore = count($rows) > $limit;
+    $pageRows = $hasMore ? array_slice($rows, 0, $limit) : $rows;
 
     $machines = db()->query(
         'SELECT machine_id, display_name, is_active, last_seen_at
@@ -251,7 +255,7 @@ if ($method === 'GET') {
     )->fetchAll();
 
     respond_ok([
-        'items' => array_map('activity_map_log', $statement->fetchAll()),
+        'items' => array_map('activity_map_log', $pageRows),
         'machines' => array_map(
             static function (array $row): array {
                 return [
@@ -263,6 +267,8 @@ if ($method === 'GET') {
             },
             $machines
         ),
+        'hasMore' => $hasMore,
+        'nextOffset' => $hasMore ? $offset + count($pageRows) : null,
     ]);
 }
 

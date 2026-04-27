@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import { getActivityLogs, ActivityLog, ActivityMachine } from "@/services/activityLogService";
+import { getAllActivityLogs, ActivityLog, ActivityMachine } from "@/services/activityLogService";
 
 const EVENT_OPTIONS = [
   { value: "", label: "Tất cả sự kiện" },
@@ -30,8 +30,6 @@ const EVENT_OPTIONS = [
 ];
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 300];
-const FETCH_LIMIT_OPTIONS = [200, 500, 1000];
-
 function formatDateTime(value: string) {
   const date = new Date(value.replace(" ", "T"));
   if (Number.isNaN(date.getTime())) return value;
@@ -178,7 +176,6 @@ export default function ActivityLogsPage() {
   const [eventType, setEventType] = useState("");
   const [startDate, setStartDate] = useState(getTodayInputValue);
   const [endDate, setEndDate] = useState(getTodayInputValue);
-  const [fetchLimit, setFetchLimit] = useState(500);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
@@ -191,9 +188,8 @@ export default function ActivityLogsPage() {
       eventType,
       startDate: startDate ? `${startDate} 00:00:00` : undefined,
       endDate: endDate ? `${endDate} 23:59:59` : undefined,
-      limit: fetchLimit,
     }),
-    [machineId, eventType, startDate, endDate, fetchLimit]
+    [machineId, eventType, startDate, endDate]
   );
 
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
@@ -207,7 +203,7 @@ export default function ActivityLogsPage() {
     setError("");
 
     try {
-      const data = await getActivityLogs(filters);
+      const data = await getAllActivityLogs(filters);
       setItems(data.items);
       setMachines(data.machines);
     } catch (loadError) {
@@ -264,7 +260,7 @@ export default function ActivityLogsPage() {
 
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
               <label className="space-y-1.5">
                 <span className="text-xs font-semibold uppercase text-slate-500">Máy</span>
                 <select
@@ -314,21 +310,6 @@ export default function ActivityLogsPage() {
                   onChange={(event) => setEndDate(event.target.value)}
                   className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500"
                 />
-              </label>
-
-              <label className="space-y-1.5">
-                <span className="text-xs font-semibold uppercase text-slate-500">Giới hạn tải</span>
-                <select
-                  value={fetchLimit}
-                  onChange={(event) => setFetchLimit(Number(event.target.value))}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500"
-                >
-                  {FETCH_LIMIT_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option} log
-                    </option>
-                  ))}
-                </select>
               </label>
 
               <label className="space-y-1.5">
