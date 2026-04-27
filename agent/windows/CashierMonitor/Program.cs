@@ -1,3 +1,5 @@
+using System.Windows.Forms;
+
 namespace CashierMonitor;
 
 internal static class Program
