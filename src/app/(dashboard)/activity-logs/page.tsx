@@ -27,6 +27,8 @@ const EVENT_OPTIONS = [
   { value: "browser_tab_active", label: "Tab trình duyệt" },
   { value: "dns_domain", label: "Truy cập domain" },
   { value: "agent_started", label: "Agent chạy" },
+  { value: "keyboard", label: "Gõ phím" },
+  { value: "mouse", label: "Click chuột" },
 ];
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 300];
@@ -58,6 +60,8 @@ function eventBadgeClass(eventType: string) {
   if (eventType.includes("file")) return "bg-blue-50 text-blue-700 border-blue-100";
   if (eventType.includes("dns")) return "bg-amber-50 text-amber-700 border-amber-100";
   if (eventType.includes("app")) return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  if (eventType === "keyboard") return "bg-cyan-50 text-cyan-700 border-cyan-100";
+  if (eventType === "mouse") return "bg-orange-50 text-orange-700 border-orange-100";
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
 

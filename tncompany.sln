@@ -1,0 +1,32 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "agent", "agent", "{A0596E84-2522-6F31-0F43-77167BFA80D0}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "windows", "windows", "{6C572B18-F507-2CC1-548B-609FA6AF021E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CashierMonitor", "agent\windows\CashierMonitor\CashierMonitor.csproj", "{973B0CCB-CD03-17D4-E669-6D54200A09B6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{973B0CCB-CD03-17D4-E669-6D54200A09B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{973B0CCB-CD03-17D4-E669-6D54200A09B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{973B0CCB-CD03-17D4-E669-6D54200A09B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{973B0CCB-CD03-17D4-E669-6D54200A09B6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{6C572B18-F507-2CC1-548B-609FA6AF021E} = {A0596E84-2522-6F31-0F43-77167BFA80D0}
+		{973B0CCB-CD03-17D4-E669-6D54200A09B6} = {6C572B18-F507-2CC1-548B-609FA6AF021E}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {45E8F9E5-F38B-41F0-B43E-3C4DBFC1564F}
+	EndGlobalSection
+EndGlobal

@@ -6,7 +6,7 @@ Hệ thống gồm:
 - Windows agent: `agent/windows/CashierMonitor`
 - Trang xem log: `/admin/activity-logs`
 
-Agent không chụp màn hình, không ghi phím bấm, không lấy mật khẩu. Log gắn với `machineId`.
+Agent không chụp màn hình, không lấy mật khẩu. Ghi phím bấm và click chuột để đối soát văn bản gốc.
 
 ## 1. Cài database trên server
 
@@ -117,7 +117,56 @@ Queue offline nằm ở:
 C:\ProgramData\TNCompany\CashierMonitor\queue.jsonl
 ```
 
-## 5. Tạo startup shortcut dự phòng
+## 5. Nâng cấp agent (cách nhanh)
+
+### Cách 1: Nâng cấp trên máy cashier (thủ công)
+
+Khi có version mới, copy file `CashierMonitor.exe` vào Desktop máy thu ngân, rồi mở PowerShell (quyền Admin) và chạy:
+
+```powershell
+cd Desktop
+.\CashierMonitor.exe --uninstall
+Start-Sleep -Seconds 2
+.\CashierMonitor.exe --install --machine-id MAY-THU-NGAN-01 --server-url https://tnservice.vn/api/activity-logs.php --api-key may-thu-ngan-01
+```
+
+Hoặc nhanh hơn, dùng script tự động (cần quyền Admin):
+
+```powershell
+# Copy file upgrade-agent.ps1 tới Desktop trước
+cd Desktop
+.\upgrade-agent.ps1
+```
+
+Script sẽ hỏi Machine ID và API Key, rồi tự động:
+1. Gỡ cài version cũ
+2. Cài đặt version mới
+3. Khởi động service
+
+### Cách 2: Nâng cấp từ xa (từ máy dev)
+
+Chạy từ máy có dev environment:
+
+```powershell
+cd agent\windows\CashierMonitor
+.\upgrade-remote-agent.ps1
+```
+
+Script sẽ:
+1. Hỏi tên/IP máy cashier, Machine ID, API Key
+2. Copy file EXE mới qua network
+3. Tự động chạy upgrade trên máy cashier
+4. Không cần can thiệp thêm
+
+Ví dụ:
+
+```powershell
+.\upgrade-remote-agent.ps1 -ComputerName "192.168.1.100" -MachineId "MAY-THU-NGAN-01" -ApiKey "may-thu-ngan-01"
+```
+
+**Lưu ý:** Máy dev phải có kết nối network tới máy cashier, và máy cashier cần bật WinRM (hoặc chạy `Enable-PSRemoting -Force` trên máy cashier trước).
+
+## 6. Tạo startup shortcut dự phòng
 
 Chạy một lần trên máy thu ngân:
 
