@@ -104,12 +104,24 @@ function activity_require_machine(string $machineId, string $agentKey): array
     return $machine;
 }
 
-function activity_map_log(array $row): array
+function activity_map_log(array $row, bool $includeScreenshot = false): array
 {
     $details = null;
     if (!empty($row['details_json'])) {
         $decoded = json_decode((string) $row['details_json'], true);
         $details = is_array($decoded) ? $decoded : null;
+    }
+
+    $hasScreenshot = false;
+    if (is_array($details) && !empty($details['screenshotDataUrl']) && is_string($details['screenshotDataUrl'])) {
+        $hasScreenshot = true;
+        if (!$includeScreenshot) {
+            unset($details['screenshotDataUrl']);
+        }
+    }
+
+    if (is_array($details) && count($details) === 0) {
+        $details = null;
     }
 
     return [
@@ -124,6 +136,7 @@ function activity_map_log(array $row): array
         'processId' => $row['process_id'] !== null ? (int) $row['process_id'] : null,
         'target' => $row['target'] ?: null,
         'details' => $details,
+        'hasScreenshot' => $hasScreenshot,
     ];
 }
 
@@ -211,6 +224,23 @@ if ($method === 'POST') {
 if ($method === 'GET') {
     auth_require(['admin']);
 
+    $logId = max(0, (int) ($_GET['id'] ?? 0));
+    if ($logId > 0) {
+        $statement = db()->prepare('SELECT * FROM activity_logs WHERE id = :id LIMIT 1');
+        $statement->execute([
+            'id' => $logId,
+        ]);
+        $row = $statement->fetch();
+
+        if (!$row) {
+            respond_error('Activity log not found', 404);
+        }
+
+        respond_ok([
+            'item' => activity_map_log($row, true),
+        ]);
+    }
+
     $machineId = trim((string) ($_GET['machineId'] ?? ''));
     $eventType = trim((string) ($_GET['eventType'] ?? ''));
     $limit = max(1, min(1000, (int) ($_GET['limit'] ?? 200)));
@@ -255,7 +285,12 @@ if ($method === 'GET') {
     )->fetchAll();
 
     respond_ok([
-        'items' => array_map('activity_map_log', $pageRows),
+        'items' => array_map(
+            static function (array $row): array {
+                return activity_map_log($row, false);
+            },
+            $pageRows
+        ),
         'machines' => array_map(
             static function (array $row): array {
                 return [

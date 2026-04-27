@@ -1,19 +1,26 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Download,
   Monitor,
   RefreshCcw,
   Search,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import { getAllActivityLogs, ActivityLog, ActivityMachine } from "@/services/activityLogService";
+import {
+  ActivityLog,
+  ActivityMachine,
+  getActivityLog,
+  getAllActivityLogs,
+} from "@/services/activityLogService";
 
 const EVENT_OPTIONS = [
   { value: "", label: "Tất cả sự kiện" },
@@ -32,6 +39,7 @@ const EVENT_OPTIONS = [
 ];
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 300];
+
 function formatDateTime(value: string) {
   const date = new Date(value.replace(" ", "T"));
   if (Number.isNaN(date.getTime())) return value;
@@ -73,6 +81,46 @@ function formatDetails(details: ActivityLog["details"]) {
   return JSON.stringify(details, null, 2);
 }
 
+function splitDetails(details: ActivityLog["details"]) {
+  if (!details || Object.keys(details).length === 0) {
+    return {
+      screenshotDataUrl: "",
+      text: "",
+    };
+  }
+
+  const normalized = { ...details };
+  const screenshotDataUrl =
+    typeof normalized.screenshotDataUrl === "string" ? normalized.screenshotDataUrl : "";
+
+  if ("screenshotDataUrl" in normalized) {
+    delete normalized.screenshotDataUrl;
+  }
+
+  return {
+    screenshotDataUrl,
+    text: formatDetails(normalized),
+  };
+}
+
+function canOpenDetail(item: ActivityLog) {
+  return item.hasScreenshot || !!formatDetails(item.details);
+}
+
+function buildScreenshotFileName(item: ActivityLog) {
+  const safeMachine = item.machineId.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const safeEvent = item.eventType.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const timestamp = item.eventTime.replace(/[^0-9]/g, "").slice(0, 14) || "capture";
+  const extension =
+    item.details &&
+    typeof item.details.screenshotDataUrl === "string" &&
+    item.details.screenshotDataUrl.startsWith("data:image/png")
+      ? "png"
+      : "jpg";
+
+  return `${safeMachine}-${safeEvent}-${timestamp}.${extension}`;
+}
+
 function MachineCard({ machine }: { machine: ActivityMachine }) {
   return (
     <Card className="border-slate-200 shadow-sm">
@@ -86,9 +134,7 @@ function MachineCard({ machine }: { machine: ActivityMachine }) {
               </div>
             </div>
             <div className="mt-2 text-xs text-slate-500">
-              {machine.lastSeenAt
-                ? `Lần cuối: ${formatDateTime(machine.lastSeenAt)}`
-                : "Chưa có log"}
+              {machine.lastSeenAt ? `Lần cuối: ${formatDateTime(machine.lastSeenAt)}` : "Chưa có log"}
             </div>
           </div>
           <span
@@ -104,72 +150,146 @@ function MachineCard({ machine }: { machine: ActivityMachine }) {
   );
 }
 
-function LogRow({
-  item,
-  expanded,
-  onToggleExpanded,
-}: {
-  item: ActivityLog;
-  expanded: boolean;
-  onToggleExpanded: () => void;
-}) {
-  const detailsText = formatDetails(item.details);
+function LogRow({ item, onOpenDetail }: { item: ActivityLog; onOpenDetail: () => void }) {
+  const canExpand = canOpenDetail(item);
 
   return (
-    <Fragment>
-      <tr className="border-b border-slate-100 align-top hover:bg-slate-50">
-        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">
-          <div className="flex items-center gap-2">
-            <Clock3 className="h-4 w-4 text-slate-400" />
-            {formatDateTime(item.eventTime)}
-          </div>
-        </td>
-        <td className="px-4 py-3 text-sm font-semibold text-slate-900">{item.machineId}</td>
-        <td className="px-4 py-3">
-          <span
-            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${eventBadgeClass(
-              item.eventType
-            )}`}
+    <tr className="border-b border-slate-100 align-top hover:bg-slate-50">
+      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">
+        <div className="flex items-center gap-2">
+          <Clock3 className="h-4 w-4 text-slate-400" />
+          {formatDateTime(item.eventTime)}
+        </div>
+      </td>
+      <td className="px-4 py-3 text-sm font-semibold text-slate-900">{item.machineId}</td>
+      <td className="px-4 py-3">
+        <span
+          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${eventBadgeClass(
+            item.eventType
+          )}`}
+        >
+          {eventLabel(item.eventType)}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-sm text-slate-700">
+        <div className="font-medium">{item.target || item.appName || item.action || "-"}</div>
+        {item.appName && item.target !== item.appName ? (
+          <div className="mt-1 text-xs text-slate-500">{item.appName}</div>
+        ) : null}
+      </td>
+      <td className="px-4 py-3 text-sm text-slate-500">
+        <div>{item.processId ?? "-"}</div>
+        <div className="mt-1 text-xs">Nhận: {formatDateTime(item.receivedAt)}</div>
+      </td>
+      <td className="px-4 py-3 text-right text-sm">
+        {canExpand ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onOpenDetail}
+            className="h-8 px-2 text-slate-600"
           >
-            {eventLabel(item.eventType)}
-          </span>
-        </td>
-        <td className="px-4 py-3 text-sm text-slate-700">
-          <div className="font-medium">{item.target || item.appName || item.action || "-"}</div>
-          {item.appName && item.target !== item.appName ? (
-            <div className="mt-1 text-xs text-slate-500">{item.appName}</div>
-          ) : null}
-        </td>
-        <td className="px-4 py-3 text-sm text-slate-500">
-          <div>{item.processId ?? "-"}</div>
-          <div className="mt-1 text-xs">Nhận: {formatDateTime(item.receivedAt)}</div>
-        </td>
-        <td className="px-4 py-3 text-right text-sm">
-          {detailsText ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onToggleExpanded}
-              className="h-8 px-2 text-slate-600"
-            >
-              {expanded ? "Ẩn" : "Chi tiết"}
+            Chi tiết
+          </Button>
+        ) : (
+          <span className="text-slate-400">-</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function DetailModal({
+  item,
+  loading,
+  error,
+  onClose,
+}: {
+  item?: ActivityLog;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+}) {
+  if (!item && !loading && !error) {
+    return null;
+  }
+
+  const { screenshotDataUrl, text: detailsText } = splitDetails(item?.details ?? null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+      <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Chi tiết log
+            </div>
+            {item ? (
+              <div className="mt-1 text-sm text-slate-600">
+                {item.machineId} · {eventLabel(item.eventType)} · {formatDateTime(item.eventTime)}
+              </div>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            {item && screenshotDataUrl ? (
+              <a
+                href={screenshotDataUrl}
+                download={buildScreenshotFileName(item)}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <Download className="h-4 w-4" />
+                Tải ảnh
+              </a>
+            ) : null}
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} className="h-9 w-9 px-0">
+              <X className="h-4 w-4" />
             </Button>
-          ) : (
-            <span className="text-slate-400">-</span>
-          )}
-        </td>
-      </tr>
-      {expanded && detailsText ? (
-        <tr className="border-b border-slate-100 bg-slate-50">
-          <td colSpan={6} className="px-4 py-3">
-            <pre className="max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700">
-              {detailsText}
-            </pre>
-          </td>
-        </tr>
-      ) : null}
-    </Fragment>
+          </div>
+        </div>
+
+        <div className="max-h-[calc(90vh-80px)] overflow-auto p-5">
+          {loading ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              Đang tải chi tiết...
+            </div>
+          ) : null}
+
+          {!loading && error ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+
+          {!loading && !error ? (
+            <div className="space-y-4">
+              {screenshotDataUrl ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Ảnh màn hình
+                  </div>
+                  <img
+                    src={screenshotDataUrl}
+                    alt="Screenshot captured by Cashier Monitor"
+                    className="max-h-[65vh] w-full rounded-xl border border-slate-200 bg-white object-contain"
+                  />
+                </div>
+              ) : null}
+
+              {detailsText ? (
+                <pre className="max-h-72 overflow-auto rounded-2xl border border-slate-200 bg-white p-4 text-xs leading-relaxed text-slate-700">
+                  {detailsText}
+                </pre>
+              ) : !screenshotDataUrl ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                  Không có chi tiết bổ sung.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -182,7 +302,10 @@ export default function ActivityLogsPage() {
   const [endDate, setEndDate] = useState(getTodayInputValue);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+  const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
+  const [detailItems, setDetailItems] = useState<Record<number, ActivityLog>>({});
+  const [detailLoading, setDetailLoading] = useState<Record<number, boolean>>({});
+  const [detailErrors, setDetailErrors] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -218,18 +341,69 @@ export default function ActivityLogsPage() {
     }
   }
 
+  async function loadDetail(id: number) {
+    if (detailItems[id] || detailLoading[id]) {
+      return;
+    }
+
+    setDetailLoading((current) => ({
+      ...current,
+      [id]: true,
+    }));
+    setDetailErrors((current) => ({
+      ...current,
+      [id]: "",
+    }));
+
+    try {
+      const response = await getActivityLog(id);
+      setDetailItems((current) => ({
+        ...current,
+        [id]: response.item,
+      }));
+    } catch (detailLoadError) {
+      setDetailErrors((current) => ({
+        ...current,
+        [id]:
+          detailLoadError instanceof Error
+            ? detailLoadError.message
+            : "Không tải được chi tiết log.",
+      }));
+    } finally {
+      setDetailLoading((current) => ({
+        ...current,
+        [id]: false,
+      }));
+    }
+  }
+
   useEffect(() => {
     void loadData();
   }, [filters]);
 
   useEffect(() => {
     setPage(1);
-    setExpandedLogId(null);
+    setSelectedLogId(null);
+    setDetailItems({});
+    setDetailLoading({});
+    setDetailErrors({});
   }, [filters, pageSize]);
 
   useEffect(() => {
     setPage((currentPage) => Math.min(currentPage, totalPages));
   }, [totalPages]);
+
+  const selectedItem = selectedLogId
+    ? detailItems[selectedLogId] ?? items.find((item) => item.id === selectedLogId)
+    : undefined;
+
+  function handleOpenDetail(item: ActivityLog) {
+    setSelectedLogId(item.id);
+
+    if (canOpenDetail(item) && !detailItems[item.id] && !detailLoading[item.id]) {
+      void loadDetail(item.id);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -244,7 +418,7 @@ export default function ActivityLogsPage() {
               Nhật ký máy thu ngân
             </h1>
             <p className="mt-2 text-sm text-slate-500">
-              Theo dõi app, file và domain mà agent Windows gửi về server.
+              Theo dõi app, file, domain và screenshot mà agent Windows gửi về server.
             </p>
           </div>
 
@@ -405,10 +579,7 @@ export default function ActivityLogsPage() {
                     <LogRow
                       key={`${item.machineId}-${item.eventId}`}
                       item={item}
-                      expanded={expandedLogId === item.id}
-                      onToggleExpanded={() =>
-                        setExpandedLogId((currentId) => (currentId === item.id ? null : item.id))
-                      }
+                      onOpenDetail={() => handleOpenDetail(item)}
                     />
                   ))
                 ) : (
@@ -448,6 +619,12 @@ export default function ActivityLogsPage() {
           </div>
         </Card>
       </div>
+      <DetailModal
+        item={selectedItem}
+        loading={selectedLogId ? !!detailLoading[selectedLogId] : false}
+        error={selectedLogId ? detailErrors[selectedLogId] ?? "" : ""}
+        onClose={() => setSelectedLogId(null)}
+      />
     </main>
   );
 }

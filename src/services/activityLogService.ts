@@ -19,6 +19,7 @@ export type ActivityLog = {
   processId: number | null;
   target: string | null;
   details: Record<string, unknown> | null;
+  hasScreenshot: boolean;
 };
 
 export type ActivityLogFilters = {
@@ -35,6 +36,10 @@ export type ActivityLogResponse = {
   machines: ActivityMachine[];
   hasMore: boolean;
   nextOffset: number | null;
+};
+
+export type ActivityLogDetailResponse = {
+  item: ActivityLog;
 };
 
 export async function getActivityLogs(filters: ActivityLogFilters = {}) {
@@ -81,4 +86,10 @@ export async function getAllActivityLogs(filters: ActivityLogFilters = {}, batch
     items,
     machines,
   };
+}
+
+export async function getActivityLog(id: number) {
+  return apiRequest<ActivityLogDetailResponse>(`/activity-logs.php?id=${id}`, {
+    method: "GET",
+  });
 }

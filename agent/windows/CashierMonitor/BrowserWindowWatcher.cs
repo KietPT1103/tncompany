@@ -58,11 +58,11 @@ public sealed class BrowserWindowWatcher
             AppName = processName,
             ProcessId = processId,
             Target = tabTitle,
-            Details = new Dictionary<string, string?>
+            Details = ScreenshotCapture.WithScreenshot(new Dictionary<string, string?>
             {
                 ["windowTitle"] = title,
                 ["browser"] = processName,
-            },
+            }),
         });
     }
 

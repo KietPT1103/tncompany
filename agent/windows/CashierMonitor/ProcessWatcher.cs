@@ -54,6 +54,7 @@ public sealed class ProcessWatcher
                             AppName = name,
                             ProcessId = process.Id,
                             Target = name,
+                            Details = ScreenshotCapture.WithScreenshot(),
                         });
                     }
                 }

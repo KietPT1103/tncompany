@@ -51,10 +51,10 @@ public sealed class ActiveWindowWatcher
             AppName = activeWindow.ProcessName,
             ProcessId = activeWindow.ProcessId,
             Target = activeWindow.Title,
-            Details = new Dictionary<string, string?>
+            Details = ScreenshotCapture.WithScreenshot(new Dictionary<string, string?>
             {
                 ["windowTitle"] = activeWindow.Title,
-            },
+            }),
         });
     }
 }

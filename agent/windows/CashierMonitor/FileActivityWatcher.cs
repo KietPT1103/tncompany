@@ -34,9 +34,9 @@ public sealed class FileActivityWatcher : IDisposable
                 EnableRaisingEvents = true,
             };
 
-            watcher.Created += (_, args) => OnFileEvent("file_created", "created", args.FullPath);
-            watcher.Changed += (_, args) => OnFileEvent("file_changed", "changed", args.FullPath);
-            watcher.Deleted += (_, args) => OnFileEvent("file_deleted", "deleted", args.FullPath);
+            watcher.Created += (_, args) => OnFileEvent("file_created", "created", args.FullPath, captureScreenshot: true);
+            watcher.Changed += (_, args) => OnFileEvent("file_changed", "changed", args.FullPath, captureScreenshot: true);
+            watcher.Deleted += (_, args) => OnFileEvent("file_deleted", "deleted", args.FullPath, captureScreenshot: true);
             watcher.Renamed += (_, args) =>
                 OnFileEvent(
                     "file_renamed",
@@ -115,7 +115,8 @@ public sealed class FileActivityWatcher : IDisposable
         string eventType,
         string action,
         string target,
-        Dictionary<string, string?>? details = null)
+        Dictionary<string, string?>? details = null,
+        bool captureScreenshot = false)
     {
         try
         {
@@ -146,7 +147,7 @@ public sealed class FileActivityWatcher : IDisposable
                 EventType = eventType,
                 Action = action,
                 Target = target,
-                Details = details,
+                Details = captureScreenshot ? ScreenshotCapture.WithScreenshot(details) : details,
             });
         }
         catch (Exception exception)

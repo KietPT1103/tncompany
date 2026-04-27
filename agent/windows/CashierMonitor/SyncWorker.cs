@@ -5,6 +5,7 @@ namespace CashierMonitor;
 
 public sealed class SyncWorker
 {
+    private const int MaxPayloadBytes = 2_500_000;
     private readonly AgentConfig _config;
     private readonly EventQueue _queue;
     private readonly HttpClient _httpClient;
@@ -46,6 +47,8 @@ public sealed class SyncWorker
         var batch = _queue.PeekBatch(_config.MaxBatchSize);
         if (batch.Count == 0) return;
 
+        batch = LimitBatchSize(batch);
+
         var payload = new LogBatch
         {
             MachineId = _config.MachineId,
@@ -67,5 +70,32 @@ public sealed class SyncWorker
 
         _queue.RemoveSent(batch.Count);
         AgentLog.Info($"Synced {batch.Count} events");
+    }
+
+    private List<ActivityEvent> LimitBatchSize(List<ActivityEvent> batch)
+    {
+        var currentBatch = batch;
+
+        while (currentBatch.Count > 1)
+        {
+            var payload = new LogBatch
+            {
+                MachineId = _config.MachineId,
+                Events = currentBatch,
+            };
+
+            var json = JsonSerializer.Serialize(payload, AgentJsonContext.Default.LogBatch);
+            var payloadBytes = Encoding.UTF8.GetByteCount(json);
+            if (payloadBytes <= MaxPayloadBytes)
+            {
+                return currentBatch;
+            }
+
+            currentBatch = currentBatch
+                .Take(Math.Max(1, currentBatch.Count / 2))
+                .ToList();
+        }
+
+        return currentBatch;
     }
 }
