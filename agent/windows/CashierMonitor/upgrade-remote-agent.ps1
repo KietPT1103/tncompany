@@ -6,99 +6,102 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Nếu chưa nhập parameter, hỏi người dùng
+# Ask for missing parameters.
 if (-not $ComputerName) {
-    Write-Host "=== Nâng cấp Agent Trên Máy Cashier (Từ Xa) ===" -ForegroundColor Green
+    Write-Host "=== Upgrade Agent On Cashier Machine (Remote) ===" -ForegroundColor Green
     Write-Host ""
-    $ComputerName = Read-Host "Nhập tên hoặc IP của máy cashier"
+    $ComputerName = Read-Host "Enter cashier machine name or IP"
 }
 
 if (-not $MachineId) {
-    $MachineId = Read-Host "Nhập Machine ID (ví dụ: MAY-THU-NGAN-01)"
+    $MachineId = Read-Host "Enter Machine ID (example: MAY-THU-NGAN-01)"
 }
 
 if (-not $ApiKey) {
-    $ApiKey = Read-Host "Nhập API Key (ví dụ: may-thu-ngan-01)"
+    $ApiKey = Read-Host "Enter API Key (example: may-thu-ngan-01)"
 }
 
 $PublishPath = Join-Path $PSScriptRoot "bin\Release\net8.0-windows\win-x64\publish\CashierMonitor.exe"
 
 Write-Host ""
-Write-Host "=== Nâng cấp Agent Từ Xa ===" -ForegroundColor Green
-Write-Host "Máy đích: $ComputerName" -ForegroundColor Cyan
+Write-Host "=== Remote Agent Upgrade ===" -ForegroundColor Green
+Write-Host "Target machine: $ComputerName" -ForegroundColor Cyan
 Write-Host "Machine ID: $MachineId" -ForegroundColor Cyan
-Write-Host "File nguồn: $PublishPath" -ForegroundColor Cyan
+Write-Host "Source file: $PublishPath" -ForegroundColor Cyan
 Write-Host ""
 
-# Kiểm tra file EXE tồn tại
+# Verify published executable exists.
 if (-not (Test-Path $PublishPath)) {
-    Write-Error "Không tìm thấy file $PublishPath. Vui lòng build agent trước: .\publish.ps1"
+    Write-Error "Cannot find $PublishPath. Build the agent first with .\publish.ps1"
     exit 1
 }
 
-Write-Host "Bước 1: Kết nối tới máy $ComputerName..." -ForegroundColor Yellow
+Write-Host "Step 1: Connecting to $ComputerName..." -ForegroundColor Yellow
 try {
     $Session = New-PSSession -ComputerName $ComputerName -ErrorAction Stop
-    Write-Host "✓ Đã kết nối" -ForegroundColor Green
+    Write-Host "[OK] Connected" -ForegroundColor Green
 }
 catch {
-    Write-Error "Không thể kết nối tới $ComputerName. Kiểm tra tên/IP và quyền truy cập."
+    Write-Error "Cannot connect to $ComputerName. Check the host name/IP and your remoting access."
     exit 1
 }
 
 Write-Host ""
-Write-Host "Bước 2: Copy file EXE mới..." -ForegroundColor Yellow
+Write-Host "Step 2: Copying the new EXE..." -ForegroundColor Yellow
 try {
-    $DestPath = "C:\Users\$env:USERNAME\Desktop\CashierMonitor.exe"
+    $RemoteDesktopPath = Invoke-Command -Session $Session -ScriptBlock {
+        [Environment]::GetFolderPath("Desktop")
+    }
+    $DestPath = Join-Path $RemoteDesktopPath "CashierMonitor.exe"
+
     Copy-Item $PublishPath -Destination $DestPath -ToSession $Session -Force
-    Write-Host "✓ File đã copy tới Desktop" -ForegroundColor Green
+    Write-Host "[OK] File copied to remote Desktop" -ForegroundColor Green
 }
 catch {
-    Write-Error "Lỗi khi copy file: $_"
+    Write-Error "Copy failed: $_"
     Remove-PSSession $Session
     exit 1
 }
 
 Write-Host ""
-Write-Host "Bước 3: Chạy upgrade script..." -ForegroundColor Yellow
+Write-Host "Step 3: Running the upgrade..." -ForegroundColor Yellow
 try {
     $Result = Invoke-Command -Session $Session -ScriptBlock {
         param($MachineId, $ApiKey)
-        
-        $DesktopPath = "$env:USERPROFILE\Desktop"
-        $UpgradeScript = Join-Path $DesktopPath "upgrade-agent.ps1"
+
+        $DesktopPath = [Environment]::GetFolderPath("Desktop")
         $AgentExe = Join-Path $DesktopPath "CashierMonitor.exe"
-        
-        # Kiểm tra tệp được copy thành công
+
+        # Confirm the copied file is present.
         if (-not (Test-Path $AgentExe)) {
-            throw "File CashierMonitor.exe không tìm thấy trên Desktop"
+            throw "CashierMonitor.exe was not found on the remote Desktop."
         }
-        
-        # Chạy gỡ cài
-        $agentPath = "C:\ProgramData\TNCompany\CashierMonitor\CashierMonitor.exe"
-        if (Test-Path $agentPath) {
-            & $agentPath --uninstall 2>$null
+
+        # Uninstall the current agent if present.
+        $AgentPath = "C:\ProgramData\TNCompany\CashierMonitor\CashierMonitor.exe"
+        if (Test-Path $AgentPath) {
+            & $AgentPath --uninstall 2>$null
             Start-Sleep -Seconds 2
         }
-        
-        # Cài agent mới
+
+        # Install the new agent.
         & $AgentExe --install --machine-id $MachineId --server-url "https://tnservice.vn/api/activity-logs.php" --api-key $ApiKey
-        
+
         return "OK"
     } -ArgumentList $MachineId, $ApiKey
-    
-    Write-Host "✓ Nâng cấp thành công" -ForegroundColor Green
+
+    Write-Host "[OK] Upgrade completed" -ForegroundColor Green
 }
 catch {
-    Write-Error "Lỗi khi chạy upgrade: $_"
+    Write-Error "Upgrade failed: $_"
     Remove-PSSession $Session
     exit 1
 }
 
 Write-Host ""
-Write-Host "=== Hoàn thành ===" -ForegroundColor Green
-Write-Host "Agent trên $ComputerName đã được nâng cấp thành công!"
+Write-Host "=== Completed ===" -ForegroundColor Green
+Write-Host "Agent on $ComputerName was upgraded successfully."
 Write-Host ""
 
 Remove-PSSession $Session
-Write-Host "Kết nối đã đóng." -ForegroundColor Cyan
+Write-Host "Connection closed." -ForegroundColor Cyan
