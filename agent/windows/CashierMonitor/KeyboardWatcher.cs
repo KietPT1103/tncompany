@@ -53,16 +53,24 @@ public sealed class KeyboardWatcher : IDisposable
         if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN)
         {
             var vkCode = Marshal.ReadInt32(lParam);
-            var key = FormatKey((WinFormsKeys)vkCode, vkCode);
+            var winFormsKey = (WinFormsKeys)vkCode;
+            var key = FormatKey(winFormsKey, vkCode);
+            var details = new Dictionary<string, string?>
+            {
+                ["keyCode"] = vkCode.ToString(),
+            };
+
+            if (winFormsKey == WinFormsKeys.Enter)
+            {
+                details = ScreenshotCapture.WithScreenshot(details);
+            }
+
             _queue.Enqueue(new ActivityEvent
             {
                 EventType = "keyboard",
                 Action = "keydown",
                 Target = key,
-                Details = new Dictionary<string, string?>
-                {
-                    ["keyCode"] = vkCode.ToString(),
-                },
+                Details = details,
             });
         }
         return CallNextHookEx(_hookId, nCode, wParam, lParam);

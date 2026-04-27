@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import {
   ActivityLog,
   ActivityMachine,
+  downloadActivityLogScreenshots,
   getActivityLog,
   getAllActivityLogs,
 } from "@/services/activityLogService";
@@ -85,6 +86,8 @@ function splitDetails(details: ActivityLog["details"]) {
   if (!details || Object.keys(details).length === 0) {
     return {
       screenshotDataUrl: "",
+      screenshotUrl: "",
+      screenshotName: "",
       text: "",
     };
   }
@@ -92,13 +95,19 @@ function splitDetails(details: ActivityLog["details"]) {
   const normalized = { ...details };
   const screenshotDataUrl =
     typeof normalized.screenshotDataUrl === "string" ? normalized.screenshotDataUrl : "";
+  const screenshotUrl = typeof normalized.screenshotUrl === "string" ? normalized.screenshotUrl : "";
+  const screenshotName =
+    typeof normalized.screenshotName === "string" ? normalized.screenshotName : "";
 
-  if ("screenshotDataUrl" in normalized) {
-    delete normalized.screenshotDataUrl;
-  }
+  delete normalized.screenshotDataUrl;
+  delete normalized.screenshotUrl;
+  delete normalized.screenshotName;
+  delete normalized.screenshotMime;
 
   return {
     screenshotDataUrl,
+    screenshotUrl,
+    screenshotName,
     text: formatDetails(normalized),
   };
 }
@@ -108,17 +117,14 @@ function canOpenDetail(item: ActivityLog) {
 }
 
 function buildScreenshotFileName(item: ActivityLog) {
+  if (item.details && typeof item.details.screenshotName === "string" && item.details.screenshotName.trim() !== "") {
+    return item.details.screenshotName;
+  }
+
   const safeMachine = item.machineId.replace(/[^a-zA-Z0-9_-]/g, "-");
   const safeEvent = item.eventType.replace(/[^a-zA-Z0-9_-]/g, "-");
   const timestamp = item.eventTime.replace(/[^0-9]/g, "").slice(0, 14) || "capture";
-  const extension =
-    item.details &&
-    typeof item.details.screenshotDataUrl === "string" &&
-    item.details.screenshotDataUrl.startsWith("data:image/png")
-      ? "png"
-      : "jpg";
-
-  return `${safeMachine}-${safeEvent}-${timestamp}.${extension}`;
+  return `${safeMachine}-${safeEvent}-${timestamp}.jpg`;
 }
 
 function MachineCard({ machine }: { machine: ActivityMachine }) {
@@ -215,7 +221,10 @@ function DetailModal({
     return null;
   }
 
-  const { screenshotDataUrl, text: detailsText } = splitDetails(item?.details ?? null);
+  const { screenshotDataUrl, screenshotUrl, screenshotName, text: detailsText } = splitDetails(
+    item?.details ?? null
+  );
+  const screenshotSource = screenshotUrl || screenshotDataUrl;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
@@ -232,10 +241,10 @@ function DetailModal({
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {item && screenshotDataUrl ? (
+            {item && screenshotSource ? (
               <a
-                href={screenshotDataUrl}
-                download={buildScreenshotFileName(item)}
+                href={screenshotSource}
+                download={screenshotName || buildScreenshotFileName(item)}
                 className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 <Download className="h-4 w-4" />
@@ -263,13 +272,13 @@ function DetailModal({
 
           {!loading && !error ? (
             <div className="space-y-4">
-              {screenshotDataUrl ? (
+              {screenshotSource ? (
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Ảnh màn hình
                   </div>
                   <img
-                    src={screenshotDataUrl}
+                    src={screenshotSource}
                     alt="Screenshot captured by Cashier Monitor"
                     className="max-h-[65vh] w-full rounded-xl border border-slate-200 bg-white object-contain"
                   />
@@ -280,7 +289,7 @@ function DetailModal({
                 <pre className="max-h-72 overflow-auto rounded-2xl border border-slate-200 bg-white p-4 text-xs leading-relaxed text-slate-700">
                   {detailsText}
                 </pre>
-              ) : !screenshotDataUrl ? (
+              ) : !screenshotSource ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
                   Không có chi tiết bổ sung.
                 </div>
@@ -306,6 +315,7 @@ export default function ActivityLogsPage() {
   const [detailItems, setDetailItems] = useState<Record<number, ActivityLog>>({});
   const [detailLoading, setDetailLoading] = useState<Record<number, boolean>>({});
   const [detailErrors, setDetailErrors] = useState<Record<number, string>>({});
+  const [zipLoading, setZipLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -377,6 +387,35 @@ export default function ActivityLogsPage() {
     }
   }
 
+  async function handleDownloadScreenshots(deleteAfterDownload: boolean) {
+    setError("");
+    setZipLoading(true);
+
+    try {
+      const { blob, fileName } = await downloadActivityLogScreenshots(filters, deleteAfterDownload);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+
+      if (deleteAfterDownload) {
+        await loadData();
+        setSelectedLogId(null);
+        setDetailItems({});
+        setDetailLoading({});
+        setDetailErrors({});
+      }
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Không tải được file ZIP ảnh.");
+    } finally {
+      setZipLoading(false);
+    }
+  }
+
   useEffect(() => {
     void loadData();
   }, [filters]);
@@ -425,6 +464,29 @@ export default function ActivityLogsPage() {
           <Button onClick={() => void loadData()} isLoading={loading} className="gap-2">
             <RefreshCcw className="h-4 w-4" />
             Làm mới
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleDownloadScreenshots(false)}
+            isLoading={zipLoading}
+            className="gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Tải toàn bộ ảnh
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleDownloadScreenshots(true)}
+            isLoading={zipLoading}
+            className="gap-2 border-rose-200 text-rose-700 hover:bg-rose-50"
+          >
+            <Download className="h-4 w-4" />
+            Tải và xóa ảnh trên server
           </Button>
         </div>
 

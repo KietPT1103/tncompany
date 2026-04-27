@@ -5,6 +5,30 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 
+const ACTIVITY_SCREENSHOT_RELATIVE_ROOT = 'uploads/activity-screenshots';
+
+function activity_ensure_column(string $table, string $column, string $definition): void
+{
+    $statement = db()->prepare(
+        'SELECT COLUMN_NAME
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = :table_name
+           AND column_name = :column_name
+         LIMIT 1'
+    );
+    $statement->execute([
+        'table_name' => $table,
+        'column_name' => $column,
+    ]);
+
+    if ($statement->fetch()) {
+        return;
+    }
+
+    db()->exec(sprintf('ALTER TABLE `%s` ADD COLUMN `%s` %s', $table, $column, $definition));
+}
+
 function activity_ensure_tables(): void
 {
     db()->exec(
@@ -35,11 +59,18 @@ function activity_ensure_tables(): void
             process_id INT NULL,
             target VARCHAR(1024) NULL,
             details_json LONGTEXT NULL,
+            screenshot_path VARCHAR(500) NULL,
+            screenshot_name VARCHAR(255) NULL,
+            screenshot_mime VARCHAR(100) NULL,
             UNIQUE KEY uniq_activity_event (machine_id, event_id),
             KEY idx_activity_machine_time (machine_id, event_time),
             KEY idx_activity_type_time (event_type, event_time)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
+
+    activity_ensure_column('activity_logs', 'screenshot_path', 'VARCHAR(500) NULL AFTER details_json');
+    activity_ensure_column('activity_logs', 'screenshot_name', 'VARCHAR(255) NULL AFTER screenshot_path');
+    activity_ensure_column('activity_logs', 'screenshot_mime', 'VARCHAR(100) NULL AFTER screenshot_name');
 }
 
 function activity_agent_key(): string
@@ -104,16 +135,137 @@ function activity_require_machine(string $machineId, string $agentKey): array
     return $machine;
 }
 
-function activity_map_log(array $row, bool $includeScreenshot = false): array
+function activity_screenshot_disk_root(): string
 {
-    $details = null;
-    if (!empty($row['details_json'])) {
-        $decoded = json_decode((string) $row['details_json'], true);
-        $details = is_array($decoded) ? $decoded : null;
+    return dirname(__DIR__) . DIRECTORY_SEPARATOR . ACTIVITY_SCREENSHOT_RELATIVE_ROOT;
+}
+
+function activity_public_url(string $relativePath): string
+{
+    return '/' . ltrim(str_replace('\\', '/', $relativePath), '/');
+}
+
+function activity_safe_name(string $value, string $fallback): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return $fallback;
     }
 
+    $value = preg_replace('/[<>:"\/\\\\|?*\x00-\x1F]/u', '-', $value) ?? $fallback;
+    $value = preg_replace('/\s+/u', ' ', $value) ?? $fallback;
+    $value = trim($value, ". \t\n\r\0\x0B");
+
+    if ($value === '') {
+        return $fallback;
+    }
+
+    if (function_exists('mb_substr')) {
+        return mb_substr($value, 0, 120);
+    }
+
+    return substr($value, 0, 120);
+}
+
+function activity_extension_for_mime(string $mime): string
+{
+    $map = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+        'image/gif' => 'gif',
+        'image/bmp' => 'bmp',
+    ];
+
+    return $map[strtolower($mime)] ?? 'jpg';
+}
+
+function activity_store_screenshot(
+    string $machineId,
+    string $eventId,
+    string $eventTime,
+    string $preferredName,
+    string $dataUrl
+): ?array {
+    if (!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', $dataUrl, $matches)) {
+        return null;
+    }
+
+    $mime = strtolower($matches[1]);
+    $binary = base64_decode($matches[2], true);
+    if ($binary === false) {
+        return null;
+    }
+
+    try {
+        $date = new DateTimeImmutable($eventTime);
+    } catch (Throwable $exception) {
+        $date = new DateTimeImmutable();
+    }
+
+    $extension = activity_extension_for_mime($mime);
+    $machineSegment = activity_safe_name($machineId, 'machine');
+    $relativeDirectory = ACTIVITY_SCREENSHOT_RELATIVE_ROOT
+        . '/' . $date->format('Y')
+        . '/' . $date->format('m')
+        . '/' . $date->format('d')
+        . '/' . $machineSegment;
+    $absoluteDirectory = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDirectory);
+
+    if (!is_dir($absoluteDirectory) && !mkdir($absoluteDirectory, 0775, true) && !is_dir($absoluteDirectory)) {
+        throw new RuntimeException('Cannot create screenshot directory');
+    }
+
+    $relativePath = $relativeDirectory . '/' . $eventId . '.' . $extension;
+    $absolutePath = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+
+    file_put_contents($absolutePath, $binary);
+
+    $downloadName = activity_safe_name($preferredName, 'screenshot') . '.' . $extension;
+
+    return [
+        'path' => $relativePath,
+        'name' => $downloadName,
+        'mime' => $mime,
+    ];
+}
+
+function activity_delete_screenshot_file(?string $relativePath): void
+{
+    if (!$relativePath) {
+        return;
+    }
+
+    $absolutePath = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    if (is_file($absolutePath)) {
+        @unlink($absolutePath);
+    }
+}
+
+function activity_extract_details(array $row): ?array
+{
+    if (empty($row['details_json'])) {
+        return null;
+    }
+
+    $decoded = json_decode((string) $row['details_json'], true);
+    return is_array($decoded) ? $decoded : null;
+}
+
+function activity_map_log(array $row, bool $includeScreenshot = false): array
+{
+    $details = activity_extract_details($row);
     $hasScreenshot = false;
-    if (is_array($details) && !empty($details['screenshotDataUrl']) && is_string($details['screenshotDataUrl'])) {
+
+    if (!empty($row['screenshot_path'])) {
+        $hasScreenshot = true;
+        if ($includeScreenshot) {
+            $details = $details ?? [];
+            $details['screenshotUrl'] = activity_public_url((string) $row['screenshot_path']);
+            $details['screenshotName'] = (string) ($row['screenshot_name'] ?: 'screenshot.jpg');
+            $details['screenshotMime'] = (string) ($row['screenshot_mime'] ?: 'image/jpeg');
+        }
+    } elseif (is_array($details) && !empty($details['screenshotDataUrl']) && is_string($details['screenshotDataUrl'])) {
         $hasScreenshot = true;
         if (!$includeScreenshot) {
             unset($details['screenshotDataUrl']);
@@ -140,6 +292,205 @@ function activity_map_log(array $row, bool $includeScreenshot = false): array
     ];
 }
 
+function activity_query_filters(): array
+{
+    return [
+        'machineId' => trim((string) ($_GET['machineId'] ?? '')),
+        'eventType' => trim((string) ($_GET['eventType'] ?? '')),
+        'startDate' => trim((string) ($_GET['startDate'] ?? '')),
+        'endDate' => trim((string) ($_GET['endDate'] ?? '')),
+    ];
+}
+
+function activity_build_log_query(array $filters, bool $onlyWithScreenshot = false): array
+{
+    $sql = 'SELECT * FROM activity_logs WHERE 1 = 1';
+    $params = [];
+
+    if (!empty($filters['machineId'])) {
+        $sql .= ' AND machine_id = :machine_id';
+        $params['machine_id'] = $filters['machineId'];
+    }
+
+    if (!empty($filters['eventType'])) {
+        $sql .= ' AND event_type = :event_type';
+        $params['event_type'] = $filters['eventType'];
+    }
+
+    if (!empty($filters['startDate'])) {
+        $sql .= ' AND event_time >= :start_date';
+        $params['start_date'] = activity_to_sql_datetime($filters['startDate']);
+    }
+
+    if (!empty($filters['endDate'])) {
+        $sql .= ' AND event_time <= :end_date';
+        $params['end_date'] = activity_to_sql_datetime($filters['endDate']);
+    }
+
+    if ($onlyWithScreenshot) {
+        $sql .= ' AND (screenshot_path IS NOT NULL OR details_json LIKE :legacy_screenshot)';
+        $params['legacy_screenshot'] = '%screenshotDataUrl%';
+    }
+
+    return [$sql, $params];
+}
+
+function activity_extract_legacy_screenshot(array &$details): ?array
+{
+    $dataUrl = $details['screenshotDataUrl'] ?? null;
+    if (!is_string($dataUrl) || trim($dataUrl) === '') {
+        return null;
+    }
+
+    if (!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', $dataUrl, $matches)) {
+        return null;
+    }
+
+    $binary = base64_decode($matches[2], true);
+    if ($binary === false) {
+        return null;
+    }
+
+    unset($details['screenshotDataUrl']);
+    return [
+        'mime' => strtolower($matches[1]),
+        'binary' => $binary,
+    ];
+}
+
+function activity_unique_zip_name(array &$usedNames, string $preferredName): string
+{
+    $pathInfo = pathinfo($preferredName);
+    $filename = $pathInfo['filename'] ?? 'screenshot';
+    $extension = isset($pathInfo['extension']) ? '.' . $pathInfo['extension'] : '';
+    $candidate = $preferredName;
+    $counter = 2;
+
+    while (isset($usedNames[$candidate])) {
+        $candidate = sprintf('%s (%d)%s', $filename, $counter, $extension);
+        $counter += 1;
+    }
+
+    $usedNames[$candidate] = true;
+    return $candidate;
+}
+
+function activity_download_zip(array $filters, bool $deleteAfterDownload): void
+{
+    if (!class_exists('ZipArchive')) {
+        respond_error('ZipArchive is not available on the server', 500);
+    }
+
+    [$sql, $params] = activity_build_log_query($filters, true);
+    $sql .= ' ORDER BY event_time DESC, id DESC';
+    $statement = db()->prepare($sql);
+    $statement->execute($params);
+    $rows = $statement->fetchAll();
+
+    $zipPath = tempnam(sys_get_temp_dir(), 'activity-shots-');
+    if ($zipPath === false) {
+        respond_error('Cannot create temporary zip file', 500);
+    }
+
+    @unlink($zipPath);
+    $zipPath .= '.zip';
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        respond_error('Cannot open zip archive for writing', 500);
+    }
+
+    $usedNames = [];
+    $rowsToClean = [];
+    $addedFiles = 0;
+
+    foreach ($rows as $row) {
+        $details = activity_extract_details($row) ?? [];
+        $zipNameSeed = (string) ($row['screenshot_name']
+            ?: $row['target']
+            ?: $row['app_name']
+            ?: $row['event_type']
+            ?: 'screenshot');
+        $zipName = activity_unique_zip_name($usedNames, activity_safe_name($zipNameSeed, 'screenshot') . '.jpg');
+
+        if (!empty($row['screenshot_path'])) {
+            $absolutePath = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string) $row['screenshot_path']);
+            if (is_file($absolutePath)) {
+                $zip->addFile($absolutePath, $zipName);
+                $rowsToClean[] = [
+                    'id' => (int) $row['id'],
+                    'path' => (string) $row['screenshot_path'],
+                    'details' => $details,
+                    'hasLegacy' => false,
+                ];
+                $addedFiles += 1;
+            }
+
+            continue;
+        }
+
+        $legacyScreenshot = activity_extract_legacy_screenshot($details);
+        if ($legacyScreenshot) {
+            $zip->addFromString($zipName, $legacyScreenshot['binary']);
+            $rowsToClean[] = [
+                'id' => (int) $row['id'],
+                'path' => null,
+                'details' => $details,
+                'hasLegacy' => true,
+            ];
+            $addedFiles += 1;
+        }
+    }
+
+    $zip->close();
+
+    if ($addedFiles === 0) {
+        @unlink($zipPath);
+        respond_error('No screenshots found for the selected filters', 404);
+    }
+
+    $archiveName = 'activity-screenshots-' . (new DateTimeImmutable())->format('Ymd-His') . '.zip';
+
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="' . $archiveName . '"');
+    header('Content-Length: ' . (string) filesize($zipPath));
+
+    readfile($zipPath);
+
+    if ($deleteAfterDownload) {
+        $clearStatement = db()->prepare(
+            'UPDATE activity_logs
+             SET screenshot_path = NULL,
+                 screenshot_name = NULL,
+                 screenshot_mime = NULL,
+                 details_json = :details_json
+             WHERE id = :id'
+        );
+
+        foreach ($rowsToClean as $rowToClean) {
+            if (!empty($rowToClean['path'])) {
+                activity_delete_screenshot_file($rowToClean['path']);
+            }
+
+            $detailsJson = null;
+            if (is_array($rowToClean['details']) && count($rowToClean['details']) > 0) {
+                $detailsJson = json_encode(
+                    $rowToClean['details'],
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                );
+            }
+
+            $clearStatement->execute([
+                'id' => $rowToClean['id'],
+                'details_json' => $detailsJson,
+            ]);
+        }
+    }
+
+    @unlink($zipPath);
+    exit;
+}
+
 try {
     activity_ensure_tables();
 } catch (Throwable $exception) {
@@ -163,10 +514,10 @@ if ($method === 'POST') {
     $statement = db()->prepare(
         'INSERT INTO activity_logs (
             event_id, machine_id, event_time, event_type, action, app_name,
-            process_id, target, details_json
+            process_id, target, details_json, screenshot_path, screenshot_name, screenshot_mime
          ) VALUES (
             :event_id, :machine_id, :event_time, :event_type, :action, :app_name,
-            :process_id, :target, :details_json
+            :process_id, :target, :details_json, :screenshot_path, :screenshot_name, :screenshot_mime
          )
          ON DUPLICATE KEY UPDATE
             received_at = received_at'
@@ -188,15 +539,40 @@ if ($method === 'POST') {
             continue;
         }
 
+        $eventTime = activity_to_sql_datetime($event['eventTime'] ?? $event['event_time'] ?? null);
         $details = $event['details'] ?? null;
-        $detailsJson = is_array($details) || is_object($details)
+        $details = is_array($details) ? $details : null;
+
+        $screenshotPath = null;
+        $screenshotName = null;
+        $screenshotMime = null;
+
+        if (is_array($details) && !empty($details['screenshotDataUrl']) && is_string($details['screenshotDataUrl'])) {
+            $preferredName = (string) ($event['target'] ?? $event['appName'] ?? $event['app_name'] ?? $eventType);
+            $storedScreenshot = activity_store_screenshot(
+                $machineId,
+                $eventId,
+                $eventTime,
+                $preferredName,
+                $details['screenshotDataUrl']
+            );
+
+            if ($storedScreenshot) {
+                $screenshotPath = $storedScreenshot['path'];
+                $screenshotName = $storedScreenshot['name'];
+                $screenshotMime = $storedScreenshot['mime'];
+                unset($details['screenshotDataUrl']);
+            }
+        }
+
+        $detailsJson = is_array($details) && count($details) > 0
             ? json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
             : null;
 
         $statement->execute([
             'event_id' => $eventId,
             'machine_id' => $machineId,
-            'event_time' => activity_to_sql_datetime($event['eventTime'] ?? $event['event_time'] ?? null),
+            'event_time' => $eventTime,
             'event_type' => $eventType,
             'action' => activity_trim_string($event['action'] ?? null, 80),
             'app_name' => activity_trim_string($event['appName'] ?? $event['app_name'] ?? null, 255),
@@ -205,6 +581,9 @@ if ($method === 'POST') {
                 : null,
             'target' => activity_trim_string($event['target'] ?? null, 1024),
             'details_json' => $detailsJson,
+            'screenshot_path' => $screenshotPath,
+            'screenshot_name' => $screenshotName,
+            'screenshot_mime' => $screenshotMime,
         ]);
 
         $stored += 1;
@@ -224,6 +603,13 @@ if ($method === 'POST') {
 if ($method === 'GET') {
     auth_require(['admin']);
 
+    if (($_GET['downloadScreenshots'] ?? '') === '1') {
+        activity_download_zip(
+            activity_query_filters(),
+            (($_GET['deleteAfterDownload'] ?? '') === '1')
+        );
+    }
+
     $logId = max(0, (int) ($_GET['id'] ?? 0));
     if ($logId > 0) {
         $statement = db()->prepare('SELECT * FROM activity_logs WHERE id = :id LIMIT 1');
@@ -241,36 +627,11 @@ if ($method === 'GET') {
         ]);
     }
 
-    $machineId = trim((string) ($_GET['machineId'] ?? ''));
-    $eventType = trim((string) ($_GET['eventType'] ?? ''));
+    $filters = activity_query_filters();
     $limit = max(1, min(1000, (int) ($_GET['limit'] ?? 200)));
     $offset = max(0, (int) ($_GET['offset'] ?? 0));
-    $startDate = trim((string) ($_GET['startDate'] ?? ''));
-    $endDate = trim((string) ($_GET['endDate'] ?? ''));
 
-    $sql = 'SELECT * FROM activity_logs WHERE 1 = 1';
-    $params = [];
-
-    if ($machineId !== '') {
-        $sql .= ' AND machine_id = :machine_id';
-        $params['machine_id'] = $machineId;
-    }
-
-    if ($eventType !== '') {
-        $sql .= ' AND event_type = :event_type';
-        $params['event_type'] = $eventType;
-    }
-
-    if ($startDate !== '') {
-        $sql .= ' AND event_time >= :start_date';
-        $params['start_date'] = activity_to_sql_datetime($startDate);
-    }
-
-    if ($endDate !== '') {
-        $sql .= ' AND event_time <= :end_date';
-        $params['end_date'] = activity_to_sql_datetime($endDate);
-    }
-
+    [$sql, $params] = activity_build_log_query($filters, false);
     $sql .= ' ORDER BY event_time DESC, id DESC LIMIT ' . ($limit + 1) . ' OFFSET ' . $offset;
     $statement = db()->prepare($sql);
     $statement->execute($params);
@@ -294,10 +655,10 @@ if ($method === 'GET') {
         'machines' => array_map(
             static function (array $row): array {
                 return [
-                'machineId' => (string) $row['machine_id'],
-                'displayName' => $row['display_name'] ?: null,
-                'isActive' => (bool) $row['is_active'],
-                'lastSeenAt' => $row['last_seen_at'] ?: null,
+                    'machineId' => (string) $row['machine_id'],
+                    'displayName' => $row['display_name'] ?: null,
+                    'isActive' => (bool) $row['is_active'],
+                    'lastSeenAt' => $row['last_seen_at'] ?: null,
                 ];
             },
             $machines

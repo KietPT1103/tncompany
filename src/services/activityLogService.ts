@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api";
+import { apiRequest, getApiToken } from "@/lib/api";
 
 export type ActivityMachine = {
   machineId: string;
@@ -42,13 +42,19 @@ export type ActivityLogDetailResponse = {
   item: ActivityLog;
 };
 
-export async function getActivityLogs(filters: ActivityLogFilters = {}) {
+function buildActivityLogQuery(filters: ActivityLogFilters = {}) {
   const params = new URLSearchParams();
 
   if (filters.machineId) params.set("machineId", filters.machineId);
   if (filters.eventType) params.set("eventType", filters.eventType);
   if (filters.startDate) params.set("startDate", filters.startDate);
   if (filters.endDate) params.set("endDate", filters.endDate);
+
+  return params;
+}
+
+export async function getActivityLogs(filters: ActivityLogFilters = {}) {
+  const params = buildActivityLogQuery(filters);
   params.set("limit", String(filters.limit ?? 200));
   if (filters.offset !== undefined) params.set("offset", String(filters.offset));
 
@@ -92,4 +98,49 @@ export async function getActivityLog(id: number) {
   return apiRequest<ActivityLogDetailResponse>(`/activity-logs.php?id=${id}`, {
     method: "GET",
   });
+}
+
+export async function downloadActivityLogScreenshots(
+  filters: ActivityLogFilters = {},
+  deleteAfterDownload = false
+) {
+  const params = buildActivityLogQuery(filters);
+  params.set("downloadScreenshots", "1");
+  if (deleteAfterDownload) {
+    params.set("deleteAfterDownload", "1");
+  }
+
+  const token = getApiToken();
+  const response = await fetch(`/api/activity-logs.php?${params.toString()}`, {
+    method: "GET",
+    cache: "no-store",
+    headers: token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : undefined,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payloadError = "";
+
+    try {
+      const payload = JSON.parse(text) as { error?: string };
+      payloadError = payload.error || "";
+    } catch {
+      payloadError = "";
+    }
+
+    throw new Error(payloadError || "Không tải được file ZIP ảnh.");
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="([^"]+)"/i);
+
+  return {
+    blob,
+    fileName: match?.[1] || "activity-screenshots.zip",
+  };
 }
