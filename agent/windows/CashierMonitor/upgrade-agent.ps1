@@ -101,6 +101,8 @@ if (-not (Test-Administrator)) {
     exit 1
 }
 
+Set-Location -Path $env:TEMP
+
 $InstalledDir = "C:\ProgramData\TNCompany\CashierMonitor"
 $InstalledExePath = Join-Path $InstalledDir "CashierMonitor.exe"
 $InstalledConfigPath = Join-Path $InstalledDir "config.json"
