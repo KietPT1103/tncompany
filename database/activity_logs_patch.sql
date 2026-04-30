@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS activity_logs (
   process_id INT NULL,
   target VARCHAR(1024) NULL,
   details_json LONGTEXT NULL,
+  has_screenshot TINYINT(1) NOT NULL DEFAULT 0,
   UNIQUE KEY uniq_activity_event (machine_id, event_id),
   KEY idx_activity_machine_time (machine_id, event_time),
-  KEY idx_activity_type_time (event_type, event_time)
+  KEY idx_activity_type_time (event_type, event_time),
+  KEY idx_activity_has_screenshot_time (has_screenshot, event_time, id)
 );
