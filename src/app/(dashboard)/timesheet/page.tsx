@@ -25,6 +25,8 @@ import { useRouter } from "next/navigation";
 import {
   calculatePayrollSalary,
   formatCurrency,
+  formatHours,
+  getAttendanceBonusProgress,
   getPayrollBreakdown,
   getDefaultRoleForStore,
   getRoleGroupsForStore,
@@ -759,6 +761,9 @@ export default function TimesheetPage() {
   const salaryDetailBreakdown = salaryDetailEmployee
     ? getEmployeeBreakdown(salaryDetailEmployee)
     : null;
+  const salaryDetailAttendanceProgress = salaryDetailEmployee
+    ? getAttendanceBonusProgress(buildPayrollEntryFromSummary(salaryDetailEmployee))
+    : null;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6">
@@ -1166,18 +1171,28 @@ export default function TimesheetPage() {
             </div>
 
             <div className="mt-5 space-y-3 text-sm">
+              {salaryDetailBreakdown.baseSalary > 0 ? (
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
                 <span className="text-slate-600">
                   {salaryDetailBreakdown.salaryType === "monthly"
                     ? "Tiền lương cứng"
                     : "Tiền lương giờ"}
                 </span>
-                <span className="font-semibold text-slate-900">
-                  {formatCurrency(salaryDetailBreakdown.baseSalary)}
-                </span>
+                <div className="text-right">
+                  <div className="font-semibold text-slate-900">
+                    {formatCurrency(salaryDetailBreakdown.baseSalary)}
+                  </div>
+                  {salaryDetailBreakdown.salaryType === "hourly" ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      ({formatHours(salaryDetailEmployee.TotalHours || 0)}h)
+                    </div>
+                  ) : null}
+                </div>
               </div>
+              ) : null}
 
               {salaryDetailBreakdown.salaryType === "monthly" ? (
+                salaryDetailBreakdown.overtimePay > 0 ? (
                 <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
                   <span className="text-slate-600">
                     Tiền OT
@@ -1191,15 +1206,22 @@ export default function TimesheetPage() {
                     {formatCurrency(salaryDetailBreakdown.overtimePay)}
                   </span>
                 </div>
-              ) : (
+                ) : null
+              ) : salaryDetailBreakdown.weekendBonus > 0 ? (
                 <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
                   <span className="text-slate-600">Tiền cuối tuần</span>
-                  <span className="font-semibold text-slate-900">
-                    {formatCurrency(salaryDetailBreakdown.weekendBonus)}
-                  </span>
+                  <div className="text-right">
+                    <div className="font-semibold text-slate-900">
+                      {formatCurrency(salaryDetailBreakdown.weekendBonus)}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      ({formatHours(salaryDetailEmployee.WeekendHours || 0)}h)
+                    </div>
+                  </div>
                 </div>
-              )}
+              ) : null}
 
+              {salaryDetailBreakdown.allowanceTotal > 0 ? (
               <div className="rounded-xl bg-slate-50 px-4 py-3">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-600">Tiền trợ cấp</span>
@@ -1216,22 +1238,36 @@ export default function TimesheetPage() {
                   </div>
                 ) : null}
               </div>
+              ) : null}
 
               {salaryDetailBreakdown.attendanceBonus > 0 ? (
                 <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-4 py-3">
                   <span className="text-emerald-700">Thưởng chuyên cần</span>
-                  <span className="font-semibold text-emerald-800">
-                    {formatCurrency(salaryDetailBreakdown.attendanceBonus)}
-                  </span>
+                  <div className="text-right">
+                    <div className="font-semibold text-emerald-800">
+                      {formatCurrency(salaryDetailBreakdown.attendanceBonus)}
+                    </div>
+                    {salaryDetailAttendanceProgress ? (
+                      <div className="mt-1 text-xs text-emerald-600/80">
+                        {salaryDetailAttendanceProgress.qualifiedDays}/
+                        {salaryDetailAttendanceProgress.targetDays} ngày
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
 
               {salaryDetailBreakdown.deduction > 0 ? (
                 <div className="flex items-center justify-between rounded-xl bg-rose-50 px-4 py-3">
                   <span className="text-rose-700">Khấu trừ nghỉ vượt phép</span>
-                  <span className="font-semibold text-rose-800">
-                    - {formatCurrency(salaryDetailBreakdown.deduction)}
-                  </span>
+                  <div className="text-right">
+                    <div className="font-semibold text-rose-800">
+                      - {formatCurrency(salaryDetailBreakdown.deduction)}
+                    </div>
+                    <div className="mt-1 text-xs text-rose-700/80">
+                      {salaryDetailBreakdown.unpaidLeaveDays} ngày
+                    </div>
+                  </div>
                 </div>
               ) : null}
             </div>

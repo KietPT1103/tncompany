@@ -71,7 +71,7 @@ export default function AllowanceDialog({
               <div className="rounded-[20px] border border-emerald-200 bg-white px-4 py-3 text-sm">
                 <div className="text-slate-500">Đang tính</div>
                 <div className="mt-2 text-lg font-semibold text-emerald-700">{computedAttendanceBonus.toLocaleString("vi-VN")} đ</div>
-                <div className="mt-2 text-xs text-slate-500">Đi làm {workingDays} ngày, nghỉ thiếu {absentDays} ngày.</div>
+                <div className="mt-2 text-xs text-slate-500">Đi làm {workingDays} ngày, nghỉ {absentDays} ngày.</div>
               </div>
             </div>
           ) : null}

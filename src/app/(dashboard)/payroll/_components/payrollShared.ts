@@ -125,10 +125,22 @@ export function getAttendanceBonusValue(entry: PayrollEntry) {
   const bonusAmount = Math.max(0, entry.attendanceBonusAmount || 0);
   const bonusDays = Math.max(0, entry.attendanceBonusDays || 0);
   if (!bonusAmount) return 0;
-  if (!bonusDays) return bonusAmount;
+  if (!bonusDays) return Math.round(bonusAmount);
   const absentDays = getAbsentDays(entry);
   const remainingRatio = Math.max(0, bonusDays - absentDays) / bonusDays;
-  return bonusAmount * remainingRatio;
+  return Math.round(bonusAmount * remainingRatio);
+}
+
+export function getAttendanceBonusProgress(entry: PayrollEntry) {
+  if (!entry.attendanceBonusEnabled) return null;
+  const targetDays = Math.max(0, entry.attendanceBonusDays || 0);
+  if (!targetDays) return null;
+  const absentDays = getAbsentDays(entry);
+  const qualifiedDays = Math.max(0, targetDays - absentDays);
+  return {
+    qualifiedDays,
+    targetDays,
+  };
 }
 
 export function getPayrollBreakdown(entry: PayrollEntry) {
@@ -150,7 +162,7 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
   let deduction = 0;
   if (salaryType === "monthly") {
     baseSalary = entry.monthlySalary || entry.fixedSalary || 0;
-    deduction = unpaidLeaveDays * (baseSalary / 30);
+    deduction = Math.round(unpaidLeaveDays * (baseSalary / 30));
   } else {
     baseSalary = (entry.totalHours || 0) * (entry.hourlyRate || 0);
   }
