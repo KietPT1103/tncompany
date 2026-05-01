@@ -1214,7 +1214,9 @@ export default function PayrollDetail({
                       key={entry.id}
                       className={cn(
                         "align-top transition-colors",
-                        isMonthly ? "bg-sky-50/40" : "bg-white",
+                        isMonthly
+                          ? "bg-gradient-to-r from-sky-100 via-cyan-50 to-white"
+                          : "bg-white",
                         hasEntryError(entry) && "bg-red-50/60",
                       )}
                     >
@@ -1222,7 +1224,7 @@ export default function PayrollDetail({
                         <td
                           className={cn(
                             "px-4 py-4 border-b border-slate-500 align-middle",
-                            isMonthly && "bg-sky-50/40",
+                            isMonthly && "bg-sky-100/80",
                           )}
                         >
                           <div className="flex items-center gap-2 min-w-0">
@@ -1295,7 +1297,14 @@ export default function PayrollDetail({
 
                       {visibleColumns.workDays ? (
                         <td className="py-4 pr-4 border-b border-slate-200">
-                          <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div
+                            className={cn(
+                              "rounded-[20px] border px-4 py-3",
+                              isMonthly
+                                ? "border-sky-200 bg-white/80 shadow-sm shadow-sky-100"
+                                : "border-slate-200 bg-slate-50",
+                            )}
+                          >
                             <div className="text-lg font-semibold text-slate-900">
                               {breakdown.workingDays}
                               {isMonthly ? (
