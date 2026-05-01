@@ -44,6 +44,7 @@ import {
   Search,
   Settings2,
   Trash2,
+  X,
 } from "lucide-react";
 
 import {
@@ -254,6 +255,12 @@ const buildPayrollEntryPayload = (
   };
 };
 
+const hasProfileAllowances = (employee?: Employee) =>
+  Array.isArray(employee?.allowances) &&
+  (employee?.allowances || []).some(
+    (allowance) => (allowance?.amount || 0) > 0 || (allowance?.name || "").trim() !== "",
+  );
+
 const mergeEntryWithEmployeeProfile = (
   entry: PayrollEntry,
   employees: Employee[],
@@ -274,7 +281,11 @@ const mergeEntryWithEmployeeProfile = (
     !entry.attendanceBonusEnabled &&
     (entry.attendanceBonusDays || 0) === 0 &&
     (entry.attendanceBonusAmount || 0) === 0;
+  const needsAllowanceHydration =
+    hasProfileAllowances(linkedEmployee) &&
+    (!Array.isArray(entry.allowances) || entry.allowances.length === 0);
   const shouldUseEmployeeProfile =
+    needsAllowanceHydration ||
     needsMonthlyProfileHydration ||
     (employeeSalaryType === "monthly" && entrySalaryType !== "monthly");
 
@@ -296,6 +307,14 @@ const mergeEntryWithEmployeeProfile = (
     attendanceBonusDays: linkedEmployee.attendanceBonusDays || 0,
     attendanceBonusAmount: linkedEmployee.attendanceBonusAmount || 0,
     standardHours: linkedEmployee.standardHours || 0,
+    allowances:
+      needsAllowanceHydration && linkedEmployee.allowances
+        ? linkedEmployee.allowances.map((allowance) => ({
+            name: allowance.name,
+            amount: allowance.amount,
+            period: allowance.period,
+          }))
+        : entry.allowances || [],
   };
   nextEntry.salary = calculatePayrollSalary(nextEntry);
   return nextEntry;
@@ -363,6 +382,10 @@ export default function PayrollDetail({
   const [attendanceBonusDays, setAttendanceBonusDays] = useState(0);
 
   const [attendanceBonusAmount, setAttendanceBonusAmount] = useState(0);
+
+  const [salaryDetailEntryId, setSalaryDetailEntryId] = useState<string | null>(
+    null,
+  );
 
   const entrySaveQueuesRef = useRef<Record<string, Promise<void>>>({});
 
@@ -732,7 +755,7 @@ export default function PayrollDetail({
 
       salary: 0,
 
-      allowances: [],
+      allowances: employee.allowances || [],
 
       note: "",
 
@@ -970,6 +993,14 @@ export default function PayrollDetail({
 
   const allowanceBreakdown = allowanceEntry
     ? getPayrollBreakdown(allowanceEntry)
+    : null;
+
+  const salaryDetailEntry = entries.find(
+    (entry) => entry.id === salaryDetailEntryId,
+  );
+
+  const salaryDetailBreakdown = salaryDetailEntry
+    ? getPayrollBreakdown(salaryDetailEntry)
     : null;
 
   if (loading) {
@@ -1400,9 +1431,16 @@ export default function PayrollDetail({
 
                       {visibleColumns.total ? (
                         <td className="px-4 py-4 border-b border-slate-500 text-right">
-                          <div className="font-bold text-emerald-600">
-                            {formatCurrency(entry.salary || 0)}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSalaryDetailEntryId(entry.id || null)}
+                            className="text-right transition hover:opacity-90"
+                            title="Xem chi tiết cách tính lương"
+                          >
+                            <div className="font-bold text-emerald-600 hover:underline">
+                              {formatCurrency(entry.salary || 0)}
+                            </div>
+                          </button>
                           <div className="mt-1 text-xs text-slate-400">
                             {formatHours(entry.totalHours || 0)}h x{" "}
                             {formatCurrency(entry.hourlyRate || 0)}
@@ -1529,6 +1567,126 @@ export default function PayrollDetail({
         onClose={() => setShowAddDialog(false)}
         onCreateNew={handleCreateEmployee}
       />
+      {salaryDetailEntry && salaryDetailBreakdown ? (
+        <div
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/45 p-4"
+          onClick={() => setSalaryDetailEntryId(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Chi tiết lương
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {salaryDetailEntry.employeeName} •{" "}
+                  {salaryDetailEntry.role || "Nhân viên"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSalaryDetailEntryId(null)}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Đóng"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-3 text-sm">
+              <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                <span className="text-slate-600">
+                  {salaryDetailBreakdown.salaryType === "monthly"
+                    ? "Tiền lương cứng"
+                    : "Tiền lương giờ"}
+                </span>
+                <span className="font-semibold text-slate-900">
+                  {formatCurrency(salaryDetailBreakdown.baseSalary)}
+                </span>
+              </div>
+
+              {salaryDetailBreakdown.salaryType === "monthly" ? (
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-600">
+                    Tiền OT
+                    {salaryDetailBreakdown.overtimeHours > 0
+                      ? ` (${formatHours(
+                          salaryDetailBreakdown.overtimeHours,
+                        )}h x ${formatCurrency(
+                          salaryDetailBreakdown.overtimeRate,
+                        )})`
+                      : ""}
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(salaryDetailBreakdown.overtimePay)}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-600">Tiền cuối tuần</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(salaryDetailBreakdown.weekendBonus)}
+                  </span>
+                </div>
+              )}
+
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Tiền trợ cấp</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(salaryDetailBreakdown.allowanceTotal)}
+                  </span>
+                </div>
+                {(salaryDetailEntry.allowances || []).length > 0 ? (
+                  <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 text-slate-500">
+                    {(salaryDetailEntry.allowances || []).map(
+                      (allowance, index) => (
+                        <div
+                          key={`${allowance.name}-${index}`}
+                          className="flex items-center justify-between"
+                        >
+                          <span>+ {allowance.name || `Trợ cấp ${index + 1}`}</span>
+                          <span>{formatCurrency(allowance.amount)}</span>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              {salaryDetailBreakdown.attendanceBonus > 0 ? (
+                <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
+                  <span className="text-emerald-700">Thưởng chuyên cần</span>
+                  <span className="font-semibold text-emerald-800">
+                    {formatCurrency(salaryDetailBreakdown.attendanceBonus)}
+                  </span>
+                </div>
+              ) : null}
+
+              {salaryDetailBreakdown.deduction > 0 ? (
+                <div className="flex items-center justify-between rounded-2xl bg-rose-50 px-4 py-3">
+                  <span className="text-rose-700">Khấu trừ nghỉ vượt phép</span>
+                  <span className="font-semibold text-rose-800">
+                    - {formatCurrency(salaryDetailBreakdown.deduction)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex items-center justify-between rounded-2xl bg-sky-50 px-4 py-4">
+              <span className="text-base font-semibold text-slate-700">
+                Tổng
+              </span>
+              <span className="text-xl font-bold text-sky-700">
+                {formatCurrency(salaryDetailEntry.salary || 0)}
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {allowanceEntryId ? (
         <AllowanceDialog
           allowances={editAllowances}

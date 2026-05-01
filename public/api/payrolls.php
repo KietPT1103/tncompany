@@ -512,7 +512,7 @@ if ($method === 'POST') {
                     'totalHours' => 0,
                     'weekendHours' => 0,
                     'salary' => 0,
-                    'allowances' => [],
+                    'allowances' => is_array($employee['allowances'] ?? null) ? $employee['allowances'] : [],
                     'note' => '',
                     'salaryType' => $salaryType,
                     'monthlySalary' => $monthlySalary,

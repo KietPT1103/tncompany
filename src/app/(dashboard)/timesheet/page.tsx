@@ -24,6 +24,8 @@ import { useStore } from "@/context/StoreContext";
 import { useRouter } from "next/navigation";
 import {
   calculatePayrollSalary,
+  formatCurrency,
+  getPayrollBreakdown,
   getDefaultRoleForStore,
   getRoleGroupsForStore,
 } from "../payroll/_components/payrollShared";
@@ -59,6 +61,33 @@ interface EmployeeSummary {
   TotalSalary: number;
   Errors: string[];
   Shifts: Shift[];
+}
+
+function buildPayrollEntryFromSummary(employee: EmployeeSummary): PayrollEntry {
+  return {
+    payrollId: "",
+    employeeId: employee.dbId || employee.EnNo,
+    employeeCode: employee.EnNo,
+    employeeName: employee.Name,
+    role: employee.Role,
+    hourlyRate: employee.SalaryPerHour,
+    totalHours: employee.TotalHours,
+    weekendHours: employee.WeekendHours,
+    salary: employee.TotalSalary,
+    allowances:
+      employee.Allowance > 0 ? [{ name: "Phá»¥ cáº¥p", amount: employee.Allowance }] : [],
+    note: employee.Note,
+    salaryType: employee.SalaryType,
+    monthlySalary: employee.MonthlySalary,
+    expectedWorkDays: employee.ExpectedWorkDays,
+    paidLeaveDays: employee.PaidLeaveDays,
+    attendanceBonusEnabled: employee.AttendanceBonusEnabled,
+    attendanceBonusDays: employee.AttendanceBonusDays,
+    attendanceBonusAmount: employee.AttendanceBonusAmount,
+    fixedSalary: employee.MonthlySalary,
+    standardHours: employee.StandardHours,
+    shifts: employee.Shifts,
+  };
 }
 
 function calculateEmployeeTotal(employee: EmployeeSummary) {
@@ -125,6 +154,7 @@ export default function TimesheetPage() {
   const [selectedEmpIndex, setSelectedEmpIndex] = useState<number | null>(null);
   const [dbEmployees, setDbEmployees] = useState<Employee[]>([]);
   const [savedPayrollId, setSavedPayrollId] = useState("");
+  const [salaryDetailEmployee, setSalaryDetailEmployee] = useState<EmployeeSummary | null>(null);
 
   const { storeId } = useStore();
   const roleGroups = getRoleGroupsForStore(storeId);
@@ -230,6 +260,35 @@ export default function TimesheetPage() {
       errors,
       shifts,
     };
+  };
+
+  const getEmployeeBreakdown = (employee: EmployeeSummary) => {
+    const entry: PayrollEntry = {
+      payrollId: "",
+      employeeId: employee.dbId || employee.EnNo,
+      employeeCode: employee.EnNo,
+      employeeName: employee.Name,
+      role: employee.Role,
+      hourlyRate: employee.SalaryPerHour,
+      totalHours: employee.TotalHours,
+      weekendHours: employee.WeekendHours,
+      salary: employee.TotalSalary,
+      allowances:
+        employee.Allowance > 0 ? [{ name: "Phụ cấp", amount: employee.Allowance }] : [],
+      note: employee.Note,
+      salaryType: employee.SalaryType,
+      monthlySalary: employee.MonthlySalary,
+      expectedWorkDays: employee.ExpectedWorkDays,
+      paidLeaveDays: employee.PaidLeaveDays,
+      attendanceBonusEnabled: employee.AttendanceBonusEnabled,
+      attendanceBonusDays: employee.AttendanceBonusDays,
+      attendanceBonusAmount: employee.AttendanceBonusAmount,
+      fixedSalary: employee.MonthlySalary,
+      standardHours: employee.StandardHours,
+      shifts: employee.Shifts,
+    };
+
+    return getPayrollBreakdown(entry);
   };
 
   React.useEffect(() => {
@@ -697,6 +756,10 @@ export default function TimesheetPage() {
     XLSX.writeFile(workbook, "BangLuong.xlsx");
   };
 
+  const salaryDetailBreakdown = salaryDetailEmployee
+    ? getEmployeeBreakdown(salaryDetailEmployee)
+    : null;
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -1022,8 +1085,15 @@ export default function TimesheetPage() {
                           onChange={(event) => handleSalaryChange(employee.EnNo, event.target.value)}
                         />
                       </td>
-                      <td className="px-6 py-4 text-right font-mono font-bold text-green-700">
-                        {employee.TotalSalary.toLocaleString("vi-VN")} đ
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSalaryDetailEmployee(employee)}
+                          className="font-mono font-bold text-green-700 transition hover:text-green-800 hover:underline"
+                          title="Xem chi tiết cách tính lương"
+                        >
+                          {employee.TotalSalary.toLocaleString("vi-VN")} đ
+                        </button>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
@@ -1065,6 +1135,115 @@ export default function TimesheetPage() {
             </div>
           </div>
         </Card>
+      ) : null}
+
+      {salaryDetailEmployee && salaryDetailBreakdown ? (
+        <div
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/45 p-4"
+          onClick={() => setSalaryDetailEmployee(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Chi tiết lương: {salaryDetailEmployee.Name}
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {salaryDetailEmployee.EnNo} • {salaryDetailEmployee.Role || "Nhân viên"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSalaryDetailEmployee(null)}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Đóng"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-3 text-sm">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                <span className="text-slate-600">
+                  {salaryDetailBreakdown.salaryType === "monthly"
+                    ? "Tiền lương cứng"
+                    : "Tiền lương giờ"}
+                </span>
+                <span className="font-semibold text-slate-900">
+                  {formatCurrency(salaryDetailBreakdown.baseSalary)}
+                </span>
+              </div>
+
+              {salaryDetailBreakdown.salaryType === "monthly" ? (
+                <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-600">
+                    Tiền OT
+                    {salaryDetailBreakdown.overtimeHours > 0
+                      ? ` (${salaryDetailBreakdown.overtimeHours.toLocaleString("vi-VN", {
+                          maximumFractionDigits: 2,
+                        })}h x ${formatCurrency(salaryDetailBreakdown.overtimeRate)})`
+                      : ""}
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(salaryDetailBreakdown.overtimePay)}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-600">Tiền cuối tuần</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(salaryDetailBreakdown.weekendBonus)}
+                  </span>
+                </div>
+              )}
+
+              <div className="rounded-xl bg-slate-50 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Tiền trợ cấp</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(salaryDetailBreakdown.allowanceTotal)}
+                  </span>
+                </div>
+                {salaryDetailEmployee.Allowance > 0 ? (
+                  <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 text-sm text-slate-500">
+                    <div className="flex items-center justify-between">
+                      <span>+ Trợ cấp</span>
+                      <span>{formatCurrency(salaryDetailEmployee.Allowance)}</span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {salaryDetailBreakdown.attendanceBonus > 0 ? (
+                <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-4 py-3">
+                  <span className="text-emerald-700">Thưởng chuyên cần</span>
+                  <span className="font-semibold text-emerald-800">
+                    {formatCurrency(salaryDetailBreakdown.attendanceBonus)}
+                  </span>
+                </div>
+              ) : null}
+
+              {salaryDetailBreakdown.deduction > 0 ? (
+                <div className="flex items-center justify-between rounded-xl bg-rose-50 px-4 py-3">
+                  <span className="text-rose-700">Khấu trừ nghỉ vượt phép</span>
+                  <span className="font-semibold text-rose-800">
+                    - {formatCurrency(salaryDetailBreakdown.deduction)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex items-center justify-between rounded-2xl bg-sky-50 px-4 py-4">
+              <span className="text-base font-semibold text-slate-700">Tổng</span>
+              <span className="text-xl font-bold text-sky-700">
+                {formatCurrency(salaryDetailEmployee.TotalSalary)}
+              </span>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {hoveredError ? (
