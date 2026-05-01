@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 15
     environment: FTP
     env:
@@ -35,18 +35,20 @@ jobs:
 
       - name: Validate deploy settings
         id: deploy-settings
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
+          if ([string]::IsNullOrWhiteSpace($env:FTP_SERVER)) { throw "Missing GitHub secret: FTP_SERVER" }
+          if ([string]::IsNullOrWhiteSpace($env:FTP_USERNAME)) { throw "Missing GitHub secret: FTP_USERNAME" }
+          if ([string]::IsNullOrWhiteSpace($env:FTP_PASSWORD)) { throw "Missing GitHub secret: FTP_PASSWORD" }
+          if ([string]::IsNullOrWhiteSpace($env:FTP_SERVER_DIR)) { throw "Missing GitHub variable: FTP_SERVER_DIR" }
 
-          test -n "$FTP_SERVER" || { echo "Missing GitHub secret: FTP_SERVER"; exit 1; }
-          test -n "$FTP_USERNAME" || { echo "Missing GitHub secret: FTP_USERNAME"; exit 1; }
-          test -n "$FTP_PASSWORD" || { echo "Missing GitHub secret: FTP_PASSWORD"; exit 1; }
-          test -n "$FTP_SERVER_DIR" || { echo "Missing GitHub variable: FTP_SERVER_DIR"; exit 1; }
+          $ftpPort = if ([string]::IsNullOrWhiteSpace($env:FTP_PORT)) { "21" } else { $env:FTP_PORT }
+          $ftpProtocol = if ([string]::IsNullOrWhiteSpace($env:FTP_PROTOCOL)) { "ftp" } else { $env:FTP_PROTOCOL }
+          $ftpServerDir = $env:FTP_SERVER_DIR.TrimEnd("/") + "/"
 
-          echo "ftp_port=${FTP_PORT:-21}" >> "$GITHUB_OUTPUT"
-          echo "ftp_protocol=${FTP_PROTOCOL:-ftp}" >> "$GITHUB_OUTPUT"
-          echo "ftp_server_dir=${FTP_SERVER_DIR%/}/" >> "$GITHUB_OUTPUT"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "ftp_port=$ftpPort"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "ftp_protocol=$ftpProtocol"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "ftp_server_dir=$ftpServerDir"
 
       - name: Install dependencies
         run: npm ci
