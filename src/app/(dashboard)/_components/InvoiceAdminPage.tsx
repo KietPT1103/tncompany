@@ -319,7 +319,7 @@ export default function InvoiceAdminPage({
 
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-10">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="w-full space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Link
@@ -357,13 +357,13 @@ export default function InvoiceAdminPage({
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Bộ lọc</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Bộ lọc</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_220px_220px_180px]">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
                     Tìm kiếm
@@ -395,37 +395,40 @@ export default function InvoiceAdminPage({
                   value={endDate}
                   onChange={(event) => setEndDate(event.target.value)}
                 />
-                <Button variant="outline" className="w-full" onClick={loadEntries}>
-                  Áp dụng lọc
-                </Button>
+                <div className="flex items-end">
+                  <Button variant="outline" className="w-full" onClick={loadEntries}>
+                    Áp dụng lọc
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  Số hóa đơn
+                </p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{entries.length}</p>
               </CardContent>
             </Card>
-
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Tổng quan</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    Số hóa đơn
-                  </p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{entries.length}</p>
-                </div>
-                <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    Tổng giá trị
-                  </p>
-                  <p className="mt-1 text-2xl font-bold text-emerald-700">
-                    {formatCurrency(totalAmount)} VND
-                  </p>
-                </div>
-                <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    Minh chứng đã tải
-                  </p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{totalEvidence}</p>
-                </div>
+              <CardContent className="p-5">
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  Tổng giá trị
+                </p>
+                <p className="mt-2 text-3xl font-bold text-emerald-700">
+                  {formatCurrency(totalAmount)} VND
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  Minh chứng đã tải
+                </p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{totalEvidence}</p>
               </CardContent>
             </Card>
           </div>
