@@ -23,6 +23,7 @@ import { saveImportedPayroll, type PayrollEntry } from "@/services/payrolls.fire
 import { useStore } from "@/context/StoreContext";
 import { useRouter } from "next/navigation";
 import {
+  calculatePayrollSalary,
   getDefaultRoleForStore,
   getRoleGroupsForStore,
 } from "../payroll/_components/payrollShared";
@@ -42,17 +43,52 @@ interface EmployeeSummary {
   Name: string;
   EnNo: string;
   Role: string;
+  SalaryType: "hourly" | "monthly";
   Allowance: number;
   Note: string;
   TotalHours: number;
   WeekendHours: number;
   SalaryPerHour: number;
+  MonthlySalary: number;
+  ExpectedWorkDays: number;
+  PaidLeaveDays: number;
+  AttendanceBonusEnabled: boolean;
+  AttendanceBonusDays: number;
+  AttendanceBonusAmount: number;
+  StandardHours: number;
   TotalSalary: number;
   Errors: string[];
   Shifts: Shift[];
 }
 
 function calculateEmployeeTotal(employee: EmployeeSummary) {
+  if (employee.SalaryType === "monthly") {
+    return calculatePayrollSalary({
+      payrollId: "",
+      employeeId: employee.dbId || employee.EnNo,
+      employeeCode: employee.EnNo,
+      employeeName: employee.Name,
+      role: employee.Role,
+      hourlyRate: employee.SalaryPerHour,
+      totalHours: employee.TotalHours,
+      weekendHours: employee.WeekendHours,
+      salary: 0,
+      allowances:
+        employee.Allowance > 0 ? [{ name: "Phụ cấp", amount: employee.Allowance }] : [],
+      note: employee.Note,
+      salaryType: "monthly",
+      monthlySalary: employee.MonthlySalary,
+      expectedWorkDays: employee.ExpectedWorkDays,
+      paidLeaveDays: employee.PaidLeaveDays,
+      attendanceBonusEnabled: employee.AttendanceBonusEnabled,
+      attendanceBonusDays: employee.AttendanceBonusDays,
+      attendanceBonusAmount: employee.AttendanceBonusAmount,
+      fixedSalary: employee.MonthlySalary,
+      standardHours: employee.StandardHours,
+      shifts: employee.Shifts,
+    });
+  }
+
   const total =
     employee.TotalHours * employee.SalaryPerHour +
     employee.WeekendHours * 1000 +
@@ -103,6 +139,97 @@ export default function TimesheetPage() {
 
   const formatLocalMonth = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const isMonthlyEmployee = (employee?: Employee) => {
+    return employee?.salaryType === "monthly" || (employee?.monthlySalary || 0) > 0;
+  };
+
+  const buildEmployeeRowsMap = (rows: TimesheetRow[]) => {
+    const grouped: Record<string, TimesheetRow[]> = {};
+
+    rows.forEach((row) => {
+      const employeeCode = row.EnNo?.trim() || `unknown_${row.Name || "employee"}`;
+      if (!grouped[employeeCode]) grouped[employeeCode] = [];
+      grouped[employeeCode].push(row);
+    });
+
+    return grouped;
+  };
+
+  const summarizeRows = (employeeCode: string, rows: TimesheetRow[]) => {
+    const sortedRows = [...rows].sort(
+      (left, right) => new Date(left.DateTime).getTime() - new Date(right.DateTime).getTime()
+    );
+    const displayName =
+      sortedRows.find((row) => row.Name?.trim())?.Name?.trim() || `Unknown_${employeeCode}`;
+
+    let totalHours = 0;
+    let weekendHours = 0;
+    const errors: string[] = [];
+    const shifts: Shift[] = [];
+    let pointer = 0;
+
+    while (pointer < sortedRows.length) {
+      const inTimeStr = sortedRows[pointer].DateTime;
+      let matched = false;
+
+      if (pointer + 1 < sortedRows.length) {
+        const outTimeStr = sortedRows[pointer + 1].DateTime;
+        const inTime = new Date(inTimeStr);
+        const outTime = new Date(outTimeStr);
+        const limitDate = new Date(inTime);
+        if (limitDate.getHours() >= 5) {
+          limitDate.setDate(limitDate.getDate() + 1);
+        }
+        limitDate.setHours(5, 0, 0, 0);
+
+        if (outTime <= limitDate) {
+          const diffMs = outTime.getTime() - inTime.getTime();
+          const hours = diffMs / (1000 * 60 * 60);
+          if (hours > 0) {
+            totalHours += hours;
+            const day = inTime.getDay();
+            const isWeekend = day === 0 || day === 6;
+            if (isWeekend) weekendHours += hours;
+
+            shifts.push({
+              id: `${employeeCode}-${pointer}`,
+              date: inTimeStr.split(" ")[0],
+              inTime: inTimeStr,
+              outTime: outTimeStr,
+              hours: Number.parseFloat(hours.toFixed(2)),
+              isWeekend,
+              isValid: true,
+            });
+            matched = true;
+            pointer += 2;
+          }
+        }
+      }
+
+      if (!matched) {
+        errors.push(`Lá»—i/thiáº¿u cáº·p: ${sortedRows[pointer].DateTime}`);
+        shifts.push({
+          id: `${employeeCode}-${pointer}-err`,
+          date: sortedRows[pointer].DateTime.split(" ")[0],
+          inTime: sortedRows[pointer].DateTime,
+          outTime: "",
+          hours: 0,
+          isWeekend: false,
+          isValid: false,
+        });
+        pointer += 1;
+      }
+    }
+
+    return {
+      displayName,
+      totalHours: Number.parseFloat(totalHours.toFixed(2)),
+      weekendHours: Number.parseFloat(weekendHours.toFixed(2)),
+      errors,
+      shifts,
+    };
   };
 
   React.useEffect(() => {
@@ -229,33 +356,62 @@ export default function TimesheetPage() {
       const rawData = await parseFile(file);
       const start = new Date(`${startDate}T00:00:00`);
       const end = new Date(`${endDate}T23:59:59`);
+      const monthStart =
+        mode === "month" && selectedMonth
+          ? new Date(`${selectedMonth}-01T00:00:00`)
+          : start;
 
       const filteredRows = rawData.filter((row) => {
         const date = new Date(row.DateTime);
         return !Number.isNaN(date.getTime()) && date >= start && date <= end;
       });
 
-      const grouped: Record<string, TimesheetRow[]> = {};
-      filteredRows.forEach((row) => {
-        const employeeCode = row.EnNo?.trim() || `unknown_${row.Name || "employee"}`;
-        if (!grouped[employeeCode]) grouped[employeeCode] = [];
-        grouped[employeeCode].push(row);
-      });
+      const monthlyRows =
+        mode === "month" && selectedPeriod === 2
+          ? rawData.filter((row) => {
+              const date = new Date(row.DateTime);
+              return !Number.isNaN(date.getTime()) && date >= monthStart && date <= end;
+            })
+          : filteredRows;
+
+      const selectedRowsByEmployee = buildEmployeeRowsMap(filteredRows);
+      const monthlyRowsByEmployee = buildEmployeeRowsMap(monthlyRows);
+      const employeeCodes = new Set(Object.keys(selectedRowsByEmployee));
+
+      if (mode === "month" && selectedPeriod === 2) {
+        dbEmployees.forEach((employee) => {
+          if (isMonthlyEmployee(employee) && employee.employeeCode?.trim()) {
+            employeeCodes.add(employee.employeeCode.trim());
+          }
+        });
+      }
 
       const summaries: EmployeeSummary[] = [];
-      for (const employeeCode of Object.keys(grouped)) {
-        const rows = grouped[employeeCode].sort(
-          (left, right) => new Date(left.DateTime).getTime() - new Date(right.DateTime).getTime()
+      for (const employeeCode of employeeCodes) {
+        const matchedDbEmployee = dbEmployees.find(
+          (employee) => employee.employeeCode?.trim() === employeeCode
         );
-        const displayName =
-          rows.find((row) => row.Name?.trim())?.Name?.trim() || `Unknown_${employeeCode}`;
+        const useMonthlySalary =
+          mode === "month" && selectedPeriod === 2 && isMonthlyEmployee(matchedDbEmployee);
 
-        let totalHours = 0;
-        let weekendHours = 0;
-        const errors: string[] = [];
-        const shifts: Shift[] = [];
-        let pointer = 0;
+        if (mode === "month" && selectedPeriod === 1 && isMonthlyEmployee(matchedDbEmployee)) {
+          continue;
+        }
 
+        const sourceRows = useMonthlySalary
+          ? monthlyRowsByEmployee[employeeCode] || []
+          : selectedRowsByEmployee[employeeCode] || [];
+
+        if (sourceRows.length === 0 && !useMonthlySalary) {
+          continue;
+        }
+
+        const { displayName, totalHours, weekendHours, errors, shifts } = summarizeRows(
+          employeeCode,
+          sourceRows
+        );
+
+        /*
         while (pointer < rows.length) {
           const inTimeStr = rows[pointer].DateTime;
           let matched = false;
@@ -318,29 +474,31 @@ export default function TimesheetPage() {
           continue;
         }
 
+        */
         const summary: EmployeeSummary = {
           dbId: matchedDbEmployee?.id,
-          Name: displayName,
+          Name: matchedDbEmployee?.name || displayName,
           EnNo: employeeCode,
           Role: matchedDbEmployee?.role || "",
+          SalaryType: useMonthlySalary ? "monthly" : "hourly",
           Allowance: 0,
           Note: "",
-          TotalHours: Number.parseFloat(totalHours.toFixed(2)),
-          WeekendHours: Number.parseFloat(weekendHours.toFixed(2)),
+          TotalHours: totalHours,
+          WeekendHours: weekendHours,
           SalaryPerHour: matchedDbEmployee?.hourlyRate || 15000,
+          MonthlySalary: matchedDbEmployee?.monthlySalary || 0,
+          ExpectedWorkDays: matchedDbEmployee?.expectedWorkDays || 30,
+          PaidLeaveDays: matchedDbEmployee?.paidLeaveDays || 0,
+          AttendanceBonusEnabled: matchedDbEmployee?.attendanceBonusEnabled || false,
+          AttendanceBonusDays: matchedDbEmployee?.attendanceBonusDays || 0,
+          AttendanceBonusAmount: matchedDbEmployee?.attendanceBonusAmount || 0,
+          StandardHours: matchedDbEmployee?.standardHours || 0,
           TotalSalary: 0,
           Errors: errors,
           Shifts: shifts,
         };
 
-        // For full-time employees in period 2, use monthly salary
-        if (mode === 'month' && selectedPeriod === 2 && matchedDbEmployee?.monthlySalary > 0) {
-          summary.TotalSalary = matchedDbEmployee.monthlySalary;
-          summary.TotalHours = 0;
-          summary.WeekendHours = 0;
-        } else {
-          summary.TotalSalary = calculateEmployeeTotal(summary);
-        }
+        summary.TotalSalary = calculateEmployeeTotal(summary);
 
         summaries.push(summary);
       }
@@ -470,7 +628,7 @@ export default function TimesheetPage() {
           const matchedDbEmployee = dbEmployees.find(
             (emp) => emp.employeeCode?.trim() === employee.EnNo
           );
-          const isFullTime = matchedDbEmployee?.monthlySalary > 0;
+          const isFullTime = isMonthlyEmployee(matchedDbEmployee);
           const salaryType = (mode === 'month' && selectedPeriod === 2 && isFullTime) ? 'monthly' : 'hourly';
           
           return {
@@ -485,8 +643,14 @@ export default function TimesheetPage() {
             allowances: employee.Allowance > 0 ? [{ name: "Phụ cấp", amount: employee.Allowance }] : [],
             note: employee.Note,
             salaryType,
-            fixedSalary: salaryType === 'monthly' ? matchedDbEmployee?.monthlySalary || 0 : 0,
-            standardHours: 0,
+            monthlySalary: salaryType === "monthly" ? employee.MonthlySalary : 0,
+            fixedSalary: salaryType === 'monthly' ? employee.MonthlySalary : 0,
+            expectedWorkDays: salaryType === "monthly" ? employee.ExpectedWorkDays : 0,
+            paidLeaveDays: salaryType === "monthly" ? employee.PaidLeaveDays : 0,
+            attendanceBonusEnabled: salaryType === "monthly" ? employee.AttendanceBonusEnabled : false,
+            attendanceBonusDays: salaryType === "monthly" ? employee.AttendanceBonusDays : 0,
+            attendanceBonusAmount: salaryType === "monthly" ? employee.AttendanceBonusAmount : 0,
+            standardHours: salaryType === "monthly" ? employee.StandardHours : 0,
             shifts: employee.Shifts,
           };
         }) as Array<Partial<PayrollEntry>>,

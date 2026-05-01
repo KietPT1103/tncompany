@@ -265,9 +265,8 @@ const mergeEntryWithEmployeeProfile = (
   const employeeSalaryType = resolvePayrollSalaryType(
     linkedEmployee as Partial<PayrollEntry>,
   );
-  const shouldUseEmployeeProfile =
+  const needsMonthlyProfileHydration =
     employeeSalaryType === "monthly" &&
-    entrySalaryType !== "monthly" &&
     (entry.monthlySalary || entry.fixedSalary || 0) === 0 &&
     (entry.expectedWorkDays || 0) === 0 &&
     (entry.paidLeaveDays || 0) === 0 &&
@@ -275,6 +274,9 @@ const mergeEntryWithEmployeeProfile = (
     !entry.attendanceBonusEnabled &&
     (entry.attendanceBonusDays || 0) === 0 &&
     (entry.attendanceBonusAmount || 0) === 0;
+  const shouldUseEmployeeProfile =
+    needsMonthlyProfileHydration ||
+    (employeeSalaryType === "monthly" && entrySalaryType !== "monthly");
 
   if (!shouldUseEmployeeProfile) return entry;
 
