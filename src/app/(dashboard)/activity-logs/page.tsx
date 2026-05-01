@@ -41,6 +41,7 @@ const EVENT_OPTIONS = [
   { value: "browser_tab_active", label: "Tab trình duyệt" },
   { value: "dns_domain", label: "Truy cập domain" },
   { value: "agent_started", label: "Agent chạy" },
+  { value: "agent_crashed", label: "Agent bị lỗi" },
   { value: "keyboard", label: "Gõ phím" },
   { value: "mouse", label: "Click chuột" },
 ];
@@ -94,6 +95,7 @@ function eventBadgeClass(eventType: string) {
   if (eventType.includes("browser")) return "bg-violet-50 text-violet-700 border-violet-100";
   if (eventType.includes("file")) return "bg-blue-50 text-blue-700 border-blue-100";
   if (eventType.includes("dns")) return "bg-amber-50 text-amber-700 border-amber-100";
+  if (eventType.startsWith("agent_")) return "bg-rose-50 text-rose-700 border-rose-100";
   if (eventType.includes("app")) return "bg-emerald-50 text-emerald-700 border-emerald-100";
   if (eventType === "keyboard") return "bg-cyan-50 text-cyan-700 border-cyan-100";
   if (eventType === "mouse") return "bg-orange-50 text-orange-700 border-orange-100";

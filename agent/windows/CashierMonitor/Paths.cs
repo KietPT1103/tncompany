@@ -11,6 +11,7 @@ public static class Paths
     public static string ConfigPath => Path.Combine(DataDirectory, "config.json");
     public static string QueuePath => Path.Combine(DataDirectory, "queue.jsonl");
     public static string LogPath => Path.Combine(DataDirectory, "agent.log");
+    public static string CrashMarkerPath => Path.Combine(DataDirectory, "crash-marker.json");
 
     public static void EnsureDataDirectory()
     {

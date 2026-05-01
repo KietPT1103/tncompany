@@ -1,22 +1,30 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using WinFormsKeys = System.Windows.Forms.Keys;
 
 namespace CashierMonitor;
 
 public sealed class KeyboardWatcher : IDisposable
 {
-    private readonly AgentConfig _config;
+    private const int BufferedKeyIdleMilliseconds = 5_000;
     private readonly EventQueue _queue;
+    private readonly object _bufferGate = new();
+    private readonly StringBuilder _buffer = new();
+    private readonly System.Threading.Timer _bufferTimer;
     private IntPtr _hookId = IntPtr.Zero;
     private readonly LowLevelKeyboardProc _proc;
 
     public KeyboardWatcher(AgentConfig config, EventQueue queue)
     {
-        _config = config;
         _queue = queue;
         _proc = HookCallback;
+        _bufferTimer = new System.Threading.Timer(
+            _ => FlushBufferedKeys("idle"),
+            null,
+            Timeout.Infinite,
+            Timeout.Infinite);
     }
 
     public void Start()
@@ -26,6 +34,9 @@ public sealed class KeyboardWatcher : IDisposable
 
     public void Dispose()
     {
+        FlushBufferedKeys("dispose");
+        _bufferTimer.Dispose();
+
         if (_hookId != IntPtr.Zero)
         {
             UnhookWindowsHookEx(_hookId);
@@ -54,6 +65,17 @@ public sealed class KeyboardWatcher : IDisposable
         {
             var vkCode = Marshal.ReadInt32(lParam);
             var winFormsKey = (WinFormsKeys)vkCode;
+
+            if (TryBufferKey(winFormsKey, vkCode))
+            {
+                return CallNextHookEx(_hookId, nCode, wParam, lParam);
+            }
+
+            if (winFormsKey == WinFormsKeys.Enter && FlushBufferedKeys("enter", includeScreenshot: true))
+            {
+                return CallNextHookEx(_hookId, nCode, wParam, lParam);
+            }
+
             var key = FormatKey(winFormsKey, vkCode);
             var details = new Dictionary<string, string?>
             {
@@ -74,6 +96,114 @@ public sealed class KeyboardWatcher : IDisposable
             });
         }
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
+    }
+
+    private bool TryBufferKey(WinFormsKeys key, int vkCode)
+    {
+        if (key >= WinFormsKeys.A && key <= WinFormsKeys.Z)
+        {
+            AppendToBuffer(char.ToLowerInvariant((char)vkCode).ToString());
+            return true;
+        }
+
+        if (key >= WinFormsKeys.D0 && key <= WinFormsKeys.D9)
+        {
+            AppendToBuffer(((char)('0' + (vkCode - (int)WinFormsKeys.D0))).ToString());
+            return true;
+        }
+
+        if (key == WinFormsKeys.Space && HasBufferedKeys())
+        {
+            AppendToBuffer(" ");
+            return true;
+        }
+
+        if (key == WinFormsKeys.Back)
+        {
+            return RemoveLastBufferedCharacter();
+        }
+
+        return false;
+    }
+
+    private void AppendToBuffer(string value)
+    {
+        lock (_bufferGate)
+        {
+            _buffer.Append(value);
+            _bufferTimer.Change(BufferedKeyIdleMilliseconds, Timeout.Infinite);
+        }
+    }
+
+    private bool RemoveLastBufferedCharacter()
+    {
+        lock (_bufferGate)
+        {
+            if (_buffer.Length == 0)
+            {
+                return false;
+            }
+
+            _buffer.Length -= 1;
+            if (_buffer.Length == 0)
+            {
+                _bufferTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            }
+            else
+            {
+                _bufferTimer.Change(BufferedKeyIdleMilliseconds, Timeout.Infinite);
+            }
+
+            return true;
+        }
+    }
+
+    private bool HasBufferedKeys()
+    {
+        lock (_bufferGate)
+        {
+            return _buffer.Length > 0;
+        }
+    }
+
+    private bool FlushBufferedKeys(string reason, bool includeScreenshot = false)
+    {
+        ActivityEvent? bufferedEvent = null;
+
+        lock (_bufferGate)
+        {
+            if (_buffer.Length == 0)
+            {
+                _bufferTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                return false;
+            }
+
+            var target = _buffer.ToString();
+            _buffer.Clear();
+            _bufferTimer.Change(Timeout.Infinite, Timeout.Infinite);
+
+            var details = new Dictionary<string, string?>
+            {
+                ["flushReason"] = reason,
+                ["length"] = target.Length.ToString(),
+            };
+
+            if (includeScreenshot)
+            {
+                details = ScreenshotCapture.WithScreenshot(details);
+            }
+
+            bufferedEvent = new ActivityEvent
+            {
+                EventType = "keyboard",
+                Action = "keydown",
+                Target = target,
+                Details = details,
+            };
+        }
+
+        _queue.Enqueue(bufferedEvent);
+        return true;
     }
 
     private static string FormatKey(WinFormsKeys key, int vkCode)

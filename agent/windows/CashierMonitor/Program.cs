@@ -23,6 +23,8 @@ internal static class Program
             var config = ConfigLoader.Load(args);
             var queue = new EventQueue();
 
+            CrashMarkerStore.ReplayIfPresent(queue, config.MachineId);
+
             queue.Enqueue(new ActivityEvent
             {
                 EventType = "agent_started",
@@ -107,6 +109,7 @@ internal static class Program
         }
         catch (Exception exception)
         {
+            CrashMarkerStore.Record("fatal", exception);
             AgentLog.Error(exception, "Fatal agent error");
             return 1;
         }

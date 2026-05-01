@@ -53,6 +53,7 @@ public sealed class LogBatch
     public List<ActivityEvent> Events { get; set; } = [];
 }
 
+[JsonSerializable(typeof(CrashMarker))]
 [JsonSerializable(typeof(AgentConfig))]
 [JsonSerializable(typeof(ActivityEvent))]
 [JsonSerializable(typeof(LogBatch))]
@@ -62,4 +63,15 @@ public sealed class LogBatch
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 internal sealed partial class AgentJsonContext : JsonSerializerContext
 {
+}
+
+public sealed class CrashMarker
+{
+    public string Context { get; set; } = "";
+    public string RecordedAt { get; set; } = DateTimeOffset.Now.ToString("O");
+    public string MachineName { get; set; } = Environment.MachineName;
+    public string OsVersion { get; set; } = Environment.OSVersion.VersionString;
+    public string ExceptionType { get; set; } = "";
+    public string Message { get; set; } = "";
+    public string? StackTrace { get; set; }
 }
