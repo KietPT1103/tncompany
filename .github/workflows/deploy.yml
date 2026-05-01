@@ -4,37 +4,73 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
-permissions:
-  contents: write
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: FTP
+    env:
+      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+      FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      FTP_PORT: ${{ vars.FTP_PORT }}
+      FTP_PROTOCOL: ${{ vars.FTP_PROTOCOL }}
+      FTP_SERVER_DIR: ${{ vars.FTP_SERVER_DIR }}
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
+          cache: npm
 
-      - run: npm install --force
-      - run: npm run build
-
-      - name: Zip dist
+      - name: Validate deploy settings
+        id: deploy-settings
+        shell: bash
         run: |
-          cd dist
-          zip -r ../dist.zip .
-          cd ..
+          set -euo pipefail
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+          test -n "$FTP_SERVER" || { echo "Missing GitHub secret: FTP_SERVER"; exit 1; }
+          test -n "$FTP_USERNAME" || { echo "Missing GitHub secret: FTP_USERNAME"; exit 1; }
+          test -n "$FTP_PASSWORD" || { echo "Missing GitHub secret: FTP_PASSWORD"; exit 1; }
+          test -n "$FTP_SERVER_DIR" || { echo "Missing GitHub variable: FTP_SERVER_DIR"; exit 1; }
+
+          echo "ftp_port=${FTP_PORT:-21}" >> "$GITHUB_OUTPUT"
+          echo "ftp_protocol=${FTP_PROTOCOL:-ftp}" >> "$GITHUB_OUTPUT"
+          echo "ftp_server_dir=${FTP_SERVER_DIR%/}/" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Deploy dist to DirectAdmin
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
-          tag_name: latest
-          name: latest
-          files: dist.zip
-
-      - name: Trigger deploy
-        run: |
-          curl https://tnservice.vn/webhook.php
+          server: ${{ env.FTP_SERVER }}
+          username: ${{ env.FTP_USERNAME }}
+          password: ${{ env.FTP_PASSWORD }}
+          port: ${{ steps.deploy-settings.outputs.ftp_port }}
+          protocol: ${{ steps.deploy-settings.outputs.ftp_protocol }}
+          local-dir: ./dist/
+          server-dir: ${{ steps.deploy-settings.outputs.ftp_server_dir }}
+          log-level: standard
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            api/config.php
+            uploads/**
+            deploy.php
+            webhook.php
+            test.php
