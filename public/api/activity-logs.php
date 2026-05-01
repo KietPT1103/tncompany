@@ -533,6 +533,52 @@ function activity_zip_add_binary(ZipArchive $zip, string $entryName, string $bin
     return $added;
 }
 
+function activity_stream_download(string $absolutePath, string $contentType, string $downloadName): void
+{
+    @set_time_limit(0);
+    ignore_user_abort(true);
+
+    if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+        @session_write_close();
+    }
+
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+
+    if (function_exists('apache_setenv')) {
+        @apache_setenv('no-gzip', '1');
+    }
+
+    @ini_set('zlib.output_compression', '0');
+    @ini_set('output_buffering', '0');
+
+    header('Content-Type: ' . $contentType);
+    header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+    header('Content-Length: ' . (string) filesize($absolutePath));
+    header('Content-Transfer-Encoding: binary');
+    header('Cache-Control: private, no-transform');
+    header('X-Accel-Buffering: no');
+
+    $handle = fopen($absolutePath, 'rb');
+    if ($handle === false) {
+        respond_error('Cannot open download file', 500);
+    }
+
+    while (!feof($handle)) {
+        $chunk = fread($handle, 1024 * 1024);
+        if ($chunk === false) {
+            break;
+        }
+
+        echo $chunk;
+        flush();
+    }
+
+    fclose($handle);
+    exit;
+}
+
 function activity_export_counts(array $filters): array
 {
     [$whereClause, $params] = activity_build_log_conditions($filters, false);
@@ -776,11 +822,7 @@ function activity_download_export_job(string $jobId): void
         respond_error('Export archive not found', 404);
     }
 
-    header('Content-Type: application/zip');
-    header('Content-Disposition: attachment; filename="' . (string) $job['archiveName'] . '"');
-    header('Content-Length: ' . (string) filesize($zipPath));
-    readfile($zipPath);
-    exit;
+    activity_stream_download($zipPath, 'application/zip', (string) $job['archiveName']);
 }
 
 function activity_count_screenshots(array $filters): int
