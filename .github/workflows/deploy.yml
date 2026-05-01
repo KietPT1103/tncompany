@@ -35,7 +35,7 @@ jobs:
 
       - name: Validate deploy settings
         id: deploy-settings
-        shell: pwsh
+        shell: powershell
         run: |
           if ([string]::IsNullOrWhiteSpace($env:FTP_SERVER)) { throw "Missing GitHub secret: FTP_SERVER" }
           if ([string]::IsNullOrWhiteSpace($env:FTP_USERNAME)) { throw "Missing GitHub secret: FTP_USERNAME" }
