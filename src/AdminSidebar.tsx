@@ -20,6 +20,7 @@ import {
   MessageSquareText,
   Package,
   PanelLeftClose,
+  ReceiptText,
   Tags,
   Tractor,
   UtensilsCrossed,
@@ -42,6 +43,8 @@ const navItems = [
 ];
 
 const adminExtraNavItems = [
+  { href: "/internal-invoices", label: "Hóa đơn nội bộ", icon: ReceiptText },
+  { href: "/tax-invoices", label: "Hóa đơn thuế", icon: ReceiptText },
   { href: "/activity-logs", label: "Nhật ký máy", icon: Activity },
   { href: "/accounts", label: "Tài khoản", icon: KeyRound },
 ];

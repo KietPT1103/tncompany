@@ -9,12 +9,14 @@ import AccountManagementPage from "./app/(dashboard)/accounts-page";
 import ActivityLogsPage from "./app/(dashboard)/activity-logs/page";
 import CategoryManagementPage from "./app/(dashboard)/categories/page";
 import DashboardPage from "./app/(dashboard)/page";
+import InternalInvoicesPage from "./app/(dashboard)/internal-invoices/page";
 import PayrollPage from "./app/(dashboard)/payroll/page";
 import SalaryEstimatePage from "./app/(dashboard)/payroll-estimate-page";
 import ProductsPage from "./app/(dashboard)/product/page";
 import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
 import SocialListeningPage from "./app/(dashboard)/social-listening/page";
+import TaxInvoicesPage from "./app/(dashboard)/tax-invoices/page";
 import TimesheetPage from "./app/(dashboard)/timesheet/page";
 import LoginPage from "./app/login/page";
 import RoleGuard from "./components/RoleGuard";
@@ -96,8 +98,10 @@ export default function App() {
               <Route path="categories" element={<CategoryManagementPage />} />
               <Route path="accounts" element={<AccountManagementPage />} />
               <Route path="activity-logs" element={<ActivityLogsPage />} />
+              <Route path="internal-invoices" element={<InternalInvoicesPage />} />
               <Route path="payroll" element={<PayrollPage />} />
               <Route path="social-listening" element={<SocialListeningPage />} />
+              <Route path="tax-invoices" element={<TaxInvoicesPage />} />
               <Route path="timesheet" element={<TimesheetPage />} />
             </Route>
           </Route>

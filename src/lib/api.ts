@@ -150,8 +150,14 @@ export async function apiRequest<T>(
   useAuth = true
 ) {
   const headers = new Headers(options.headers || {});
-  headers.set("Content-Type", "application/json");
   headers.set("Accept", "application/json");
+
+  const isFormDataBody =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
+
+  if (!isFormDataBody) {
+    headers.set("Content-Type", "application/json");
+  }
 
   const token = useAuth ? getApiToken() : "";
   if (token) {

@@ -14,3 +14,4 @@ dist-ssr/
 agent/windows/CashierMonitor/bin/
 agent/windows/CashierMonitor/obj/
 public/uploads/activity-screenshots/
+public/uploads/invoices/
