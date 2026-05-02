@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
@@ -11,6 +11,7 @@ import {
   InvoiceScope,
   updateInvoiceEntry,
 } from "@/services/invoiceEntryService";
+import { parseInvoiceImportWorkbook } from "@/services/excel";
 import { useStore } from "@/context/StoreContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -26,6 +27,7 @@ import {
   RefreshCcw,
   Search,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 
@@ -116,10 +118,12 @@ export default function InvoiceAdminPage({
   accentClassName,
 }: InvoiceAdminPageProps) {
   const { storeId, storeName } = useStore();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const [entries, setEntries] = useState<InvoiceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -317,8 +321,100 @@ export default function InvoiceAdminPage({
     );
   };
 
+  const openImportPicker = () => {
+    if (importing) {
+      return;
+    }
+
+    importInputRef.current?.click();
+  };
+
+  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!storeId) {
+      alert("Vui lòng chọn cửa hàng trước khi import hóa đơn.");
+      input.value = "";
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const parsed = await parseInvoiceImportWorkbook(file);
+
+      if (parsed.entries.length === 0) {
+        alert("Không tìm thấy dòng dữ liệu hợp lệ theo mẫu Excel.");
+        return;
+      }
+
+      const sheetSummary = parsed.sheets
+        .map((sheet) => `${sheet.sheetName} (${sheet.rowCount} dòng)`)
+        .join(", ");
+
+      const confirmed = confirm(
+        [
+          `Sẽ import ${parsed.entries.length} hóa đơn từ ${parsed.sheets.length} sheet.`,
+          `File: ${file.name}`,
+          sheetSummary ? `Chi tiết: ${sheetSummary}` : "",
+          parsed.skippedRows > 0 ? `Bỏ qua ${parsed.skippedRows} dòng không hợp lệ.` : "",
+          "",
+          "Tiếp tục import?",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      for (const entry of parsed.entries) {
+        await createInvoiceEntry({
+          scope,
+          storeId,
+          invoiceDate: entry.invoiceDate,
+          invoiceNumber: "",
+          partnerName: "",
+          note: entry.note,
+          items: entry.items,
+        });
+      }
+
+      await loadEntries();
+
+      alert(
+        [
+          `Đã import ${parsed.entries.length} hóa đơn.`,
+          `Từ ${parsed.sheets.length} sheet trong file ${file.name}.`,
+          parsed.skippedRows > 0 ? `Đã bỏ qua ${parsed.skippedRows} dòng không hợp lệ.` : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Không thể import file Excel.");
+    } finally {
+      setImporting(false);
+      input.value = "";
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-10">
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleImportFile}
+      />
+
       <div className="w-full space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
@@ -342,15 +438,28 @@ export default function InvoiceAdminPage({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="gap-2" onClick={loadEntries}>
+            <Button variant="outline" className="gap-2" onClick={loadEntries} disabled={importing}>
               <RefreshCcw className="h-4 w-4" />
               Tải lại
             </Button>
-            <Button variant="outline" className="gap-2" onClick={handleExport}>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={openImportPicker}
+              isLoading={importing}
+            >
+              <Upload className="h-4 w-4" />
+              Import Excel
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={handleExport} disabled={importing}>
               <Download className="h-4 w-4" />
               Xuất Excel
             </Button>
-            <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700" onClick={openCreateModal}>
+            <Button
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+              onClick={openCreateModal}
+              disabled={importing}
+            >
               <Plus className="h-4 w-4" />
               Thêm hóa đơn
             </Button>
@@ -529,6 +638,7 @@ export default function InvoiceAdminPage({
                                 size="sm"
                                 className="gap-1"
                                 onClick={() => openEditModal(entry)}
+                                disabled={importing}
                               >
                                 <Pencil className="h-4 w-4" />
                                 Sửa
@@ -539,6 +649,7 @@ export default function InvoiceAdminPage({
                                 className="gap-1 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                                 isLoading={deletingId === entry.id}
                                 onClick={() => handleDelete(entry)}
+                                disabled={importing}
                               >
                                 <Trash2 className="h-4 w-4" />
                                 Xóa
