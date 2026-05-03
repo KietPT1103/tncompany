@@ -277,6 +277,7 @@ CREATE TABLE IF NOT EXISTS payroll_entries (
   employee_name VARCHAR(255) NOT NULL,
   role VARCHAR(100) NOT NULL,
   hourly_rate DECIMAL(15,2) NOT NULL DEFAULT 0,
+  hourly_multiplier DECIMAL(10,3) NOT NULL DEFAULT 1,
   total_hours DECIMAL(15,3) NOT NULL DEFAULT 0,
   weekend_hours DECIMAL(15,3) NOT NULL DEFAULT 0,
   salary DECIMAL(15,2) NOT NULL DEFAULT 0,

@@ -158,13 +158,19 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
       : 0;
   const overtimeRate = salaryType === "monthly" ? Math.max(0, entry.hourlyRate || 0) : 0;
   const overtimePay = overtimeHours * overtimeRate;
+  const hourlyMultiplier =
+    salaryType === "hourly" &&
+    typeof entry.hourlyMultiplier === "number" &&
+    Number.isFinite(entry.hourlyMultiplier)
+      ? Math.max(0, entry.hourlyMultiplier || 0)
+      : 1;
   let baseSalary = 0;
   let deduction = 0;
   if (salaryType === "monthly") {
     baseSalary = entry.monthlySalary || entry.fixedSalary || 0;
     deduction = Math.round(unpaidLeaveDays * (baseSalary / 30));
   } else {
-    baseSalary = (entry.totalHours || 0) * (entry.hourlyRate || 0);
+    baseSalary = (entry.totalHours || 0) * (entry.hourlyRate || 0) * hourlyMultiplier;
   }
   const rawSalary = Math.max(
     0,
@@ -176,6 +182,7 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
     attendanceBonus,
     baseSalary,
     deduction,
+    hourlyMultiplier,
     overtimeHours,
     overtimePay,
     overtimeRate,

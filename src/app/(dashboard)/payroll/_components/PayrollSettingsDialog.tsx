@@ -9,8 +9,10 @@ import { X } from "lucide-react";
 export default function PayrollSettingsDialog({
   monthlySalary,
   expectedWorkDays,
+  hourlyMultiplier,
   onClose,
   onExpectedWorkDaysChange,
+  onHourlyMultiplierChange,
   onMonthlySalaryChange,
   onOvertimeRateChange,
   onPaidLeaveDaysChange,
@@ -24,8 +26,10 @@ export default function PayrollSettingsDialog({
 }: {
   monthlySalary: number;
   expectedWorkDays: number;
+  hourlyMultiplier: number;
   onClose: () => void;
   onExpectedWorkDaysChange: (value: number) => void;
+  onHourlyMultiplierChange: (value: number) => void;
   onMonthlySalaryChange: (value: number) => void;
   onOvertimeRateChange: (value: number) => void;
   onPaidLeaveDaysChange: (value: number) => void;
@@ -76,8 +80,21 @@ export default function PayrollSettingsDialog({
               </div>
             </div>
           ) : (
-            <div className="rounded-[24px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-              Nhân viên theo giờ dùng tổng giờ làm, giờ cuối tuần và phụ cấp để tính lương như hiện tại.
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                label="Hệ số lương giờ"
+                value={hourlyMultiplier}
+                onChange={(event) =>
+                  onHourlyMultiplierChange(Number(event.target.value) || 0)
+                }
+                className="h-11 rounded-2xl bg-slate-50 text-right"
+              />
+              <div className="rounded-[24px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                Dùng cho bảng lương lễ hoặc bảng bù thêm. Ví dụ đã trả 1x ở bảng trước và chỉ cần cộng thêm 0.5x thì nhập hệ số 0.5.
+              </div>
             </div>
           )}
         </div>

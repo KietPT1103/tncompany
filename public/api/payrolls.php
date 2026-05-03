@@ -105,6 +105,7 @@ function payrolls_ensure_tables(): void
             employee_name VARCHAR(255) NOT NULL,
             role VARCHAR(100) NOT NULL DEFAULT "",
             hourly_rate DECIMAL(12,2) NOT NULL DEFAULT 0,
+            hourly_multiplier DECIMAL(10,3) NOT NULL DEFAULT 1,
             total_hours DECIMAL(10,2) NOT NULL DEFAULT 0,
             weekend_hours DECIMAL(10,2) NOT NULL DEFAULT 0,
             salary DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -141,6 +142,7 @@ function payrolls_ensure_tables(): void
     payrolls_ensure_column('payrolls', 'period_end', 'DATE NULL AFTER period_start');
     payrolls_ensure_column('payroll_entries', 'employee_code', "VARCHAR(100) NOT NULL DEFAULT '' AFTER employee_id");
     payrolls_ensure_column('payroll_entries', 'allowances_json', 'LONGTEXT NULL AFTER salary');
+    payrolls_ensure_column('payroll_entries', 'hourly_multiplier', 'DECIMAL(10,3) NOT NULL DEFAULT 1 AFTER hourly_rate');
     payrolls_ensure_column('payroll_entries', 'monthly_salary', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER salary_type');
     payrolls_ensure_column('payroll_entries', 'expected_work_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER monthly_salary');
     payrolls_ensure_column('payroll_entries', 'paid_leave_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER expected_work_days');
@@ -199,6 +201,7 @@ function payrolls_map_entry_row(array $row): array
         'employeeName' => (string) $row['employee_name'],
         'role' => (string) $row['role'],
         'hourlyRate' => (float) $row['hourly_rate'],
+        'hourlyMultiplier' => (float) ($row['hourly_multiplier'] ?? 1),
         'totalHours' => (float) $row['total_hours'],
         'weekendHours' => (float) $row['weekend_hours'],
         'salary' => (float) $row['salary'],
@@ -343,17 +346,20 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
     $salaryType = payrolls_normalize_salary_type((string) ($entry['salaryType'] ?? ''), $entry);
     $monthlySalary = (float) ($entry['monthlySalary'] ?? ($entry['fixedSalary'] ?? 0));
     $expectedWorkDays = (float) ($entry['expectedWorkDays'] ?? ($salaryType === 'monthly' ? 30 : 0));
+    $hourlyMultiplier = array_key_exists('hourlyMultiplier', $entry)
+        ? max(0, (float) $entry['hourlyMultiplier'])
+        : 1.0;
 
     $statement = db()->prepare(
         'INSERT INTO payroll_entries (
             id, payroll_id, employee_id, employee_code, employee_name, role,
-            hourly_rate, total_hours, weekend_hours, salary, allowances_json, note,
+            hourly_rate, hourly_multiplier, total_hours, weekend_hours, salary, allowances_json, note,
             salary_type, monthly_salary, expected_work_days, paid_leave_days,
             attendance_bonus_enabled, attendance_bonus_days, attendance_bonus_amount,
             fixed_salary, standard_hours, shifts_json, created_at
          ) VALUES (
             :id, :payroll_id, :employee_id, :employee_code, :employee_name, :role,
-            :hourly_rate, :total_hours, :weekend_hours, :salary, :allowances_json, :note,
+            :hourly_rate, :hourly_multiplier, :total_hours, :weekend_hours, :salary, :allowances_json, :note,
             :salary_type, :monthly_salary, :expected_work_days, :paid_leave_days,
             :attendance_bonus_enabled, :attendance_bonus_days, :attendance_bonus_amount,
             :fixed_salary, :standard_hours, :shifts_json, NOW()
@@ -367,6 +373,7 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
         'employee_name' => trim((string) ($entry['employeeName'] ?? 'Nhan vien')),
         'role' => trim((string) ($entry['role'] ?? '')),
         'hourly_rate' => (float) ($entry['hourlyRate'] ?? 0),
+        'hourly_multiplier' => $hourlyMultiplier,
         'total_hours' => (float) ($entry['totalHours'] ?? 0),
         'weekend_hours' => (float) ($entry['weekendHours'] ?? 0),
         'salary' => (float) ($entry['salary'] ?? 0),
@@ -509,6 +516,7 @@ if ($method === 'POST') {
                     'employeeName' => (string) ($employee['name'] ?? 'Unknown'),
                     'role' => (string) ($employee['role'] ?? ''),
                     'hourlyRate' => (float) ($employee['hourlyRate'] ?? 0),
+                    'hourlyMultiplier' => 1,
                     'totalHours' => 0,
                     'weekendHours' => 0,
                     'salary' => 0,
@@ -558,6 +566,7 @@ if ($method === 'PATCH') {
             'employeeName' => 'employee_name',
             'role' => 'role',
             'hourlyRate' => 'hourly_rate',
+            'hourlyMultiplier' => 'hourly_multiplier',
             'totalHours' => 'total_hours',
             'weekendHours' => 'weekend_hours',
             'salary' => 'salary',
@@ -585,6 +594,8 @@ if ($method === 'PATCH') {
                 $params[$payloadKey] = payrolls_normalize_salary_type((string) $body[$payloadKey], $body);
             } elseif ($payloadKey === 'attendanceBonusEnabled') {
                 $params[$payloadKey] = !empty($body[$payloadKey]) ? 1 : 0;
+            } elseif ($payloadKey === 'hourlyMultiplier') {
+                $params[$payloadKey] = max(0, (float) $body[$payloadKey]);
             } elseif ($payloadKey === 'fixedSalary') {
                 $params[$payloadKey] = (float) $body[$payloadKey];
             } else {

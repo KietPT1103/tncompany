@@ -238,6 +238,7 @@ const buildPayrollEntryPayload = (
     employeeName: entry.employeeName,
     role: entry.role,
     hourlyRate: entry.hourlyRate || 0,
+    hourlyMultiplier: entry.hourlyMultiplier ?? 1,
     totalHours: entry.totalHours || 0,
     weekendHours: entry.weekendHours || 0,
     salary: entry.salary || 0,
@@ -370,7 +371,11 @@ export default function PayrollDetail({
     paidLeaveDays: 0,
     standardHours: 0,
     overtimeRate: 0,
+    hourlyMultiplier: 1,
   });
+  const [batchHourlyMultiplier, setBatchHourlyMultiplier] = useState(1);
+  const [isApplyingBatchMultiplier, setIsApplyingBatchMultiplier] =
+    useState(false);
 
   const [allowanceEntryId, setAllowanceEntryId] = useState<string | null>(null);
 
@@ -504,6 +509,7 @@ export default function PayrollDetail({
         const normalizedEntry: PayrollEntry = {
           ...entry,
           salaryType: resolvePayrollSalaryType(entry),
+          hourlyMultiplier: entry.hourlyMultiplier ?? 1,
           monthlySalary: entry.monthlySalary || entry.fixedSalary || 0,
           fixedSalary: entry.fixedSalary || entry.monthlySalary || 0,
         };
@@ -587,6 +593,8 @@ export default function PayrollDetail({
           resolvedSalaryType === "monthly" ? nextEntry.paidLeaveDays || 0 : 0,
         standardHours:
           resolvedSalaryType === "monthly" ? nextEntry.standardHours || 0 : 0,
+        hourlyMultiplier:
+          resolvedSalaryType === "hourly" ? nextEntry.hourlyMultiplier ?? 1 : 1,
       };
       persistedEntry.salary = calculatePayrollSalary(persistedEntry);
 
@@ -663,6 +671,8 @@ export default function PayrollDetail({
       expectedWorkDays: resolvedExpectedWorkDays,
       standardHours:
         resolvedSalaryType === "monthly" ? settingsData.standardHours : 0,
+      hourlyMultiplier:
+        resolvedSalaryType === "hourly" ? settingsData.hourlyMultiplier : 1,
       hourlyRate:
         resolvedSalaryType === "monthly"
           ? settingsData.overtimeRate
@@ -750,6 +760,8 @@ export default function PayrollDetail({
 
       hourlyRate: employee.hourlyRate || 0,
 
+      hourlyMultiplier: 1,
+
       totalHours: 0,
 
       weekendHours: 0,
@@ -835,6 +847,7 @@ export default function PayrollDetail({
       employeeName: payload.name.trim(),
       role: payload.role,
       hourlyRate: payload.hourlyRate,
+      hourlyMultiplier: 1,
       totalHours: 0,
       weekendHours: 0,
       salary: 0,
@@ -989,6 +1002,19 @@ export default function PayrollDetail({
   const monthlyEntries = entries.filter(
     (entry) => resolvePayrollSalaryType(entry) === "monthly",
   ).length;
+  const hourlyEntries = entries.filter(
+    (entry) => resolvePayrollSalaryType(entry) === "hourly",
+  );
+  const uniformHourlyMultiplier =
+    hourlyEntries.length === 0
+      ? 1
+      : hourlyEntries.every(
+            (entry) =>
+              (entry.hourlyMultiplier ?? 1) ===
+              (hourlyEntries[0]?.hourlyMultiplier ?? 1),
+          )
+        ? hourlyEntries[0]?.hourlyMultiplier ?? 1
+        : null;
 
   const allowanceEntry = entries.find((entry) => entry.id === allowanceEntryId);
 
@@ -1006,6 +1032,55 @@ export default function PayrollDetail({
   const salaryDetailAttendanceProgress = salaryDetailEntry
     ? getAttendanceBonusProgress(salaryDetailEntry)
     : null;
+
+  async function handleApplyBatchHourlyMultiplier() {
+    if (hourlyEntries.length === 0) {
+      alert("Bảng lương này không có nhân viên theo giờ để áp dụng hệ số.");
+      return;
+    }
+
+    const nextMultiplier = Number(batchHourlyMultiplier);
+    if (!Number.isFinite(nextMultiplier) || nextMultiplier < 0) {
+      alert("Hệ số không hợp lệ.");
+      return;
+    }
+
+    setIsApplyingBatchMultiplier(true);
+    try {
+      await Promise.resolve(debouncedUpdate.flush());
+
+      const updatedHourlyEntries = hourlyEntries
+        .filter((entry): entry is PayrollEntry & { id: string } => Boolean(entry.id))
+        .map((entry) => {
+          const nextEntry: PayrollEntry = {
+            ...entry,
+            hourlyMultiplier: nextMultiplier,
+          };
+          nextEntry.salary = calculatePayrollSalary(nextEntry);
+          return nextEntry as PayrollEntry & { id: string };
+        });
+      const updatedMap = new Map(
+        updatedHourlyEntries.map((entry) => [entry.id, entry]),
+      );
+
+      setEntries((current) =>
+        current.map((entry) =>
+          entry.id ? updatedMap.get(entry.id) || entry : entry,
+        ),
+      );
+
+      await Promise.all(
+        updatedHourlyEntries.map((entry) =>
+          queueEntryPersist(entry, { hourlyMultiplier: nextMultiplier }),
+        ),
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Không thể áp dụng hệ số cho toàn bộ đợt lương.");
+    } finally {
+      setIsApplyingBatchMultiplier(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -1069,6 +1144,53 @@ export default function PayrollDetail({
             <p className="mt-4 text-2xl font-semibold text-slate-900">
               {formatCurrency(filteredTotal)}
             </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-[24px] border border-amber-200 bg-amber-50/80 p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">
+                Hệ số lương cho toàn đợt
+              </h3>
+              <p className="mt-1 text-sm text-slate-600">
+                Áp dụng một lần cho toàn bộ nhân viên theo giờ của bảng lương
+                này. Không ảnh hưởng hồ sơ nhân viên hay các đợt lương cũ.
+              </p>
+              <p className="mt-2 text-sm text-amber-800">
+                {hourlyEntries.length === 0
+                  ? "Hiện không có nhân viên theo giờ trong đợt này."
+                  : uniformHourlyMultiplier === null
+                    ? `Đợt này đang có nhiều hệ số khác nhau trên ${hourlyEntries.length} nhân viên theo giờ.`
+                    : `Đợt này hiện đang dùng hệ số ${formatHours(
+                        uniformHourlyMultiplier,
+                      )} cho ${hourlyEntries.length} nhân viên theo giờ.`}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                label="Hệ số áp dụng"
+                value={batchHourlyMultiplier}
+                onChange={(event) =>
+                  setBatchHourlyMultiplier(Number(event.target.value) || 0)
+                }
+                className="h-11 min-w-[180px] rounded-2xl bg-white text-right"
+              />
+              <Button
+                className="h-11 rounded-2xl px-5"
+                onClick={() => {
+                  void handleApplyBatchHourlyMultiplier();
+                }}
+                isLoading={isApplyingBatchMultiplier}
+                disabled={hourlyEntries.length === 0}
+              >
+                Áp dụng cho cả đợt
+              </Button>
+            </div>
           </div>
         </div>
       </section>
@@ -1448,6 +1570,10 @@ export default function PayrollDetail({
                           <div className="mt-1 text-xs text-slate-400">
                             {formatHours(entry.totalHours || 0)}h x{" "}
                             {formatCurrency(entry.hourlyRate || 0)}
+                            {breakdown.salaryType === "hourly" &&
+                            breakdown.hourlyMultiplier !== 1
+                              ? ` x ${formatHours(breakdown.hourlyMultiplier)}`
+                              : ""}
                           </div>
                         </td>
                       ) : null}
@@ -1498,6 +1624,7 @@ export default function PayrollDetail({
                                       ? entry.standardHours || 0
                                       : 0,
                                   overtimeRate: entry.hourlyRate || 0,
+                                  hourlyMultiplier: entry.hourlyMultiplier ?? 1,
                                 });
                               }}
                             >
@@ -1614,7 +1741,14 @@ export default function PayrollDetail({
                   </div>
                   {salaryDetailBreakdown.salaryType === "hourly" ? (
                     <div className="mt-1 text-xs text-slate-500">
-                      ({formatHours(salaryDetailEntry.totalHours || 0)}h)
+                      ({formatHours(salaryDetailEntry.totalHours || 0)}h x{" "}
+                      {formatCurrency(salaryDetailEntry.hourlyRate || 0)}
+                      {salaryDetailBreakdown.hourlyMultiplier !== 1
+                        ? ` x ${formatHours(
+                            salaryDetailBreakdown.hourlyMultiplier,
+                          )}`
+                        : ""}
+                      )
                     </div>
                   ) : null}
                 </div>
@@ -1789,6 +1923,7 @@ export default function PayrollDetail({
 
       {settingsEntryId ? (
         <PayrollSettingsDialog
+          hourlyMultiplier={settingsData.hourlyMultiplier}
           monthlySalary={settingsData.monthlySalary}
           expectedWorkDays={settingsData.expectedWorkDays}
           onClose={() => setSettingsEntryId(null)}
@@ -1796,6 +1931,12 @@ export default function PayrollDetail({
             setSettingsData((current) => ({
               ...current,
               expectedWorkDays: value || 30,
+            }))
+          }
+          onHourlyMultiplierChange={(value) =>
+            setSettingsData((current) => ({
+              ...current,
+              hourlyMultiplier: value,
             }))
           }
           onMonthlySalaryChange={(value) =>

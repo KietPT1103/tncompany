@@ -35,6 +35,7 @@ export type PayrollEntry = {
   employeeName: string;
   role: string;
   hourlyRate: number;
+  hourlyMultiplier?: number;
   totalHours: number;
   weekendHours: number;
   salary: number;

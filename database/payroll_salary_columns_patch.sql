@@ -21,6 +21,7 @@ END;
 
 ALTER TABLE payroll_entries
   MODIFY COLUMN salary_type VARCHAR(20) NOT NULL DEFAULT 'hourly',
+  ADD COLUMN hourly_multiplier DECIMAL(10,3) NOT NULL DEFAULT 1 AFTER hourly_rate,
   ADD COLUMN monthly_salary DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER salary_type,
   ADD COLUMN expected_work_days DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER monthly_salary,
   ADD COLUMN paid_leave_days DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER expected_work_days,
