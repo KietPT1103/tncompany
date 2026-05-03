@@ -150,7 +150,6 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
   const workingDays = getWorkingDays(entry);
   const absentDays = getAbsentDays(entry);
   const unpaidLeaveDays = getUnpaidLeaveDays(entry);
-  const weekendBonus = salaryType === "hourly" ? (entry.weekendHours || 0) * 1000 : 0;
   const standardHours = Math.max(0, entry.standardHours || 0);
   const overtimeHours =
     salaryType === "monthly" && standardHours > 0
@@ -164,6 +163,10 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
     Number.isFinite(entry.hourlyMultiplier)
       ? Math.max(0, entry.hourlyMultiplier || 0)
       : 1;
+  const weekendBonus =
+    salaryType === "hourly"
+      ? (entry.weekendHours || 0) * 1000 * hourlyMultiplier
+      : 0;
   let baseSalary = 0;
   let deduction = 0;
   if (salaryType === "monthly") {

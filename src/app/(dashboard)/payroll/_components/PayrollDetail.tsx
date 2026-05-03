@@ -1781,7 +1781,14 @@ export default function PayrollDetail({
                       {formatCurrency(salaryDetailBreakdown.weekendBonus)}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      ({formatHours(salaryDetailEntry.weekendHours || 0)}h)
+                      ({formatHours(salaryDetailEntry.weekendHours || 0)}h x{" "}
+                      {formatCurrency(1000)}
+                      {salaryDetailBreakdown.hourlyMultiplier !== 1
+                        ? ` x ${formatHours(
+                            salaryDetailBreakdown.hourlyMultiplier,
+                          )}`
+                        : ""}
+                      )
                     </div>
                   </div>
                 </div>
