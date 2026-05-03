@@ -177,6 +177,17 @@ export default function TimesheetPage() {
     return employee?.salaryType === "monthly" || (employee?.monthlySalary || 0) > 0;
   };
 
+  const resolveImportedSalaryType = (employee?: Employee) => {
+    if (
+      isMonthlyEmployee(employee) &&
+      (mode === "custom" || (mode === "month" && selectedPeriod === 2))
+    ) {
+      return "monthly" as const;
+    }
+
+    return "hourly" as const;
+  };
+
   const buildEmployeeRowsMap = (rows: TimesheetRow[]) => {
     const grouped: Record<string, TimesheetRow[]> = {};
 
@@ -453,7 +464,7 @@ export default function TimesheetPage() {
           (employee) => employee.employeeCode?.trim() === employeeCode
         );
         const useMonthlySalary =
-          mode === "month" && selectedPeriod === 2 && isMonthlyEmployee(matchedDbEmployee);
+          resolveImportedSalaryType(matchedDbEmployee) === "monthly";
 
         if (mode === "month" && selectedPeriod === 1 && isMonthlyEmployee(matchedDbEmployee)) {
           continue;
@@ -689,8 +700,7 @@ export default function TimesheetPage() {
           const matchedDbEmployee = dbEmployees.find(
             (emp) => emp.employeeCode?.trim() === employee.EnNo
           );
-          const isFullTime = isMonthlyEmployee(matchedDbEmployee);
-          const salaryType = (mode === 'month' && selectedPeriod === 2 && isFullTime) ? 'monthly' : 'hourly';
+          const salaryType = employee.SalaryType || resolveImportedSalaryType(matchedDbEmployee);
           
           return {
             employeeId: employee.dbId || `manual_${employee.EnNo || Date.now()}`,
