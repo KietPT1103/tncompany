@@ -1002,9 +1002,7 @@ export default function PayrollDetail({
   const monthlyEntries = entries.filter(
     (entry) => resolvePayrollSalaryType(entry) === "monthly",
   ).length;
-  const hourlyEntries = entries.filter(
-    (entry) => resolvePayrollSalaryType(entry) === "hourly",
-  );
+  const hourlyEntries = entries;
   const uniformHourlyMultiplier =
     hourlyEntries.length === 0
       ? 1
@@ -1750,6 +1748,10 @@ export default function PayrollDetail({
                         : ""}
                       )
                     </div>
+                  ) : salaryDetailBreakdown.hourlyMultiplier !== 1 ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      (x {formatHours(salaryDetailBreakdown.hourlyMultiplier)})
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -1765,7 +1767,13 @@ export default function PayrollDetail({
                           salaryDetailBreakdown.overtimeHours,
                         )}h x ${formatCurrency(
                           salaryDetailBreakdown.overtimeRate,
-                        )})`
+                        )}${
+                          salaryDetailBreakdown.hourlyMultiplier !== 1
+                            ? ` x ${formatHours(
+                                salaryDetailBreakdown.hourlyMultiplier,
+                              )}`
+                            : ""
+                        })`
                       : ""}
                   </span>
                   <span className="font-semibold text-slate-900">

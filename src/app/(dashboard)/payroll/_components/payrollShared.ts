@@ -156,16 +156,15 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
       ? Math.max(0, (entry.totalHours || 0) - standardHours)
       : 0;
   const overtimeRate = salaryType === "monthly" ? Math.max(0, entry.hourlyRate || 0) : 0;
-  const overtimePay = overtimeHours * overtimeRate;
-  const hourlyMultiplier =
-    salaryType === "hourly" &&
+  const salaryMultiplier =
     typeof entry.hourlyMultiplier === "number" &&
     Number.isFinite(entry.hourlyMultiplier)
       ? Math.max(0, entry.hourlyMultiplier || 0)
       : 1;
-  const weekendBonus =
+  let overtimePay = overtimeHours * overtimeRate;
+  let weekendBonus =
     salaryType === "hourly"
-      ? (entry.weekendHours || 0) * 1000 * hourlyMultiplier
+      ? (entry.weekendHours || 0) * 1000
       : 0;
   let baseSalary = 0;
   let deduction = 0;
@@ -173,7 +172,14 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
     baseSalary = entry.monthlySalary || entry.fixedSalary || 0;
     deduction = Math.round(unpaidLeaveDays * (baseSalary / 30));
   } else {
-    baseSalary = (entry.totalHours || 0) * (entry.hourlyRate || 0) * hourlyMultiplier;
+    baseSalary = (entry.totalHours || 0) * (entry.hourlyRate || 0);
+  }
+
+  if (salaryMultiplier !== 1) {
+    baseSalary *= salaryMultiplier;
+    deduction *= salaryMultiplier;
+    overtimePay *= salaryMultiplier;
+    weekendBonus *= salaryMultiplier;
   }
   const rawSalary = Math.max(
     0,
@@ -185,7 +191,7 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
     attendanceBonus,
     baseSalary,
     deduction,
-    hourlyMultiplier,
+    hourlyMultiplier: salaryMultiplier,
     overtimeHours,
     overtimePay,
     overtimeRate,

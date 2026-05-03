@@ -75,8 +75,19 @@ export default function PayrollSettingsDialog({
               <Input type="number" label="Nghỉ phép được tính lương" value={paidLeaveDays || ""} onChange={(event) => onPaidLeaveDaysChange(Number(event.target.value) || 0)} className="h-11 rounded-2xl bg-slate-50 text-right" />
               <Input type="number" label="Số giờ cần làm" value={standardHours || ""} onChange={(event) => onStandardHoursChange(Number(event.target.value) || 0)} className="h-11 rounded-2xl bg-slate-50 text-right" />
               <InputMoney label="Lương OT / giờ" value={overtimeRate} set={onOvertimeRateChange} className="h-11 rounded-2xl bg-slate-50" />
-              <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                Mặc định số ngày phải đi làm là 30. Nếu tổng giờ làm vượt mốc giờ cần làm thì phần vượt sẽ được cộng thêm theo lương OT / giờ.
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                label="Hệ số lương"
+                value={hourlyMultiplier}
+                onChange={(event) =>
+                  onHourlyMultiplierChange(Number(event.target.value) || 0)
+                }
+                className="h-11 rounded-2xl bg-slate-50 text-right"
+              />
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 md:col-span-2">
+                Mặc định số ngày phải đi làm là 30. Nếu tổng giờ làm vượt mốc giờ cần làm thì phần vượt sẽ được cộng thêm theo lương OT / giờ. Hệ số này áp dụng cho phần lương của đợt hiện tại.
               </div>
             </div>
           ) : (
@@ -85,7 +96,7 @@ export default function PayrollSettingsDialog({
                 type="number"
                 min="0"
                 step="0.1"
-                label="Hệ số lương giờ"
+                label="Hệ số lương"
                 value={hourlyMultiplier}
                 onChange={(event) =>
                   onHourlyMultiplierChange(Number(event.target.value) || 0)
