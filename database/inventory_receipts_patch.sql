@@ -1,5 +1,20 @@
-ALTER TABLE products
-  ADD COLUMN IF NOT EXISTS stock_quantity DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER is_selling;
+SET @stock_quantity_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'products'
+    AND COLUMN_NAME = 'stock_quantity'
+);
+
+SET @stock_quantity_sql := IF(
+  @stock_quantity_exists = 0,
+  'ALTER TABLE products ADD COLUMN stock_quantity DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER is_selling',
+  'SELECT 1'
+);
+
+PREPARE stock_quantity_stmt FROM @stock_quantity_sql;
+EXECUTE stock_quantity_stmt;
+DEALLOCATE PREPARE stock_quantity_stmt;
 
 CREATE TABLE IF NOT EXISTS product_components (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,

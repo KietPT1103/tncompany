@@ -199,7 +199,9 @@ if ($method === 'GET') {
     $receiptRows = $statement->fetchAll();
     $receiptIds = array_values(
         array_map(
-            static fn (array $row): string => (string) $row['id'],
+            static function (array $row): string {
+                return (string) $row['id'];
+            },
             $receiptRows
         )
     );
@@ -273,7 +275,9 @@ if ($method === 'POST') {
     $totalAmount = round(
         array_reduce(
             $items,
-            static fn (float $sum, array $item): float => $sum + (float) $item['lineTotal'],
+            static function (float $sum, array $item): float {
+                return $sum + (float) $item['lineTotal'];
+            },
             0.0
         ),
         2

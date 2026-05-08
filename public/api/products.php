@@ -85,7 +85,9 @@ if ($method === 'GET') {
         $storeId,
         array_values(
             array_map(
-                static fn (array $row): string => (string) $row['id'],
+                static function (array $row): string {
+                    return (string) $row['id'];
+                },
                 $rows
             )
         )
@@ -99,7 +101,9 @@ if ($method === 'GET') {
             $payload['componentCount'] = count($components);
             $payload['componentCostTotal'] = array_reduce(
                 $components,
-                static fn (float $sum, array $component): float => $sum + (float) ($component['lineTotal'] ?? 0),
+                static function (float $sum, array $component): float {
+                    return $sum + (float) ($component['lineTotal'] ?? 0);
+                },
                 0.0
             );
 

@@ -84,6 +84,7 @@ function buildApiTransportError(response: Response, rawBody: string) {
   }
 
   const normalizedBody = rawBody.replace(/\s+/g, " ").trim();
+  const responseSnippet = normalizedBody.slice(0, 280);
   const looksHtml =
     normalizedBody.startsWith("<!DOCTYPE html") ||
     normalizedBody.startsWith("<html") ||
@@ -91,13 +92,13 @@ function buildApiTransportError(response: Response, rawBody: string) {
 
   if (looksHtml) {
     return new ApiTransportError(
-      `API ${pathname} tra ve HTML thay vi JSON (${status}). Neu dang chay local, hay kiem tra Vite proxy hoac dung npm run dev:full.`,
+      `API ${pathname} tra ve HTML thay vi JSON (${status}). ${responseSnippet || "Khong co noi dung response."}`,
       true
     );
   }
 
   return new ApiTransportError(
-    `API ${pathname} tra ve du lieu khong hop le (${status}).`,
+    `API ${pathname} tra ve du lieu khong hop le (${status}). ${responseSnippet || "Khong co noi dung response."}`,
     response.status === 404
   );
 }

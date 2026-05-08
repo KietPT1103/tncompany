@@ -709,7 +709,9 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
         'totalConsumedQuantity' => round(
             array_reduce(
                 $items,
-                static fn (float $sum, array $item): float => $sum + (float) $item['quantity'],
+                static function (float $sum, array $item): float {
+                    return $sum + (float) $item['quantity'];
+                },
                 0.0
             ),
             3
@@ -717,7 +719,9 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
         'totalConsumedCost' => round(
             array_reduce(
                 $items,
-                static fn (float $sum, array $item): float => $sum + (float) $item['lineCost'],
+                static function (float $sum, array $item): float {
+                    return $sum + (float) $item['lineCost'];
+                },
                 0.0
             ),
             2

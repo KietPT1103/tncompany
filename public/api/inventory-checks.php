@@ -270,7 +270,9 @@ if ($method === 'GET') {
     $checkRows = $statement->fetchAll();
     $checkIds = array_values(
         array_map(
-            static fn (array $row): string => (string) $row['id'],
+            static function (array $row): string {
+                return (string) $row['id'];
+            },
             $checkRows
         )
     );
