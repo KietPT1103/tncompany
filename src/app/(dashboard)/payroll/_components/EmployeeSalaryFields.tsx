@@ -16,6 +16,9 @@ export type EmployeeSalaryFormValues = {
   monthlySalary: number;
   expectedWorkDays: number;
   paidLeaveDays: number;
+  attendanceBonusEnabled: boolean;
+  attendanceBonusDays: number;
+  attendanceBonusAmount: number;
   standardHours: number;
   allowances: EmployeeAllowance[];
 };
@@ -48,6 +51,9 @@ export function createEmployeeSalaryFormValues(
     expectedWorkDays:
       salaryType === "monthly" ? employee?.expectedWorkDays || 30 : 30,
     paidLeaveDays: salaryType === "monthly" ? employee?.paidLeaveDays || 0 : 0,
+    attendanceBonusEnabled: employee?.attendanceBonusEnabled || false,
+    attendanceBonusDays: employee?.attendanceBonusDays || 0,
+    attendanceBonusAmount: employee?.attendanceBonusAmount || 0,
     standardHours: salaryType === "monthly" ? employee?.standardHours || 0 : 0,
     allowances: employee?.allowances || [],
   };
@@ -65,6 +71,13 @@ export function buildEmployeeMutationPayload(values: EmployeeSalaryFormValues) {
     monthlySalary: isMonthly ? values.monthlySalary : 0,
     expectedWorkDays: isMonthly ? values.expectedWorkDays || 30 : 0,
     paidLeaveDays: isMonthly ? values.paidLeaveDays : 0,
+    attendanceBonusEnabled: values.attendanceBonusEnabled,
+    attendanceBonusDays: values.attendanceBonusEnabled
+      ? values.attendanceBonusDays
+      : 0,
+    attendanceBonusAmount: values.attendanceBonusEnabled
+      ? values.attendanceBonusAmount
+      : 0,
     standardHours: isMonthly ? values.standardHours : 0,
     allowances: (values.allowances || []).map((allowance) => ({
       name: allowance.name.trim(),
@@ -231,6 +244,55 @@ export default function EmployeeSalaryFields({
           />
         </div>
       )}
+
+      <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+        <label className="flex items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+          <div>
+            <div className="font-semibold text-slate-900">Chuyên cần hồ sơ</div>
+            <p className="mt-1 text-sm text-slate-500">
+              Lưu cấu hình thưởng chuyên cần để dùng lại khi tạo kỳ lương mới.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={values.attendanceBonusEnabled}
+            onChange={(event) =>
+              onChange({
+                attendanceBonusEnabled: event.target.checked,
+                attendanceBonusDays: event.target.checked
+                  ? values.attendanceBonusDays
+                  : 0,
+                attendanceBonusAmount: event.target.checked
+                  ? values.attendanceBonusAmount
+                  : 0,
+              })
+            }
+            className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+          />
+        </label>
+
+        {values.attendanceBonusEnabled ? (
+          <div className="mt-4 grid gap-4 rounded-[20px] border border-emerald-200 bg-emerald-50/60 p-4 md:grid-cols-[1fr_1fr]">
+            <Input
+              type="number"
+              label="Mốc trừ chuyên cần (ngày nghỉ)"
+              value={values.attendanceBonusDays || ""}
+              onChange={(event) =>
+                onChange({
+                  attendanceBonusDays: Number(event.target.value) || 0,
+                })
+              }
+              className="h-11 rounded-2xl bg-white text-right"
+            />
+            <InputMoney
+              label="Thưởng chuyên cần"
+              value={values.attendanceBonusAmount}
+              set={(value) => onChange({ attendanceBonusAmount: value })}
+              className="h-11 rounded-2xl bg-white"
+            />
+          </div>
+        ) : null}
+      </div>
 
       <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

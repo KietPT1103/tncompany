@@ -270,7 +270,7 @@ export default function EmployeeManager({
 
       {dialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-4xl rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.28)]">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.28)]">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Hồ sơ nhân viên</p>
@@ -279,9 +279,11 @@ export default function EmployeeManager({
               </div>
               <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl text-slate-500 hover:bg-slate-100" onClick={closeDialog} disabled={submitting}><X className="h-4 w-4" /></Button>
             </div>
-            <div className="space-y-6 px-6 py-6">
-              <EmployeeSalaryFields roleGroups={roleGroups} values={formValues} onChange={(changes) => setFormValues((current) => ({ ...current, ...changes }))} />
-              {dialogError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{dialogError}</div> : null}
+            <div className="min-h-0 overflow-y-auto px-6 py-6">
+              <div className="space-y-6">
+                <EmployeeSalaryFields roleGroups={roleGroups} values={formValues} onChange={(changes) => setFormValues((current) => ({ ...current, ...changes }))} />
+                {dialogError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{dialogError}</div> : null}
+              </div>
             </div>
             <div className="flex flex-col-reverse gap-3 border-t border-slate-100 px-6 py-5 sm:flex-row sm:justify-end">
               <Button variant="outline" className="rounded-2xl" onClick={closeDialog} disabled={submitting}>Hủy</Button>

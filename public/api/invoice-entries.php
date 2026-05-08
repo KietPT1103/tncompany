@@ -694,12 +694,23 @@ if ($method === 'GET') {
             OR invoice_number LIKE :search_invoice_number
             OR partner_name LIKE :search_partner_name
             OR note LIKE :search_note
+            OR EXISTS (
+                SELECT 1
+                FROM invoice_entry_items invoice_items
+                WHERE invoice_items.invoice_id = invoice_entries.id
+                  AND (
+                    invoice_items.item_name LIKE :search_item_name
+                    OR COALESCE(invoice_items.unit, "") LIKE :search_item_unit
+                  )
+            )
         )';
         $searchValue = '%' . $search . '%';
         $params['search_id'] = $searchValue;
         $params['search_invoice_number'] = $searchValue;
         $params['search_partner_name'] = $searchValue;
         $params['search_note'] = $searchValue;
+        $params['search_item_name'] = $searchValue;
+        $params['search_item_unit'] = $searchValue;
     }
 
     if ($startDate !== '') {

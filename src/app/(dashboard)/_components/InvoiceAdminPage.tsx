@@ -657,7 +657,7 @@ export default function InvoiceAdminPage({
                         }
                       }}
                       className="pl-9"
-                      placeholder="Số HĐ, đơn vị, ghi chú"
+                      placeholder="Số HĐ, đơn vị, chi tiết, ghi chú"
                     />
                   </div>
                 </div>

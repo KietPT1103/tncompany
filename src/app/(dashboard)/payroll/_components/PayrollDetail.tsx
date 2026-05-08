@@ -808,7 +808,11 @@ export default function PayrollDetail({
     monthlySalary: number;
     expectedWorkDays: number;
     paidLeaveDays: number;
+    attendanceBonusEnabled: boolean;
+    attendanceBonusDays: number;
+    attendanceBonusAmount: number;
     standardHours: number;
+    allowances?: Employee["allowances"];
   }) {
     if (!storeId) throw new Error("Chưa chọn cửa hàng.");
 
@@ -835,10 +839,15 @@ export default function PayrollDetail({
       monthlySalary: isMonthly ? payload.monthlySalary : 0,
       expectedWorkDays: isMonthly ? payload.expectedWorkDays || 30 : 0,
       paidLeaveDays: isMonthly ? payload.paidLeaveDays : 0,
-      attendanceBonusEnabled: false,
-      attendanceBonusDays: 0,
-      attendanceBonusAmount: 0,
+      attendanceBonusEnabled: payload.attendanceBonusEnabled,
+      attendanceBonusDays: payload.attendanceBonusEnabled
+        ? payload.attendanceBonusDays
+        : 0,
+      attendanceBonusAmount: payload.attendanceBonusEnabled
+        ? payload.attendanceBonusAmount
+        : 0,
       standardHours: isMonthly ? payload.standardHours : 0,
+      allowances: payload.allowances || [],
     });
 
     await addPayrollEntry(payrollId, {
@@ -851,15 +860,19 @@ export default function PayrollDetail({
       totalHours: 0,
       weekendHours: 0,
       salary: 0,
-      allowances: [],
+      allowances: payload.allowances || [],
       note: "",
       salaryType: payload.salaryType,
       monthlySalary: isMonthly ? payload.monthlySalary : 0,
       expectedWorkDays: isMonthly ? payload.expectedWorkDays || 30 : 0,
       paidLeaveDays: isMonthly ? payload.paidLeaveDays : 0,
-      attendanceBonusEnabled: false,
-      attendanceBonusDays: 0,
-      attendanceBonusAmount: 0,
+      attendanceBonusEnabled: payload.attendanceBonusEnabled,
+      attendanceBonusDays: payload.attendanceBonusEnabled
+        ? payload.attendanceBonusDays
+        : 0,
+      attendanceBonusAmount: payload.attendanceBonusEnabled
+        ? payload.attendanceBonusAmount
+        : 0,
       standardHours: isMonthly ? payload.standardHours : 0,
       shifts: [],
     });

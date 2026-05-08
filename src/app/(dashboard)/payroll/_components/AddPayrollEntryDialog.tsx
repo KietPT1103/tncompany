@@ -29,7 +29,11 @@ type AddPayrollEntryDialogProps = {
     monthlySalary: number;
     expectedWorkDays: number;
     paidLeaveDays: number;
+    attendanceBonusEnabled: boolean;
+    attendanceBonusDays: number;
+    attendanceBonusAmount: number;
     standardHours: number;
+    allowances: Employee["allowances"];
   }) => Promise<void>;
 };
 
@@ -114,7 +118,11 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
         monthlySalary: formValues.salaryType === "monthly" ? formValues.monthlySalary : 0,
         expectedWorkDays: formValues.salaryType === "monthly" ? formValues.expectedWorkDays || 30 : 0,
         paidLeaveDays: formValues.salaryType === "monthly" ? formValues.paidLeaveDays : 0,
+        attendanceBonusEnabled: formValues.attendanceBonusEnabled,
+        attendanceBonusDays: formValues.attendanceBonusEnabled ? formValues.attendanceBonusDays : 0,
+        attendanceBonusAmount: formValues.attendanceBonusEnabled ? formValues.attendanceBonusAmount : 0,
         standardHours: formValues.salaryType === "monthly" ? formValues.standardHours : 0,
+        allowances: formValues.allowances,
       });
     } catch (submitError) {
       if (submitError instanceof Error) setError(submitError.message);
@@ -126,7 +134,7 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-4xl rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.28)]">
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.28)]">
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Kỳ lương</p>
@@ -136,7 +144,8 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
           <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl text-slate-500 hover:bg-slate-100" onClick={onClose}><X className="h-4 w-4" /></Button>
         </div>
 
-        <div className="space-y-6 px-6 py-6">
+        <div className="min-h-0 overflow-y-auto px-6 py-6">
+          <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2">
             <button type="button" onClick={() => setMode("existing")} className={cn("rounded-[24px] border px-4 py-4 text-left transition-all", mode === "existing" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white")}>
               <div className="flex items-start gap-3">
@@ -184,6 +193,7 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
           )}
 
           {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
+          </div>
         </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-100 px-6 py-5 sm:flex-row sm:justify-end">
