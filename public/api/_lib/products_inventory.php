@@ -247,6 +247,7 @@ function products_inventory_replace_components(string $storeId, string $productI
             'product_code' => $componentCode,
         ]);
         $componentRow = $findComponent->fetch();
+        $findComponent->closeCursor();
         if (!$componentRow) {
             continue;
         }

@@ -30,15 +30,21 @@ function db(): PDO
         );
     }
 
+    $options = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ];
+
+    if ($driver !== 'sqlite' && defined('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY')) {
+        $options[PDO::MYSQL_ATTR_USE_BUFFERED_QUERY] = true;
+    }
+
     $pdo = new PDO(
         $dsn,
         $driver === 'sqlite' ? null : ($config['db_user'] ?? ''),
         $driver === 'sqlite' ? null : ($config['db_password'] ?? ''),
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ]
+        $options
     );
 
     return $pdo;
