@@ -9,7 +9,36 @@ export type Product = {
   categoryName?: string;
   has_cost: boolean;
   isSelling?: boolean;
+  stockQuantity?: number;
+  componentCount?: number;
+  componentCostTotal?: number;
+  components?: ProductComponent[];
   storeId?: string;
+};
+
+export type ProductComponent = {
+  productCode: string;
+  productName: string;
+  quantity: number;
+  cost: number;
+  stockQuantity: number;
+  lineTotal: number;
+};
+
+export type ProductPayload = {
+  product_code: string;
+  product_name: string;
+  cost: number | null;
+  price: number | null;
+  category?: string;
+  has_cost?: boolean;
+  isSelling?: boolean;
+  storeId?: string;
+  stockQuantity?: number;
+  components?: Array<{
+    productCode: string;
+    quantity: number;
+  }>;
 };
 
 export async function getAllProducts(storeId = "cafe"): Promise<Product[]> {
@@ -20,6 +49,10 @@ export async function getAllProducts(storeId = "cafe"): Promise<Product[]> {
   return items.map((item) => ({
     ...item,
     isSelling: item.isSelling !== false,
+    stockQuantity: item.stockQuantity ?? 0,
+    componentCount: item.componentCount ?? 0,
+    componentCostTotal: item.componentCostTotal ?? 0,
+    components: item.components || [],
   }));
 }
 
@@ -45,10 +78,16 @@ export async function upsertProductsFromExcel(
 export async function updateProductCost(
   productCode: string,
   data: {
+    productName?: string;
     cost?: number | null;
     price?: number | null;
     category?: string;
     isSelling?: boolean;
+    stockQuantity?: number;
+    components?: Array<{
+      productCode: string;
+      quantity: number;
+    }>;
   },
   storeId = "cafe"
 ) {
@@ -69,7 +108,7 @@ export async function deleteProduct(productCode: string, storeId: string) {
   );
 }
 
-export async function addProduct(product: Product) {
+export async function addProduct(product: ProductPayload) {
   await apiRequest<{ created: boolean }>("/products.php", {
     method: "POST",
     body: JSON.stringify({
@@ -80,6 +119,8 @@ export async function addProduct(product: Product) {
       has_cost: product.has_cost ?? Boolean(product.cost),
       isSelling: product.isSelling !== false,
       storeId: product.storeId || "cafe",
+      stockQuantity: product.stockQuantity ?? 0,
+      components: product.components || [],
     }),
   });
 }

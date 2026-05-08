@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/products_inventory.php';
 
 function products_find_category_id(string $storeId, ?string $rawCategory): ?string
 {
@@ -56,11 +57,13 @@ function products_row_to_payload(array $row): array
         'categoryName' => $row['category_name'] ?: '',
         'has_cost' => (bool) $row['has_cost'],
         'isSelling' => (bool) $row['is_selling'],
+        'stockQuantity' => $row['stock_quantity'] !== null ? (float) $row['stock_quantity'] : 0.0,
         'storeId' => (string) $row['store_id'],
     ];
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+products_inventory_ensure_schema();
 
 if ($method === 'GET') {
     auth_require(['admin']);
@@ -77,8 +80,36 @@ if ($method === 'GET') {
         'store_id' => $storeId,
     ]);
 
+    $rows = $statement->fetchAll();
+    $componentsByProductId = products_inventory_load_components(
+        $storeId,
+        array_values(
+            array_map(
+                static fn (array $row): string => (string) $row['id'],
+                $rows
+            )
+        )
+    );
+
+    $items = array_map(
+        static function (array $row) use ($componentsByProductId): array {
+            $payload = products_row_to_payload($row);
+            $components = $componentsByProductId[(string) $row['id']] ?? [];
+            $payload['components'] = $components;
+            $payload['componentCount'] = count($components);
+            $payload['componentCostTotal'] = array_reduce(
+                $components,
+                static fn (float $sum, array $component): float => $sum + (float) ($component['lineTotal'] ?? 0),
+                0.0
+            );
+
+            return $payload;
+        },
+        $rows
+    );
+
     respond_ok([
-        'items' => array_map('products_row_to_payload', $statement->fetchAll()),
+        'items' => $items,
     ]);
 }
 
@@ -141,25 +172,41 @@ if ($method === 'POST') {
         respond_error('Missing product code or name', 422);
     }
 
+    $components = is_array($body['components'] ?? null) ? $body['components'] : [];
     $categoryId = products_find_category_id($storeId, (string) ($body['category'] ?? ''));
-    $statement = db()->prepare(
-        'INSERT INTO products (
-            id, store_id, product_code, product_name, category_id, cost, price, has_cost, is_selling
-         ) VALUES (
-            :id, :store_id, :product_code, :product_name, :category_id, :cost, :price, :has_cost, :is_selling
-         )'
-    );
-    $statement->execute([
-        'id' => uuidv4(),
-        'store_id' => $storeId,
-        'product_code' => $productCode,
-        'product_name' => $productName,
-        'category_id' => $categoryId,
-        'cost' => is_numeric($body['cost'] ?? null) ? (float) $body['cost'] : null,
-        'price' => is_numeric($body['price'] ?? null) ? (float) $body['price'] : null,
-        'has_cost' => !empty($body['has_cost']) || is_numeric($body['cost'] ?? null) ? 1 : 0,
-        'is_selling' => array_key_exists('isSelling', $body) ? (!empty($body['isSelling']) ? 1 : 0) : 1,
-    ]);
+    $productId = uuidv4();
+    db()->beginTransaction();
+
+    try {
+        $statement = db()->prepare(
+            'INSERT INTO products (
+                id, store_id, product_code, product_name, category_id, cost, price, has_cost, is_selling, stock_quantity
+             ) VALUES (
+                :id, :store_id, :product_code, :product_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity
+             )'
+        );
+        $statement->execute([
+            'id' => $productId,
+            'store_id' => $storeId,
+            'product_code' => $productCode,
+            'product_name' => $productName,
+            'category_id' => $categoryId,
+            'cost' => is_numeric($body['cost'] ?? null) ? (float) $body['cost'] : null,
+            'price' => is_numeric($body['price'] ?? null) ? (float) $body['price'] : null,
+            'has_cost' => !empty($body['has_cost']) || is_numeric($body['cost'] ?? null) ? 1 : 0,
+            'is_selling' => array_key_exists('isSelling', $body) ? (!empty($body['isSelling']) ? 1 : 0) : 1,
+            'stock_quantity' => products_inventory_parse_decimal($body['stockQuantity'] ?? 0),
+        ]);
+
+        products_inventory_replace_components($storeId, $productId, $productCode, $components);
+        db()->commit();
+    } catch (Throwable $exception) {
+        if (db()->inTransaction()) {
+            db()->rollBack();
+        }
+
+        throw $exception;
+    }
 
     respond_ok([
         'created' => true,
@@ -194,6 +241,11 @@ if ($method === 'PATCH') {
         $params['price'] = is_numeric($body['price']) ? (float) $body['price'] : null;
     }
 
+    if (array_key_exists('productName', $body)) {
+        $fields[] = 'product_name = :product_name';
+        $params['product_name'] = trim((string) $body['productName']);
+    }
+
     if (array_key_exists('category', $body)) {
         $fields[] = 'category_id = :category_id';
         $params['category_id'] = products_find_category_id($storeId, (string) $body['category']);
@@ -204,17 +256,65 @@ if ($method === 'PATCH') {
         $params['is_selling'] = !empty($body['isSelling']) ? 1 : 0;
     }
 
-    if ($fields === []) {
+    if (array_key_exists('stockQuantity', $body)) {
+        $fields[] = 'stock_quantity = :stock_quantity';
+        $params['stock_quantity'] = products_inventory_parse_decimal($body['stockQuantity'] ?? 0);
+    }
+
+    $hasComponents = array_key_exists('components', $body);
+
+    if ($fields === [] && !$hasComponents) {
         respond_error('No changes provided', 422);
     }
 
-    $statement = db()->prepare(
-        sprintf(
-            'UPDATE products SET %s WHERE store_id = :store_id AND product_code = :product_code',
-            implode(', ', $fields)
-        )
+    $findStatement = db()->prepare(
+        'SELECT id, product_code
+         FROM products
+         WHERE store_id = :store_id
+           AND product_code = :product_code
+         LIMIT 1'
     );
-    $statement->execute($params);
+    $findStatement->execute([
+        'store_id' => $storeId,
+        'product_code' => $productCode,
+    ]);
+    $product = $findStatement->fetch();
+
+    if (!$product) {
+        respond_error('Không tìm thấy hàng hoá.', 404);
+    }
+
+    db()->beginTransaction();
+
+    try {
+        if ($fields !== []) {
+            $statement = db()->prepare(
+                sprintf(
+                    'UPDATE products SET %s WHERE store_id = :store_id AND product_code = :product_code',
+                    implode(', ', $fields)
+                )
+            );
+            $statement->execute($params);
+        }
+
+        if ($hasComponents) {
+            $components = is_array($body['components']) ? $body['components'] : [];
+            products_inventory_replace_components(
+                $storeId,
+                (string) $product['id'],
+                (string) $product['product_code'],
+                $components
+            );
+        }
+
+        db()->commit();
+    } catch (Throwable $exception) {
+        if (db()->inTransaction()) {
+            db()->rollBack();
+        }
+
+        throw $exception;
+    }
 
     respond_ok([
         'updated' => true,
