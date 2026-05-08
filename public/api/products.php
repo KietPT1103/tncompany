@@ -124,15 +124,21 @@ if ($method === 'POST') {
         $items = is_array($body['items'] ?? null) ? $body['items'] : [];
         $statement = db()->prepare(
             'INSERT INTO products (
-                id, store_id, product_code, product_name, category_id, cost, price, has_cost, is_selling
+                id, store_id, product_code, product_name, category_id, cost, price, has_cost, is_selling, stock_quantity
              ) VALUES (
-                :id, :store_id, :product_code, :product_name, :category_id, NULL, :price, 0, 1
+                :id, :store_id, :product_code, :product_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity
              )
              ON DUPLICATE KEY UPDATE
                 product_name = VALUES(product_name),
                 category_id = VALUES(category_id),
-                price = VALUES(price)'
+                cost = VALUES(cost),
+                price = VALUES(price),
+                has_cost = VALUES(has_cost),
+                is_selling = VALUES(is_selling),
+                stock_quantity = VALUES(stock_quantity)'
         );
+
+        $preparedComponents = [];
 
         foreach ($items as $item) {
             $productCode = trim((string) ($item['product_code'] ?? ''));
@@ -142,7 +148,10 @@ if ($method === 'POST') {
             }
 
             $categoryId = products_find_category_id($storeId, (string) ($item['category'] ?? ''));
-            $price = $item['price'];
+            $price = $item['price'] ?? null;
+            $cost = $item['cost'] ?? null;
+            $stockQuantity = $item['stockQuantity'] ?? 0;
+            $isSelling = array_key_exists('isSelling', $item) ? (!empty($item['isSelling']) ? 1 : 0) : 1;
 
             $statement->execute([
                 'id' => uuidv4(),
@@ -150,8 +159,33 @@ if ($method === 'POST') {
                 'product_code' => $productCode,
                 'product_name' => $productName,
                 'category_id' => $categoryId,
+                'cost' => is_numeric($cost) ? (float) $cost : null,
                 'price' => is_numeric($price) ? (float) $price : null,
+                'has_cost' => is_numeric($cost) ? 1 : 0,
+                'is_selling' => $isSelling,
+                'stock_quantity' => is_numeric($stockQuantity) ? round((float) $stockQuantity, 3) : 0,
             ]);
+
+            if (array_key_exists('components', $item) && is_array($item['components'])) {
+                $preparedComponents[] = [
+                    'productCode' => $productCode,
+                    'components' => $item['components'],
+                ];
+            }
+        }
+
+        foreach ($preparedComponents as $componentSet) {
+            $productRow = products_inventory_find_product($storeId, (string) $componentSet['productCode']);
+            if (!$productRow) {
+                continue;
+            }
+
+            products_inventory_replace_components(
+                $storeId,
+                (string) $productRow['id'],
+                (string) $productRow['product_code'],
+                is_array($componentSet['components']) ? $componentSet['components'] : []
+            );
         }
 
         respond_ok([

@@ -60,8 +60,15 @@ export async function upsertProductsFromExcel(
   products: {
     product_code: string;
     product_name: string;
+    cost?: number | null;
     price?: number | null;
+    stockQuantity?: number | null;
     category?: string;
+    isSelling?: boolean;
+    components?: Array<{
+      productCode: string;
+      quantity: number;
+    }>;
   }[],
   storeId: string
 ) {

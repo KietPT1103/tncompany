@@ -47,13 +47,17 @@ register_shutdown_function(static function (): void {
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 });
 
-$configPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'config.php';
+$configDirectory = dirname(__DIR__);
+$configLocalPath = $configDirectory . DIRECTORY_SEPARATOR . 'config.local.php';
+$configPath = file_exists($configLocalPath)
+    ? $configLocalPath
+    : $configDirectory . DIRECTORY_SEPARATOR . 'config.php';
 
 if (!file_exists($configPath)) {
     http_response_code(500);
     echo json_encode([
         'ok' => false,
-        'error' => 'Missing API config.php. Copy config.php.example to config.php and fill DB credentials.',
+        'error' => 'Missing API config. Create config.local.php or config.php and fill DB credentials.',
     ], JSON_UNESCAPED_SLASHES);
     exit;
 }

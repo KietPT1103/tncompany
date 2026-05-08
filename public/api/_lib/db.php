@@ -23,8 +23,9 @@ function db(): PDO
         $dsn = 'sqlite:' . $path;
     } else {
         $dsn = sprintf(
-            'mysql:host=%s;dbname=%s;charset=utf8mb4',
+            'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
             $config['db_host'] ?? 'localhost',
+            (int) ($config['db_port'] ?? 3306),
             $config['db_name'] ?? ''
         );
     }

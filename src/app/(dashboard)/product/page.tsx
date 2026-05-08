@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/Input";
 import {
   ArrowLeft,
   Check,
+  ClipboardList,
   ChevronDown,
   FolderTree,
   Menu,
@@ -81,6 +82,90 @@ const parseNumberInput = (value: string) => {
   const normalized = value.replace(/,/g, ".").replace(/[^\d.-]/g, "");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeExcelHeader = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .trim();
+
+const parseExcelNumber = (value: unknown) => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\s/g, "").replace(/,/g, "").replace(/[^\d.-]/g, "");
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseExcelBoolean = (value: unknown, fallback = true) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/đ/g, "d")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (["1", "true", "co", "yes", "dang kinh doanh"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "khong", "no", "ngung kinh doanh"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+};
+
+const parseComponentCell = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split("|")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [productCodeRaw, quantityRaw] = entry.split(":");
+      const productCode = String(productCodeRaw ?? "").trim();
+      const quantity = parseExcelNumber(quantityRaw);
+
+      if (!productCode || !quantity || quantity <= 0) {
+        return null;
+      }
+
+      return {
+        productCode,
+        quantity,
+      };
+    })
+    .filter((item): item is { productCode: string; quantity: number } => Boolean(item));
 };
 
 function ProductModal({
@@ -591,18 +676,11 @@ export default function ProductsPage() {
           const data = new Uint8Array(event.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: "array" });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
-
-          const normalizeHeader = (value: unknown) =>
-            String(value ?? "")
-              .toLowerCase()
-              .normalize("NFD")
-              .replace(/[\u0300-\u036f]/g, "")
-              .trim();
+          const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
 
           const headerIndex = rows.findIndex((row) => {
             if (!Array.isArray(row)) return false;
-            return row.some((cell) => normalizeHeader(cell).includes("ma hang"));
+            return row.some((cell) => normalizeExcelHeader(cell).includes("ma hang"));
           });
 
           if (headerIndex === -1) {
@@ -612,28 +690,42 @@ export default function ProductsPage() {
 
           const headerRow = rows[headerIndex] || [];
           const dataRows = rows.slice(headerIndex + 1);
-          const codeIdx = headerRow.findIndex((cell) => normalizeHeader(cell).includes("ma hang"));
-          const nameIdx = headerRow.findIndex((cell) => normalizeHeader(cell).includes("ten hang"));
-          const categoryIdx = headerRow.findIndex((cell) =>
-            normalizeHeader(cell).includes("nhom hang")
+          const codeIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("ma hang")
           );
-          const priceIdx = headerRow.findIndex((cell) => normalizeHeader(cell).includes("gia ban"));
+          const nameIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("ten hang")
+          );
+          const categoryIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("nhom hang")
+          );
+          const priceIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("gia ban")
+          );
+          const costIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("gia von")
+          );
+          const stockIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("ton kho")
+          );
+          const componentsIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("hang thanh phan")
+          );
+          const isSellingIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("dang kinh doanh")
+          );
 
           const mapped = dataRows
             .filter((row) => {
               const code = codeIdx >= 0 ? row[codeIdx] : row[0];
               const name = nameIdx >= 0 ? row[nameIdx] : row[1];
-              return typeof code === "string" && typeof name === "string";
+              return String(code ?? "").trim() !== "" && String(name ?? "").trim() !== "";
             })
             .map((row) => {
               const categoryName = categoryIdx >= 0 ? row[categoryIdx] : "";
-              const rawPrice = priceIdx >= 0 ? row[priceIdx] : undefined;
-              const parsedPrice =
-                typeof rawPrice === "number"
-                  ? rawPrice
-                  : rawPrice
-                  ? Number(String(rawPrice).replace(/[^0-9.-]/g, ""))
-                  : null;
+              const parsedPrice = priceIdx >= 0 ? parseExcelNumber(row[priceIdx]) : null;
+              const parsedCost = costIdx >= 0 ? parseExcelNumber(row[costIdx]) : null;
+              const parsedStock = stockIdx >= 0 ? parseExcelNumber(row[stockIdx]) : null;
               const normalizedCategory =
                 typeof categoryName === "string" ? categoryName.trim() : "";
               const matchedCategoryId =
@@ -646,13 +738,24 @@ export default function ProductsPage() {
                 product_code: String(codeIdx >= 0 ? row[codeIdx] : row[0]).trim(),
                 product_name: String(nameIdx >= 0 ? row[nameIdx] : row[1]).trim(),
                 category: matchedCategoryId,
+                cost: Number.isFinite(parsedCost) ? Number(parsedCost) : null,
                 price: Number.isFinite(parsedPrice) ? Number(parsedPrice) : null,
+                stockQuantity: Number.isFinite(parsedStock) ? Number(parsedStock) : 0,
+                isSelling:
+                  isSellingIdx >= 0 ? parseExcelBoolean(row[isSellingIdx], true) : true,
+                components:
+                  componentsIdx >= 0 ? parseComponentCell(row[componentsIdx]) : [],
               };
             });
 
+          if (mapped.length === 0) {
+            alert("File Excel không có dòng hàng hoá hợp lệ để import.");
+            return;
+          }
+
           await upsertProductsFromExcel(mapped, storeId);
           await loadProducts();
-          alert("Import danh sách hàng hoá thành công.");
+          alert(`Import thành công ${mapped.length} hàng hoá.`);
         } catch (error) {
           console.error(error);
           alert("Không thể import file Excel.");
@@ -791,6 +894,12 @@ export default function ProductsPage() {
   }
 
   const actionMenuItems = [
+    {
+      key: "check",
+      icon: ClipboardList,
+      label: "Kiểm kho",
+      href: "/product/checks",
+    },
     {
       key: "receipt",
       icon: PackagePlus,

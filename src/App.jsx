@@ -13,6 +13,7 @@ import InternalInvoicesPage from "./app/(dashboard)/internal-invoices/page";
 import PayrollPage from "./app/(dashboard)/payroll/page";
 import SalaryEstimatePage from "./app/(dashboard)/payroll-estimate-page";
 import ProductsPage from "./app/(dashboard)/product/page";
+import InventoryChecksPage from "./app/(dashboard)/product/checks/page";
 import InventoryReceiptsPage from "./app/(dashboard)/product/receipts/page";
 import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
@@ -96,6 +97,7 @@ export default function App() {
               <Route path="reports/:id" element={<ReportDetailPage />} />
               <Route path="cash-flow" element={<CashFlowPage />} />
               <Route path="product" element={<ProductsPage />} />
+              <Route path="product/checks" element={<InventoryChecksPage />} />
               <Route path="product/receipts" element={<InventoryReceiptsPage />} />
               <Route path="categories" element={<CategoryManagementPage />} />
               <Route path="accounts" element={<AccountManagementPage />} />

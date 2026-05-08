@@ -26,6 +26,25 @@ export type ImportedInvoiceWorkbook = {
   skippedRows: number;
 };
 
+export type ParsedSalesReportRow = {
+  product_code: string;
+  product_name: string;
+  quantitySold: number;
+  quantityReturned: number;
+  quantity: number;
+  revenue: number;
+  netRevenue: number;
+};
+
+export type ParsedSalesReportWorkbook = {
+  fileName: string;
+  startDate: string;
+  endDate: string;
+  rows: ParsedSalesReportRow[];
+  totalRevenue: number;
+  totalNetRevenue: number;
+};
+
 const trimCell = (value: unknown) =>
   typeof value === "string" ? value.trim() : String(value ?? "").trim();
 
@@ -33,12 +52,11 @@ const normalizeHeader = (value: unknown) =>
   trimCell(value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[đĐ]/g, "d")
+    .replace(/[\u0111\u0110]/g, "d")
     .toLowerCase()
     .replace(/\s+/g, " ");
 
-const isRowEmpty = (row: unknown[]) =>
-  row.every((cell) => trimCell(cell) === "");
+const isRowEmpty = (row: unknown[]) => row.every((cell) => trimCell(cell) === "");
 
 const parseQuantityValue = (value: unknown) => {
   if (typeof value === "number") {
@@ -149,8 +167,8 @@ export function parseExcel(file: File): Promise<any[]> {
   return new Promise((resolve) => {
     const reader = new FileReader();
 
-    reader.onload = (e) => {
-      const data = new Uint8Array(e.target!.result as ArrayBuffer);
+    reader.onload = (event) => {
+      const data = new Uint8Array(event.target!.result as ArrayBuffer);
       const workbook = XLSX.read(data, { type: "array" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
@@ -160,6 +178,107 @@ export function parseExcel(file: File): Promise<any[]> {
       }) as any[][];
 
       resolve(rows);
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+export function parseSalesReportWorkbook(file: File): Promise<ParsedSalesReportWorkbook> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => reject(reader.error || new Error("Failed to read workbook"));
+
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          defval: "",
+          raw: false,
+        }) as unknown[][];
+
+        const headerRowIndex = rows.findIndex((row) => {
+          const normalizedRow = row.map(normalizeHeader);
+          return (
+            normalizedRow.some((cell) => cell.includes("ma hang")) &&
+            normalizedRow.some((cell) => cell.includes("sl ban"))
+          );
+        });
+
+        if (headerRowIndex === -1) {
+          throw new Error("Khong tim thay header bao cao ban hang.");
+        }
+
+        const headerRow = rows[headerRowIndex] || [];
+        const codeIndex = headerRow.findIndex((cell) => normalizeHeader(cell).includes("ma hang"));
+        const nameIndex = headerRow.findIndex((cell) => normalizeHeader(cell).includes("ten hang"));
+        const soldIndex = headerRow.findIndex((cell) => normalizeHeader(cell).includes("sl ban"));
+        const revenueIndex = headerRow.findIndex((cell) => normalizeHeader(cell) === "doanh thu");
+        const returnedIndex = headerRow.findIndex((cell) => normalizeHeader(cell).includes("sl tra"));
+        const netRevenueIndex = headerRow.findIndex((cell) =>
+          normalizeHeader(cell).includes("doanh thu thuan")
+        );
+
+        const rangeRow = rows.find((row) =>
+          row.some((cell) => normalizeHeader(cell).includes("tu ngay"))
+        );
+        const rangeText =
+          rangeRow?.map(trimCell).find((cell) => normalizeHeader(cell).includes("tu ngay")) || "";
+        const rangeMatch = rangeText.match(/(\d{1,2}\/\d{1,2}\/\d{4}).*?(\d{1,2}\/\d{1,2}\/\d{4})/i);
+
+        const startDate = rangeMatch ? toDateInputValue(rangeMatch[1]) : "";
+        const endDate = rangeMatch ? toDateInputValue(rangeMatch[2]) : "";
+
+        const summaryRow = rows[headerRowIndex + 1] || [];
+        const totalRevenue = revenueIndex >= 0 ? parseMoneyValue(summaryRow[revenueIndex]) : 0;
+        const totalNetRevenue =
+          netRevenueIndex >= 0 ? parseMoneyValue(summaryRow[netRevenueIndex]) : totalRevenue;
+
+        const parsedRows = rows
+          .slice(headerRowIndex + 1)
+          .map((row) => {
+            const productCode = trimCell(row[codeIndex]);
+            const productName = trimCell(row[nameIndex]);
+            const quantitySold = soldIndex >= 0 ? parseQuantityValue(row[soldIndex]) : 0;
+            const quantityReturned = returnedIndex >= 0 ? parseQuantityValue(row[returnedIndex]) : 0;
+            const quantity = quantitySold - quantityReturned;
+            const revenue = revenueIndex >= 0 ? parseMoneyValue(row[revenueIndex]) : 0;
+            const netRevenue =
+              netRevenueIndex >= 0 ? parseMoneyValue(row[netRevenueIndex]) : revenue;
+
+            return {
+              product_code: productCode,
+              product_name: productName,
+              quantitySold,
+              quantityReturned,
+              quantity,
+              revenue,
+              netRevenue,
+            };
+          })
+          .filter(
+            (row) =>
+              row.product_code &&
+              row.product_name &&
+              !normalizeHeader(row.product_code).includes("sl mat hang") &&
+              row.quantity > 0
+          );
+
+        resolve({
+          fileName: file.name,
+          startDate,
+          endDate,
+          rows: parsedRows,
+          totalRevenue,
+          totalNetRevenue,
+        });
+      } catch (error) {
+        reject(error);
+      }
     };
 
     reader.readAsArrayBuffer(file);
@@ -259,16 +378,16 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
 
             if (surcharge > 0) {
               items.push({
-                name: "Phát sinh (ship, xe)",
+                name: "Phat sinh (ship, xe)",
                 quantity: 1,
-                unit: "lần",
+                unit: "lan",
                 unitPrice: surcharge,
               });
             }
 
-            const noteParts = [`Import Excel sheet: ${sheetName}`, `Dòng: ${rowIndex + 1}`];
+            const noteParts = [`Import Excel sheet: ${sheetName}`, `Dong: ${rowIndex + 1}`];
             if (currentCategory) {
-              noteParts.push(`Nhóm: ${currentCategory}`);
+              noteParts.push(`Nhom: ${currentCategory}`);
             }
 
             entries.push({
