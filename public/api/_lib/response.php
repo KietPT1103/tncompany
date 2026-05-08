@@ -5,7 +5,18 @@ declare(strict_types=1);
 function respond(array $payload, int $status = 200): never
 {
     http_response_code($status);
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    $json = json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR
+    );
+
+    if ($json === false) {
+        $json = '{"ok":false,"error":"Failed to encode API response."}';
+        http_response_code(500);
+    }
+
+    echo $json;
     exit;
 }
 

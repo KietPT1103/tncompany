@@ -2,6 +2,28 @@
 
 declare(strict_types=1);
 
+if (!ob_get_level()) {
+    ob_start();
+}
+
+function bootstrap_emit_json(array $payload): void
+{
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+
+    $json = json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR
+    );
+
+    if ($json === false) {
+        $json = '{"ok":false,"error":"Failed to encode API response."}';
+    }
+
+    echo $json;
+}
+
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
@@ -12,7 +34,7 @@ header('Expires: 0');
 
 set_exception_handler(static function (Throwable $exception): void {
     http_response_code(500);
-    echo json_encode([
+    bootstrap_emit_json([
         'ok' => false,
         'error' => $exception->getMessage(),
         'meta' => [
@@ -20,7 +42,7 @@ set_exception_handler(static function (Throwable $exception): void {
             'file' => basename($exception->getFile()),
             'line' => $exception->getLine(),
         ],
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ]);
     exit;
 });
 
@@ -36,7 +58,7 @@ register_shutdown_function(static function (): void {
     }
 
     http_response_code(500);
-    echo json_encode([
+    bootstrap_emit_json([
         'ok' => false,
         'error' => (string) ($error['message'] ?? 'Fatal error'),
         'meta' => [
@@ -44,7 +66,7 @@ register_shutdown_function(static function (): void {
             'file' => basename((string) ($error['file'] ?? '')),
             'line' => (int) ($error['line'] ?? 0),
         ],
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ]);
 });
 
 $configDirectory = dirname(__DIR__);
@@ -55,10 +77,10 @@ $configPath = file_exists($configLocalPath)
 
 if (!file_exists($configPath)) {
     http_response_code(500);
-    echo json_encode([
+    bootstrap_emit_json([
         'ok' => false,
         'error' => 'Missing API config. Create config.local.php or config.php and fill DB credentials.',
-    ], JSON_UNESCAPED_SLASHES);
+    ]);
     exit;
 }
 
