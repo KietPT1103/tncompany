@@ -46,6 +46,13 @@ type EditableItem = {
   unitPrice: string;
 };
 
+type FilterMode = "day" | "range" | "month" | "quarter" | "year";
+
+type InvoiceDateQuery = {
+  startDate?: string;
+  endDate?: string;
+};
+
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
 
@@ -65,7 +72,110 @@ const createEmptyItem = (): EditableItem => ({
   unitPrice: "",
 });
 
-const todayValue = () => new Date().toISOString().split("T")[0];
+const padDatePart = (value: number) => String(value).padStart(2, "0");
+
+const formatDateInputValue = (value: Date) =>
+  `${value.getFullYear()}-${padDatePart(value.getMonth() + 1)}-${padDatePart(
+    value.getDate()
+  )}`;
+
+const formatMonthInputValue = (value: Date) =>
+  `${value.getFullYear()}-${padDatePart(value.getMonth() + 1)}`;
+
+const todayValue = () => formatDateInputValue(new Date());
+
+const currentYearValue = () => String(new Date().getFullYear());
+
+const currentMonthValue = () => formatMonthInputValue(new Date());
+
+const currentQuarterValue = () => String(Math.floor(new Date().getMonth() / 3) + 1);
+
+const createDefaultFilterState = () => ({
+  mode: "range" as FilterMode,
+  day: todayValue(),
+  startDate: "",
+  endDate: "",
+  month: currentMonthValue(),
+  quarter: currentQuarterValue(),
+  quarterYear: currentYearValue(),
+  year: currentYearValue(),
+});
+
+function buildDateQuery(params: {
+  mode: FilterMode;
+  day: string;
+  startDate: string;
+  endDate: string;
+  month: string;
+  quarter: string;
+  quarterYear: string;
+  year: string;
+}): InvoiceDateQuery & { error?: string } {
+  if (params.mode === "day") {
+    if (!params.day) {
+      return { error: "Vui lòng chọn ngày cần lọc." };
+    }
+
+    return {
+      startDate: params.day,
+      endDate: params.day,
+    };
+  }
+
+  if (params.mode === "range") {
+    if (params.startDate && params.endDate && params.startDate > params.endDate) {
+      return { error: "Ngày bắt đầu không được lớn hơn ngày kết thúc." };
+    }
+
+    return {
+      startDate: params.startDate || undefined,
+      endDate: params.endDate || undefined,
+    };
+  }
+
+  if (params.mode === "month") {
+    if (!params.month || !/^\d{4}-\d{2}$/.test(params.month)) {
+      return { error: "Vui lòng chọn tháng hợp lệ." };
+    }
+
+    const [yearValue, monthValue] = params.month.split("-").map(Number);
+
+    return {
+      startDate: formatDateInputValue(new Date(yearValue, monthValue - 1, 1)),
+      endDate: formatDateInputValue(new Date(yearValue, monthValue, 0)),
+    };
+  }
+
+  if (params.mode === "quarter") {
+    const quarter = Number(params.quarter);
+    const yearValue = Number(params.quarterYear);
+
+    if (!Number.isInteger(yearValue) || yearValue < 2000) {
+      return { error: "Vui lòng nhập năm hợp lệ cho bộ lọc quý." };
+    }
+
+    if (!Number.isInteger(quarter) || quarter < 1 || quarter > 4) {
+      return { error: "Vui lòng chọn quý hợp lệ." };
+    }
+
+    const startMonth = (quarter - 1) * 3;
+
+    return {
+      startDate: formatDateInputValue(new Date(yearValue, startMonth, 1)),
+      endDate: formatDateInputValue(new Date(yearValue, startMonth + 3, 0)),
+    };
+  }
+
+  const yearValue = Number(params.year);
+  if (!Number.isInteger(yearValue) || yearValue < 2000) {
+    return { error: "Vui lòng nhập năm hợp lệ." };
+  }
+
+  return {
+    startDate: formatDateInputValue(new Date(yearValue, 0, 1)),
+    endDate: formatDateInputValue(new Date(yearValue, 11, 31)),
+  };
+}
 
 const parseDecimal = (value: string) => {
   const normalized = value.replace(/,/g, ".").replace(/[^\d.-]/g, "");
@@ -124,9 +234,19 @@ export default function InvoiceAdminPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [filterMode, setFilterMode] = useState<FilterMode>(createDefaultFilterState().mode);
   const [search, setSearch] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [filterDay, setFilterDay] = useState(createDefaultFilterState().day);
+  const [startDate, setStartDate] = useState(createDefaultFilterState().startDate);
+  const [endDate, setEndDate] = useState(createDefaultFilterState().endDate);
+  const [filterMonth, setFilterMonth] = useState(createDefaultFilterState().month);
+  const [filterQuarter, setFilterQuarter] = useState(createDefaultFilterState().quarter);
+  const [filterQuarterYear, setFilterQuarterYear] = useState(
+    createDefaultFilterState().quarterYear
+  );
+  const [filterYear, setFilterYear] = useState(createDefaultFilterState().year);
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [appliedDateQuery, setAppliedDateQuery] = useState<InvoiceDateQuery>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<InvoiceEntry | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(todayValue());
@@ -140,15 +260,18 @@ export default function InvoiceAdminPage({
 
   const scopeLabel = scope === "internal" ? "Nội bộ" : "Thuế";
 
-  const loadEntries = async () => {
+  const loadEntries = async (
+    dateQuery: InvoiceDateQuery = appliedDateQuery,
+    keyword: string = appliedSearch
+  ) => {
     setLoading(true);
     try {
       const data = await getInvoiceEntries({
         scope,
         storeId,
-        search,
-        startDate,
-        endDate,
+        search: keyword,
+        startDate: dateQuery.startDate,
+        endDate: dateQuery.endDate,
         limit: 300,
       });
       setEntries(data);
@@ -161,9 +284,9 @@ export default function InvoiceAdminPage({
   };
 
   useEffect(() => {
-    loadEntries();
+    void loadEntries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, storeId, startDate, endDate]);
+  }, [scope, storeId]);
 
   const totalAmount = useMemo(
     () => entries.reduce((sum, entry) => sum + entry.totalAmount, 0),
@@ -405,6 +528,52 @@ export default function InvoiceAdminPage({
     }
   };
 
+  const applyFilters = async () => {
+    const dateQuery = buildDateQuery({
+      mode: filterMode,
+      day: filterDay,
+      startDate,
+      endDate,
+      month: filterMonth,
+      quarter: filterQuarter,
+      quarterYear: filterQuarterYear,
+      year: filterYear,
+    });
+
+    if (dateQuery.error) {
+      alert(dateQuery.error);
+      return;
+    }
+
+    const keyword = search.trim();
+    const nextDateQuery = {
+      startDate: dateQuery.startDate,
+      endDate: dateQuery.endDate,
+    };
+
+    setAppliedSearch(keyword);
+    setAppliedDateQuery(nextDateQuery);
+    await loadEntries(nextDateQuery, keyword);
+  };
+
+  const resetFilters = async () => {
+    const defaults = createDefaultFilterState();
+
+    setFilterMode(defaults.mode);
+    setSearch("");
+    setFilterDay(defaults.day);
+    setStartDate(defaults.startDate);
+    setEndDate(defaults.endDate);
+    setFilterMonth(defaults.month);
+    setFilterQuarter(defaults.quarter);
+    setFilterQuarterYear(defaults.quarterYear);
+    setFilterYear(defaults.year);
+    setAppliedSearch("");
+    setAppliedDateQuery({});
+
+    await loadEntries({}, "");
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-10">
       <input
@@ -472,7 +641,7 @@ export default function InvoiceAdminPage({
               <CardTitle className="text-lg">Bộ lọc</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_220px_220px_180px]">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_220px_minmax(0,1fr)_160px_160px]">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
                     Tìm kiếm
@@ -484,7 +653,7 @@ export default function InvoiceAdminPage({
                       onChange={(event) => setSearch(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
-                          void loadEntries();
+                          void applyFilters();
                         }
                       }}
                       className="pl-9"
@@ -492,22 +661,106 @@ export default function InvoiceAdminPage({
                     />
                   </div>
                 </div>
-                <Input
-                  type="date"
-                  label="Từ ngày"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
-                />
-                <Input
-                  type="date"
-                  label="Đến ngày"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
-                />
+                <div className="space-y-1">
+                  <label className="text-sm font-medium leading-none text-slate-700">
+                    Kiểu lọc
+                  </label>
+                  <select
+                    value={filterMode}
+                    onChange={(event) => setFilterMode(event.target.value as FilterMode)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="day">Theo ngày</option>
+                    <option value="range">Khoảng ngày</option>
+                    <option value="month">Theo tháng</option>
+                    <option value="quarter">Theo quý</option>
+                    <option value="year">Theo năm</option>
+                  </select>
+                </div>
+                <div className="xl:col-span-2">
+                  {filterMode === "day" ? (
+                    <Input
+                      type="date"
+                      label="Ngày hóa đơn"
+                      value={filterDay}
+                      onChange={(event) => setFilterDay(event.target.value)}
+                    />
+                  ) : null}
+
+                  {filterMode === "range" ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Input
+                        type="date"
+                        label="Từ ngày"
+                        value={startDate}
+                        onChange={(event) => setStartDate(event.target.value)}
+                      />
+                      <Input
+                        type="date"
+                        label="Đến ngày"
+                        value={endDate}
+                        onChange={(event) => setEndDate(event.target.value)}
+                      />
+                    </div>
+                  ) : null}
+
+                  {filterMode === "month" ? (
+                    <Input
+                      type="month"
+                      label="Tháng"
+                      value={filterMonth}
+                      onChange={(event) => setFilterMonth(event.target.value)}
+                    />
+                  ) : null}
+
+                  {filterMode === "quarter" ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium leading-none text-slate-700">
+                          Quý
+                        </label>
+                        <select
+                          value={filterQuarter}
+                          onChange={(event) => setFilterQuarter(event.target.value)}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                          <option value="1">Quý 1</option>
+                          <option value="2">Quý 2</option>
+                          <option value="3">Quý 3</option>
+                          <option value="4">Quý 4</option>
+                        </select>
+                      </div>
+                      <Input
+                        type="number"
+                        label="Năm"
+                        value={filterQuarterYear}
+                        onChange={(event) => setFilterQuarterYear(event.target.value)}
+                        min="2000"
+                        step="1"
+                      />
+                    </div>
+                  ) : null}
+
+                  {filterMode === "year" ? (
+                    <Input
+                      type="number"
+                      label="Năm"
+                      value={filterYear}
+                      onChange={(event) => setFilterYear(event.target.value)}
+                      min="2000"
+                      step="1"
+                    />
+                  ) : null}
+                </div>
                 <div className="flex items-end">
-                  <Button variant="outline" className="w-full" onClick={loadEntries}>
-                    Áp dụng lọc
-                  </Button>
+                  <div className="flex w-full gap-2">
+                    <Button variant="outline" className="flex-1" onClick={applyFilters}>
+                      Áp dụng
+                    </Button>
+                    <Button variant="ghost" className="flex-1" onClick={resetFilters}>
+                      Xóa lọc
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>
