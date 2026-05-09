@@ -301,9 +301,12 @@ $schema = $article
         font-size: clamp(36px, 5vw, 60px);
       }
       .list-grid {
+        max-width: 1120px;
+        margin: 0 auto;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 22px;
+        align-items: start;
       }
       .card {
         display: block;
@@ -321,14 +324,16 @@ $schema = $article
         box-shadow: 0 24px 48px rgba(98, 64, 35, 0.12);
       }
       .card-cover {
-        aspect-ratio: 16 / 10;
+        aspect-ratio: 16 / 9;
         width: 100%;
+        max-height: 220px;
         object-fit: cover;
         display: block;
       }
       .card-cover-placeholder {
-        aspect-ratio: 16 / 10;
+        aspect-ratio: 16 / 9;
         width: 100%;
+        max-height: 220px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -344,7 +349,7 @@ $schema = $article
       }
       .card h2 {
         margin: 10px 0 12px;
-        font-size: 26px;
+        font-size: 22px;
         line-height: 1.18;
         color: var(--ink);
       }
@@ -375,6 +380,9 @@ $schema = $article
         .page-nav {
           justify-content: flex-start;
         }
+        .list-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
       }
       @media (max-width: 768px) {
         .shell { padding: 18px 14px 56px; }
@@ -382,6 +390,9 @@ $schema = $article
         .content { font-size: 17px; line-height: 1.85; }
         .content h2 { font-size: 32px; }
         .content h3 { font-size: 24px; }
+        .list-grid {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
