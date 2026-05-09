@@ -135,10 +135,26 @@ const homepageSeo = {
   description: buildHomepageSeoDescription(),
 };
 
+const aboutSeo = {
+  title: "V\u1ec1 ch\u00fang t\u00f4i | T&N Company",
+  description:
+    "T\u00ecm hi\u1ec3u th\u00f4ng tin doanh nghi\u1ec7p, n\u0103ng l\u1ef1c v\u1eadn h\u00e0nh v\u00e0 h\u1ec7 sinh th\u00e1i \u00d4ng Quan c\u1ee7a T&N Company t\u1ea1i C\u1ea7n Th\u01a1.",
+};
+
 const publicSeoByPath = {
-  "/about": {
+  "/": {
     title: homepageSeo.title,
     description: homepageSeo.description,
+    canonical: toAbsoluteUrl("/"),
+    image: DEFAULT_OG_IMAGE,
+    siteName: company.shortName,
+    openGraphType: "website",
+    robots: "index,follow",
+    schema: buildOrganizationSchema(),
+  },
+  "/about": {
+    title: aboutSeo.title,
+    description: aboutSeo.description,
     canonical: toAbsoluteUrl("/about"),
     image: DEFAULT_OG_IMAGE,
     siteName: company.shortName,
@@ -170,7 +186,7 @@ const publicSeoByPath = {
 
 export function getSeoForPath(pathname) {
   if (pathname === "/home") {
-    return publicSeoByPath["/about"];
+    return publicSeoByPath["/"];
   }
 
   if (pathname === "/login" || pathname.startsWith("/admin") || pathname.startsWith("/api")) {

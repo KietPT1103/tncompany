@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Bricolage+Grotesque:wght@500;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Bricolage+Grotesque:wght@500;700;800&family=Great+Vibes&family=Lalezar&display=swap");
 
 * {
   box-sizing: border-box;
@@ -90,17 +90,17 @@ a {
 }
 
 .theme-home {
-  --bg-1: #ecf5ef;
-  --bg-2: #f6fbf8;
-  --bg-3: #fcfffd;
-  --blob-1: rgba(112, 184, 132, 0.35);
-  --blob-2: rgba(66, 148, 108, 0.22);
-  --ink: #173326;
-  --muted: #4d6b5c;
-  --accent: #1f8f63;
-  --accent-soft: #9ad8bc;
-  --line: rgba(84, 137, 104, 0.26);
-  --shadow: 0 24px 62px rgba(41, 87, 63, 0.15);
+  --bg-1: #f6efe7;
+  --bg-2: #fdf8f3;
+  --bg-3: #fffdf9;
+  --blob-1: rgba(223, 176, 123, 0.2);
+  --blob-2: rgba(191, 152, 119, 0.16);
+  --ink: #2b1c13;
+  --muted: #6d5646;
+  --accent: #9b6a33;
+  --accent-soft: #edc995;
+  --line: rgba(141, 101, 71, 0.22);
+  --shadow: 0 24px 62px rgba(90, 56, 29, 0.12);
 }
 
 .ambient {
@@ -138,87 +138,802 @@ a {
 }
 
 .site-header {
-  width: min(1180px, calc(100% - 2rem));
-  margin: 1.1rem auto 0;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.68);
-  box-shadow: var(--shadow);
-  border-radius: 22px;
-  padding: 0.9rem 1.1rem;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
   position: sticky;
-  top: 0.75rem;
-  z-index: 18;
-  backdrop-filter: blur(9px);
+  top: 0;
+  z-index: 24;
+  width: 100%;
+  background: #6f4b07;
+  border-bottom: 1px solid rgba(255, 245, 224, 0.18);
+  box-shadow: 0 10px 28px rgba(39, 23, 6, 0.2);
+}
+
+.site-header-inner {
+  width: min(1320px, calc(100% - 2rem));
+  min-height: 72px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 132px 1fr 132px;
+  align-items: center;
+  gap: 1rem;
 }
 
 .brand {
+  width: 132px;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  padding: 0.35rem 0;
 }
 
-.brand-mark {
-  width: 48px;
-  height: 48px;
-  border-radius: 13px;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  color: var(--button-text);
-  background: linear-gradient(145deg, var(--accent), #3a2619);
-  box-shadow: 0 8px 20px rgba(33, 20, 13, 0.28);
+.brand-logo {
+  display: block;
+  width: clamp(64px, 6.5vw, 84px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 12px rgba(28, 17, 6, 0.18));
 }
 
-.brand-title {
-  margin: 0;
-  font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
-  font-size: 1.08rem;
-}
-
-.brand-sub {
-  margin: 0.15rem 0 0;
-  color: var(--muted);
-  font-size: 0.8rem;
+.header-spacer {
+  width: 132px;
+  height: 1px;
 }
 
 .page-nav {
   display: flex;
-  gap: 0.65rem;
+  justify-content: center;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
 }
 
 .page-nav a {
-  padding: 0.55rem 0.85rem;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0.45rem 0.8rem;
+  border-radius: 4px;
   border: 1px solid transparent;
-  color: var(--muted);
+  color: rgba(255, 247, 233, 0.94);
   font-weight: 700;
-  font-size: 0.88rem;
-  transition: all 0.24s ease;
+  font-size: 0.76rem;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .page-nav a:hover {
-  color: var(--ink);
-  border-color: var(--line);
-  background: rgba(255, 255, 255, 0.72);
+  color: #fffdf8;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .page-nav a.is-active {
-  color: var(--button-text);
-  border-color: transparent;
-  background: linear-gradient(120deg, var(--accent), #2f1e13);
-  box-shadow: 0 9px 20px rgba(45, 28, 19, 0.3);
+  color: #fffdf8;
+  border-color: rgba(255, 247, 233, 0.88);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.page-nav a:focus-visible {
+  outline: none;
+  color: #fffdf8;
+  border-color: #fffdf8;
+  box-shadow: 0 0 0 2px rgba(255, 247, 233, 0.2);
 }
 
 .page-content {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
-  padding: 3.5rem 0 3rem;
+  padding: 2.4rem 0 3rem;
+}
+
+.page-content.is-home {
+  width: 100%;
+  padding: 0;
+}
+
+.homepage-shell {
+  width: 100vw;
+  margin-top: -2.4rem;
+  margin-left: calc(50% - 50vw);
+  background: #fffdfb;
+  color: #4b3326;
+}
+
+.homepage-shell img {
+  display: block;
+  width: 100%;
+}
+
+.homepage-main {
+  width: min(1020px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(3rem, 6vw, 4.8rem) 0 0;
+  display: grid;
+  gap: clamp(3rem, 5vw, 4.8rem);
+}
+
+.homepage-label {
+  margin: 0;
+  color: #8c6240;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.homepage-hero {
+  position: relative;
+  width: 100%;
+  min-height: clamp(380px, 52vw, 720px);
+  overflow: hidden;
+}
+
+.homepage-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(26, 14, 7, 0.42) 0%, rgba(26, 14, 7, 0.12) 34%, rgba(26, 14, 7, 0) 62%),
+    linear-gradient(180deg, rgba(20, 11, 5, 0.04), rgba(20, 11, 5, 0.18));
+}
+
+.homepage-hero-image {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  object-fit: cover;
+}
+
+.homepage-hero-overlay {
+  position: absolute;
+  inset: 0;
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto;
+  z-index: 1;
+}
+
+.homepage-hero-tag {
+  position: absolute;
+  top: clamp(5rem, 15vw, 10rem);
+  left: clamp(1rem, 4vw, 3rem);
+  margin: 0;
+  color: #fff8f0;
+  font-family: "Great Vibes", cursive;
+  font-size: clamp(2.2rem, 4.4vw, 4.4rem);
+  line-height: 0.92;
+  text-shadow: 0 6px 18px rgba(31, 17, 7, 0.24);
+}
+
+.homepage-hero-title {
+  position: absolute;
+  right: clamp(0.5rem, 8vw, 5rem);
+  bottom: clamp(2rem, 8vw, 4.5rem);
+  margin: 0;
+  color: #fff8f0;
+  font-family: "Great Vibes", cursive;
+  font-size: clamp(4rem, 9vw, 8rem);
+  font-weight: 400;
+  line-height: 0.9;
+  text-shadow: 0 8px 22px rgba(31, 17, 7, 0.28);
+}
+
+.homepage-intro {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.34fr) minmax(0, 0.66fr);
+  align-items: center;
+  gap: clamp(1.4rem, 4vw, 3rem);
+}
+
+.homepage-intro-media {
+  width: min(100%, 290px);
+  margin: 0 auto;
+}
+
+.homepage-intro-media img {
+  aspect-ratio: 3 / 4.2;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 20px 48px rgba(58, 37, 24, 0.14);
+}
+
+.homepage-intro-copy {
+  max-width: 420px;
+}
+
+.homepage-intro-copy h2 {
+  margin: 0.45rem 0 0;
+  color: #4a3328;
+  font-size: clamp(1.4rem, 2.8vw, 2rem);
+  line-height: 1.12;
+}
+
+.homepage-intro-copy p:last-child {
+  margin: 0.8rem 0 0;
+  color: #7c6556;
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.homepage-intro-ornament {
+  position: absolute;
+  top: 12%;
+  right: -2rem;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+}
+
+.homepage-intro-ornament span {
+  position: absolute;
+  border: 2px solid rgba(208, 175, 142, 0.66);
+  border-radius: 999px;
+}
+
+.homepage-intro-ornament span:first-child {
+  width: 110px;
+  height: 110px;
+  top: 6px;
+  right: 26px;
+}
+
+.homepage-intro-ornament span:last-child {
+  width: 160px;
+  height: 160px;
+  right: 0;
+  bottom: 0;
+}
+
+.homepage-intro-ornament::after {
+  content: "";
+  position: absolute;
+  right: 24px;
+  bottom: 20px;
+  width: 62px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 107, 73, 0.8);
+  transform: rotate(-49deg);
+}
+
+.homepage-style-grid {
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(2rem, 4vw, 3.6rem);
+  align-items: start;
+}
+
+.homepage-style-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+}
+
+.homepage-style-card-highlight .homepage-style-media {
+  position: relative;
+  isolation: isolate;
+}
+
+.homepage-style-card-highlight .homepage-style-media::before {
+  content: "";
+  position: absolute;
+  top: -14px;
+  left: -14px;
+  width: 92px;
+  height: 92px;
+  background: #ef5d76;
+  clip-path: polygon(0 0, 100% 0, 66% 34%, 22% 34%, 22% 100%, 0 100%);
+  z-index: 0;
+}
+
+.homepage-style-media {
+  width: min(100%, 338px);
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+.homepage-style-media img {
+  width: 100%;
+  aspect-ratio: 0.84;
+  object-fit: cover;
+  box-shadow: 0 18px 34px rgba(58, 38, 26, 0.14);
+}
+
+.homepage-style-note {
+  width: min(100%, 452px);
+  margin: -2.35rem auto 0;
+  border-radius: 18px;
+  background: #dec3ac;
+  padding: 4rem 1.2rem 1rem;
+  color: #383533;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  box-shadow: none;
+}
+
+.homepage-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.homepage-banner-line {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0%, #b7894f 45%, #efc845 100%);
+}
+
+.homepage-banner-line:last-child {
+  background: linear-gradient(90deg, #efc845 0%, #b7894f 55%, transparent 100%);
+}
+
+.homepage-banner-copy {
+  text-align: center;
+}
+
+.homepage-banner-copy h2 {
+  margin: 0;
+  color: #9b6b3d;
+  font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+  font-size: clamp(1.7rem, 3vw, 2.8rem);
+  line-height: 1.02;
+}
+
+.homepage-banner-copy p {
+  margin: 0.3rem 0 0;
+  color: #ca914d;
+  font-size: clamp(1.15rem, 2vw, 1.6rem);
+  font-weight: 700;
+}
+
+.homepage-decor .homepage-banner {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  gap: 0.75rem;
+}
+
+.homepage-decor .homepage-banner-line {
+  position: relative;
+  width: clamp(108px, 13vw, 172px);
+  height: 14px;
+  justify-self: end;
+  background: none;
+  box-shadow: none;
+}
+
+.homepage-decor .homepage-banner-line::before {
+  content: "";
+  position: absolute;
+  inset: 1px 0 auto;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #926b53 0%, #926b53 78%, rgba(146, 107, 83, 0.16) 100%);
+}
+
+.homepage-decor .homepage-banner-line::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: -1px;
+  width: 58%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fff7d1 0%, #efc73c 30%, #efc73c 100%);
+  box-shadow: 0 0 10px rgba(239, 199, 60, 0.22);
+}
+
+.homepage-decor .homepage-banner-line:last-child {
+  justify-self: start;
+}
+
+.homepage-decor .homepage-banner-line:last-child::before {
+  background: linear-gradient(90deg, rgba(146, 107, 83, 0.16) 0%, #926b53 22%, #926b53 100%);
+}
+
+.homepage-decor .homepage-banner-line:last-child::after {
+  left: -1px;
+  right: auto;
+  background: linear-gradient(90deg, #efc73c 0%, #efc73c 70%, #fff7d1 100%);
+}
+
+.homepage-decor .homepage-banner-copy {
+  min-width: max-content;
+}
+
+.homepage-decor .homepage-banner-copy h2 {
+  font-size: clamp(2rem, 3.9vw, 3rem);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 0.98;
+  white-space: nowrap;
+}
+
+.homepage-decor .homepage-banner-copy p {
+  margin-top: 0.35rem;
+  color: #d78b58;
+  font-size: clamp(1.25rem, 2.2vw, 1.9rem);
+  font-weight: 800;
+  line-height: 1.02;
+}
+
+.homepage-decor-grid {
+  width: min(100%, 1080px);
+  margin: 2.5rem auto 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  gap: clamp(1.6rem, 3vw, 2.9rem);
+  align-items: start;
+}
+
+.homepage-decor-media {
+  width: min(100%, 506px);
+}
+
+.homepage-decor-media img {
+  width: 100%;
+  aspect-ratio: 1.18;
+  object-fit: cover;
+  border-radius: 18px;
+  box-shadow: 0 18px 38px rgba(79, 53, 33, 0.12);
+}
+
+.homepage-decor-copy {
+  max-width: 31rem;
+  padding-top: 0.55rem;
+}
+
+.homepage-decor-copy p {
+  margin: 0 0 1.05rem;
+  color: #5e4739;
+  font-size: 1rem;
+  line-height: 1.72;
+}
+
+.homepage-decor-highlights {
+  margin-top: 1.55rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.homepage-decor-pill {
+  width: min(100%, 174px);
+  margin: 0 auto;
+  text-align: center;
+}
+
+.homepage-decor-pill img {
+  width: 132px;
+  height: 132px;
+  margin: 0 auto;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 4px solid #b89372;
+  box-shadow: 0 12px 28px rgba(75, 47, 28, 0.1);
+}
+
+.homepage-decor-pill h3 {
+  margin: 0.95rem 0 0;
+  color: #8b6a54;
+  font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.12;
+}
+
+.homepage-decor-pill p {
+  margin: 0.45rem auto 0;
+  max-width: 170px;
+  color: #5d4639;
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
+.homepage-drinks h2,
+.homepage-story h2 {
+  margin: 0;
+  text-align: center;
+  color: #4e3425;
+  font-size: clamp(1.35rem, 2.2vw, 1.7rem);
+  letter-spacing: 0.04em;
+}
+
+.homepage-drink-grid {
+  margin-top: 1.4rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.6rem 1.25rem;
+}
+
+.homepage-drink-card img {
+  aspect-ratio: 1;
+  object-fit: cover;
+  box-shadow: 0 18px 40px rgba(63, 40, 22, 0.1);
+}
+
+.homepage-drink-card p {
+  margin: 0.48rem 0 0;
+  text-align: center;
+  color: #655040;
+  font-size: 0.88rem;
+}
+
+.homepage-story-hero {
+  margin-top: 1.2rem;
+}
+
+.homepage-story-hero img {
+  box-shadow: 0 20px 50px rgba(63, 39, 24, 0.12);
+}
+
+.homepage-story-lead {
+  max-width: 760px;
+  margin-top: 1rem;
+}
+
+.homepage-story-lead h3 {
+  margin: 0;
+  color: #5c3d2a;
+  font-size: 1rem;
+}
+
+.homepage-story-lead p {
+  margin: 0.55rem 0 0;
+  color: #7c6756;
+  line-height: 1.78;
+  margin-bottom: 100px;
+}
+
+.homepage-story-grid {
+  margin-top: 1.35rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.homepage-story-card img {
+  aspect-ratio: 1.28;
+  object-fit: cover;
+}
+
+.homepage-story-card h3 {
+  margin: 0.55rem 0 0;
+  color: #5c3d2a;
+  font-size: 0.96rem;
+}
+
+.homepage-story-card p {
+  margin: 0.35rem 0 0;
+  color: #7c6756;
+  font-size: 0.84rem;
+  line-height: 1.7;
+}
+
+.homepage-social-grid {
+  margin-top: 1.6rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.4rem;
+}
+
+.homepage-social-card {
+
+  border: 2px solid #c9a17b;
+  border-radius: 16px;
+  background: #fff;
+  padding: 1.5rem 1.4rem;
+  box-shadow: 0 16px 34px rgba(75, 47, 28, 0.08);
+}
+
+.homepage-social-card h3 {
+  font-weight: 800;
+  margin: 0;
+  text-align: center;
+  color: #8e633e;
+  font-size: clamp(1.3rem, 2.2vw, 2rem);
+}
+
+.homepage-social-list {
+  margin-top: 1.1rem;
+  display: grid;
+  gap: 0.95rem;
+}
+
+.homepage-social-item {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  color: #5d4738;
+  font-weight: 600;
+}
+
+.homepage-social-item img {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+}
+
+.homepage-social-item img.is-facebook {
+  transform: scale(1.44);
+  transform-origin: center;
+}
+
+.homepage-footer {
+  width: 100%;
+  margin-top: clamp(2.5rem, 5vw, 4rem);
+  padding: 2rem 0 0;
+  background: #a17a5d;
+  color: #f8eee4;
+}
+
+.homepage-footer-inner {
+  width: min(1280px, calc(100% - 2rem));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.25fr 0.8fr 1.05fr 1.2fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.homepage-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 1.05rem;
+}
+
+.homepage-footer-logo-shell {
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  background: #274c7b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.homepage-footer-brand img {
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+}
+
+.homepage-footer-brand h2 {
+  margin: 0;
+  max-width: 200px;
+  color: #fff9f4;
+  font-family: "Lalezar", "Be Vietnam Pro", sans-serif;
+  font-size: clamp(1.5rem, 2.4vw, 1.9rem);
+  line-height: 1.08;
+}
+
+.homepage-footer-column p,
+.homepage-footer-links a {
+  color: rgba(255, 247, 238, 0.88);
+}
+
+.homepage-footer-heading {
+  margin: 0 0 0.85rem;
+  color: #fff5eb;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.homepage-footer-column p {
+  margin: 0 0 0.85rem;
+  line-height: 1.65;
+  font-size: 0.98rem;
+}
+
+.homepage-footer-subheading {
+  color: #fff7f0;
+}
+
+.homepage-footer-links {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.homepage-footer-links a {
+  width: fit-content;
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.98rem;
+  transition: opacity 0.18s ease;
+}
+
+.homepage-footer-links a::before {
+  content: "›";
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.homepage-footer-links a:hover {
+  opacity: 0.78;
+}
+
+.homepage-footer-socials {
+  display: flex;
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.homepage-footer-socials a {
+  width: 50px;
+  height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.homepage-footer-socials img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.homepage-footer-form {
+  display: flex;
+  align-items: center;
+  margin-top: 1rem;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  width: min(100%, 360px);
+}
+
+.homepage-footer-form input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: #fff;
+  padding: 0.95rem 1rem;
+  color: #6b5648;
+  font: inherit;
+}
+
+.homepage-footer-form input::placeholder {
+  color: #978273;
+}
+
+.homepage-footer-form button {
+  border: 0;
+  border-radius: 0;
+  padding: 0.95rem 1.45rem;
+  background: #274c7b;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.homepage-footer-bottom {
+  width: 100%;
+  margin: 1.7rem 0 0;
+  padding: 1rem 1rem;
+  border-top: 1px solid rgba(255, 246, 235, 0.18);
+  text-align: center;
+  color: rgba(255, 247, 238, 0.8);
+  font-size: 0.84rem;
 }
 
 .home-stack {
@@ -1195,6 +1910,200 @@ a {
 }
 
 @media (max-width: 1080px) {
+  .homepage-hero-overlay,
+  .homepage-footer-inner,
+  .homepage-footer-bottom {
+    width: min(1180px, calc(100% - 1.4rem));
+  }
+
+  .homepage-intro,
+  .homepage-decor-grid,
+  .homepage-footer-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .homepage-style-grid,
+  .homepage-social-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .homepage-intro-copy,
+  .homepage-decor-copy,
+  .homepage-story-lead {
+    max-width: none;
+  }
+
+  .homepage-decor-media {
+    margin: 0 auto;
+  }
+
+  .homepage-intro-ornament {
+    right: 0;
+    top: 4%;
+    transform: scale(0.88);
+    transform-origin: top right;
+  }
+}
+
+@media (max-width: 820px) {
+  .homepage-shell {
+    margin-top: -1.35rem;
+  }
+
+  .homepage-main {
+    width: min(1020px, calc(100% - 1.3rem));
+    gap: 2.4rem;
+  }
+
+  .homepage-hero {
+    min-height: 320px;
+  }
+
+  .homepage-hero-tag {
+    top: 4.6rem;
+    left: 0.8rem;
+  }
+
+  .homepage-hero-title {
+    right: 0.8rem;
+    bottom: 1.5rem;
+  }
+
+  .homepage-style-grid,
+  .homepage-drink-grid,
+  .homepage-story-grid,
+  .homepage-social-grid,
+  .homepage-decor-highlights {
+    grid-template-columns: 1fr;
+  }
+
+  .homepage-style-media,
+  .homepage-intro-media {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .homepage-style-note {
+    margin-top: -1.9rem;
+    padding: 3.3rem 1rem 0.95rem;
+  }
+
+  .homepage-intro-ornament {
+    display: none;
+  }
+
+  .homepage-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .homepage-banner-line {
+    display: none;
+  }
+
+  .homepage-banner-copy h2 {
+    font-size: 1.6rem;
+  }
+
+  .homepage-decor .homepage-banner-copy {
+    min-width: 0;
+  }
+
+  .homepage-decor .homepage-banner-copy h2 {
+    font-size: 1.85rem;
+    white-space: normal;
+  }
+
+  .homepage-decor .homepage-banner-copy p {
+    font-size: 1.45rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .homepage-shell {
+    margin-top: -0.95rem;
+  }
+
+  .homepage-hero-overlay {
+    width: calc(100% - 1rem);
+  }
+
+  .homepage-hero {
+    min-height: 280px;
+  }
+
+  .homepage-hero::after {
+    background:
+      linear-gradient(180deg, rgba(26, 14, 7, 0.22) 0%, rgba(26, 14, 7, 0.28) 100%);
+  }
+
+  .homepage-hero-tag {
+    top: 4.1rem;
+    font-size: 1.9rem;
+  }
+
+  .homepage-hero-title {
+    font-size: 3.4rem;
+  }
+
+  .homepage-decor .homepage-banner-copy h2 {
+    font-size: 1.55rem;
+  }
+
+  .homepage-decor .homepage-banner-copy p {
+    font-size: 1.18rem;
+  }
+
+  .homepage-style-note,
+  .homepage-decor-copy p,
+  .homepage-story-lead p,
+  .homepage-story-card p,
+  .homepage-footer-column p,
+  .homepage-social-item {
+    font-size: 0.9rem;
+  }
+
+  .homepage-style-note {
+    margin-top: -1.55rem;
+    padding-top: 2.8rem;
+    line-height: 1.2;
+  }
+
+  .homepage-drink-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .homepage-footer {
+    padding-top: 1.4rem;
+  }
+
+  .homepage-footer-form {
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 18px;
+  }
+
+  .homepage-footer-form button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .homepage-main {
+    width: calc(100% - 1rem);
+  }
+
+  .homepage-style-note,
+  .homepage-social-card {
+    padding-inline: 0.9rem;
+  }
+
+  .homepage-drink-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1080px) {
   .home-hero,
   .home-dual {
     grid-template-columns: 1fr;
@@ -1230,13 +2139,24 @@ a {
 }
 
 @media (max-width: 820px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
+  .site-header-inner {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 0 0.8rem;
   }
 
   .page-nav {
-    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .brand,
+  .header-spacer {
+    width: auto;
+  }
+
+  .header-spacer {
+    display: none;
   }
 
   .split-panel,
@@ -1253,10 +2173,20 @@ a {
 }
 
 @media (max-width: 640px) {
-  .site-header,
+  .site-header-inner,
   .page-content,
   .site-footer {
     width: min(1180px, calc(100% - 1.2rem));
+  }
+
+  .page-nav {
+    gap: 0.4rem;
+  }
+
+  .page-nav a {
+    min-height: 32px;
+    padding: 0.42rem 0.62rem;
+    font-size: 0.7rem;
   }
 
   .hero-copy {

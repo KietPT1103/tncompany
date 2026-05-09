@@ -1,13 +1,16 @@
-import React from "react";
+export default function AppFooter({ pageId }) {
+  if (pageId === "home") {
+    return null;
+  }
 
-export default function AppFooter({ isHome }) {
+  const footerCopy =
+    pageId === "about"
+      ? "© 2026 T&N Company. Trang giới thiệu doanh nghiệp và năng lực vận hành."
+      : "© 2026 Hệ sinh thái Ông Quan.";
+
   return (
     <footer className="site-footer">
-      <p>
-        {isHome
-          ? "© 2026 T&N Company. Trang chủ giới thiệu doanh nghiệp và năng lực vận hành."
-          : "© 2026 Hệ sinh thái Ông Quan."}
-      </p>
+      <p>{footerCopy}</p>
     </footer>
   );
 }

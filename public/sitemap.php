@@ -16,6 +16,10 @@ $staticUrls = [
         'priority' => '0.8',
     ],
     [
+        'loc' => seo_runtime_absolute_url('/ca-phe-ong-quan'),
+        'priority' => '0.8',
+    ],
+    [
         'loc' => seo_runtime_absolute_url('/tiem-lau-ong-quan'),
         'priority' => '0.8',
     ],

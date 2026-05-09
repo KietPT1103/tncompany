@@ -119,7 +119,7 @@ function createVenueSlides({ folderKey, tone, venueName }) {
 export const venues = [
   {
     id: "cafe",
-    hash: "/",
+    hash: "/ca-phe-ong-quan",
     navLabel: "Tiệm cà phê Ông Quan",
     shortLabel: "Cà phê",
     tag: "Quán chính",
@@ -317,21 +317,17 @@ export const venues = [
 ];
 
 export const pages = [
+  { id: "home", hash: "/", label: "Trang chủ", shortLabel: "Trang chủ" },
   ...venues.map((venue) => ({
     id: venue.id,
     hash: venue.hash,
     label: venue.navLabel,
     shortLabel: venue.shortLabel,
   })),
-  { id: "home", hash: "/about", label: "Về chúng tôi", shortLabel: "Về chúng tôi" },
+  { id: "about", hash: "/about", label: "Về chúng tôi", shortLabel: "Về chúng tôi" },
 ];
 
-export const navPages = [
-  ...pages.slice(0, 3),
-  { id: "news", hash: "/tin-tuc", label: "Tin tức", shortLabel: "Tin tức", external: true },
-  pages[3],
-];
-
+export const navPages = [pages[0], ...pages.slice(1, 4), pages[4]];
 export const pagesById = pages.reduce((accumulator, page) => {
   accumulator[page.id] = page;
   return accumulator;

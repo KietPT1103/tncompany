@@ -1063,11 +1063,11 @@ $schema = $article
           </div>
         </div>
 
-        <nav class="page-nav" aria-label="Điều hướng trang">
-          <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/')) ?>">Cà phê</a>
+                <nav class="page-nav" aria-label="Điều hướng trang">
+          <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/')) ?>">Trang chủ</a>
+          <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/ca-phe-ong-quan')) ?>">Cà phê</a>
           <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/tiem-lau-ong-quan')) ?>">Tiệm lẩu</a>
           <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/ong-quan-farm')) ?>">Farm</a>
-          <a class="is-active" href="<?= seo_runtime_escape(seo_runtime_absolute_url('/tin-tuc')) ?>">Tin tức</a>
           <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/about')) ?>">Về chúng tôi</a>
         </nav>
       </header>

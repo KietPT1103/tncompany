@@ -59,18 +59,14 @@ function AdminIndexPage() {
 }
 
 export default function App() {
-  const landingHashes = pages
-    .filter((page) => page.id !== "home" && page.hash !== "/")
-    .map((page) => page.hash);
+  const landingHashes = pages.filter((page) => page.hash !== "/").map((page) => page.hash);
 
   return (
     <>
       <SeoManager />
       <Routes>
-        <Route path="/about" element={<LandingApp />} />
         <Route path="/" element={<LandingApp />} />
-        <Route path="/ca-phe-ong-quan" element={<Navigate to="/" replace />} />
-        <Route path="/home" element={<Navigate to="/about" replace />} />
+        <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/admin"

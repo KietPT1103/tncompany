@@ -1,8 +1,8 @@
-import React from "react";
 import { navPages, pagesById, routeByHash, venuesById } from "../data/siteData";
 import AppFooter from "./AppFooter";
 import AppHeader from "./AppHeader";
 import CompanyHome from "./CompanyHome";
+import HomePage from "./HomePage";
 import VenuePage from "./VenuePage";
 
 export function resolvePublicPageState(pathname) {
@@ -15,6 +15,7 @@ export function resolvePublicPageState(pathname) {
     activePage,
     activeVenue,
     isHome: activePage.id === "home",
+    isAbout: activePage.id === "about",
   };
 }
 
@@ -25,18 +26,21 @@ export default function PublicSiteShell({
   onNavigate,
   onOpenImage,
 }) {
-  const { activePage, activeVenue, isHome } = resolvePublicPageState(pathname);
+  const { activePage, activeVenue, isHome, isAbout } = resolvePublicPageState(pathname);
+  const themeClass = activeVenue ? `theme-${activeVenue.id}` : "theme-home";
 
   return (
-    <div className={`app-shell ${isHome ? "theme-home" : `theme-${activeVenue.id}`}`}>
+    <div className={`app-shell ${themeClass}`}>
       <div className="ambient ambient-1" aria-hidden="true" />
       <div className="ambient ambient-2" aria-hidden="true" />
       <div className="ambient ambient-3" aria-hidden="true" />
 
       <AppHeader activePageId={activePage.id} onNavigate={onNavigate} pages={navPages} />
 
-      <main className="page-content">
+      <main className={`page-content${isHome ? " is-home" : ""}`}>
         {isHome ? (
+          <HomePage onOpenPage={onNavigate} />
+        ) : isAbout ? (
           <CompanyHome onOpenPage={onNavigate} />
         ) : (
           <VenuePage
@@ -49,7 +53,7 @@ export default function PublicSiteShell({
         )}
       </main>
 
-      <AppFooter isHome={isHome} />
+      <AppFooter pageId={activePage.id} />
     </div>
   );
 }
