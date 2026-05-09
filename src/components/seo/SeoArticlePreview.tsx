@@ -49,6 +49,13 @@ export default function SeoArticlePreview({
         .seo-preview-content ul,
         .seo-preview-content ol {
           padding-left: 1.5rem;
+          list-style-position: outside;
+        }
+        .seo-preview-content ul {
+          list-style-type: disc;
+        }
+        .seo-preview-content ol {
+          list-style-type: decimal;
         }
         .seo-preview-content li {
           margin-bottom: 0.5rem;
@@ -80,13 +87,10 @@ export default function SeoArticlePreview({
       `}</style>
 
       <div className="mx-auto max-w-5xl">
-        <div className="mb-8 flex items-center justify-between gap-4 border-b border-slate-200 pb-5 text-sm text-slate-500">
+        <div className="mb-8 border-b border-slate-200 pb-5 text-sm text-slate-500">
           <div>
             <div className="font-semibold text-slate-900">Bản xem trước bài viết</div>
             <div>Hiển thị gần giống trang public.</div>
-          </div>
-          <div className="rounded-full bg-slate-100 px-4 py-2 font-medium text-slate-600">
-            /bai-viet/xem-truoc
           </div>
         </div>
 

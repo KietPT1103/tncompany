@@ -154,7 +154,7 @@ export default function SeoArticlesPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4 font-mono text-xs text-slate-600">
-                        /bai-viet/{article.slug}
+                        /tin-tuc/{article.slug}
                       </td>
                       <td className="px-5 py-4 text-slate-600">
                         {targetStoreLabels[article.targetStore] || "Toàn hệ sinh thái"}
@@ -176,7 +176,7 @@ export default function SeoArticlesPage() {
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-2">
                           <a
-                            href={`/bai-viet/${article.slug}`}
+                            href={`/tin-tuc/${article.slug}`}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"

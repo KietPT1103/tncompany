@@ -24,7 +24,7 @@ $staticUrls = [
         'priority' => '0.8',
     ],
     [
-        'loc' => seo_runtime_absolute_url('/bai-viet'),
+        'loc' => seo_runtime_absolute_url('/tin-tuc'),
         'priority' => '0.8',
     ],
 ];

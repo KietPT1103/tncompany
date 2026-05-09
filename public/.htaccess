@@ -8,8 +8,10 @@ RewriteRule ^home/?$ / [R=301,L]
 
 # Serve dynamic SEO article pages and sitemap.
 RewriteRule ^sitemap\.xml$ sitemap.php [L]
-RewriteRule ^bai-viet/?$ seo-article-page.php [L,QSA]
-RewriteRule ^bai-viet/([^/]+)/?$ seo-article-page.php?slug=$1 [L,QSA]
+RewriteRule ^bai-viet/?$ /tin-tuc [R=301,L]
+RewriteRule ^bai-viet/([^/]+)/?$ /tin-tuc/$1 [R=301,L]
+RewriteRule ^tin-tuc/?$ seo-article-page.php [L,QSA]
+RewriteRule ^tin-tuc/([^/]+)/?$ seo-article-page.php?slug=$1 [L,QSA]
 
 # Serve prerendered public pages without forcing a trailing slash.
 RewriteRule ^(ca-phe-ong-quan|tiem-lau-ong-quan|ong-quan-farm)$ $1/index.html [L]

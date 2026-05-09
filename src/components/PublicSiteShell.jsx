@@ -1,5 +1,5 @@
 import React from "react";
-import { pages, pagesById, routeByHash, venuesById } from "../data/siteData";
+import { navPages, pagesById, routeByHash, venuesById } from "../data/siteData";
 import AppFooter from "./AppFooter";
 import AppHeader from "./AppHeader";
 import CompanyHome from "./CompanyHome";
@@ -33,7 +33,7 @@ export default function PublicSiteShell({
       <div className="ambient ambient-2" aria-hidden="true" />
       <div className="ambient ambient-3" aria-hidden="true" />
 
-      <AppHeader activePageId={activePage.id} onNavigate={onNavigate} pages={pages} />
+      <AppHeader activePageId={activePage.id} onNavigate={onNavigate} pages={navPages} />
 
       <main className="page-content">
         {isHome ? (

@@ -61,7 +61,10 @@ function isSelectionInsideEditor(
   return !!anchorNode && editor.contains(anchorNode);
 }
 
-function detectBlockType(editor: HTMLDivElement, selection: Selection | null): ToolbarState["block"] {
+function detectBlockType(
+  editor: HTMLDivElement,
+  selection: Selection | null
+): ToolbarState["block"] {
   if (!selection || selection.rangeCount === 0) return "p";
   let node: Node | null = selection.anchorNode;
 
@@ -76,6 +79,19 @@ function detectBlockType(editor: HTMLDivElement, selection: Selection | null): T
   }
 
   return "p";
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttribute(value: string) {
+  return escapeHtml(value);
 }
 
 export default function RichTextEditor({
@@ -169,8 +185,23 @@ export default function RichTextEditor({
   function handleInsertLink() {
     saveSelection();
     const url = window.prompt("Nhập đường dẫn muốn gắn:");
-    if (!url) return;
-    runCommand("createLink", url);
+    if (!url?.trim()) return;
+
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().trim() || "";
+    const linkText = window.prompt(
+      "Nhập nội dung hiển thị cho link:",
+      selectedText
+    );
+
+    if (!linkText?.trim()) return;
+
+    runCommand(
+      "insertHTML",
+      `<a href="${escapeAttribute(url.trim())}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+        linkText.trim()
+      )}</a>`
+    );
   }
 
   function handleRemoveLink() {
@@ -324,7 +355,12 @@ export default function RichTextEditor({
         data-placeholder={placeholder}
       />
 
-      <div className={cn("border-t border-[#ece5da] px-5 py-3 text-xs text-slate-400", minimal && "border-0 px-0 pt-3")}>
+      <div
+        className={cn(
+          "border-t border-[#ece5da] px-5 py-3 text-xs text-slate-400",
+          minimal && "border-0 px-0 pt-3"
+        )}
+      >
         Có thể dùng phím tắt quen thuộc như `Ctrl+B`, `Ctrl+I`, `Ctrl+U`.
       </div>
 
@@ -355,6 +391,13 @@ export default function RichTextEditor({
         [contenteditable] ol {
           margin: 0 0 1rem;
           padding-left: 1.4rem;
+          list-style-position: outside;
+        }
+        [contenteditable] ul {
+          list-style-type: disc;
+        }
+        [contenteditable] ol {
+          list-style-type: decimal;
         }
         [contenteditable] li {
           margin-bottom: 0.45rem;

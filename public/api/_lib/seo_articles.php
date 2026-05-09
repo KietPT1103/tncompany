@@ -280,7 +280,7 @@ function seo_articles_slug_exists(string $slug, ?string $ignoreId = null): bool
 
 function seo_articles_public_path(string $slug): string
 {
-    return '/bai-viet/' . rawurlencode($slug);
+    return '/tin-tuc/' . rawurlencode($slug);
 }
 
 function seo_articles_fetch_public_article_by_slug(string $slug): ?array

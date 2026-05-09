@@ -326,6 +326,12 @@ export const pages = [
   { id: "home", hash: "/about", label: "Về chúng tôi", shortLabel: "Về chúng tôi" },
 ];
 
+export const navPages = [
+  ...pages.slice(0, 3),
+  { id: "news", hash: "/tin-tuc", label: "Tin tức", shortLabel: "Tin tức", external: true },
+  pages[3],
+];
+
 export const pagesById = pages.reduce((accumulator, page) => {
   accumulator[page.id] = page;
   return accumulator;

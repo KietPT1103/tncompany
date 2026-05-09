@@ -359,9 +359,6 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
                       <span className="rounded-full bg-[#eff6ff] px-4 py-1.5 font-semibold text-[#1d4ed8]">
                         Bản nháp
                       </span>
-                      <span>
-                        URL xem ngoài: <span className="font-mono text-xs">/bai-viet/{form.slug || "slug-bai-viet"}</span>
-                      </span>
                     </div>
 
                     <textarea
@@ -380,7 +377,7 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
 
                     <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-[#f7f4ee] px-4 py-3 text-sm text-slate-500">
                       <span className="font-medium text-slate-700">Slug</span>
-                      <span className="font-mono text-xs text-slate-400">/bai-viet/</span>
+                      <span className="font-mono text-xs text-slate-400">/tin-tuc/</span>
                       <input
                         value={form.slug}
                         onChange={(event) => {
@@ -705,7 +702,11 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
                 Bản nháp hiển thị gần giống trang public.
               </div>
             </div>
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setPreviewOpen(false)}
+              className="border-white bg-white text-slate-900 hover:bg-slate-100 hover:text-slate-900"
+            >
               Đóng preview
             </Button>
           </div>

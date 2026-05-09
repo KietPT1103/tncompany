@@ -15,11 +15,11 @@ if ($isDetail && !$article) {
 }
 
 $articles = $isDetail ? [] : seo_articles_fetch_public_articles(100);
-$defaultTitle = 'Bài viết SEO | T&N Company';
-$defaultDescription = 'Tổng hợp bài viết SEO về cà phê, lẩu, farm và hệ sinh thái Ông Quan tại Cần Thơ.';
+$defaultTitle = 'Tin tức | T&N Company';
+$defaultDescription = 'Tin tức, bài viết và nội dung SEO về cà phê, lẩu, farm và hệ sinh thái Ông Quan tại Cần Thơ.';
 $canonical = $isDetail && $article
     ? seo_runtime_absolute_url(seo_articles_public_path($article['slug']))
-    : seo_runtime_absolute_url('/bai-viet');
+    : seo_runtime_absolute_url('/tin-tuc');
 $title = $article
     ? trim((string) ($article['metaTitle'] ?: $article['title'])) . ' | T&N Company'
     : $defaultTitle;
@@ -56,7 +56,7 @@ $schema = $article
     : [
         '@context' => 'https://schema.org',
         '@type' => 'CollectionPage',
-        'name' => 'Bài viết SEO',
+        'name' => 'Tin tức',
         'description' => $defaultDescription,
         'url' => $canonical,
       ];
@@ -85,58 +85,97 @@ $schema = $article
     <style>
       :root {
         color-scheme: light;
-        --bg: #fffdfa;
-        --ink: #0f172a;
-        --muted: #64748b;
-        --line: #e2e8f0;
-        --soft: #f8fafc;
-        --blue: #1428f0;
+        --bg: #f9f6f1;
+        --panel: rgba(255, 255, 255, 0.92);
+        --line: #e8dccd;
+        --ink: #172033;
+        --muted: #6f7b91;
+        --brand: #7b4b25;
+        --brand-strong: #5f3819;
+        --brand-soft: #f4e7d5;
+        --blue: #1d4ed8;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         font-family: "Segoe UI", system-ui, sans-serif;
-        background: var(--bg);
         color: var(--ink);
+        background:
+          radial-gradient(circle at 0% 14%, rgba(236, 178, 116, 0.32), transparent 18%),
+          radial-gradient(circle at 100% 90%, rgba(239, 205, 171, 0.30), transparent 16%),
+          linear-gradient(180deg, #fcfaf7 0%, #f8f3ed 100%);
       }
       a { color: inherit; }
       .shell {
-        max-width: 1200px;
+        max-width: 1240px;
         margin: 0 auto;
-        padding: 28px 20px 72px;
+        padding: 24px 18px 72px;
       }
-      .topbar {
+      .site-header {
         display: flex;
         justify-content: space-between;
-        gap: 16px;
+        gap: 24px;
         align-items: center;
-        flex-wrap: wrap;
-        padding-bottom: 22px;
-        border-bottom: 1px solid var(--line);
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 28px;
+        padding: 14px 18px;
+        box-shadow: 0 22px 50px rgba(98, 64, 35, 0.10);
+        backdrop-filter: blur(8px);
       }
-      .crumbs,
-      .top-actions {
+      .brand {
         display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
         align-items: center;
+        gap: 14px;
       }
-      .chip,
-      .ghost-link {
+      .brand-mark {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        justify-content: center;
+        width: 46px;
+        height: 46px;
+        border-radius: 16px;
+        background: linear-gradient(180deg, #8b5b31 0%, #6b3f1f 100%);
+        color: #fff;
+        font-weight: 800;
+        font-size: 17px;
+      }
+      .brand-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .brand-sub {
+        margin: 4px 0 0;
+        color: #756554;
+        font-size: 13px;
+      }
+      .page-nav {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+      }
+      .page-nav a {
+        padding: 12px 16px;
         border-radius: 999px;
-        border: 1px solid var(--line);
-        padding: 10px 15px;
         text-decoration: none;
-        color: var(--muted);
-        font-size: 14px;
-        background: #fff;
+        color: #755e4a;
+        font-weight: 700;
+        transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+      }
+      .page-nav a:hover {
+        background: #f6ede2;
+        color: var(--brand-strong);
+      }
+      .page-nav a.is-active {
+        background: linear-gradient(180deg, #8b5b31 0%, #6b3f1f 100%);
+        color: #fff;
+        box-shadow: 0 10px 22px rgba(107, 63, 31, 0.24);
       }
       .page-header {
-        max-width: 860px;
-        margin: 36px auto 0;
+        max-width: 900px;
+        margin: 42px auto 0;
       }
       .eyebrow {
         display: inline-block;
@@ -170,8 +209,9 @@ $schema = $article
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
-        background: var(--soft);
+        background: rgba(255, 255, 255, 0.72);
         padding: 9px 14px;
+        border: 1px solid #edf2f7;
       }
       .cover {
         display: block;
@@ -183,7 +223,7 @@ $schema = $article
         box-shadow: 0 28px 80px rgba(15, 23, 42, 0.10);
       }
       .article {
-        max-width: 860px;
+        max-width: 900px;
         margin: 44px auto 0;
       }
       .content {
@@ -216,6 +256,13 @@ $schema = $article
       .content ul,
       .content ol {
         padding-left: 1.5rem;
+        list-style-position: outside;
+      }
+      .content ul {
+        list-style-type: disc;
+      }
+      .content ol {
+        list-style-type: decimal;
       }
       .content li {
         margin-bottom: 10px;
@@ -247,8 +294,8 @@ $schema = $article
         margin-top: 36px;
       }
       .list-heading {
-        max-width: 860px;
-        margin: 0 auto 28px;
+        max-width: 900px;
+        margin: 0 auto 32px;
       }
       .list-heading h1 {
         font-size: clamp(36px, 5vw, 60px);
@@ -256,28 +303,48 @@ $schema = $article
       .list-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 18px;
+        gap: 22px;
       }
       .card {
         display: block;
+        overflow: hidden;
         border: 1px solid var(--line);
         border-radius: 28px;
-        padding: 24px;
-        background: #fff;
+        background: rgba(255, 255, 255, 0.88);
         text-decoration: none;
         transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        box-shadow: 0 18px 40px rgba(98, 64, 35, 0.08);
       }
       .card:hover {
         transform: translateY(-4px);
-        border-color: #cbd5e1;
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+        border-color: #d8c2ab;
+        box-shadow: 0 24px 48px rgba(98, 64, 35, 0.12);
       }
-      .card .eyebrow {
-        letter-spacing: 0.18em;
+      .card-cover {
+        aspect-ratio: 16 / 10;
+        width: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .card-cover-placeholder {
+        aspect-ratio: 16 / 10;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #f6e7d4 0%, #fdf7ef 100%);
+        color: #8b6b4f;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 13px;
+      }
+      .card-body {
+        padding: 20px 20px 22px;
       }
       .card h2 {
-        margin: 16px 0 12px;
-        font-size: 28px;
+        margin: 10px 0 12px;
+        font-size: 26px;
         line-height: 1.18;
         color: var(--ink);
       }
@@ -286,19 +353,31 @@ $schema = $article
         color: var(--muted);
         line-height: 1.75;
       }
+      .card .eyebrow {
+        letter-spacing: 0.18em;
+      }
       .empty {
-        max-width: 860px;
+        max-width: 900px;
         margin: 0 auto;
         color: var(--muted);
         font-size: 18px;
         line-height: 1.8;
       }
       .not-found {
-        max-width: 860px;
+        max-width: 900px;
         margin: 48px auto 0;
       }
+      @media (max-width: 920px) {
+        .site-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .page-nav {
+          justify-content: flex-start;
+        }
+      }
       @media (max-width: 768px) {
-        .shell { padding: 20px 16px 56px; }
+        .shell { padding: 18px 14px 56px; }
         .summary { font-size: 18px; }
         .content { font-size: 17px; line-height: 1.85; }
         .content h2 { font-size: 32px; }
@@ -308,25 +387,32 @@ $schema = $article
   </head>
   <body>
     <div class="shell">
-      <div class="topbar">
-        <div class="crumbs">
-          <a class="chip" href="<?= seo_runtime_escape(seo_runtime_absolute_url('/')) ?>">Trang chủ</a>
-          <a class="chip" href="<?= seo_runtime_escape(seo_runtime_absolute_url('/bai-viet')) ?>">Bài viết SEO</a>
+      <header class="site-header">
+        <div class="brand">
+          <span class="brand-mark">T&amp;N</span>
+          <div>
+            <p class="brand-title">T&amp;N service</p>
+            <p class="brand-sub">Trang chủ doanh nghiệp &amp; hệ sinh thái Ông Quan</p>
+          </div>
         </div>
-        <div class="top-actions">
-          <a class="ghost-link" href="<?= seo_runtime_escape(seo_runtime_absolute_url('/about')) ?>">Về T&amp;N Company</a>
-        </div>
-      </div>
+
+        <nav class="page-nav" aria-label="Điều hướng trang">
+          <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/')) ?>">Cà phê</a>
+          <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/tiem-lau-ong-quan')) ?>">Tiệm lẩu</a>
+          <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/ong-quan-farm')) ?>">Farm</a>
+          <a class="is-active" href="<?= seo_runtime_escape(seo_runtime_absolute_url('/tin-tuc')) ?>">Tin tức</a>
+          <a href="<?= seo_runtime_escape(seo_runtime_absolute_url('/about')) ?>">Về chúng tôi</a>
+        </nav>
+      </header>
 
       <?php if ($isDetail && $article): ?>
         <header class="page-header">
-          <div class="eyebrow">Bài viết SEO</div>
+          <div class="eyebrow">Tin tức</div>
           <h1><?= seo_runtime_escape($article['title']) ?></h1>
           <div class="summary"><?= seo_runtime_escape($article['excerpt'] ?: $description) ?></div>
           <div class="meta">
             <span>Đăng lúc: <?= seo_runtime_escape($article['publishedAt'] ?: $article['createdAt']) ?></span>
             <span>Cập nhật: <?= seo_runtime_escape($article['updatedAt']) ?></span>
-            <span>URL: /bai-viet/<?= seo_runtime_escape($article['slug']) ?></span>
           </div>
         </header>
 
@@ -340,18 +426,18 @@ $schema = $article
       <?php elseif ($isDetail): ?>
         <section class="not-found">
           <div class="eyebrow">404</div>
-          <h1>Bài viết không tồn tại hoặc chưa được publish</h1>
+          <h1>Tin tức không tồn tại hoặc chưa được publish</h1>
           <div class="summary">
-            URL này hiện không có bài viết public. Nếu bài vừa đăng, hãy kiểm tra trạng thái publish trong admin.
+            Trang này hiện không có bài viết public. Nếu bài vừa đăng, hãy kiểm tra trạng thái publish trong admin.
           </div>
         </section>
       <?php else: ?>
         <section class="list-shell">
           <div class="list-heading">
             <div class="eyebrow">Kho nội dung</div>
-            <h1>Bài viết SEO cho hệ sinh thái Ông Quan</h1>
+            <h1>Tin tức &amp; bài viết mới nhất</h1>
             <div class="summary">
-              Tổng hợp các bài viết public về cà phê, lẩu, farm và trải nghiệm tại Cần Thơ. Mỗi bài có URL riêng, meta riêng và được đưa vào sitemap động để Google dễ crawl hơn.
+              Tổng hợp các bài viết về cà phê, tiệm lẩu, farm và trải nghiệm tại Cần Thơ. Mỗi bài có ảnh bìa, mô tả rõ ràng và URL riêng để dễ chia sẻ cũng như tối ưu tìm kiếm.
             </div>
           </div>
 
@@ -360,10 +446,19 @@ $schema = $article
           <?php else: ?>
             <div class="list-grid">
               <?php foreach ($articles as $item): ?>
+                <?php $itemCover = trim((string) ($item['coverImageUrl'] ?? '')); ?>
                 <a class="card" href="<?= seo_runtime_escape(seo_articles_public_path($item['slug'])) ?>">
-                  <div class="eyebrow"><?= seo_runtime_escape((string) strtoupper($item['targetStore'] ?: 'company')) ?></div>
-                  <h2><?= seo_runtime_escape($item['title']) ?></h2>
-                  <p><?= seo_runtime_escape($item['excerpt']) ?></p>
+                  <?php if ($itemCover !== ''): ?>
+                    <img class="card-cover" src="<?= seo_runtime_escape(seo_runtime_resolve_asset_url($itemCover)) ?>" alt="<?= seo_runtime_escape($item['title']) ?>" />
+                  <?php else: ?>
+                    <div class="card-cover-placeholder">Tin tức T&amp;N</div>
+                  <?php endif; ?>
+
+                  <div class="card-body">
+                    <div class="eyebrow"><?= seo_runtime_escape((string) strtoupper($item['targetStore'] ?: 'company')) ?></div>
+                    <h2><?= seo_runtime_escape($item['title']) ?></h2>
+                    <p><?= seo_runtime_escape($item['excerpt'] ?: 'Bài viết đang được cập nhật mô tả ngắn.') ?></p>
+                  </div>
                 </a>
               <?php endforeach; ?>
             </div>
