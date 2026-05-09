@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS seo_articles (
+  id VARCHAR(36) PRIMARY KEY,
+  slug VARCHAR(191) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  excerpt TEXT NULL,
+  content_html LONGTEXT NOT NULL,
+  cover_image_url VARCHAR(500) NULL,
+  meta_title VARCHAR(255) NULL,
+  meta_description VARCHAR(320) NULL,
+  target_store VARCHAR(32) NULL,
+  is_published TINYINT(1) NOT NULL DEFAULT 0,
+  published_at DATETIME NULL,
+  created_by VARCHAR(36) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_seo_articles_slug (slug),
+  KEY idx_seo_articles_published (is_published, published_at),
+  KEY idx_seo_articles_target_store (target_store),
+  KEY idx_seo_articles_updated_at (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -33,20 +33,21 @@ import { StoreType, useStore } from "@/context/StoreContext";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: Calculator },
-  { href: "/reports", label: "Báo cáo", icon: FileText },
-  { href: "/cash-flow", label: "Dòng tiền", icon: BarChart3 },
-  { href: "/product", label: "Sản phẩm", icon: Package },
-  { href: "/categories", label: "Danh mục", icon: Tags },
-  { href: "/payroll", label: "Tính lương", icon: Wallet },
-  { href: "/payroll-estimate", label: "Ước lượng lương", icon: CalendarDays },
+  { href: "/reports", label: "BÃ¡o cÃ¡o", icon: FileText },
+  { href: "/cash-flow", label: "DÃ²ng tiá»n", icon: BarChart3 },
+  { href: "/product", label: "Sáº£n pháº©m", icon: Package },
+  { href: "/categories", label: "Danh má»¥c", icon: Tags },
+  { href: "/payroll", label: "TÃ­nh lÆ°Æ¡ng", icon: Wallet },
+  { href: "/payroll-estimate", label: "Æ¯á»›c lÆ°á»£ng lÆ°Æ¡ng", icon: CalendarDays },
   { href: "/social-listening", label: "Social Listening", icon: MessageSquareText },
+  { href: "/seo-articles", label: "Bai viet SEO", icon: FileText },
 ];
 
 const adminExtraNavItems = [
-  { href: "/internal-invoices", label: "Hóa đơn nội bộ", icon: ReceiptText },
-  { href: "/tax-invoices", label: "Hóa đơn thuế", icon: ReceiptText },
-  { href: "/activity-logs", label: "Nhật ký máy", icon: Activity },
-  { href: "/accounts", label: "Tài khoản", icon: KeyRound },
+  { href: "/internal-invoices", label: "HÃ³a Ä‘Æ¡n ná»™i bá»™", icon: ReceiptText },
+  { href: "/tax-invoices", label: "HÃ³a Ä‘Æ¡n thuáº¿", icon: ReceiptText },
+  { href: "/activity-logs", label: "Nháº­t kÃ½ mÃ¡y", icon: Activity },
+  { href: "/accounts", label: "TÃ i khoáº£n", icon: KeyRound },
 ];
 
 const storeOptions: {
@@ -55,10 +56,10 @@ const storeOptions: {
   label: string;
   note: string;
 }[] = [
-  { id: "cafe", icon: Coffee, label: "Cafe", note: "Quầy nước" },
-  { id: "restaurant", icon: UtensilsCrossed, label: "Lẩu / Bếp", note: "Khu bếp" },
-  { id: "bakery", icon: CakeSlice, label: "Tiệm bánh", note: "Quầy bánh" },
-  { id: "farm", icon: Tractor, label: "Farm", note: "Khu trải nghiệm" },
+  { id: "cafe", icon: Coffee, label: "Cafe", note: "Quáº§y nÆ°á»›c" },
+  { id: "restaurant", icon: UtensilsCrossed, label: "Láº©u / Báº¿p", note: "Khu báº¿p" },
+  { id: "bakery", icon: CakeSlice, label: "Tiá»‡m bÃ¡nh", note: "Quáº§y bÃ¡nh" },
+  { id: "farm", icon: Tractor, label: "Farm", note: "Khu tráº£i nghiá»‡m" },
 ];
 
 export default function AdminSidebar({
@@ -139,7 +140,7 @@ export default function AdminSidebar({
                 type="button"
                 onClick={onToggleCollapsed}
                 className="hidden rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 lg:inline-flex"
-                aria-label="Ẩn sidebar"
+                aria-label="áº¨n sidebar"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </button>
@@ -158,7 +159,7 @@ export default function AdminSidebar({
                 </div>
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    Khu vực hiện tại
+                    Khu vá»±c hiá»‡n táº¡i
                   </div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
                     {currentStore.label}
@@ -247,7 +248,7 @@ export default function AdminSidebar({
             className="flex w-full items-center justify-start gap-3 px-3 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
           >
             <LogOut className="h-5 w-5" />
-            Đăng xuất
+            ÄÄƒng xuáº¥t
           </Button>
         </div>
       </div>

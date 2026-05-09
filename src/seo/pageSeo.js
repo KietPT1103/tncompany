@@ -11,6 +11,10 @@ function toAbsoluteUrl(pathname = "/") {
 const DEFAULT_OG_IMAGE = new URL(defaultOgImagePath, `${SITE_URL}/`).toString();
 const BRAND_LOGO = toAbsoluteUrl("/favicon.svg");
 
+function buildHomepageSeoDescription() {
+  return `Kh\u00e1m ph\u00e1 h\u1ec7 sinh th\u00e1i \u00d4ng Quan t\u1ea1i ${buildHomepageAddressText()} g\u1ed3m Ti\u1ec7m c\u00e0 ph\u00ea \u00d4ng Quan, Ti\u1ec7m l\u1ea9u \u00d4ng Quan v\u00e0 \u00d4ng Quan Farm; ph\u00f9 h\u1ee3p t\u00ecm qu\u00e1n cafe \u0111\u1eb9p, qu\u00e1n l\u1ea9u \u0103n s\u00e1ng, \u0111i\u1ec3m tham quan check-in t\u1ea1i C\u1ea7n Th\u01a1.`;
+}
+
 function buildAddress() {
   return {
     "@type": "PostalAddress",
@@ -51,6 +55,7 @@ function buildOrganizationSchema() {
       "@id": `${SITE_URL}/#organization`,
       name: company.shortName,
       legalName: company.name,
+      description: buildHomepageSeoDescription(),
       url: SITE_URL,
       logo: BRAND_LOGO,
       image: BRAND_LOGO,
@@ -62,6 +67,7 @@ function buildOrganizationSchema() {
       "@id": `${SITE_URL}/#website`,
       url: SITE_URL,
       name: company.shortName,
+      description: buildHomepageSeoDescription(),
       inLanguage: "vi-VN",
     },
   ];
@@ -77,7 +83,7 @@ function buildOrganizationSchema() {
   };
 }
 
-function buildVenueSchema(venue) {
+function buildVenueSchema(venue, seoDescription = venue.description) {
   const schemaTypeByVenue = {
     cafe: "CafeOrCoffeeShop",
     hotpot: "Restaurant",
@@ -89,7 +95,7 @@ function buildVenueSchema(venue) {
     "@type": schemaTypeByVenue[venue.id] || "LocalBusiness",
     "@id": `${pageUrl}#place`,
     name: venue.name,
-    description: venue.description,
+    description: seoDescription,
     url: pageUrl,
     image: toAbsoluteUrl(venue.heroImage),
     telephone: venue.contact,
@@ -110,24 +116,23 @@ const venueMetaOverrides = {
   cafe: {
     title: "Ti\u1ec7m c\u00e0 ph\u00ea \u00d4ng Quan C\u1ea7n Th\u01a1 | Qu\u00e1n cafe \u0111\u1eb9p t\u1ea1i Ninh Ki\u1ec1u",
     description:
-      "Kh\u00e1m ph\u00e1 Ti\u1ec7m c\u00e0 ph\u00ea \u00d4ng Quan t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1. Xem kh\u00f4ng gian cafe, h\u00ecnh \u1ea3nh th\u1ef1c t\u1ebf, gi\u1edd m\u1edf c\u1eeda v\u00e0 th\u00f4ng tin li\u00ean h\u1ec7.",
+      "Ti\u1ec7m c\u00e0 ph\u00ea \u00d4ng Quan t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1 l\u00e0 qu\u00e1n cafe \u0111\u1eb9p c\u00f3 nhi\u1ec1u khu nh\u01b0 H\u1ed9i An, nh\u00e0 b\u00ean su\u1ed1i, nh\u00e0 gia ti\u00ean; ph\u00f9 h\u1ee3p g\u1eb7p g\u1ee1, ch\u1ee5p \u1ea3nh v\u00e0 th\u01b0 gi\u00e3n.",
   },
   hotpot: {
     title: "Ti\u1ec7m l\u1ea9u \u00d4ng Quan C\u1ea7n Th\u01a1 | L\u1ea9u, \u0103n s\u00e1ng v\u00e0 m\u00f3n n\u01b0\u1edbng t\u1ea1i Ninh Ki\u1ec1u",
     description:
-      "Ti\u1ec7m l\u1ea9u \u00d4ng Quan ph\u1ee5c v\u1ee5 l\u1ea9u v\u00e0 m\u00f3n n\u01b0\u1edbng t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1. Xem menu n\u1ed5i b\u1eadt, khung gi\u1edd v\u00e0 h\u00ecnh \u1ea3nh th\u1ef1c t\u1ebf.",
+      "Ti\u1ec7m l\u1ea9u \u00d4ng Quan t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1 ph\u1ee5c v\u1ee5 l\u1ea9u, \u0103n s\u00e1ng, m\u00f3n n\u01b0\u1edbng v\u00e0 m\u00f3n \u0103n k\u00e8m; ph\u00f9 h\u1ee3p nh\u00f3m b\u1ea1n, gia \u0111\u00ecnh v\u00e0 kh\u00e1ch \u0103n theo nhi\u1ec1u khung gi\u1edd.",
   },
   farm: {
     title: "\u00d4ng Quan Farm C\u1ea7n Th\u01a1 | \u0110i\u1ec3m tham quan, check-in v\u00e0 vui ch\u01a1i gia \u0111\u00ecnh",
     description:
-      "\u00d4ng Quan Farm l\u00e0 \u0111i\u1ec3m tham quan t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1, ph\u00f9 h\u1ee3p cho gia \u0111\u00ecnh, nh\u00f3m b\u1ea1n v\u00e0 kh\u00e1ch ch\u1ee5p \u1ea3nh. Xem khu th\u00fa, g\u00f3c check-in v\u00e0 gi\u1edd tham quan.",
+      "\u00d4ng Quan Farm t\u1ea1i 701/78 \u0110\u01b0\u1eddng 30/4, ph\u01b0\u1eddng H\u01b0ng L\u1ee3i, qu\u1eadn Ninh Ki\u1ec1u, C\u1ea7n Th\u01a1 l\u00e0 \u0111i\u1ec3m tham quan, check-in v\u00e0 vui ch\u01a1i ngo\u00e0i tr\u1eddi v\u1edbi khu th\u00fa, g\u00f3c ch\u1ee5p \u1ea3nh, kh\u00f4ng gian ph\u00f9 h\u1ee3p gia \u0111\u00ecnh v\u00e0 nh\u00f3m b\u1ea1n cu\u1ed1i tu\u1ea7n.",
   },
 };
 
 const homepageSeo = {
   title: "T&N Company | H\u1ec7 sinh th\u00e1i \u00d4ng Quan g\u1ed3m cafe, l\u1ea9u v\u00e0 farm t\u1ea1i C\u1ea7n Th\u01a1",
-  description:
-    `Kh\u00e1m ph\u00e1 h\u1ec7 sinh th\u00e1i \u00d4ng Quan t\u1ea1i ${buildHomepageAddressText()}: ti\u1ec7m c\u00e0 ph\u00ea, ti\u1ec7m l\u1ea9u v\u00e0 farm tham quan. Xem h\u00ecnh \u1ea3nh, gi\u1edd m\u1edf c\u1eeda v\u00e0 th\u00f4ng tin li\u00ean h\u1ec7.`,
+  description: buildHomepageSeoDescription(),
 };
 
 const publicSeoByPath = {
@@ -144,18 +149,19 @@ const publicSeoByPath = {
   ...Object.fromEntries(
     venues.map((venue) => {
       const metaOverride = venueMetaOverrides[venue.id] || {};
+      const seoDescription = metaOverride.description || venue.description;
 
       return [
         venue.hash,
         {
           title: metaOverride.title || `${venue.name} | ${company.shortName}`,
-          description: metaOverride.description || venue.description,
+          description: seoDescription,
           canonical: toAbsoluteUrl(venue.hash),
           image: toAbsoluteUrl(venue.heroImage),
           siteName: company.shortName,
           openGraphType: "website",
           robots: "index,follow",
-          schema: buildVenueSchema(venue),
+          schema: buildVenueSchema(venue, seoDescription),
         },
       ];
     })

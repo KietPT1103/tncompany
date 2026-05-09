@@ -6,6 +6,11 @@ RewriteRule ^api/ - [L]
 # Canonicalize the legacy home path.
 RewriteRule ^home/?$ / [R=301,L]
 
+# Serve dynamic SEO article pages and sitemap.
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+RewriteRule ^bai-viet/?$ seo-article-page.php [L,QSA]
+RewriteRule ^bai-viet/([^/]+)/?$ seo-article-page.php?slug=$1 [L,QSA]
+
 # Serve prerendered public pages without forcing a trailing slash.
 RewriteRule ^(ca-phe-ong-quan|tiem-lau-ong-quan|ong-quan-farm)$ $1/index.html [L]
 
