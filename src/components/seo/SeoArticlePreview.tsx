@@ -16,28 +16,103 @@ export default function SeoArticlePreview({
   blocks,
 }: SeoArticlePreviewProps) {
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6efe7_0%,#fffdf9_100%)] px-4 py-8 text-slate-900">
-      <div className="mx-auto max-w-4xl">
-        <div className="rounded-[32px] border border-[#eadfce] bg-white/85 p-8 shadow-[0_20px_60px_rgba(66,38,15,0.08)] backdrop-blur">
-          <div className="inline-flex rounded-full bg-[#fff3e8] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#9a3412]">
-            Bài viết SEO
+    <div className="min-h-screen bg-[#fffdfa] px-4 py-8 text-slate-900 md:px-8">
+      <style>{`
+        .seo-preview-content {
+          color: #0f172a;
+          font-size: 1.15rem;
+          line-height: 1.95;
+        }
+        .seo-preview-content > section {
+          margin: 0 0 3rem;
+        }
+        .seo-preview-content h2 {
+          margin: 0 0 1.25rem;
+          color: #1428f0;
+          font-size: clamp(2rem, 4vw, 2.75rem);
+          line-height: 1.1;
+          font-weight: 800;
+        }
+        .seo-preview-content h3 {
+          margin: 0 0 1rem;
+          color: #1428f0;
+          font-size: 1.75rem;
+          line-height: 1.2;
+          font-weight: 800;
+        }
+        .seo-preview-content p,
+        .seo-preview-content ul,
+        .seo-preview-content ol,
+        .seo-preview-content blockquote {
+          margin: 0 0 1.25rem;
+        }
+        .seo-preview-content ul,
+        .seo-preview-content ol {
+          padding-left: 1.5rem;
+        }
+        .seo-preview-content li {
+          margin-bottom: 0.5rem;
+        }
+        .seo-preview-content a {
+          color: #2563eb;
+          text-decoration: underline;
+        }
+        .seo-preview-content blockquote {
+          border-left: 4px solid #2563eb;
+          padding-left: 1rem;
+          color: #334155;
+          font-style: italic;
+        }
+        .seo-preview-content figure {
+          margin: 2rem 0 0;
+        }
+        .seo-preview-content img {
+          display: block;
+          width: 100%;
+          border-radius: 28px;
+          object-fit: cover;
+        }
+        .seo-preview-content figcaption {
+          margin-top: 0.9rem;
+          font-size: 0.95rem;
+          color: #64748b;
+        }
+      `}</style>
+
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8 flex items-center justify-between gap-4 border-b border-slate-200 pb-5 text-sm text-slate-500">
+          <div>
+            <div className="font-semibold text-slate-900">Bản xem trước bài viết</div>
+            <div>Hiển thị gần giống trang public.</div>
           </div>
-          <h1 className="mt-5 text-4xl font-bold leading-tight md:text-5xl">{title || "Tiêu đề bài viết"}</h1>
-          <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
-            {excerpt || "Mô tả ngắn của bài viết sẽ xuất hiện tại đây để người viết xem trước cách hiển thị ở phần mở đầu."}
-          </p>
+          <div className="rounded-full bg-slate-100 px-4 py-2 font-medium text-slate-600">
+            /bai-viet/xem-truoc
+          </div>
+        </div>
+
+        <article className="mx-auto max-w-4xl">
+          <header className="pb-10">
+            <div className="text-sm font-semibold uppercase tracking-[0.24em] text-[#1428f0]">
+              Bài viết SEO
+            </div>
+            <h1 className="mt-5 text-[clamp(2.7rem,5vw,4.6rem)] font-extrabold leading-[1.02] tracking-tight text-slate-950">
+              {title || "Tiêu đề bài viết"}
+            </h1>
+            <p className="mt-6 max-w-3xl text-xl leading-9 text-slate-600">
+              {excerpt ||
+                "Mô tả ngắn của bài viết sẽ hiển thị ở đây để người viết xem trước phần mở đầu và đoạn giới thiệu chính."}
+            </p>
+          </header>
 
           {coverImageUrl ? (
             <img
               src={coverImageUrl}
               alt={title || "Ảnh cover bài viết"}
-              className="mt-8 h-auto max-h-[460px] w-full rounded-[28px] border border-[#eadfce] object-cover"
+              className="mb-12 w-full rounded-[32px] object-cover shadow-[0_24px_70px_rgba(15,23,42,0.08)]"
             />
           ) : null}
-        </div>
 
-        <article className="mt-6 rounded-[32px] border border-[#eadfce] bg-white/90 px-6 py-8 shadow-[0_18px_50px_rgba(66,38,15,0.08)] md:px-10">
-          <div className="space-y-10">
+          <div className="seo-preview-content">
             {blocks.map((block) => {
               const hasContent =
                 block.heading.trim() || block.html.trim() || block.imageUrl.trim();
@@ -45,30 +120,20 @@ export default function SeoArticlePreview({
               if (!hasContent) return null;
 
               return (
-                <section key={block.id} className="space-y-5">
-                  {block.heading ? (
-                    <h2 className="text-2xl font-semibold leading-tight text-slate-900">
-                      {block.heading}
-                    </h2>
-                  ) : null}
+                <section key={block.id}>
+                  {block.heading ? <h2>{block.heading}</h2> : null}
 
                   {block.html ? (
-                    <div
-                      className="prose prose-slate max-w-none prose-headings:font-semibold prose-p:leading-8 prose-a:text-emerald-700"
-                      dangerouslySetInnerHTML={{ __html: block.html }}
-                    />
+                    <div dangerouslySetInnerHTML={{ __html: block.html }} />
                   ) : null}
 
                   {block.imageUrl ? (
-                    <figure className="space-y-3">
+                    <figure>
                       <img
                         src={block.imageUrl}
                         alt={block.imageAlt || block.heading || "Ảnh minh họa"}
-                        className="w-full rounded-[24px] border border-[#eadfce] object-cover"
                       />
-                      {block.imageAlt ? (
-                        <figcaption className="text-sm text-slate-500">{block.imageAlt}</figcaption>
-                      ) : null}
+                      {block.imageAlt ? <figcaption>{block.imageAlt}</figcaption> : null}
                     </figure>
                   ) : null}
                 </section>
