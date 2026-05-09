@@ -36,9 +36,15 @@ function seo_articles_build_payload(array $body, ?array $existing = null): array
         respond_error('Slug is required', 422);
     }
 
-    $contentHtml = seo_articles_sanitize_html((string) ($body['contentHtml'] ?? ($existing['contentHtml'] ?? '')));
+    $contentBlocks = seo_articles_normalize_blocks(
+        $body['contentJson'] ?? ($existing['contentJson'] ?? null),
+        (string) ($body['contentHtml'] ?? ($existing['contentHtml'] ?? ''))
+    );
+    $contentHtml = seo_articles_sanitize_html(
+        $body['contentHtml'] ?? seo_articles_blocks_to_html($contentBlocks)
+    );
     if ($contentHtml === '') {
-        respond_error('Content HTML is required', 422);
+        respond_error('Article content is required', 422);
     }
 
     $isPublished = array_key_exists('isPublished', $body)
@@ -58,6 +64,7 @@ function seo_articles_build_payload(array $body, ?array $existing = null): array
         'title' => $title,
         'excerpt' => trim((string) ($body['excerpt'] ?? ($existing['excerpt'] ?? ''))),
         'content_html' => $contentHtml,
+        'content_json' => $contentBlocks,
         'cover_image_url' => trim((string) ($body['coverImageUrl'] ?? ($existing['coverImageUrl'] ?? ''))),
         'meta_title' => trim((string) ($body['metaTitle'] ?? ($existing['metaTitle'] ?? ''))),
         'meta_description' => trim((string) ($body['metaDescription'] ?? ($existing['metaDescription'] ?? ''))),
@@ -129,11 +136,11 @@ if ($method === 'POST') {
     $id = uuidv4();
     $statement = db()->prepare(
         'INSERT INTO seo_articles (
-            id, slug, title, excerpt, content_html, cover_image_url,
+            id, slug, title, excerpt, content_html, content_json, cover_image_url,
             meta_title, meta_description, target_store, is_published,
             published_at, created_by, created_at, updated_at
          ) VALUES (
-            :id, :slug, :title, :excerpt, :content_html, :cover_image_url,
+            :id, :slug, :title, :excerpt, :content_html, :content_json, :cover_image_url,
             :meta_title, :meta_description, :target_store, :is_published,
             :published_at, :created_by, :created_at, :updated_at
          )'
@@ -146,6 +153,7 @@ if ($method === 'POST') {
         'title' => $payload['title'],
         'excerpt' => $payload['excerpt'],
         'content_html' => $payload['content_html'],
+        'content_json' => json_encode($payload['content_json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         'cover_image_url' => $payload['cover_image_url'] !== '' ? $payload['cover_image_url'] : null,
         'meta_title' => $payload['meta_title'] !== '' ? $payload['meta_title'] : null,
         'meta_description' => $payload['meta_description'] !== '' ? $payload['meta_description'] : null,
@@ -185,6 +193,7 @@ if ($method === 'PATCH') {
              title = :title,
              excerpt = :excerpt,
              content_html = :content_html,
+             content_json = :content_json,
              cover_image_url = :cover_image_url,
              meta_title = :meta_title,
              meta_description = :meta_description,
@@ -201,6 +210,7 @@ if ($method === 'PATCH') {
         'title' => $payload['title'],
         'excerpt' => $payload['excerpt'],
         'content_html' => $payload['content_html'],
+        'content_json' => json_encode($payload['content_json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         'cover_image_url' => $payload['cover_image_url'] !== '' ? $payload['cover_image_url'] : null,
         'meta_title' => $payload['meta_title'] !== '' ? $payload['meta_title'] : null,
         'meta_description' => $payload['meta_description'] !== '' ? $payload['meta_description'] : null,

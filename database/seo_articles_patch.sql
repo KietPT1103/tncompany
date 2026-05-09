@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS seo_articles (
   title VARCHAR(255) NOT NULL,
   excerpt TEXT NULL,
   content_html LONGTEXT NOT NULL,
+  content_json LONGTEXT NULL,
   cover_image_url VARCHAR(500) NULL,
   meta_title VARCHAR(255) NULL,
   meta_description VARCHAR(320) NULL,

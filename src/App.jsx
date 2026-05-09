@@ -18,6 +18,8 @@ import InventoryReceiptsPage from "./app/(dashboard)/product/receipts/page";
 import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
 import SocialListeningPage from "./app/(dashboard)/social-listening/page";
+import EditSeoArticlePage from "./app/(dashboard)/seo-articles/[id]/page";
+import NewSeoArticlePage from "./app/(dashboard)/seo-articles/new/page";
 import SeoArticlesPage from "./app/(dashboard)/seo-articles/page";
 import TaxInvoicesPage from "./app/(dashboard)/tax-invoices/page";
 import TimesheetPage from "./app/(dashboard)/timesheet/page";
@@ -107,6 +109,8 @@ export default function App() {
               <Route path="payroll" element={<PayrollPage />} />
               <Route path="social-listening" element={<SocialListeningPage />} />
               <Route path="seo-articles" element={<SeoArticlesPage />} />
+              <Route path="seo-articles/new" element={<NewSeoArticlePage />} />
+              <Route path="seo-articles/:id" element={<EditSeoArticlePage />} />
               <Route path="tax-invoices" element={<TaxInvoicesPage />} />
               <Route path="timesheet" element={<TimesheetPage />} />
             </Route>

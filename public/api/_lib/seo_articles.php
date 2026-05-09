@@ -11,6 +11,7 @@ function seo_articles_ensure_table(): void
             title VARCHAR(255) NOT NULL,
             excerpt TEXT NULL,
             content_html LONGTEXT NOT NULL,
+            content_json LONGTEXT NULL,
             cover_image_url VARCHAR(500) NULL,
             meta_title VARCHAR(255) NULL,
             meta_description VARCHAR(320) NULL,
@@ -26,6 +27,40 @@ function seo_articles_ensure_table(): void
             KEY idx_seo_articles_updated_at (updated_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
+
+    seo_articles_ensure_column('content_json', 'LONGTEXT NULL AFTER content_html');
+}
+
+function seo_articles_ensure_column(string $column, string $definition): void
+{
+    global $config;
+
+    if (!preg_match('/^[a-z_]+$/', $column)) {
+        throw new InvalidArgumentException('Invalid article column');
+    }
+
+    if (($config['db_driver'] ?? 'mysql') === 'sqlite') {
+        return;
+    }
+
+    $statement = db()->prepare(
+        'SELECT COLUMN_NAME
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = :table_name
+           AND column_name = :column_name
+         LIMIT 1'
+    );
+    $statement->execute([
+        'table_name' => 'seo_articles',
+        'column_name' => $column,
+    ]);
+
+    if ($statement->fetch()) {
+        return;
+    }
+
+    db()->exec(sprintf('ALTER TABLE seo_articles ADD COLUMN %s %s', $column, $definition));
 }
 
 seo_articles_ensure_table();
@@ -75,6 +110,89 @@ function seo_articles_sanitize_html(string $html): string
     return trim($html);
 }
 
+function seo_articles_normalize_blocks($blocks, string $fallbackHtml = ''): array
+{
+    if (!is_array($blocks)) {
+        $fallbackText = trim(strip_tags($fallbackHtml));
+        if ($fallbackText === '' && trim($fallbackHtml) === '') {
+            return [];
+        }
+
+        return [[
+            'id' => uuidv4(),
+            'heading' => '',
+            'html' => seo_articles_sanitize_html($fallbackHtml),
+            'imageUrl' => '',
+            'imageAlt' => '',
+        ]];
+    }
+
+    $normalized = [];
+
+    foreach ($blocks as $block) {
+        if (!is_array($block)) {
+            continue;
+        }
+
+        $html = seo_articles_sanitize_html((string) ($block['html'] ?? ''));
+        $heading = trim((string) ($block['heading'] ?? ''));
+        $imageUrl = trim((string) ($block['imageUrl'] ?? ''));
+        $imageAlt = trim((string) ($block['imageAlt'] ?? ''));
+
+        if ($heading === '' && $html === '' && $imageUrl === '') {
+            continue;
+        }
+
+        $normalized[] = [
+            'id' => trim((string) ($block['id'] ?? '')) ?: uuidv4(),
+            'heading' => $heading,
+            'html' => $html,
+            'imageUrl' => $imageUrl,
+            'imageAlt' => $imageAlt,
+        ];
+    }
+
+    return $normalized;
+}
+
+function seo_articles_blocks_to_html(array $blocks): string
+{
+    $segments = [];
+
+    foreach ($blocks as $block) {
+        $heading = trim((string) ($block['heading'] ?? ''));
+        $html = trim((string) ($block['html'] ?? ''));
+        $imageUrl = trim((string) ($block['imageUrl'] ?? ''));
+        $imageAlt = trim((string) ($block['imageAlt'] ?? ''));
+
+        $parts = [];
+
+        if ($heading !== '') {
+            $parts[] = '<h2>' . htmlspecialchars($heading, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</h2>';
+        }
+
+        if ($html !== '') {
+            $parts[] = $html;
+        }
+
+        if ($imageUrl !== '') {
+            $safeUrl = htmlspecialchars($imageUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $safeAlt = htmlspecialchars($imageAlt !== '' ? $imageAlt : $heading, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $parts[] = sprintf(
+                '<figure><img src="%s" alt="%s" loading="lazy" /></figure>',
+                $safeUrl,
+                $safeAlt
+            );
+        }
+
+        if ($parts !== []) {
+            $segments[] = '<section>' . implode("\n", $parts) . '</section>';
+        }
+    }
+
+    return implode("\n", $segments);
+}
+
 function seo_articles_excerpt(string $excerpt, string $contentHtml, int $limit = 180): string
 {
     $source = trim($excerpt);
@@ -119,6 +237,8 @@ function seo_articles_normalize_datetime(?string $value): ?string
 function seo_articles_map_row(array $row): array
 {
     $contentHtml = (string) ($row['content_html'] ?? '');
+    $decodedBlocks = json_decode((string) ($row['content_json'] ?? '[]'), true);
+    $contentJson = seo_articles_normalize_blocks($decodedBlocks, $contentHtml);
     $excerpt = seo_articles_excerpt((string) ($row['excerpt'] ?? ''), $contentHtml);
 
     return [
@@ -127,6 +247,7 @@ function seo_articles_map_row(array $row): array
         'title' => (string) $row['title'],
         'excerpt' => $excerpt,
         'contentHtml' => $contentHtml,
+        'contentJson' => $contentJson,
         'coverImageUrl' => $row['cover_image_url'] ? (string) $row['cover_image_url'] : '',
         'metaTitle' => $row['meta_title'] ? (string) $row['meta_title'] : '',
         'metaDescription' => $row['meta_description'] ? (string) $row['meta_description'] : '',
@@ -190,7 +311,7 @@ function seo_articles_fetch_public_articles(int $limit = 50): array
          ORDER BY COALESCE(published_at, created_at) DESC
          LIMIT :limit'
     );
-    $statement->bindValue(':limit', max(1, min(200, $limit)), PDO::PARAM_INT);
+    $statement->bindValue(':limit', max(1, min(500, $limit)), PDO::PARAM_INT);
     $statement->execute();
 
     return array_map(

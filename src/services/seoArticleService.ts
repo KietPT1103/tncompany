@@ -8,6 +8,7 @@ export type SeoArticle = {
   title: string;
   excerpt: string;
   contentHtml: string;
+  contentJson: SeoArticleBlock[];
   coverImageUrl: string;
   metaTitle: string;
   metaDescription: string;
@@ -18,11 +19,20 @@ export type SeoArticle = {
   updatedAt: string;
 };
 
+export type SeoArticleBlock = {
+  id: string;
+  heading: string;
+  html: string;
+  imageUrl: string;
+  imageAlt: string;
+};
+
 export type SeoArticlePayload = {
   slug: string;
   title: string;
   excerpt: string;
   contentHtml: string;
+  contentJson: SeoArticleBlock[];
   coverImageUrl: string;
   metaTitle: string;
   metaDescription: string;
@@ -82,4 +92,19 @@ export async function deleteSeoArticle(id: string) {
     `/seo-articles.php?id=${encodeURIComponent(id)}`,
     { method: "DELETE" }
   );
+}
+
+export async function uploadSeoArticleImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const { url } = await apiRequest<{ url: string }>(
+    "/seo-article-upload.php",
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  return url;
 }
