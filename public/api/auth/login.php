@@ -23,8 +23,8 @@ $userCount = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
 
 if ($userCount === 0 && strtolower($identifier) === 'admin' && $password === 'admin123') {
     $stmt = $pdo->prepare(
-        'INSERT INTO users (id, email, username, display_name, password_hash, role, store_id)
-         VALUES (:id, :email, :username, :display_name, :password_hash, :role, :store_id)'
+        'INSERT INTO users (id, email, username, display_name, password_hash, role, store_id, permissions_json)
+         VALUES (:id, :email, :username, :display_name, :password_hash, :role, :store_id, :permissions_json)'
     );
     $stmt->execute([
         'id' => uuidv4(),
@@ -34,6 +34,10 @@ if ($userCount === 0 && strtolower($identifier) === 'admin' && $password === 'ad
         'password_hash' => password_hash('admin123', PASSWORD_DEFAULT),
         'role' => 'admin',
         'store_id' => $selectedStore,
+        'permissions_json' => json_encode(
+            auth_default_permissions_for_role('admin'),
+            JSON_UNESCAPED_UNICODE
+        ),
     ]);
 }
 
@@ -44,7 +48,7 @@ if ($normalized === 'admin') {
 }
 
 $stmt = $pdo->prepare(
-    'SELECT id, email, username, display_name, password_hash, role, store_id
+    'SELECT id, email, username, display_name, password_hash, role, store_id, permissions_json
      FROM users
      WHERE is_active = 1 AND (email = :identifier OR username = :username OR email = :admin_email)
      LIMIT 1'
@@ -64,12 +68,8 @@ $token = issue_api_token((string)$user['id']);
 
 respond_ok([
     'token' => $token,
-    'user' => [
-        'id' => $user['id'],
-        'email' => $user['email'],
-        'username' => $user['username'],
-        'displayName' => $user['display_name'],
-        'role' => $user['role'],
-        'storeId' => $user['store_id'] ?: $selectedStore,
-    ],
+    'user' => array_merge(
+        auth_map_user((array) $user),
+        ['storeId' => $user['store_id'] ?: $selectedStore]
+    ),
 ]);

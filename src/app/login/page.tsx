@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useStore, StoreType } from "@/context/StoreContext";
 import { loginApi, seedDefaultUsersApi, setApiToken } from "@/lib/api";
+import { getDefaultRouteForUser } from "@/lib/permissions";
 import { AppUser, normalizeUserRole } from "@/types/auth";
 
 const CASHIER_ACCOUNTS = ["thungan1", "thungan2", "thungan3"] as const;
@@ -40,11 +41,10 @@ const isValidStoreId = (value: string | null | undefined): value is StoreType =>
   value === "cafe" || value === "restaurant" || value === "bakery" || value === "farm";
 
 const getRedirectAfterLogin = (user: AppUser) =>
-  normalizeUserRole(user) === "admin"
-    ? "/admin"
-    : normalizeUserRole(user) === "manager"
-    ? "/admin/payroll-estimate"
-    : "/admin/bills";
+  getDefaultRouteForUser({
+    ...user,
+    role: normalizeUserRole(user) || user.role,
+  });
 
 export default function LoginPage() {
   const [account, setAccount] = useState("");

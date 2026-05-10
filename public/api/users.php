@@ -15,17 +15,19 @@ function users_map_row(array $row): array
         'role' => (string) $row['role'],
         'storeId' => $row['store_id'] !== null ? (string) $row['store_id'] : null,
         'isActive' => (bool) ($row['is_active'] ?? false),
+        'permissions' => auth_effective_permissions($row),
         'createdAt' => null,
         'updatedAt' => null,
     ];
 }
 
-$currentUser = auth_require(['admin']);
+$currentUser = auth_require_permission('accounts.access');
+$canManageAccess = (($currentUser['role'] ?? '') === 'admin');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
     $statement = db()->query(
-        'SELECT id, email, username, display_name, role, store_id, is_active
+        'SELECT id, email, username, display_name, role, store_id, is_active, permissions_json
          FROM users
          ORDER BY email ASC'
     );
@@ -46,23 +48,31 @@ if ($method === 'POST') {
     $username = trim((string) ($body['username'] ?? ''));
     $displayName = trim((string) ($body['displayName'] ?? ''));
     $password = (string) ($body['password'] ?? '');
-    $role = trim((string) ($body['role'] ?? 'user'));
+    $requestedRole = trim((string) ($body['role'] ?? 'user'));
     $storeId = trim((string) ($body['storeId'] ?? ''));
+    $role = $canManageAccess ? $requestedRole : 'user';
+    $permissions = $canManageAccess
+        ? (
+            array_key_exists('permissions', $body)
+                ? auth_normalize_permissions($body['permissions'])
+                : auth_default_permissions_for_role($role)
+        )
+        : auth_default_permissions_for_role($role);
 
     if ($email === '' || $password === '') {
-        respond_error('Email và mật khẩu là bắt buộc.', 422);
+        respond_error('Email vÃ  máº­t kháº©u lÃ  báº¯t buá»™c.', 422);
     }
 
     if (!in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
-        respond_error('Vai trò không hợp lệ.', 422);
+        respond_error('Vai trÃ² khÃ´ng há»£p lá»‡.', 422);
     }
 
     $id = uuidv4();
     $statement = db()->prepare(
         'INSERT INTO users (
-            id, email, username, display_name, password_hash, role, store_id, is_active
+            id, email, username, display_name, password_hash, role, store_id, is_active, permissions_json
          ) VALUES (
-            :id, :email, :username, :display_name, :password_hash, :role, :store_id, :is_active
+            :id, :email, :username, :display_name, :password_hash, :role, :store_id, :is_active, :permissions_json
          )'
     );
     $statement->execute([
@@ -74,10 +84,11 @@ if ($method === 'POST') {
         'role' => $role,
         'store_id' => $storeId !== '' ? $storeId : null,
         'is_active' => !array_key_exists('isActive', $body) || !empty($body['isActive']) ? 1 : 0,
+        'permissions_json' => json_encode($permissions, JSON_UNESCAPED_UNICODE),
     ]);
 
     $find = db()->prepare(
-        'SELECT id, email, username, display_name, role, store_id, is_active
+        'SELECT id, email, username, display_name, role, store_id, is_active, permissions_json
          FROM users WHERE id = :id LIMIT 1'
     );
     $find->execute(['id' => $id]);
@@ -91,7 +102,7 @@ if ($method === 'PATCH') {
     $body = read_json_body();
     $id = trim((string) ($body['id'] ?? ''));
     if ($id === '') {
-        respond_error('Thiếu id tài khoản.', 422);
+        respond_error('Thiáº¿u id tÃ i khoáº£n.', 422);
     }
 
     $fields = [];
@@ -100,7 +111,7 @@ if ($method === 'PATCH') {
     if (array_key_exists('email', $body)) {
         $email = trim((string) $body['email']);
         if ($email === '') {
-            respond_error('Email không được để trống.', 422);
+            respond_error('Email khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng.', 422);
         }
         $fields[] = 'email = :email';
         $params['email'] = $email;
@@ -119,9 +130,12 @@ if ($method === 'PATCH') {
     }
 
     if (array_key_exists('role', $body)) {
+        if (!$canManageAccess) {
+            respond_error('Chỉ admin mới được sửa vai trò.', 403);
+        }
         $role = trim((string) $body['role']);
         if (!in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
-            respond_error('Vai trò không hợp lệ.', 422);
+            respond_error('Vai trÃ² khÃ´ng há»£p lá»‡.', 422);
         }
         $fields[] = 'role = :role';
         $params['role'] = $role;
@@ -133,9 +147,20 @@ if ($method === 'PATCH') {
         $params['store_id'] = $storeId !== '' ? $storeId : null;
     }
 
+    if (array_key_exists('permissions', $body)) {
+        if (!$canManageAccess) {
+            respond_error('Chỉ admin mới được sửa phân quyền.', 403);
+        }
+        $fields[] = 'permissions_json = :permissions_json';
+        $params['permissions_json'] = json_encode(
+            auth_normalize_permissions($body['permissions']),
+            JSON_UNESCAPED_UNICODE
+        );
+    }
+
     if (array_key_exists('isActive', $body)) {
         if ($id === $currentUser['id'] && empty($body['isActive'])) {
-            respond_error('Không thể tự khóa tài khoản đang đăng nhập.', 422);
+            respond_error('KhÃ´ng thá»ƒ tá»± khÃ³a tÃ i khoáº£n Ä‘ang Ä‘Äƒng nháº­p.', 422);
         }
         $fields[] = 'is_active = :is_active';
         $params['is_active'] = !empty($body['isActive']) ? 1 : 0;
@@ -144,14 +169,14 @@ if ($method === 'PATCH') {
     if (array_key_exists('password', $body)) {
         $password = (string) $body['password'];
         if ($password === '') {
-            respond_error('Mật khẩu mới không được để trống.', 422);
+            respond_error('Máº­t kháº©u má»›i khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng.', 422);
         }
         $fields[] = 'password_hash = :password_hash';
         $params['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
     }
 
     if ($fields === []) {
-        respond_error('Không có dữ liệu cần cập nhật.', 422);
+        respond_error('KhÃ´ng cÃ³ dá»¯ liá»‡u cáº§n cáº­p nháº­t.', 422);
     }
 
     $statement = db()->prepare(
@@ -165,7 +190,7 @@ if ($method === 'PATCH') {
     }
 
     $find = db()->prepare(
-        'SELECT id, email, username, display_name, role, store_id, is_active
+        'SELECT id, email, username, display_name, role, store_id, is_active, permissions_json
          FROM users WHERE id = :id LIMIT 1'
     );
     $find->execute(['id' => $id]);
@@ -178,11 +203,11 @@ if ($method === 'PATCH') {
 if ($method === 'DELETE') {
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id === '') {
-        respond_error('Thiếu id tài khoản.', 422);
+        respond_error('Thiáº¿u id tÃ i khoáº£n.', 422);
     }
 
     if ($id === $currentUser['id']) {
-        respond_error('Không thể xóa tài khoản đang đăng nhập.', 422);
+        respond_error('KhÃ´ng thá»ƒ xÃ³a tÃ i khoáº£n Ä‘ang Ä‘Äƒng nháº­p.', 422);
     }
 
     $deleteTokens = db()->prepare('DELETE FROM api_tokens WHERE user_id = :user_id');

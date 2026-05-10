@@ -8,7 +8,7 @@ require_once __DIR__ . '/_lib/auth.php';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require(['admin']);
+    auth_require_permission('categories.access');
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
@@ -41,7 +41,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    auth_require(['admin']);
+    auth_require_permission('categories.access');
 
     $body = read_json_body();
     $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
@@ -71,7 +71,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PATCH') {
-    auth_require(['admin']);
+    auth_require_permission('categories.access');
 
     $body = read_json_body();
     $id = trim((string) ($body['id'] ?? ''));
@@ -116,7 +116,7 @@ if ($method === 'PATCH') {
 }
 
 if ($method === 'DELETE') {
-    auth_require(['admin']);
+    auth_require_permission('categories.access');
 
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id === '') {

@@ -55,7 +55,7 @@ function reports_map_row(array $row, bool $includeDetails = false): array
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require(['admin']);
+    auth_require_permission(['reports.access', 'cash_flow.access', 'dashboard.access']);
 
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id !== '') {
@@ -108,7 +108,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    auth_require(['admin']);
+    auth_require_permission(['reports.access', 'cash_flow.access', 'dashboard.access']);
 
     $body = read_json_body();
     $details = is_array($body['details'] ?? null) ? $body['details'] : [];
@@ -166,7 +166,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PATCH') {
-    auth_require(['admin']);
+    auth_require_permission(['reports.access', 'cash_flow.access', 'dashboard.access']);
 
     $body = read_json_body();
     $id = trim((string) ($body['id'] ?? ''));
@@ -216,7 +216,7 @@ if ($method === 'PATCH') {
 }
 
 if ($method === 'DELETE') {
-    auth_require(['admin']);
+    auth_require_permission(['reports.access', 'cash_flow.access', 'dashboard.access']);
 
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id === '') {

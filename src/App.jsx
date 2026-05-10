@@ -27,10 +27,11 @@ import LoginPage from "./app/login/page";
 import RoleGuard from "./components/RoleGuard";
 import SeoManager from "./components/SeoManager";
 import { useAuth } from "./context/AuthContext";
+import { getDefaultRouteForUser } from "./lib/permissions";
 
-function ProtectedLayout({ allowedRoles }) {
+function ProtectedLayout({ allowedRoles, inferPermission = true }) {
   return (
-    <RoleGuard allowedRoles={allowedRoles}>
+    <RoleGuard allowedRoles={allowedRoles} inferPermission={inferPermission}>
       <Outlet />
     </RoleGuard>
   );
@@ -45,17 +46,18 @@ function AdminLayout() {
 }
 
 function AdminIndexPage() {
-  const { role, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return null;
   }
 
-  if (role === "manager") {
-    return <Navigate to="/admin/payroll-estimate" replace />;
+  if (!user) {
+    return <Navigate to="/login" replace />;
   }
 
-  return <DashboardPage />;
+  const nextPath = getDefaultRouteForUser(user);
+  return nextPath === "/" ? <DashboardPage /> : <Navigate to={nextPath} replace />;
 }
 
 export default function App() {
@@ -70,7 +72,12 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/admin"
-          element={<ProtectedLayout allowedRoles={["admin", "manager", "user", "server"]} />}
+          element={
+            <ProtectedLayout
+              allowedRoles={["admin", "manager", "user", "server"]}
+              inferPermission={false}
+            />
+          }
         >
           <Route element={<AdminLayout />}>
             <Route index element={<AdminIndexPage />} />

@@ -30,7 +30,7 @@ products_inventory_ensure_schema();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require(['admin']);
+    auth_require_permission('dashboard.access');
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $limit = max(1, min(50, (int) ($_GET['limit'] ?? 10)));
@@ -41,7 +41,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    $user = auth_require(['admin']);
+    $user = auth_require_permission('dashboard.access');
     $body = read_json_body();
     $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
     $fileName = trim((string) ($body['fileName'] ?? 'Báo cáo bán hàng'));

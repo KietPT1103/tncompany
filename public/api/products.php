@@ -66,7 +66,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 products_inventory_ensure_schema();
 
 if ($method === 'GET') {
-    auth_require(['admin']);
+    auth_require_permission(['product.access', 'dashboard.access']);
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
@@ -118,7 +118,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    auth_require(['admin']);
+    auth_require_permission(['product.access', 'dashboard.access']);
 
     $body = read_json_body();
     $action = strtolower((string) ($body['action'] ?? 'create'));
@@ -252,7 +252,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PATCH') {
-    auth_require(['admin']);
+    auth_require_permission(['product.access', 'dashboard.access']);
 
     $body = read_json_body();
     $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
@@ -360,7 +360,7 @@ if ($method === 'PATCH') {
 }
 
 if ($method === 'DELETE') {
-    auth_require(['admin']);
+    auth_require_permission(['product.access', 'dashboard.access']);
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $productCode = trim((string) ($_GET['productCode'] ?? ''));

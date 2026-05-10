@@ -11,9 +11,10 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(100) NULL,
   display_name VARCHAR(255) NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role ENUM('admin', 'user', 'server') NOT NULL DEFAULT 'user',
+  role ENUM('admin', 'manager', 'user', 'server') NOT NULL DEFAULT 'user',
   store_id VARCHAR(32) NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
+  permissions_json LONGTEXT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_users_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE SET NULL

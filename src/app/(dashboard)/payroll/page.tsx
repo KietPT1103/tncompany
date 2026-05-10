@@ -32,11 +32,9 @@ export default function PayrollPage() {
     if (!loading) {
       if (!user) {
         router.push("/login");
-      } else if (role !== "admin") {
-        router.push("/pos");
       }
     }
-  }, [loading, role, router, user]);
+  }, [loading, router, user]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

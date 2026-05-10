@@ -70,6 +70,7 @@ function auth_ensure_tables(): void
     auth_ensure_column('users', 'role', 'VARCHAR(30) NOT NULL DEFAULT "user" AFTER password_hash');
     auth_ensure_column('users', 'store_id', 'VARCHAR(50) NULL AFTER role');
     auth_ensure_column('users', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER store_id');
+    auth_ensure_column('users', 'permissions_json', 'LONGTEXT NULL AFTER is_active');
 }
 
 auth_ensure_tables();
@@ -143,6 +144,104 @@ function auth_normalize_role(array $row): string
     return 'user';
 }
 
+function auth_all_permissions(): array
+{
+    return [
+        'dashboard.access',
+        'bills.access',
+        'payroll_estimate.access',
+        'payroll.access',
+        'timesheet.access',
+        'reports.access',
+        'cash_flow.access',
+        'product.access',
+        'inventory_checks.access',
+        'inventory_receipts.access',
+        'categories.access',
+        'internal_invoices.access',
+        'tax_invoices.access',
+        'social_listening.access',
+        'seo_articles.access',
+        'activity_logs.access',
+        'accounts.access',
+    ];
+}
+
+function auth_default_permissions_for_role(?string $role): array
+{
+    $normalizedRole = $role !== null ? strtolower(trim($role)) : '';
+
+    if ($normalizedRole === 'admin') {
+        return auth_all_permissions();
+    }
+
+    if ($normalizedRole === 'manager') {
+        return ['payroll_estimate.access'];
+    }
+
+    if ($normalizedRole === 'user' || $normalizedRole === 'server') {
+        return ['bills.access'];
+    }
+
+    return [];
+}
+
+function auth_normalize_permissions($value): array
+{
+    $rawPermissions = [];
+
+    if (is_string($value)) {
+        $decoded = json_decode($value, true);
+        if (is_array($decoded)) {
+            $rawPermissions = $decoded;
+        }
+    } elseif (is_array($value)) {
+        $rawPermissions = $value;
+    }
+
+    $allowedPermissions = auth_all_permissions();
+    $allowedLookup = array_fill_keys($allowedPermissions, true);
+    $uniqueLookup = [];
+    $normalized = [];
+
+    foreach ($rawPermissions as $permission) {
+        if (!is_string($permission)) {
+            continue;
+        }
+
+        $candidate = trim($permission);
+        if ($candidate === '' || !isset($allowedLookup[$candidate]) || isset($uniqueLookup[$candidate])) {
+            continue;
+        }
+
+        $uniqueLookup[$candidate] = true;
+        $normalized[] = $candidate;
+    }
+
+    usort(
+        $normalized,
+        static function (string $left, string $right) use ($allowedPermissions): int {
+            return array_search($left, $allowedPermissions, true) <=> array_search($right, $allowedPermissions, true);
+        }
+    );
+
+    return $normalized;
+}
+
+function auth_effective_permissions(array $row): array
+{
+    $role = auth_normalize_role($row);
+    if ($role === 'admin') {
+        return auth_all_permissions();
+    }
+
+    if (array_key_exists('permissions_json', $row) && $row['permissions_json'] !== null && $row['permissions_json'] !== '') {
+        return auth_normalize_permissions($row['permissions_json']);
+    }
+
+    return auth_default_permissions_for_role($role);
+}
+
 function auth_map_user(array $row): array
 {
     return [
@@ -153,6 +252,7 @@ function auth_map_user(array $row): array
         'displayName' => $row['display_name'] ?: ($row['username'] ?: $row['email']),
         'role' => auth_normalize_role($row),
         'storeId' => $row['store_id'] ?: null,
+        'permissions' => auth_effective_permissions($row),
     ];
 }
 
@@ -203,6 +303,30 @@ function auth_require(array $roles = []): array
     }
 
     return $user;
+}
+
+function auth_has_permission(array $user, string $permission): bool
+{
+    $permissions = auth_normalize_permissions($user['permissions'] ?? []);
+    return in_array($permission, $permissions, true);
+}
+
+function auth_require_permission($permissions, array $roles = []): array
+{
+    $user = auth_require($roles);
+
+    if ($permissions === null || $permissions === []) {
+        return $user;
+    }
+
+    $requiredPermissions = is_array($permissions) ? $permissions : [$permissions];
+    foreach ($requiredPermissions as $permission) {
+        if (is_string($permission) && auth_has_permission($user, $permission)) {
+            return $user;
+        }
+    }
+
+    respond_error('Forbidden', 403);
 }
 
 function auth_find_user_for_login(string $login): ?array

@@ -1,5 +1,5 @@
 import { apiRequest } from "@/lib/api";
-import { UserRole } from "@/types/auth";
+import { AppPermission, UserRole } from "@/types/auth";
 
 export type ManagedUser = {
   id: string;
@@ -9,6 +9,7 @@ export type ManagedUser = {
   role: UserRole;
   storeId?: string | null;
   isActive: boolean;
+  permissions: AppPermission[];
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -29,6 +30,7 @@ export async function createManagedUser(payload: {
   role: UserRole;
   storeId?: string;
   isActive?: boolean;
+  permissions?: AppPermission[];
 }) {
   const response = await apiRequest<{ item: ManagedUser }>("/users.php", {
     method: "POST",
@@ -48,6 +50,7 @@ export async function updateManagedUser(
     role: UserRole;
     storeId: string;
     isActive: boolean;
+    permissions: AppPermission[];
   }>
 ) {
   const response = await apiRequest<{ item: ManagedUser }>("/users.php", {
