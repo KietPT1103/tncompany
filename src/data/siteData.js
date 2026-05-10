@@ -324,6 +324,7 @@ export const pages = [
     label: venue.navLabel,
     shortLabel: venue.shortLabel,
   })),
+  { id: "news", hash: "/tin-tuc", label: "Tin tức", shortLabel: "Tin tức" },
   { id: "about", hash: "/about", label: "Về chúng tôi", shortLabel: "Về chúng tôi" },
 ];
 

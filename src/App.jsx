@@ -26,6 +26,8 @@ import TimesheetPage from "./app/(dashboard)/timesheet/page";
 import LoginPage from "./app/login/page";
 import RoleGuard from "./components/RoleGuard";
 import SeoManager from "./components/SeoManager";
+import ArticlesIndexPage from "./app/tin-tuc/ArticlesIndexPage";
+import ArticleDetailPage from "./app/tin-tuc/ArticleDetailPage";
 import { useAuth } from "./context/AuthContext";
 import { getDefaultRouteForUser } from "./lib/permissions";
 
@@ -61,7 +63,7 @@ function AdminIndexPage() {
 }
 
 export default function App() {
-  const landingHashes = pages.filter((page) => page.hash !== "/").map((page) => page.hash);
+  const landingHashes = pages.filter((page) => page.hash !== "/" && page.hash !== "/tin-tuc").map((page) => page.hash);
 
   return (
     <>
@@ -122,6 +124,8 @@ export default function App() {
         {landingHashes.map((path) => (
           <Route key={path} path={path} element={<LandingApp />} />
         ))}
+        <Route path="/tin-tuc" element={<ArticlesIndexPage />} />
+        <Route path="/tin-tuc/:slug" element={<ArticleDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
