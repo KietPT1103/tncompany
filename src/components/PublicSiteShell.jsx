@@ -28,22 +28,21 @@ export default function PublicSiteShell({
 }) {
   const { activePage, activeVenue, isHome, isAbout } = resolvePublicPageState(pathname);
   const themeClass = activeVenue ? `theme-${activeVenue.id}` : "theme-home";
-  const isEditorial = Boolean(activeVenue);
-
+  const isVenuePage = Boolean(activeVenue);
   return (
-    <div className={`app-shell ${themeClass}${isEditorial ? " is-editorial-shell" : ""}`}>
-      {!isEditorial ? <div className="ambient ambient-1" aria-hidden="true" /> : null}
-      {!isEditorial ? <div className="ambient ambient-2" aria-hidden="true" /> : null}
-      {!isEditorial ? <div className="ambient ambient-3" aria-hidden="true" /> : null}
+    <div className={`app-shell ${themeClass}${isVenuePage ? " is-editorial-shell" : ""}`}>
+      {!isVenuePage ? <div className="ambient ambient-1" aria-hidden="true" /> : null}
+      {!isVenuePage ? <div className="ambient ambient-2" aria-hidden="true" /> : null}
+      {!isVenuePage ? <div className="ambient ambient-3" aria-hidden="true" /> : null}
 
       <AppHeader activePageId={activePage.id} onNavigate={onNavigate} pages={navPages} />
 
-      <main className={`page-content${isHome ? " is-home" : ""}${isEditorial ? " is-editorial" : ""}`}>
+      <main className={`page-content${isHome ? " is-home" : ""}${isVenuePage ? " is-editorial" : ""}`}>
         {isHome ? (
           <HomePage onOpenPage={onNavigate} />
         ) : isAbout ? (
           <CompanyHome onOpenPage={onNavigate} />
-        ) : (
+        ) : isVenuePage ? (
           <VenuePage
             key={activeVenue.id}
             activeVenue={activeVenue}
@@ -52,7 +51,7 @@ export default function PublicSiteShell({
             onOpenImage={onOpenImage}
             onOpenPage={onNavigate}
           />
-        )}
+        ) : null}
       </main>
 
       <AppFooter pageId={activePage.id} />

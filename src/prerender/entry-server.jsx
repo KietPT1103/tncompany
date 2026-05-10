@@ -6,7 +6,9 @@ import { getSeoForPath } from "../seo/pageSeo";
 
 const noop = () => {};
 
-export const PUBLIC_PRERENDER_ROUTES = pages.map((page) => page.hash);
+export const PUBLIC_PRERENDER_ROUTES = pages
+  .filter((page) => page.hash !== "/tin-tuc")
+  .map((page) => page.hash);
 
 function escapeHtml(value) {
   return String(value)
