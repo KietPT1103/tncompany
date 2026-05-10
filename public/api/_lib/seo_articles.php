@@ -285,16 +285,18 @@ function seo_articles_public_path(string $slug): string
 
 function seo_articles_fetch_public_article_by_slug(string $slug): ?array
 {
+    $now = date('Y-m-d H:i:s');
     $statement = db()->prepare(
         'SELECT *
          FROM seo_articles
          WHERE slug = :slug
            AND is_published = 1
-           AND (published_at IS NULL OR published_at <= NOW())
+           AND (published_at IS NULL OR published_at <= :now)
          LIMIT 1'
     );
     $statement->execute([
         'slug' => $slug,
+        'now' => $now,
     ]);
 
     $row = $statement->fetch();
@@ -303,14 +305,16 @@ function seo_articles_fetch_public_article_by_slug(string $slug): ?array
 
 function seo_articles_fetch_public_articles(int $limit = 50): array
 {
+    $now = date('Y-m-d H:i:s');
     $statement = db()->prepare(
         'SELECT *
          FROM seo_articles
          WHERE is_published = 1
-           AND (published_at IS NULL OR published_at <= NOW())
+           AND (published_at IS NULL OR published_at <= :now)
          ORDER BY COALESCE(published_at, created_at) DESC
          LIMIT :limit'
     );
+    $statement->bindValue(':now', $now);
     $statement->bindValue(':limit', max(1, min(500, $limit)), PDO::PARAM_INT);
     $statement->execute();
 
@@ -320,4 +324,30 @@ function seo_articles_fetch_public_articles(int $limit = 50): array
         },
         $statement->fetchAll()
     );
+}
+
+function seo_articles_fetch_latest_public_article_for_target_store(string $targetStore): ?array
+{
+    $targetStore = trim($targetStore);
+    if ($targetStore === '') {
+        return null;
+    }
+
+    $now = date('Y-m-d H:i:s');
+    $statement = db()->prepare(
+        'SELECT *
+         FROM seo_articles
+         WHERE target_store = :target_store
+           AND is_published = 1
+           AND (published_at IS NULL OR published_at <= :now)
+         ORDER BY COALESCE(published_at, created_at) DESC
+         LIMIT 1'
+    );
+    $statement->execute([
+        'target_store' => $targetStore,
+        'now' => $now,
+    ]);
+
+    $row = $statement->fetch();
+    return $row ? seo_articles_map_row($row) : null;
 }

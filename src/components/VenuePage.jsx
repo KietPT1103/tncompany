@@ -1,269 +1,217 @@
-import React from "react";
-import { venueSeoContentById } from "../data/seoContent";
-import { venues } from "../data/siteData";
-import ClickableImage from "./ClickableImage";
-import ImageCarousel from "./ImageCarousel";
+import { useEffect, useState } from "react";
+import { pagesById } from "../data/siteData";
+import { venueEditorialContentById } from "../data/venueEditorialData";
+import {
+  getLatestVenueEditorialArticle,
+  mapSeoArticleToVenueContent,
+} from "../services/venueEditorialService";
 
-function VenueSeoSections({ sections }) {
-  if (!sections?.length) {
-    return null;
+function openInternalPage(onOpenPage, pageId, event) {
+  if (!onOpenPage) {
+    return;
   }
 
-  return (
-    <section className="section-stack">
-      <div className="section-head">
-        <p className="eyebrow">{"N\u1ed9i dung m\u1edf r\u1ed9ng"}</p>
-        <h2>{"Th\u00f4ng tin b\u1ed5 sung cho t\u00ecm ki\u1ebfm \u0111\u1ecba ph\u01b0\u01a1ng"}</h2>
-      </div>
-      <div className="seo-copy-grid">
-        {sections.map((section) => (
-          <article className="seo-copy-card" key={section.title}>
-            <h3>{section.title}</h3>
-            {section.paragraphs.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-          </article>
-        ))}
-      </div>
-    </section>
-  );
+  event.preventDefault();
+  onOpenPage(pageId);
 }
 
-function VenueFaqs({ faqs }) {
-  if (!faqs?.length) {
-    return null;
+function normalizePhoneLink(phoneValue) {
+  return `tel:${String(phoneValue || "").replace(/[^\d+]/g, "")}`;
+}
+
+function EditorialMedia({ src, alt, className, onOpenImage, playButton = false }) {
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [src]);
+
+  const effectiveSrc = loadFailed ? "" : src;
+  const canOpenImage = Boolean(effectiveSrc && onOpenImage);
+
+  if (!effectiveSrc) {
+    return (
+      <div className={`${className} editorial-media editorial-media-placeholder`} aria-hidden="true">
+        <span className="editorial-media-arrow is-left">‹</span>
+        <span className="editorial-media-arrow is-right">›</span>
+      </div>
+    );
   }
 
-  return (
-    <section className="section-stack">
-      <div className="section-head">
-        <p className="eyebrow">{"C\u00e2u h\u1ecfi th\u01b0\u1eddng g\u1eb7p"}</p>
-        <h2>{"FAQ v\u1ec1 \u0111\u1ecba \u0111i\u1ec3m n\u00e0y"}</h2>
-      </div>
-      <div className="faq-grid">
-        {faqs.map((item) => (
-          <article className="faq-card" key={item.question}>
-            <h3>{item.question}</h3>
-            <p>{item.answer}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function VenueHero({ activeVenue, heroImageFailed, onHeroImageError, onOpenImage }) {
-  return (
-    <section className="hero-block">
-      <article className="hero-copy">
-        <p className="eyebrow">{activeVenue.tag}</p>
-        <h1>{activeVenue.name}</h1>
-        <p className="hero-headline">{activeVenue.headline}</p>
-        <p className="hero-description">{activeVenue.description}</p>
-
-        <div className="meta-grid">
-          <p>
-            <span>Địa chỉ</span>
-            {activeVenue.address}
-          </p>
-          <p>
-            <span>Khung giờ</span>
-            {activeVenue.time}
-          </p>
-          <p>
-            <span>Liên hệ</span>
-            {activeVenue.contact}
-          </p>
-        </div>
-      </article>
-
-      <article className="hero-media">
-        <ClickableImage
-          alt={activeVenue.heroAlt}
-          ariaLabel={`Phóng to ảnh chính: ${activeVenue.name}`}
-          caption={activeVenue.name}
-          className="hero-image-shell"
-          fetchPriority="high"
-          loading="eager"
-          onError={onHeroImageError}
-          onOpenImage={onOpenImage}
-          showImage={!heroImageFailed}
-          src={activeVenue.heroImage}
-        />
-
-        <div className="hero-image-meta">
-          <p>Điểm nhấn</p>
-          <h2>{activeVenue.headline}</h2>
-        </div>
-      </article>
-    </section>
-  );
-}
-
-function VenueStats({ stats }) {
-  return (
-    <section className="stats-grid" aria-label="Thống kê địa điểm">
-      {stats.map((item, index) => (
-        <article className="stat-card" key={item.label} style={{ "--delay": `${index * 0.08}s` }}>
-          <p>{item.label}</p>
-          <h3>{item.value}</h3>
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function VenueZones({ activeVenue }) {
-  return (
-    <section className="section-stack">
-      <div className="section-head">
-        <p className="eyebrow">{activeVenue.zonesEyebrow || "Không gian nổi bật"}</p>
-        <h2>{activeVenue.zonesTitle || `Một phần khu trải nghiệm tại ${activeVenue.name}`}</h2>
-      </div>
-
-      <div className="zone-grid">
-        {activeVenue.zones.map((zone, index) => (
-          <article className="zone-card" key={zone.title} style={{ "--delay": `${index * 0.1}s` }}>
-            <p className="zone-order">{activeVenue.zoneItemLabel || "Khu nổi bật"} {index + 1}</p>
-            <h3>{zone.title}</h3>
-            <p>{zone.detail}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function VenueIntroSections({ activeVenue, onOpenImage }) {
-  if (!activeVenue.introSections?.length) {
-    return null;
-  }
-
-  return (
-    <section className="section-stack">
-      <div className="section-head">
-        <p className="eyebrow">{activeVenue.introEyebrow || "Ảnh giới thiệu theo phần"}</p>
-        <h2>{activeVenue.introTitle || `Tách rõ từng phần trải nghiệm tại ${activeVenue.name}`}</h2>
-      </div>
-
-      <div className="intro-grid">
-        {activeVenue.introSections.map((section) => (
-          <article className="intro-card" key={section.title}>
-            <ClickableImage
-              alt={section.alt}
-              ariaLabel={`Phóng to ảnh: ${section.title}`}
-              caption={section.title}
-              className={`intro-media ${section.tone}`}
-              onOpenImage={onOpenImage}
-              src={section.image}
-            />
-            <h3>{section.title}</h3>
-            <p>{section.description}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function VenueHighlights({ activeVenue }) {
-  return (
-    <section className="split-panel">
-      <article className="menu-card">
-        <div className="section-head compact">
-          <p className="eyebrow">Điểm nổi bật</p>
-          <h2>Menu / dịch vụ signature</h2>
-        </div>
-        <ul>
-          {activeVenue.signature.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </article>
-
-      <article className="discovery-card">
-        <div className="section-head compact">
-          <p className="eyebrow">Trải nghiệm mở rộng</p>
-          <h2>{activeVenue.discoveryTitle}</h2>
-        </div>
-        <ul>
-          {activeVenue.discoveryItems.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-        <p className="discovery-tip">{activeVenue.discoveryNote}</p>
-      </article>
-    </section>
-  );
-}
-
-function VenueEcosystem({ activeVenue, onOpenPage }) {
-  return (
-    <section className="section-stack" id="he-sinh-thai">
-      <div className="section-head">
-        <p className="eyebrow">Toàn hệ sinh thái</p>
-        <h2>3 trang độc lập trong cùng một thương hiệu Ông Quan</h2>
-      </div>
-
-      <div className="ecosystem-grid">
-        {venues.map((venue) => (
-          <article key={venue.id} className={`ecosystem-card ${venue.id === activeVenue.id ? "is-current" : ""}`}>
-            <p className="card-tag">{venue.tag}</p>
-            <h3>{venue.name}</h3>
-            <p>{venue.description}</p>
-            <a
-              href={venue.hash}
-              onClick={(event) => {
-                if (!onOpenPage) {
-                  return;
-                }
-
-                event.preventDefault();
-                onOpenPage(venue.id);
-              }}
-            >
-              {venue.id === activeVenue.id ? "Đang hiển thị" : "Mở trang này"}
-            </a>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export default function VenuePage({
-  activeVenue,
-  heroImageFailed,
-  onHeroImageError,
-  onOpenImage,
-  onOpenPage,
-}) {
-  const seoContent = venueSeoContentById[activeVenue.id] || {};
-
-  return (
+  const content = (
     <>
-      <VenueHero
-        activeVenue={activeVenue}
-        heroImageFailed={heroImageFailed}
-        onHeroImageError={onHeroImageError}
+      <img src={effectiveSrc} alt={alt} loading="lazy" onError={() => setLoadFailed(true)} />
+      {playButton ? <span className="editorial-media-play" aria-hidden="true">▶</span> : null}
+    </>
+  );
+
+  if (!canOpenImage) {
+    return <div className={`${className} editorial-media`}>{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      className={`${className} editorial-media is-clickable`}
+      onClick={() => onOpenImage({ src, alt, caption: alt })}
+      aria-label={`Phóng to ảnh: ${alt}`}
+    >
+      {content}
+    </button>
+  );
+}
+
+function VenueBreadcrumb({ activeVenue, onOpenPage }) {
+  return (
+    <nav className="editorial-breadcrumb" aria-label="Điều hướng trang">
+      <a
+        href={pagesById.home.hash}
+        onClick={(event) => openInternalPage(onOpenPage, "home", event)}
+      >
+        Trang chủ
+      </a>
+      <span aria-hidden="true">›</span>
+      <span>{activeVenue.shortLabel}</span>
+    </nav>
+  );
+}
+
+function VenueHeader({ activeVenue, content }) {
+  return (
+    <header className="editorial-header">
+      <p className="editorial-category-pill">{content.category || activeVenue.shortLabel}</p>
+      <h1>{content.title}</h1>
+      <div className="editorial-meta">
+        <span>{content.author}</span>
+        <span aria-hidden="true">•</span>
+        <span>{content.displayDate}</span>
+        <span aria-hidden="true">•</span>
+        <span>{content.readTime}</span>
+      </div>
+    </header>
+  );
+}
+
+function VenueBody({ activeVenue, content }) {
+  return (
+    <section className="editorial-body-grid">
+      <div className="editorial-story-copy">
+        {content.paragraphs.map((paragraph, index) => (
+          <p key={`${index}-${paragraph.slice(0, 48)}`}>{paragraph}</p>
+        ))}
+
+        <blockquote className="editorial-quote">
+          <p>{content.quote}</p>
+        </blockquote>
+
+        <p>{content.closing}</p>
+      </div>
+
+      <aside className="editorial-side-card">
+        <p className="editorial-side-card-title">{content.sideCard.title}</p>
+        <p>{content.sideCard.description}</p>
+        <a href={normalizePhoneLink(activeVenue.contact)}>{content.sideCard.buttonLabel}</a>
+      </aside>
+    </section>
+  );
+}
+
+function VenueRelated({ items }) {
+  return (
+    <section className="editorial-related">
+      <div className="editorial-related-head">
+        <h2>Có thể bạn quan tâm</h2>
+      </div>
+
+      <div className="editorial-related-grid">
+        {items.map((item, index) => (
+          <article className="editorial-related-card" key={`${index}-${item.title}`}>
+            <EditorialMedia
+              src={item.image}
+              alt={item.imageAlt || item.title}
+              className="editorial-related-media"
+            />
+            <div className="editorial-related-copy">
+              <p>{item.label}</p>
+              <h3>{item.title}</h3>
+              <span>{item.description}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default function VenuePage({ activeVenue, onOpenImage, onOpenPage }) {
+  const fallbackContent = venueEditorialContentById[activeVenue.id];
+  const [remoteContent, setRemoteContent] = useState(null);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    setRemoteContent(null);
+
+    if (!activeVenue?.id || !fallbackContent) {
+      return undefined;
+    }
+
+    async function loadVenueContent() {
+      try {
+        const article = await getLatestVenueEditorialArticle(activeVenue.id);
+        if (isDisposed) {
+          return;
+        }
+
+        setRemoteContent(
+          article ? mapSeoArticleToVenueContent(article, fallbackContent, activeVenue) : null
+        );
+      } catch (error) {
+        console.error("Failed to load venue editorial article", error);
+        if (!isDisposed) {
+          setRemoteContent(null);
+        }
+      }
+    }
+
+    void loadVenueContent();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [activeVenue, fallbackContent]);
+
+  const content = remoteContent || fallbackContent;
+
+  if (!content) {
+    return null;
+  }
+
+  return (
+    <article className="editorial-page">
+      <VenueBreadcrumb activeVenue={activeVenue} onOpenPage={onOpenPage} />
+      <VenueHeader activeVenue={activeVenue} content={content} />
+
+      <EditorialMedia
+        src={content.heroImage}
+        alt={content.heroAlt}
+        className="editorial-hero-media"
         onOpenImage={onOpenImage}
       />
-      <VenueStats stats={activeVenue.stats} />
-      <VenueZones activeVenue={activeVenue} />
-      <VenueIntroSections activeVenue={activeVenue} onOpenImage={onOpenImage} />
 
-      <section className="section-stack" id="thu-vien-anh">
-        <div className="section-head">
-          <p className="eyebrow">Hình ảnh</p>
-          <h2>Thư viện không gian thực tế</h2>
-        </div>
-        <ImageCarousel slides={activeVenue.slides} onOpenImage={onOpenImage} />
-      </section>
+      <div className="editorial-content-rail">
+        <VenueBody activeVenue={activeVenue} content={content} />
 
-      <VenueHighlights activeVenue={activeVenue} />
-      <VenueSeoSections sections={seoContent.sections} />
-      <VenueFaqs faqs={seoContent.faqs} />
-      <VenueEcosystem activeVenue={activeVenue} onOpenPage={onOpenPage} />
-    </>
+        <EditorialMedia
+          src={content.secondaryImage}
+          alt={content.secondaryImageAlt}
+          className="editorial-secondary-media"
+          onOpenImage={onOpenImage}
+          playButton
+        />
+      </div>
+
+      <VenueRelated items={content.relatedItems} />
+    </article>
   );
 }

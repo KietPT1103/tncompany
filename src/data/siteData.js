@@ -327,7 +327,7 @@ export const pages = [
   { id: "about", hash: "/about", label: "Về chúng tôi", shortLabel: "Về chúng tôi" },
 ];
 
-export const navPages = [pages[0], ...pages.slice(1, 4), pages[4]];
+export const navPages = pages;
 export const pagesById = pages.reduce((accumulator, page) => {
   accumulator[page.id] = page;
   return accumulator;
