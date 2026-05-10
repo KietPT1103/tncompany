@@ -10,6 +10,7 @@ const entryPath = path.join(ssrDir, "entry-server.js");
 
 const template = await readFile(templatePath, "utf8");
 const { PUBLIC_PRERENDER_ROUTES, renderPublicRoute } = await import(pathToFileURL(entryPath).href);
+const spaShellPath = path.join(distDir, "spa-shell.html");
 
 function injectRouteHtml(html, appHtml, headTags) {
   return html
@@ -23,6 +24,8 @@ function injectRouteHtml(html, appHtml, headTags) {
     .replace("</head>", `    ${headTags}\n  </head>`)
     .replace('<div id="root"></div>', `<div id="root">${appHtml}</div>`);
 }
+
+await writeFile(spaShellPath, template, "utf8");
 
 for (const route of PUBLIC_PRERENDER_ROUTES) {
   const { appHtml, headTags } = renderPublicRoute(route);

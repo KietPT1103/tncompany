@@ -46,13 +46,20 @@ export default function ArticleDetailPage() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    getSeoArticles("", "published").then((data) => {
-      const articles = data || [];
-      const current = articles.find((a) => a.slug === slug);
-      setArticle(current || null);
-      setRelatedArticles(articles.filter((a) => a.slug !== slug).slice(0, 3));
-      setLoading(false);
-    });
+    getSeoArticles("", "published")
+      .then((data) => {
+        const articles = data || [];
+        const current = articles.find((a) => a.slug === slug);
+        setArticle(current || null);
+        setRelatedArticles(articles.filter((a) => a.slug !== slug).slice(0, 3));
+      })
+      .catch(() => {
+        setArticle(null);
+        setRelatedArticles([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [slug]);
 
   if (loading) {

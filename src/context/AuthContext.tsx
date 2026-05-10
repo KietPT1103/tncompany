@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearApiToken, fetchCurrentUser, logoutApi } from "@/lib/api";
+import { clearApiToken, fetchCurrentUser, getApiToken, logoutApi } from "@/lib/api";
 import { AppUser, normalizeUserRole, UserRole } from "@/types/auth";
 
 type AuthContextType = {
@@ -28,6 +28,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const refreshUser = async () => {
+    if (!getApiToken()) {
+      setUser(null);
+      setRole(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const { user: currentUser } = await fetchCurrentUser();

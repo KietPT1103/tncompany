@@ -44,10 +44,16 @@ export default function ArticlesIndexPage() {
   const GRID_ITEMS_PER_PAGE = 9;
 
   useEffect(() => {
-    getSeoArticles("", "published").then((data) => {
-      setArticles(data || []);
-      setLoading(false);
-    });
+    getSeoArticles("", "published")
+      .then((data) => {
+        setArticles(data || []);
+      })
+      .catch(() => {
+        setArticles([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   const handleFilterChange = (newFilter: string) => {

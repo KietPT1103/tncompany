@@ -8,6 +8,8 @@ import { AuthProvider } from "./context/AuthContext";
 import { StoreProvider } from "./context/StoreContext";
 
 const rootElement = document.getElementById("root");
+const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+const isNewsRoute = pathname === "/tin-tuc" || pathname.startsWith("/tin-tuc/");
 const app = (
   <React.StrictMode>
     <BrowserRouter>
@@ -20,7 +22,7 @@ const app = (
   </React.StrictMode>
 );
 
-if (rootElement.hasChildNodes()) {
+if (rootElement.hasChildNodes() && !isNewsRoute) {
   hydrateRoot(rootElement, app);
 } else {
   createRoot(rootElement).render(app);

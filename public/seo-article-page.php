@@ -184,7 +184,10 @@ $schema = $article
     ];
 ?>
 <?php
-$indexPath = __DIR__ . '/index.html';
+$indexPath = __DIR__ . '/spa-shell.html';
+if (!file_exists($indexPath)) {
+    $indexPath = __DIR__ . '/index.html';
+}
 if (!file_exists($indexPath)) {
     // Nếu ở môi trường local chạy npm run dev, file index.html ở thư mục gốc
     $indexPath = dirname(__DIR__) . '/index.html';
