@@ -77,19 +77,30 @@ function seo_articles_build_payload(array $body, ?array $existing = null): array
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-auth_require_permission('seo_articles.access');
 
 if ($method === 'GET') {
+    $user = auth_current_user();
+    $hasAccess = $user && auth_has_permission($user, 'seo_articles.access');
+
+    $status = trim((string) ($_GET['status'] ?? 'all'));
+    if (!$hasAccess) {
+        $status = 'published'; // Ép buộc chỉ xem bài đã xuất bản nếu chưa đăng nhập
+    }
+
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id !== '') {
+        $item = seo_articles_fetch_by_id($id);
+        if ($item && !$item['isPublished'] && !$hasAccess) {
+            respond_error('Not found', 404);
+        }
         respond_ok([
-            'item' => seo_articles_fetch_by_id($id),
+            'item' => $item,
         ]);
     }
 
     $limit = max(1, min(200, (int) ($_GET['limit'] ?? 100)));
     $query = trim((string) ($_GET['query'] ?? ''));
-    $status = trim((string) ($_GET['status'] ?? 'all'));
+
 
     $sql = 'SELECT * FROM seo_articles WHERE 1 = 1';
     $params = [];
@@ -123,6 +134,8 @@ if ($method === 'GET') {
         ),
     ]);
 }
+
+auth_require_permission('seo_articles.access');
 
 if ($method === 'POST') {
     $user = auth_current_user();
