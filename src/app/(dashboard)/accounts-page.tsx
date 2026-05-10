@@ -23,18 +23,18 @@ import {
 import type { AppPermission, UserRole } from "@/types/auth";
 
 const STORE_OPTIONS = [
-  { value: "", label: "KhÃ´ng gáº¯n cá»­a hÃ ng" },
+  { value: "", label: "Khong gan cua hang" },
   { value: "cafe", label: "Cafe" },
-  { value: "restaurant", label: "Láº©u / Báº¿p" },
-  { value: "bakery", label: "Tiá»‡m bÃ¡nh" },
+  { value: "restaurant", label: "Lau / Bep" },
+  { value: "bakery", label: "Tiem banh" },
   { value: "farm", label: "Farm" },
 ];
 
 const ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
   { value: "manager", label: "Manager" },
-  { value: "user", label: "Thu ngÃ¢n" },
-  { value: "server", label: "Phá»¥c vá»¥" },
+  { value: "user", label: "Thu ngan" },
+  { value: "server", label: "Phuc vu" },
 ] as const;
 
 type FormState = {
@@ -96,7 +96,7 @@ export default function AccountManagementPage() {
       setItems(users);
     } catch (loadErr) {
       console.error(loadErr);
-      setError(loadErr instanceof Error ? loadErr.message : "KhÃ´ng táº£i Ä‘Æ°á»£c tÃ i khoáº£n.");
+      setError(loadErr instanceof Error ? loadErr.message : "Khong tai duoc tai khoan.");
     } finally {
       setLoading(false);
     }
@@ -243,7 +243,7 @@ export default function AccountManagementPage() {
         setItems((current) =>
           current.map((item) => (item.id === updated.id ? updated : item))
         );
-        setMessage("ÄÃ£ cáº­p nháº­t tÃ i khoáº£n.");
+        setMessage("Da cap nhat tai khoan.");
       } else {
         const created = await createManagedUser({
           email: form.email,
@@ -261,20 +261,20 @@ export default function AccountManagementPage() {
         });
 
         setItems((current) => [created, ...current]);
-        setMessage("ÄÃ£ táº¡o tÃ i khoáº£n má»›i.");
+        setMessage("Da tao tai khoan moi.");
         setEditingId(created.id);
         setForm((current) => ({ ...current, password: "" }));
       }
     } catch (submitErr) {
       console.error(submitErr);
-      setError(submitErr instanceof Error ? submitErr.message : "KhÃ´ng lÆ°u Ä‘Æ°á»£c tÃ i khoáº£n.");
+      setError(submitErr instanceof Error ? submitErr.message : "Khong luu duoc tai khoan.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("XÃ³a tÃ i khoáº£n nÃ y?")) return;
+    if (!confirm("Xoa tai khoan nay?")) return;
 
     setSaving(true);
     setError("");
@@ -288,10 +288,10 @@ export default function AccountManagementPage() {
         startCreate();
       }
 
-      setMessage("ÄÃ£ xÃ³a tÃ i khoáº£n.");
+      setMessage("Da xoa tai khoan.");
     } catch (deleteErr) {
       console.error(deleteErr);
-      setError(deleteErr instanceof Error ? deleteErr.message : "KhÃ´ng xÃ³a Ä‘Æ°á»£c tÃ i khoáº£n.");
+      setError(deleteErr instanceof Error ? deleteErr.message : "Khong xoa duoc tai khoan.");
     } finally {
       setSaving(false);
     }
@@ -310,20 +310,20 @@ export default function AccountManagementPage() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1.5 text-sm font-semibold text-emerald-700">
               <Shield className="h-4 w-4" />
-              Quáº£n lÃ½ tÃ i khoáº£n Ä‘Äƒng nháº­p
+              Quan ly tai khoan dang nhap
             </div>
             <h1 className="mt-3 text-3xl font-semibold text-slate-900">
-              TÃ i khoáº£n há»‡ thá»‘ng
+              Tai khoan he thong
             </h1>
             <p className="mt-2 text-sm text-slate-500">
-              Admin cÃ³ thá»ƒ táº¡o, sá»­a, khÃ³a hoáº·c xÃ³a tÃ i khoáº£n, Ä‘á»“ng thá»i báº­t/táº¯t
-              tá»«ng module mÃ  táº¡i khoáº£n Ä‘Æ°á»£c dÃ¹ng.
+              Admin co the tao, sua, khoa hoac xoa tai khoan, dong thoi bat/tat
+              tung module ma tai khoan duoc dung.
             </p>
           </div>
 
           <Button className="gap-2 rounded-2xl" onClick={startCreate}>
             <UserPlus className="h-4 w-4" />
-            Táº¡o tÃ i khoáº£n má»›i
+            Tao tai khoan moi
           </Button>
         </div>
 
@@ -343,9 +343,9 @@ export default function AccountManagementPage() {
           <Card className="rounded-[28px] border-slate-200">
             <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <CardTitle className="text-xl text-slate-900">Danh sÃ¡ch tÃ i khoáº£n</CardTitle>
+                <CardTitle className="text-xl text-slate-900">Danh sach tai khoan</CardTitle>
                 <p className="mt-2 text-sm text-slate-500">
-                  {items.length} tÃ i khoáº£n, Ä‘Äƒng nháº­p hiá»‡n táº¡i:{" "}
+                  {items.length} tai khoan, dang nhap hien tai:{" "}
                   <span className="font-medium text-slate-700">
                     {user?.displayName || user?.email}
                   </span>
@@ -355,7 +355,7 @@ export default function AccountManagementPage() {
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="TÃ¬m theo email, tÃªn, username, role, quyá»n"
+                  placeholder="Tim theo email, ten, username, role, quyen"
                   className="h-11 rounded-2xl border-slate-200 bg-white"
                 />
               </div>
@@ -363,11 +363,11 @@ export default function AccountManagementPage() {
             <CardContent>
               {loading ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-slate-500">
-                  Äang táº£i tÃ i khoáº£n...
+                  Dang tai tai khoan...
                 </div>
               ) : filteredItems.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-slate-500">
-                  KhÃ´ng cÃ³ tÃ i khoáº£n phÃ¹ há»£p.
+                  Khong co tai khoan phu hop.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -395,13 +395,13 @@ export default function AccountManagementPage() {
                                   : "bg-slate-100 text-slate-500"
                               }`}
                             >
-                              {item.isActive ? "Äang hoáº¡t Ä‘á»™ng" : "ÄÃ£ khÃ³a"}
+                              {item.isActive ? "Dang hoat dong" : "Da khoa"}
                             </span>
                           </div>
                           <div className="mt-2 text-sm text-slate-500">{item.email}</div>
                           <div className="mt-1 text-sm text-slate-500">
-                            {item.username ? `@${item.username}` : "KhÃ´ng cÃ³ username"} â€¢{" "}
-                            {item.storeId || "KhÃ´ng gáº¯n cá»­a hÃ ng"}
+                            {item.username ? `@${item.username}` : "Khong co username"} •{" "}
+                            {item.storeId || "Khong gan cua hang"}
                           </div>
                         </div>
 
@@ -411,7 +411,7 @@ export default function AccountManagementPage() {
                             className="rounded-2xl"
                             onClick={() => startEdit(item)}
                           >
-                            Sá»­a
+                            Sua
                           </Button>
                           <Button
                             variant="destructive"
@@ -419,7 +419,7 @@ export default function AccountManagementPage() {
                             onClick={() => void handleDelete(item.id)}
                             disabled={item.id === user?.id}
                           >
-                            XÃ³a
+                            Xoa
                           </Button>
                         </div>
                       </div>
@@ -435,7 +435,7 @@ export default function AccountManagementPage() {
               <div className="flex items-center gap-3">
                 <UserCog className="h-5 w-5 text-emerald-600" />
                 <CardTitle className="text-xl text-slate-900">
-                  {editingId ? "Sá»­a tÃ i khoáº£n" : "Táº¡o tÃ i khoáº£n"}
+                  {editingId ? "Sua tai khoan" : "Tao tai khoan"}
                 </CardTitle>
               </div>
             </CardHeader>
@@ -461,29 +461,29 @@ export default function AccountManagementPage() {
               />
 
               <Input
-                label="TÃªn hiá»ƒn thá»‹"
+                label="Ten hien thi"
                 value={form.displayName}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, displayName: event.target.value }))
                 }
-                placeholder="Quáº£n lÃ½ ca"
+                placeholder="Quan ly ca"
                 className="h-11 rounded-2xl border-slate-200"
               />
 
               <Input
                 type="password"
-                label={editingId ? "Äáº·t máº­t kháº©u má»›i" : "Máº­t kháº©u"}
+                label={editingId ? "Dat mat khau moi" : "Mat khau"}
                 value={form.password}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, password: event.target.value }))
                 }
-                placeholder={editingId ? "Äá»ƒ trá»‘ng náº¿u khÃ´ng Ä‘á»•i" : "Nháº­p máº­t kháº©u"}
+                placeholder={editingId ? "De trong neu khong doi" : "Nhap mat khau"}
                 className="h-11 rounded-2xl border-slate-200"
               />
 
               {canManageAccess ? (
                 <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">Vai trÃ²</span>
+                  <span className="mb-2 block text-sm font-medium text-slate-700">Vai tro</span>
                   <select
                     value={form.role}
                     onChange={(event) => handleRoleChange(event.target.value as UserRole)}
@@ -498,15 +498,15 @@ export default function AccountManagementPage() {
                 </label>
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-sm font-medium text-slate-900">Vai trÃ²</div>
+                  <div className="text-sm font-medium text-slate-900">Vai tro</div>
                   <div className="mt-1 text-sm text-slate-600">
-                    Chỉ admin mới được sửa vai trò tài khoản.
+                    Chi admin moi duoc sua vai tro tai khoan.
                   </div>
                 </div>
               )}
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Cá»­a hÃ ng</span>
+                <span className="mb-2 block text-sm font-medium text-slate-700">Cua hang</span>
                 <select
                   value={form.storeId}
                   onChange={(event) =>
@@ -525,10 +525,10 @@ export default function AccountManagementPage() {
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-medium text-slate-900">PhÃ¢n quyá»n chá»©c nÄƒng</div>
+                    <div className="text-sm font-medium text-slate-900">Phan quyen chuc nang</div>
                     <div className="mt-1 text-xs text-slate-500">
-                      Báº­t module nÃ o thÃ¬ tÃ i khoáº£n chá»‰ dÃ¹ng Ä‘Æ°á»£c module Ä‘Ã³, cÃ¡c
-                      module cÃ²n láº¡i sáº½ bá»‹ khÃ³a.
+                      Bat module nao thi tai khoan chi dung duoc module do, cac
+                      module con lai se bi khoa.
                     </div>
                   </div>
                   <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
@@ -544,7 +544,7 @@ export default function AccountManagementPage() {
                     onClick={handleSelectAllPermissions}
                     disabled={!canManageAccess || form.role === "admin"}
                   >
-                    Báº­t táº¥t cáº£
+                    Bat tat ca
                   </Button>
                   <Button
                     type="button"
@@ -553,7 +553,7 @@ export default function AccountManagementPage() {
                     onClick={handleClearPermissions}
                     disabled={!canManageAccess || form.role === "admin"}
                   >
-                    Bá» háº¿t
+                    Bo het
                   </Button>
                   <Button
                     type="button"
@@ -562,18 +562,18 @@ export default function AccountManagementPage() {
                     onClick={handleResetPermissions}
                     disabled={!canManageAccess}
                   >
-                    Máº·c Ä‘á»‹nh theo vai trÃ²
+                    Mac dinh theo vai tro
                   </Button>
                 </div>
 
                 {!canManageAccess ? (
                   <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                    Chỉ admin mới được sửa phân quyền chức năng.
+                    Chi admin moi duoc sua phan quyen chuc nang.
                   </div>
                 ) : form.role === "admin" ? (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    TÃ i khoáº£n admin luÃ´n cÃ³ toÃ n quyá»n Ä‘á»ƒ trÃ¡nh tá»± khÃ³a há»‡
-                    thá»‘ng quáº£n trá»‹.
+                    Tai khoan admin luon co toan quyen de tranh tu khoa he
+                    thong quan tri.
                   </div>
                 ) : (
                   <div className="mt-4 space-y-3">
@@ -624,9 +624,9 @@ export default function AccountManagementPage() {
 
               <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div>
-                  <div className="text-sm font-medium text-slate-900">Tráº¡ng thÃ¡i Ä‘Äƒng nháº­p</div>
+                  <div className="text-sm font-medium text-slate-900">Trang thai dang nhap</div>
                   <div className="text-xs text-slate-500">
-                    Táº¯t Ä‘á»ƒ khÃ³a tÃ i khoáº£n vÃ  Ã©p Ä‘Äƒng xuáº¥t náº¿u Ä‘ang dÃ¹ng.
+                    Tat de khoa tai khoan va ep dang xuat neu dang dung.
                   </div>
                 </div>
                 <input
@@ -645,7 +645,7 @@ export default function AccountManagementPage() {
                   onClick={() => void handleSubmit()}
                   isLoading={saving}
                 >
-                  {editingId ? "LÆ°u thay Ä‘á»•i" : "Táº¡o tÃ i khoáº£n"}
+                  {editingId ? "Luu thay doi" : "Tao tai khoan"}
                 </Button>
                 {editingId ? (
                   <Button variant="outline" className="rounded-2xl" onClick={startCreate}>

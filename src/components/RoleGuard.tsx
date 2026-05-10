@@ -62,13 +62,13 @@ export default function RoleGuard({
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center p-8 bg-white rounded-lg shadow-md">
-          <h1 className="text-2xl font-bold text-red-600 mb-2">Truy c?p b? t? ch?i</h1>
-          <p className="text-slate-600 mb-4">B?n kh?ng c? quy?n truy c?p trang n?y.</p>
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Truy cap bi tu choi</h1>
+          <p className="text-slate-600 mb-4">Ban khong co quyen truy cap trang nay.</p>
           <button
             onClick={() => router.push(nextPath)}
             className="px-4 py-2 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"
           >
-            Quay l?i khu v?c du?c cap quy?n
+            Quay lai khu vuc duoc cap quyen
           </button>
         </div>
       </div>
