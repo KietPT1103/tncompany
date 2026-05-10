@@ -1218,7 +1218,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'GET') {
-    auth_require(['admin']);
+    auth_require_permission('activity_logs.access');
 
     $downloadExportJob = trim((string) ($_GET['downloadExportJob'] ?? ''));
     if ($downloadExportJob !== '') {
@@ -1328,7 +1328,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'PUT') {
-    auth_require(['admin']);
+    auth_require_permission('activity_logs.access');
 
     $body = read_json_body();
     $action = trim((string) ($body['action'] ?? ''));
@@ -1359,7 +1359,7 @@ if ($method === 'PUT') {
 }
 
 if ($method === 'PATCH') {
-    auth_require(['admin']);
+    auth_require_permission('activity_logs.access');
 
     $body = read_json_body();
     $action = trim((string) ($body['action'] ?? ''));
@@ -1375,7 +1375,7 @@ if ($method === 'PATCH') {
 }
 
 if ($method === 'DELETE') {
-    auth_require(['admin']);
+    auth_require_permission('activity_logs.access');
 
     $body = read_json_body();
     $action = trim((string) ($body['action'] ?? $_GET['action'] ?? ''));

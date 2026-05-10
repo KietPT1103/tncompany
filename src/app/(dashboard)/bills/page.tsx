@@ -40,6 +40,7 @@ import {
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
+import { hasPermission } from "@/lib/permissions";
 
 type EditFormState = {
   tableNumber: string;
@@ -108,8 +109,9 @@ export default function BillsPage() {
   const { storeId } = useStore();
 
   const isFarmStore = storeId === "farm";
-  const canEditBill = role === "admin" || role === "user";
-  const canCancelBill = role === "admin" || (role === "user" && isFarmStore);
+  const canUseBills = hasPermission(user, "bills.access");
+  const canEditBill = canUseBills;
+  const canCancelBill = canUseBills && (role === "admin" || isFarmStore);
   const useSoftCancel = !isFarmStore;
 
   const todayInput = formatDateInput(new Date());
@@ -421,7 +423,7 @@ export default function BillsPage() {
   };
 
   return (
-    <RoleGuard allowedRoles={["admin", "user"]}>
+    <RoleGuard permission="bills.access">
       <main className="min-h-screen bg-slate-50 p-6 md:p-10">
         <div className="mx-auto max-w-7xl space-y-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

@@ -152,7 +152,7 @@ products_inventory_ensure_schema();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require(['admin']);
+    auth_require_permission('inventory_receipts.access');
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $status = strtolower(trim((string) ($_GET['status'] ?? '')));
@@ -262,7 +262,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    $user = auth_require(['admin']);
+    $user = auth_require_permission('inventory_receipts.access');
     $body = read_json_body();
     $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
     $status = inventory_receipts_normalize_status((string) ($body['status'] ?? 'draft'));
@@ -379,7 +379,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'DELETE') {
-    auth_require(['admin']);
+    auth_require_permission('inventory_receipts.access');
     $body = read_json_body();
     $receiptId = trim((string) ($body['id'] ?? ''));
 

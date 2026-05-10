@@ -17,22 +17,16 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { role } = useAuth();
+  const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-        window.localStorage.setItem(
+    window.localStorage.setItem(
       SIDEBAR_STORAGE_KEY,
       sidebarCollapsed ? "1" : "0"
     );
   }, [sidebarCollapsed]);
-
-  useEffect(() => {
-    if (role === "manager") {
-      setSidebarCollapsed(false);
-    }
-  }, [role]);
 
   return (
     <div className="flex h-screen bg-[#F8FAFC]">
@@ -42,7 +36,7 @@ export default function DashboardLayout({
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        {sidebarCollapsed && role !== "manager" ? (
+        {sidebarCollapsed && user ? (
           <button
             type="button"
             onClick={() => setSidebarCollapsed(false)}

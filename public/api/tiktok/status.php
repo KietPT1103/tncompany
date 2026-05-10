@@ -6,7 +6,7 @@ require_once dirname(__DIR__) . '/_lib/bootstrap.php';
 require_once dirname(__DIR__) . '/_lib/auth.php';
 require_once dirname(__DIR__) . '/_lib/social_listening.php';
 
-auth_require(['admin']);
+auth_require_permission('social_listening.access');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $services = social_listening_services();
 /** @var TikTokSearchController $controller */

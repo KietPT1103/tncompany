@@ -581,11 +581,9 @@ export default function SalaryEstimatePage() {
     if (!loading) {
       if (!user) {
         router.push("/login");
-      } else if (role !== "admin" && role !== "manager") {
-        router.push("/pos");
       }
     }
-  }, [loading, role, router, user]);
+  }, [loading, router, user]);
 
   useEffect(() => {
     if (!storeId) return;

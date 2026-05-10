@@ -77,7 +77,7 @@ function seo_articles_build_payload(array $body, ?array $existing = null): array
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-auth_require(['admin']);
+auth_require_permission('seo_articles.access');
 
 if ($method === 'GET') {
     $id = trim((string) ($_GET['id'] ?? ''));

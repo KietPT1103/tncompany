@@ -6,7 +6,7 @@ require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/social_listening.php';
 
-auth_require(['admin']);
+auth_require_permission('social_listening.access');
 
 $services = social_listening_services();
 $repository = $services['repository'];

@@ -55,6 +55,27 @@ function invoice_normalize_scope($value): string
     return $scope;
 }
 
+function invoice_permission_for_scope(string $scope): string
+{
+    if ($scope === 'internal') {
+        return 'internal_invoices.access';
+    }
+
+    if ($scope === 'tax') {
+        return 'tax_invoices.access';
+    }
+
+    throw new InvalidArgumentException('Unknown invoice scope');
+}
+
+function invoice_require_scope_access(array $user, string $scope): void
+{
+    $permission = invoice_permission_for_scope($scope);
+    if (!auth_has_permission($user, $permission)) {
+        respond_error('Forbidden', 403);
+    }
+}
+
 function invoice_normalize_store_id($value): string
 {
     $storeId = trim((string) $value);
@@ -443,11 +464,21 @@ function invoice_map_entry(array $row, array $itemsByInvoiceId, array $evidences
     ];
 }
 
-function invoice_get_entry_or_null(string $id): ?array
+function invoice_get_entry_row_or_null(string $id): ?array
 {
     $statement = db()->prepare('SELECT * FROM invoice_entries WHERE id = :id LIMIT 1');
     $statement->execute(['id' => $id]);
     $row = $statement->fetch();
+    if (!$row) {
+        return null;
+    }
+
+    return $row;
+}
+
+function invoice_get_entry_or_null(string $id): ?array
+{
+    $row = invoice_get_entry_row_or_null($id);
     if (!$row) {
         return null;
     }
@@ -469,6 +500,7 @@ function invoice_save_entry(array $user): array
 
     $storeId = invoice_normalize_store_id($_POST['storeId'] ?? 'cafe');
     $scope = invoice_normalize_scope($_POST['scope'] ?? '');
+    invoice_require_scope_access($user, $scope);
     $invoiceDate = invoice_normalize_date($_POST['invoiceDate'] ?? '');
     $invoiceNumber = invoice_trim_nullable($_POST['invoiceNumber'] ?? '', 100);
     $partnerName = invoice_trim_nullable($_POST['partnerName'] ?? '', 255);
@@ -488,21 +520,18 @@ function invoice_save_entry(array $user): array
     $filesToDeleteAfterCommit = [];
 
     if ($isUpdate) {
-        $existingStatement = db()->prepare(
-            'SELECT id
-             FROM invoice_entries
-             WHERE id = :id
-               AND store_id = :store_id
-               AND invoice_scope = :invoice_scope
-             LIMIT 1'
-        );
-        $existingStatement->execute([
-            'id' => $invoiceId,
-            'store_id' => $storeId,
-            'invoice_scope' => $scope,
-        ]);
+        $existingRow = invoice_get_entry_row_or_null($invoiceId);
+        if ($existingRow === null) {
+            respond_error('Invoice not found', 404);
+        }
 
-        if (!$existingStatement->fetch()) {
+        $existingScope = (string) ($existingRow['invoice_scope'] ?? '');
+        invoice_require_scope_access($user, $existingScope);
+
+        if (
+            (string) ($existingRow['store_id'] ?? '') !== $storeId
+            || $existingScope !== $scope
+        ) {
             respond_error('Invoice not found', 404);
         }
     }
@@ -657,16 +686,18 @@ function invoice_save_entry(array $user): array
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$user = auth_require(['admin']);
+$user = auth_require();
 
 if ($method === 'GET') {
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id !== '') {
-        $item = invoice_get_entry_or_null($id);
-        if ($item === null) {
+        $entryRow = invoice_get_entry_row_or_null($id);
+        if ($entryRow === null) {
             respond_error('Invoice not found', 404);
         }
+        invoice_require_scope_access($user, (string) ($entryRow['invoice_scope'] ?? ''));
 
+        $item = invoice_get_entry_or_null($id);
         respond_ok([
             'item' => $item,
         ]);
@@ -674,6 +705,7 @@ if ($method === 'GET') {
 
     $storeId = invoice_normalize_store_id($_GET['storeId'] ?? 'cafe');
     $scope = invoice_normalize_scope($_GET['scope'] ?? '');
+    invoice_require_scope_access($user, $scope);
     $search = trim((string) ($_GET['search'] ?? ''));
     $startDate = trim((string) ($_GET['startDate'] ?? ''));
     $endDate = trim((string) ($_GET['endDate'] ?? ''));
@@ -761,6 +793,12 @@ if ($method === 'DELETE') {
     if ($id === '') {
         respond_error('Invoice id is required', 422);
     }
+
+    $entryRow = invoice_get_entry_row_or_null($id);
+    if ($entryRow === null) {
+        respond_error('Invoice not found', 404);
+    }
+    invoice_require_scope_access($user, (string) ($entryRow['invoice_scope'] ?? ''));
 
     $evidenceStatement = db()->prepare(
         'SELECT file_path FROM invoice_entry_evidences WHERE invoice_id = :invoice_id'

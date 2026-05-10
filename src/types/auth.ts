@@ -1,4 +1,22 @@
 export type UserRole = "admin" | "manager" | "user" | "server";
+export type AppPermission =
+  | "dashboard.access"
+  | "bills.access"
+  | "payroll_estimate.access"
+  | "payroll.access"
+  | "timesheet.access"
+  | "reports.access"
+  | "cash_flow.access"
+  | "product.access"
+  | "inventory_checks.access"
+  | "inventory_receipts.access"
+  | "categories.access"
+  | "internal_invoices.access"
+  | "tax_invoices.access"
+  | "social_listening.access"
+  | "seo_articles.access"
+  | "activity_logs.access"
+  | "accounts.access";
 const KNOWN_USER_ROLES: UserRole[] = ["admin", "manager", "user", "server"];
 
 export type AppUser = {
@@ -9,6 +27,7 @@ export type AppUser = {
   displayName?: string | null;
   role: UserRole;
   storeId?: string | null;
+  permissions?: AppPermission[];
 };
 
 export function normalizeUserRole(

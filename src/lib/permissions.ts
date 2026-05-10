@@ -1,0 +1,317 @@
+import type { AppPermission, AppUser, UserRole } from "@/types/auth";
+
+type PermissionDefinition = {
+  id: AppPermission;
+  label: string;
+  description: string;
+  category: string;
+  path: string;
+  hidden?: boolean;
+};
+
+export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
+  {
+    id: "dashboard.access",
+    label: "Dashboard",
+    description: "Xem trang dashboard tong hop.",
+    category: "Tong quan",
+    path: "/",
+    hidden: true,
+  },
+  {
+    id: "bills.access",
+    label: "Hoa don",
+    description: "Xem va thao tac danh sach hoa don.",
+    category: "Giao dich",
+    path: "/pos",
+  },
+  {
+    id: "payroll_estimate.access",
+    label: "Uoc luong luong",
+    description: "Lap lich va uoc luong luong.",
+    category: "Nhan su",
+    path: "/payroll-estimate",
+  },
+  {
+    id: "payroll.access",
+    label: "Tinh luong",
+    description: "Quan ly bang luong va nhan su.",
+    category: "Nhan su",
+    path: "/payroll",
+  },
+  {
+    id: "timesheet.access",
+    label: "Cham cong",
+    description: "Xem va cap nhat bang cham cong.",
+    category: "Nhan su",
+    path: "/timesheet",
+  },
+  {
+    id: "reports.access",
+    label: "Bao cao",
+    description: "Xem va luu bao cao doanh thu, chi phi.",
+    category: "Bao cao",
+    path: "/reports",
+  },
+  {
+    id: "cash_flow.access",
+    label: "Dong tien",
+    description: "Theo doi dong tien va tong hop thu chi.",
+    category: "Bao cao",
+    path: "/cash-flow",
+  },
+  {
+    id: "product.access",
+    label: "San pham",
+    description: "Quan ly danh muc san pham va gia ban.",
+    category: "Hang hoa",
+    path: "/product",
+  },
+  {
+    id: "inventory_checks.access",
+    label: "Kiem kho",
+    description: "Lap va quan ly phieu kiem kho.",
+    category: "Hang hoa",
+    path: "/product/checks",
+  },
+  {
+    id: "inventory_receipts.access",
+    label: "Nhap hang",
+    description: "Lap va quan ly phieu nhap kho.",
+    category: "Hang hoa",
+    path: "/product/receipts",
+  },
+  {
+    id: "categories.access",
+    label: "Danh muc",
+    description: "Quan ly nhom danh muc hang hoa.",
+    category: "Hang hoa",
+    path: "/categories",
+  },
+  {
+    id: "internal_invoices.access",
+    label: "Hoa don noi bo",
+    description: "Quan ly hoa don noi bo.",
+    category: "Ke toan",
+    path: "/internal-invoices",
+  },
+  {
+    id: "tax_invoices.access",
+    label: "Hoa don thue",
+    description: "Quan ly hoa don thue.",
+    category: "Ke toan",
+    path: "/tax-invoices",
+  },
+  {
+    id: "social_listening.access",
+    label: "Social listening",
+    description: "Theo doi va tong hop du lieu social listening.",
+    category: "Marketing",
+    path: "/social-listening",
+  },
+  {
+    id: "seo_articles.access",
+    label: "Bai viet SEO",
+    description: "Quan ly bai viet SEO.",
+    category: "Marketing",
+    path: "/seo-articles",
+  },
+  {
+    id: "activity_logs.access",
+    label: "Nhat ky may",
+    description: "Xem lich su hoat dong may tram.",
+    category: "He thong",
+    path: "/activity-logs",
+  },
+  {
+    id: "accounts.access",
+    label: "Tai khoan",
+    description: "Tao, sua, khoa va phan quyen tai khoan.",
+    category: "He thong",
+    path: "/accounts",
+  },
+];
+
+export const ALL_APP_PERMISSIONS = PERMISSION_DEFINITIONS.map(
+  (item) => item.id
+) as AppPermission[];
+
+export const MANAGED_PERMISSION_GROUPS = PERMISSION_DEFINITIONS.filter(
+  (item) => !item.hidden
+).reduce<Array<{ category: string; items: PermissionDefinition[] }>>((groups, item) => {
+  const existing = groups.find((group) => group.category === item.category);
+  if (existing) {
+    existing.items.push(item);
+    return groups;
+  }
+
+  groups.push({
+    category: item.category,
+    items: [item],
+  });
+  return groups;
+}, []);
+
+const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
+  admin: [...ALL_APP_PERMISSIONS],
+  manager: ["payroll_estimate.access"],
+  user: ["bills.access"],
+  server: ["bills.access"],
+};
+
+const PATH_PERMISSION_RULES = [...PERMISSION_DEFINITIONS]
+  .sort((left, right) => right.path.length - left.path.length)
+  .map((item) => ({
+    path: item.path,
+    permission: item.id,
+  }));
+
+export function normalizePermissionList(value: unknown): AppPermission[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const allowed = new Set<AppPermission>(ALL_APP_PERMISSIONS);
+  const unique = new Set<AppPermission>();
+
+  value.forEach((item) => {
+    if (typeof item !== "string") {
+      return;
+    }
+
+    const normalized = item.trim() as AppPermission;
+    if (!allowed.has(normalized) || unique.has(normalized)) {
+      return;
+    }
+
+    unique.add(normalized);
+  });
+
+  return ALL_APP_PERMISSIONS.filter((permission) => unique.has(permission));
+}
+
+export function getDefaultPermissionsForRole(
+  role: UserRole | null | undefined
+): AppPermission[] {
+  if (!role) {
+    return [];
+  }
+
+  return [...(DEFAULT_ROLE_PERMISSIONS[role] || [])];
+}
+
+export function getEffectivePermissions(
+  source:
+    | Pick<AppUser, "role" | "permissions">
+    | UserRole
+    | null
+    | undefined
+): AppPermission[] {
+  if (!source) {
+    return [];
+  }
+
+  if (typeof source === "string") {
+    return getDefaultPermissionsForRole(source);
+  }
+
+  if (source.role === "admin") {
+    return [...ALL_APP_PERMISSIONS];
+  }
+
+  if (Array.isArray(source.permissions)) {
+    return normalizePermissionList(source.permissions);
+  }
+
+  return getDefaultPermissionsForRole(source.role);
+}
+
+export function hasPermission(
+  source:
+    | Pick<AppUser, "role" | "permissions">
+    | UserRole
+    | null
+    | undefined,
+  permission: AppPermission
+) {
+  return getEffectivePermissions(source).includes(permission);
+}
+
+export function hasAnyPermission(
+  source:
+    | Pick<AppUser, "role" | "permissions">
+    | UserRole
+    | null
+    | undefined,
+  permissions: AppPermission[]
+) {
+  if (permissions.length === 0) {
+    return true;
+  }
+
+  const effectivePermissions = new Set(getEffectivePermissions(source));
+  return permissions.some((permission) => effectivePermissions.has(permission));
+}
+
+export function getPermissionDefinition(permission: AppPermission) {
+  return PERMISSION_DEFINITIONS.find((item) => item.id === permission) || null;
+}
+
+export function getPermissionForPath(pathname: string): AppPermission | null {
+  const normalizedPath = pathname.split(/[?#]/, 1)[0] || "/";
+
+  const matchedRule = PATH_PERMISSION_RULES.find(({ path }) => {
+    if (path === "/") {
+      return normalizedPath === "/";
+    }
+
+    return normalizedPath === path || normalizedPath.startsWith(`${path}/`);
+  });
+
+  return matchedRule?.permission || null;
+}
+
+export function canAccessPath(
+  source:
+    | Pick<AppUser, "role" | "permissions">
+    | UserRole
+    | null
+    | undefined,
+  pathname: string
+) {
+  const permission = getPermissionForPath(pathname);
+  if (!permission) {
+    return true;
+  }
+
+  return hasPermission(source, permission);
+}
+
+const DEFAULT_ROUTE_ORDER = [
+  "/",
+  "/pos",
+  "/payroll-estimate",
+  "/payroll",
+  "/timesheet",
+  "/reports",
+  "/cash-flow",
+  "/product",
+  "/product/checks",
+  "/product/receipts",
+  "/categories",
+  "/internal-invoices",
+  "/tax-invoices",
+  "/social-listening",
+  "/seo-articles",
+  "/activity-logs",
+  "/accounts",
+] as const;
+
+export function getDefaultRouteForUser(user: AppUser | null | undefined) {
+  if (!user) {
+    return "/login";
+  }
+
+  const matchedPath = DEFAULT_ROUTE_ORDER.find((path) => canAccessPath(user, path));
+  return matchedPath || "/pos";
+}

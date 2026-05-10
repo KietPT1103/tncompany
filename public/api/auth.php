@@ -64,8 +64,8 @@ function seed_default_users(): array
     $created = 0;
     $updated = 0;
     $statement = db()->prepare(
-        'INSERT INTO users (id, email, username, display_name, password_hash, role, store_id, is_active)
-         VALUES (:id, :email, :username, :display_name, :password_hash, :role, :store_id, 1)
+        'INSERT INTO users (id, email, username, display_name, password_hash, role, store_id, is_active, permissions_json)
+         VALUES (:id, :email, :username, :display_name, :password_hash, :role, :store_id, 1, :permissions_json)
          ON DUPLICATE KEY UPDATE
            email = VALUES(email),
            username = VALUES(username),
@@ -73,6 +73,7 @@ function seed_default_users(): array
            password_hash = VALUES(password_hash),
            role = VALUES(role),
            store_id = VALUES(store_id),
+           permissions_json = VALUES(permissions_json),
            is_active = 1'
     );
 
@@ -86,6 +87,10 @@ function seed_default_users(): array
             'password_hash' => password_hash($user['password'], PASSWORD_DEFAULT),
             'role' => $user['role'],
             'store_id' => $user['store_id'],
+            'permissions_json' => json_encode(
+                auth_default_permissions_for_role($user['role']),
+                JSON_UNESCAPED_UNICODE
+            ),
         ]);
 
         if ($existing) {

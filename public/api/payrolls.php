@@ -399,7 +399,7 @@ payrolls_ensure_tables();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require(['admin', 'manager']);
+    auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
     $resource = trim((string) ($_GET['resource'] ?? ''));
     if ($resource === 'entries') {
@@ -449,7 +449,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    auth_require(['admin', 'manager']);
+    auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
     $body = read_json_body();
     $resource = trim((string) ($body['resource'] ?? ''));
@@ -549,7 +549,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PATCH') {
-    auth_require(['admin', 'manager']);
+    auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
     $body = read_json_body();
     $resource = trim((string) ($body['resource'] ?? ''));
@@ -682,7 +682,7 @@ if ($method === 'PATCH') {
 }
 
 if ($method === 'DELETE') {
-    auth_require(['admin', 'manager']);
+    auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
     $entryId = trim((string) ($_GET['entryId'] ?? ''));
     if ($entryId !== '') {

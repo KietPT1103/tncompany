@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { hasPermission } from "@/lib/permissions";
 import {
   Activity,
   BarChart3,
@@ -32,23 +33,64 @@ import { useAuth } from "@/context/AuthContext";
 import { StoreType, useStore } from "@/context/StoreContext";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: Calculator },
-  { href: "/reports", label: "Báo cáo", icon: FileText },
-  { href: "/cash-flow", label: "Dòng tiền", icon: BarChart3 },
-  { href: "/product", label: "Sản phẩm", icon: Package },
-  { href: "/categories", label: "Danh mục", icon: Tags },
-  { href: "/payroll", label: "Tính lương", icon: Wallet },
-  { href: "/payroll-estimate", label: "Ước lượng lương", icon: CalendarDays },
-  { href: "/social-listening", label: "Social Listening", icon: MessageSquareText },
-  { href: "/seo-articles", label: "Bài viết SEO", icon: FileText },
-];
-
-const adminExtraNavItems = [
-  { href: "/internal-invoices", label: "Hóa đơn nội bộ", icon: ReceiptText },
-  { href: "/tax-invoices", label: "Hóa đơn thuế", icon: ReceiptText },
-  { href: "/activity-logs", label: "Nhật ký máy", icon: Activity },
-  { href: "/accounts", label: "Tài khoản", icon: KeyRound },
-];
+  { href: "/", label: "Dashboard", icon: Calculator, permission: "dashboard.access" },
+  { href: "/pos", label: "Hoa don", icon: ReceiptText, permission: "bills.access" },
+  { href: "/reports", label: "BÃ¡o cÃ¡o", icon: FileText, permission: "reports.access" },
+  { href: "/cash-flow", label: "DÃ²ng tiá»n", icon: BarChart3, permission: "cash_flow.access" },
+  { href: "/product", label: "Sáº£n pháº©m", icon: Package, permission: "product.access" },
+  {
+    href: "/product/checks",
+    label: "Kiem kho",
+    icon: Package,
+    permission: "inventory_checks.access",
+  },
+  {
+    href: "/product/receipts",
+    label: "Nhap hang",
+    icon: Package,
+    permission: "inventory_receipts.access",
+  },
+  { href: "/categories", label: "Danh má»¥c", icon: Tags, permission: "categories.access" },
+  { href: "/payroll", label: "TÃ­nh lÆ°Æ¡ng", icon: Wallet, permission: "payroll.access" },
+  {
+    href: "/payroll-estimate",
+    label: "Æ¯á»›c lÆ°á»£ng lÆ°Æ¡ng",
+    icon: CalendarDays,
+    permission: "payroll_estimate.access",
+  },
+  { href: "/timesheet", label: "Cham cong", icon: CalendarDays, permission: "timesheet.access" },
+  {
+    href: "/social-listening",
+    label: "Social Listening",
+    icon: MessageSquareText,
+    permission: "social_listening.access",
+  },
+  {
+    href: "/seo-articles",
+    label: "BÃ i viáº¿t SEO",
+    icon: FileText,
+    permission: "seo_articles.access",
+  },
+  {
+    href: "/internal-invoices",
+    label: "HÃ³a Ä‘Æ¡n ná»™i bá»™",
+    icon: ReceiptText,
+    permission: "internal_invoices.access",
+  },
+  {
+    href: "/tax-invoices",
+    label: "HÃ³a Ä‘Æ¡n thuáº¿",
+    icon: ReceiptText,
+    permission: "tax_invoices.access",
+  },
+  {
+    href: "/activity-logs",
+    label: "Nháº­t kÃ½ mÃ¡y",
+    icon: Activity,
+    permission: "activity_logs.access",
+  },
+  { href: "/accounts", label: "TÃ i khoáº£n", icon: KeyRound, permission: "accounts.access" },
+] as const;
 
 const storeOptions: {
   id: StoreType;
@@ -56,10 +98,10 @@ const storeOptions: {
   label: string;
   note: string;
 }[] = [
-  { id: "cafe", icon: Coffee, label: "Cafe", note: "Quầy nước" },
-  { id: "restaurant", icon: UtensilsCrossed, label: "Lẩu / Bếp", note: "Mô hình Bếp" },
-  { id: "bakery", icon: CakeSlice, label: "Tiệm bánh", note: "Quầy bánh" },
-  { id: "farm", icon: Tractor, label: "Farm", note: "Khu trải nghiệm" },
+  { id: "cafe", icon: Coffee, label: "Cafe", note: "Quáº§y nÆ°á»›c" },
+  { id: "restaurant", icon: UtensilsCrossed, label: "Láº©u / Báº¿p", note: "MÃ´ hÃ¬nh Báº¿p" },
+  { id: "bakery", icon: CakeSlice, label: "Tiá»‡m bÃ¡nh", note: "Quáº§y bÃ¡nh" },
+  { id: "farm", icon: Tractor, label: "Farm", note: "Khu tráº£i nghiá»‡m" },
 ];
 
 export default function AdminSidebar({
@@ -70,7 +112,7 @@ export default function AdminSidebar({
   onToggleCollapsed?: () => void;
 }) {
   const pathname = usePathname();
-  const { logout, role, loading } = useAuth();
+  const { logout, user, loading } = useAuth();
   const { setStoreId, storeId, storeName } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [showStoreMenu, setShowStoreMenu] = useState(false);
@@ -94,15 +136,14 @@ export default function AdminSidebar({
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [showStoreMenu]);
 
-  if (loading || !role || role === "user" || role === "server") {
+  if (loading || !user) {
     return null;
   }
 
-  const effectiveCollapsed = role === "manager" ? false : collapsed;
-  const visibleNavItems =
-    role === "manager"
-      ? navItems.filter((item) => item.href === "/payroll-estimate")
-      : [...navItems, ...adminExtraNavItems];
+  const visibleNavItems = navItems.filter((item) => hasPermission(user, item.permission));
+  if (visibleNavItems.length === 0) {
+    return null;
+  }
 
   const currentStore =
     storeOptions.find((option) => option.id === storeId) || storeOptions[0];
@@ -121,7 +162,7 @@ export default function AdminSidebar({
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-slate-200 bg-white transition-all duration-200 ease-in-out lg:static lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full",
-          effectiveCollapsed
+          collapsed
             ? "w-64 lg:w-0 lg:min-w-0 lg:-translate-x-full lg:overflow-hidden lg:border-r-0"
             : "w-64"
         )}
@@ -135,12 +176,12 @@ export default function AdminSidebar({
               <span>Cost Ong Quan</span>
             </div>
 
-            {onToggleCollapsed && role !== "manager" ? (
+            {onToggleCollapsed ? (
               <button
                 type="button"
                 onClick={onToggleCollapsed}
                 className="hidden rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 lg:inline-flex"
-                aria-label="Ẩn sidebar"
+                aria-label="áº¨n sidebar"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </button>
@@ -159,7 +200,7 @@ export default function AdminSidebar({
                 </div>
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    Khu vực hiện tại
+                    Khu vá»±c hiá»‡n táº¡i
                   </div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
                     {currentStore.label}
@@ -248,7 +289,7 @@ export default function AdminSidebar({
             className="flex w-full items-center justify-start gap-3 px-3 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
           >
             <LogOut className="h-5 w-5" />
-            Đăng xuất
+            ÄÄƒng xuáº¥t
           </Button>
         </div>
       </div>

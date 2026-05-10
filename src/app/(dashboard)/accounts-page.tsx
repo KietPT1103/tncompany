@@ -1,33 +1,40 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Shield, UserCog, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import {
+  getDefaultPermissionsForRole,
+  getPermissionDefinition,
+  MANAGED_PERMISSION_GROUPS,
+  normalizePermissionList,
+} from "@/lib/permissions";
+import {
   createManagedUser,
   deleteManagedUser,
   getManagedUsers,
-  ManagedUser,
+  type ManagedUser,
   updateManagedUser,
 } from "@/services/users.api";
-import { Shield, UserCog, UserPlus, X } from "lucide-react";
+import type { AppPermission, UserRole } from "@/types/auth";
 
 const STORE_OPTIONS = [
-  { value: "", label: "Không gắn cửa hàng" },
+  { value: "", label: "KhÃ´ng gáº¯n cá»­a hÃ ng" },
   { value: "cafe", label: "Cafe" },
-  { value: "restaurant", label: "Lẩu / Bếp" },
-  { value: "bakery", label: "Tiệm bánh" },
+  { value: "restaurant", label: "Láº©u / Báº¿p" },
+  { value: "bakery", label: "Tiá»‡m bÃ¡nh" },
   { value: "farm", label: "Farm" },
 ];
 
 const ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
   { value: "manager", label: "Manager" },
-  { value: "user", label: "Thu ngân" },
-  { value: "server", label: "Phục vụ" },
+  { value: "user", label: "Thu ngÃ¢n" },
+  { value: "server", label: "Phá»¥c vá»¥" },
 ] as const;
 
 type FormState = {
@@ -35,9 +42,10 @@ type FormState = {
   username: string;
   displayName: string;
   password: string;
-  role: "admin" | "manager" | "user" | "server";
+  role: UserRole;
   storeId: string;
   isActive: boolean;
+  permissions: AppPermission[];
 };
 
 const DEFAULT_FORM: FormState = {
@@ -48,15 +56,25 @@ const DEFAULT_FORM: FormState = {
   role: "manager",
   storeId: "cafe",
   isActive: true,
+  permissions: getDefaultPermissionsForRole("manager"),
 };
 
 function mapRoleLabel(role: ManagedUser["role"]) {
   return ROLE_OPTIONS.find((item) => item.value === role)?.label || role;
 }
 
+function mapPermissionSummary(user: ManagedUser) {
+  if (user.role === "admin") {
+    return "Toan quyen";
+  }
+
+  return `${normalizePermissionList(user.permissions).length} chuc nang`;
+}
+
 export default function AccountManagementPage() {
   const { user } = useAuth();
   const { storeId } = useStore();
+  const canManageAccess = user?.role === "admin";
   const [items, setItems] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,7 +96,7 @@ export default function AccountManagementPage() {
       setItems(users);
     } catch (loadErr) {
       console.error(loadErr);
-      setError(loadErr instanceof Error ? loadErr.message : "Không tải được tài khoản.");
+      setError(loadErr instanceof Error ? loadErr.message : "KhÃ´ng táº£i Ä‘Æ°á»£c tÃ i khoáº£n.");
     } finally {
       setLoading(false);
     }
@@ -102,12 +120,18 @@ export default function AccountManagementPage() {
     if (!keyword) return items;
 
     return items.filter((item) => {
+      const permissionText = normalizePermissionList(item.permissions)
+        .map((permission) => getPermissionDefinition(permission)?.label || permission)
+        .join(" ")
+        .toLowerCase();
+
       return (
         item.email.toLowerCase().includes(keyword) ||
         (item.username || "").toLowerCase().includes(keyword) ||
         (item.displayName || "").toLowerCase().includes(keyword) ||
         item.role.toLowerCase().includes(keyword) ||
-        (item.storeId || "").toLowerCase().includes(keyword)
+        (item.storeId || "").toLowerCase().includes(keyword) ||
+        permissionText.includes(keyword)
       );
     });
   }, [items, search]);
@@ -117,6 +141,7 @@ export default function AccountManagementPage() {
     setForm({
       ...DEFAULT_FORM,
       storeId,
+      permissions: getDefaultPermissionsForRole(DEFAULT_FORM.role),
     });
     setError("");
     setMessage("");
@@ -132,9 +157,65 @@ export default function AccountManagementPage() {
       role: item.role,
       storeId: item.storeId || "",
       isActive: item.isActive,
+      permissions: normalizePermissionList(item.permissions),
     });
     setError("");
     setMessage("");
+  }
+
+  function handleRoleChange(nextRole: UserRole) {
+    setForm((current) => ({
+      ...current,
+      role: nextRole,
+      permissions: getDefaultPermissionsForRole(nextRole),
+    }));
+  }
+
+  function handlePermissionToggle(permission: AppPermission) {
+    if (form.role === "admin") {
+      return;
+    }
+
+    setForm((current) => {
+      const exists = current.permissions.includes(permission);
+      return {
+        ...current,
+        permissions: exists
+          ? current.permissions.filter((item) => item !== permission)
+          : normalizePermissionList([...current.permissions, permission]),
+      };
+    });
+  }
+
+  function handleResetPermissions() {
+    setForm((current) => ({
+      ...current,
+      permissions: getDefaultPermissionsForRole(current.role),
+    }));
+  }
+
+  function handleSelectAllPermissions() {
+    if (form.role === "admin") {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      permissions: normalizePermissionList(
+        MANAGED_PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.id))
+      ),
+    }));
+  }
+
+  function handleClearPermissions() {
+    if (form.role === "admin") {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      permissions: [],
+    }));
   }
 
   async function handleSubmit() {
@@ -148,42 +229,52 @@ export default function AccountManagementPage() {
           email: form.email,
           username: form.username,
           displayName: form.displayName,
-          role: form.role,
           storeId: form.storeId,
           isActive: form.isActive,
+          ...(canManageAccess
+            ? {
+                role: form.role,
+                permissions: form.permissions,
+              }
+            : {}),
           ...(form.password ? { password: form.password } : {}),
         });
 
         setItems((current) =>
           current.map((item) => (item.id === updated.id ? updated : item))
         );
-        setMessage("Đã cập nhật tài khoản.");
+        setMessage("ÄÃ£ cáº­p nháº­t tÃ i khoáº£n.");
       } else {
         const created = await createManagedUser({
           email: form.email,
           username: form.username,
           displayName: form.displayName,
           password: form.password,
-          role: form.role,
           storeId: form.storeId,
           isActive: form.isActive,
+          ...(canManageAccess
+            ? {
+                role: form.role,
+                permissions: form.permissions,
+              }
+            : {}),
         });
 
         setItems((current) => [created, ...current]);
-        setMessage("Đã tạo tài khoản mới.");
+        setMessage("ÄÃ£ táº¡o tÃ i khoáº£n má»›i.");
         setEditingId(created.id);
         setForm((current) => ({ ...current, password: "" }));
       }
     } catch (submitErr) {
       console.error(submitErr);
-      setError(submitErr instanceof Error ? submitErr.message : "Không lưu được tài khoản.");
+      setError(submitErr instanceof Error ? submitErr.message : "KhÃ´ng lÆ°u Ä‘Æ°á»£c tÃ i khoáº£n.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Xóa tài khoản này?")) return;
+    if (!confirm("XÃ³a tÃ i khoáº£n nÃ y?")) return;
 
     setSaving(true);
     setError("");
@@ -197,14 +288,20 @@ export default function AccountManagementPage() {
         startCreate();
       }
 
-      setMessage("Đã xóa tài khoản.");
+      setMessage("ÄÃ£ xÃ³a tÃ i khoáº£n.");
     } catch (deleteErr) {
       console.error(deleteErr);
-      setError(deleteErr instanceof Error ? deleteErr.message : "Không xóa được tài khoản.");
+      setError(deleteErr instanceof Error ? deleteErr.message : "KhÃ´ng xÃ³a Ä‘Æ°á»£c tÃ i khoáº£n.");
     } finally {
       setSaving(false);
     }
   }
+
+  const managedPermissionCount = MANAGED_PERMISSION_GROUPS.flatMap((group) =>
+    group.items.map((item) => item.id)
+  ).length;
+  const currentPermissionCount =
+    form.role === "admin" ? managedPermissionCount : form.permissions.length;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -213,20 +310,20 @@ export default function AccountManagementPage() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1.5 text-sm font-semibold text-emerald-700">
               <Shield className="h-4 w-4" />
-              Quản lý tài khoản đăng nhập
+              Quáº£n lÃ½ tÃ i khoáº£n Ä‘Äƒng nháº­p
             </div>
             <h1 className="mt-3 text-3xl font-semibold text-slate-900">
-              Tài khoản hệ thống
+              TÃ i khoáº£n há»‡ thá»‘ng
             </h1>
             <p className="mt-2 text-sm text-slate-500">
-              Admin có thể tạo, sửa, khóa hoặc xóa tài khoản. Role manager chỉ dùng cho
-              trang ước lượng/phân ca.
+              Admin cÃ³ thá»ƒ táº¡o, sá»­a, khÃ³a hoáº·c xÃ³a tÃ i khoáº£n, Ä‘á»“ng thá»i báº­t/táº¯t
+              tá»«ng module mÃ  táº¡i khoáº£n Ä‘Æ°á»£c dÃ¹ng.
             </p>
           </div>
 
           <Button className="gap-2 rounded-2xl" onClick={startCreate}>
             <UserPlus className="h-4 w-4" />
-            Tạo tài khoản mới
+            Táº¡o tÃ i khoáº£n má»›i
           </Button>
         </div>
 
@@ -242,13 +339,13 @@ export default function AccountManagementPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
           <Card className="rounded-[28px] border-slate-200">
             <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <CardTitle className="text-xl text-slate-900">Danh sách tài khoản</CardTitle>
+                <CardTitle className="text-xl text-slate-900">Danh sÃ¡ch tÃ i khoáº£n</CardTitle>
                 <p className="mt-2 text-sm text-slate-500">
-                  {items.length} tài khoản, đăng nhập hiện tại:{" "}
+                  {items.length} tÃ i khoáº£n, Ä‘Äƒng nháº­p hiá»‡n táº¡i:{" "}
                   <span className="font-medium text-slate-700">
                     {user?.displayName || user?.email}
                   </span>
@@ -258,7 +355,7 @@ export default function AccountManagementPage() {
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Tìm theo email, tên, username, role"
+                  placeholder="TÃ¬m theo email, tÃªn, username, role, quyá»n"
                   className="h-11 rounded-2xl border-slate-200 bg-white"
                 />
               </div>
@@ -266,11 +363,11 @@ export default function AccountManagementPage() {
             <CardContent>
               {loading ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-slate-500">
-                  Đang tải tài khoản...
+                  Äang táº£i tÃ i khoáº£n...
                 </div>
               ) : filteredItems.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-slate-500">
-                  Không có tài khoản phù hợp.
+                  KhÃ´ng cÃ³ tÃ i khoáº£n phÃ¹ há»£p.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -288,6 +385,9 @@ export default function AccountManagementPage() {
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                               {mapRoleLabel(item.role)}
                             </span>
+                            <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                              {mapPermissionSummary(item)}
+                            </span>
                             <span
                               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                                 item.isActive
@@ -295,13 +395,13 @@ export default function AccountManagementPage() {
                                   : "bg-slate-100 text-slate-500"
                               }`}
                             >
-                              {item.isActive ? "Đang hoạt động" : "Đã khóa"}
+                              {item.isActive ? "Äang hoáº¡t Ä‘á»™ng" : "ÄÃ£ khÃ³a"}
                             </span>
                           </div>
                           <div className="mt-2 text-sm text-slate-500">{item.email}</div>
                           <div className="mt-1 text-sm text-slate-500">
-                            {item.username ? `@${item.username}` : "Không có username"} •{" "}
-                            {item.storeId || "Không gắn cửa hàng"}
+                            {item.username ? `@${item.username}` : "KhÃ´ng cÃ³ username"} â€¢{" "}
+                            {item.storeId || "KhÃ´ng gáº¯n cá»­a hÃ ng"}
                           </div>
                         </div>
 
@@ -311,7 +411,7 @@ export default function AccountManagementPage() {
                             className="rounded-2xl"
                             onClick={() => startEdit(item)}
                           >
-                            Sửa
+                            Sá»­a
                           </Button>
                           <Button
                             variant="destructive"
@@ -319,7 +419,7 @@ export default function AccountManagementPage() {
                             onClick={() => void handleDelete(item.id)}
                             disabled={item.id === user?.id}
                           >
-                            Xóa
+                            XÃ³a
                           </Button>
                         </div>
                       </div>
@@ -335,7 +435,7 @@ export default function AccountManagementPage() {
               <div className="flex items-center gap-3">
                 <UserCog className="h-5 w-5 text-emerald-600" />
                 <CardTitle className="text-xl text-slate-900">
-                  {editingId ? "Sửa tài khoản" : "Tạo tài khoản"}
+                  {editingId ? "Sá»­a tÃ i khoáº£n" : "Táº¡o tÃ i khoáº£n"}
                 </CardTitle>
               </div>
             </CardHeader>
@@ -361,48 +461,52 @@ export default function AccountManagementPage() {
               />
 
               <Input
-                label="Tên hiển thị"
+                label="TÃªn hiá»ƒn thá»‹"
                 value={form.displayName}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, displayName: event.target.value }))
                 }
-                placeholder="Quản lý ca"
+                placeholder="Quáº£n lÃ½ ca"
                 className="h-11 rounded-2xl border-slate-200"
               />
 
               <Input
                 type="password"
-                label={editingId ? "Đặt mật khẩu mới" : "Mật khẩu"}
+                label={editingId ? "Äáº·t máº­t kháº©u má»›i" : "Máº­t kháº©u"}
                 value={form.password}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, password: event.target.value }))
                 }
-                placeholder={editingId ? "Để trống nếu không đổi" : "Nhập mật khẩu"}
+                placeholder={editingId ? "Äá»ƒ trá»‘ng náº¿u khÃ´ng Ä‘á»•i" : "Nháº­p máº­t kháº©u"}
                 className="h-11 rounded-2xl border-slate-200"
               />
 
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Vai trò</span>
-                <select
-                  value={form.role}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      role: event.target.value as FormState["role"],
-                    }))
-                  }
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                >
-                  {ROLE_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {canManageAccess ? (
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-slate-700">Vai trÃ²</span>
+                  <select
+                    value={form.role}
+                    onChange={(event) => handleRoleChange(event.target.value as UserRole)}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                  >
+                    {ROLE_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-sm font-medium text-slate-900">Vai trÃ²</div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Chỉ admin mới được sửa vai trò tài khoản.
+                  </div>
+                </div>
+              )}
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Cửa hàng</span>
+                <span className="mb-2 block text-sm font-medium text-slate-700">Cá»­a hÃ ng</span>
                 <select
                   value={form.storeId}
                   onChange={(event) =>
@@ -418,11 +522,111 @@ export default function AccountManagementPage() {
                 </select>
               </label>
 
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">PhÃ¢n quyá»n chá»©c nÄƒng</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Báº­t module nÃ o thÃ¬ tÃ i khoáº£n chá»‰ dÃ¹ng Ä‘Æ°á»£c module Ä‘Ã³, cÃ¡c
+                      module cÃ²n láº¡i sáº½ bá»‹ khÃ³a.
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                    {currentPermissionCount}/{managedPermissionCount} module
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-2xl"
+                    onClick={handleSelectAllPermissions}
+                    disabled={!canManageAccess || form.role === "admin"}
+                  >
+                    Báº­t táº¥t cáº£
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-2xl"
+                    onClick={handleClearPermissions}
+                    disabled={!canManageAccess || form.role === "admin"}
+                  >
+                    Bá» háº¿t
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-2xl"
+                    onClick={handleResetPermissions}
+                    disabled={!canManageAccess}
+                  >
+                    Máº·c Ä‘á»‹nh theo vai trÃ²
+                  </Button>
+                </div>
+
+                {!canManageAccess ? (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                    Chỉ admin mới được sửa phân quyền chức năng.
+                  </div>
+                ) : form.role === "admin" ? (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    TÃ i khoáº£n admin luÃ´n cÃ³ toÃ n quyá»n Ä‘á»ƒ trÃ¡nh tá»± khÃ³a há»‡
+                    thá»‘ng quáº£n trá»‹.
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {MANAGED_PERMISSION_GROUPS.map((group) => (
+                      <div
+                        key={group.category}
+                        className="rounded-2xl border border-white bg-white p-3 shadow-sm"
+                      >
+                        <div className="mb-3 text-sm font-semibold text-slate-900">
+                          {group.category}
+                        </div>
+                        <div className="space-y-2">
+                          {group.items.map((item) => {
+                            const checked = form.permissions.includes(item.id);
+
+                            return (
+                              <label
+                                key={item.id}
+                                className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition ${
+                                  checked
+                                    ? "border-emerald-200 bg-emerald-50"
+                                    : "border-slate-200 bg-white hover:border-slate-300"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => handlePermissionToggle(item.id)}
+                                  className="mt-1 h-4 w-4"
+                                />
+                                <div>
+                                  <div className="text-sm font-medium text-slate-900">
+                                    {item.label}
+                                  </div>
+                                  <div className="mt-1 text-xs text-slate-500">
+                                    {item.description}
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div>
-                  <div className="text-sm font-medium text-slate-900">Trạng thái đăng nhập</div>
+                  <div className="text-sm font-medium text-slate-900">Tráº¡ng thÃ¡i Ä‘Äƒng nháº­p</div>
                   <div className="text-xs text-slate-500">
-                    Tắt để khóa tài khoản và ép đăng xuất nếu đang dùng.
+                    Táº¯t Ä‘á»ƒ khÃ³a tÃ i khoáº£n vÃ  Ã©p Ä‘Äƒng xuáº¥t náº¿u Ä‘ang dÃ¹ng.
                   </div>
                 </div>
                 <input
@@ -441,7 +645,7 @@ export default function AccountManagementPage() {
                   onClick={() => void handleSubmit()}
                   isLoading={saving}
                 >
-                  {editingId ? "Lưu thay đổi" : "Tạo tài khoản"}
+                  {editingId ? "LÆ°u thay Ä‘á»•i" : "Táº¡o tÃ i khoáº£n"}
                 </Button>
                 {editingId ? (
                   <Button variant="outline" className="rounded-2xl" onClick={startCreate}>
