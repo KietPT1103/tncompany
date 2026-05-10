@@ -26,12 +26,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: true
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+
+      - name: Verify checked out revision
+        shell: powershell
+        run: |
+          Write-Host "github.sha: $env:GITHUB_SHA"
+          git rev-parse HEAD
+          git log -1 --oneline
+          Write-Host "`n--- src/prerender/entry-server.jsx ---"
+          Get-Content src\prerender\entry-server.jsx | Select-Object -First 20
+          Write-Host "`n--- src/components/PublicSiteShell.jsx ---"
+          Get-Content src\components\PublicSiteShell.jsx | Select-Object -First 60
 
       - name: Validate deploy settings
         id: deploy-settings
