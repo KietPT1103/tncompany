@@ -62,13 +62,13 @@ export default function RoleGuard({
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center p-8 bg-white rounded-lg shadow-md">
-          <h1 className="text-2xl font-bold text-red-600 mb-2">Truy cap bi tu choi</h1>
-          <p className="text-slate-600 mb-4">Ban khong co quyen truy cap trang nay.</p>
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Truy cập bị từ chối</h1>
+          <p className="text-slate-600 mb-4">Bạn không có quyền truy cập trang này.</p>
           <button
             onClick={() => router.push(nextPath)}
             className="px-4 py-2 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"
           >
-            Quay lai khu vuc duoc cap quyen
+            Quay lại khu vực được cấp quyền
           </button>
         </div>
       </div>

@@ -60,11 +60,11 @@ if ($method === 'POST') {
         : auth_default_permissions_for_role($role);
 
     if ($email === '' || $password === '') {
-        respond_error('Email va mat khau la bat buoc.', 422);
+        respond_error('Email và mật khẩu là bắt buộc.', 422);
     }
 
     if (!in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
-        respond_error('Vai tro khong hop le.', 422);
+        respond_error('Vai trò không hợp lệ.', 422);
     }
 
     $id = uuidv4();
@@ -102,7 +102,7 @@ if ($method === 'PATCH') {
     $body = read_json_body();
     $id = trim((string) ($body['id'] ?? ''));
     if ($id === '') {
-        respond_error('Thieu id tai khoan.', 422);
+        respond_error('Thiếu id tài khoản.', 422);
     }
 
     $fields = [];
@@ -111,7 +111,7 @@ if ($method === 'PATCH') {
     if (array_key_exists('email', $body)) {
         $email = trim((string) $body['email']);
         if ($email === '') {
-            respond_error('Email khong duoc de trong.', 422);
+            respond_error('Email không được để trống.', 422);
         }
         $fields[] = 'email = :email';
         $params['email'] = $email;
@@ -131,11 +131,11 @@ if ($method === 'PATCH') {
 
     if (array_key_exists('role', $body)) {
         if (!$canManageAccess) {
-            respond_error('Chi admin moi duoc sua vai tro.', 403);
+            respond_error('Chỉ admin mới được sửa vai trò.', 403);
         }
         $role = trim((string) $body['role']);
         if (!in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
-            respond_error('Vai tro khong hop le.', 422);
+            respond_error('Vai trò không hợp lệ.', 422);
         }
         $fields[] = 'role = :role';
         $params['role'] = $role;
@@ -149,7 +149,7 @@ if ($method === 'PATCH') {
 
     if (array_key_exists('permissions', $body)) {
         if (!$canManageAccess) {
-            respond_error('Chi admin moi duoc sua phan quyen.', 403);
+            respond_error('Chỉ admin mới được sửa phân quyền.', 403);
         }
         $fields[] = 'permissions_json = :permissions_json';
         $params['permissions_json'] = json_encode(
@@ -160,7 +160,7 @@ if ($method === 'PATCH') {
 
     if (array_key_exists('isActive', $body)) {
         if ($id === $currentUser['id'] && empty($body['isActive'])) {
-            respond_error('Khong the tu khoa tai khoan dang dang nhap.', 422);
+            respond_error('Không thể tự khóa tài khoản đang đăng nhập.', 422);
         }
         $fields[] = 'is_active = :is_active';
         $params['is_active'] = !empty($body['isActive']) ? 1 : 0;
@@ -169,14 +169,14 @@ if ($method === 'PATCH') {
     if (array_key_exists('password', $body)) {
         $password = (string) $body['password'];
         if ($password === '') {
-            respond_error('Mat khau moi khong duoc de trong.', 422);
+            respond_error('Mật khẩu mới không được để trống.', 422);
         }
         $fields[] = 'password_hash = :password_hash';
         $params['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
     }
 
     if ($fields === []) {
-        respond_error('Khong co du lieu can cap nhat.', 422);
+        respond_error('Không có dữ liệu cần cập nhật.', 422);
     }
 
     $statement = db()->prepare(
@@ -203,11 +203,11 @@ if ($method === 'PATCH') {
 if ($method === 'DELETE') {
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id === '') {
-        respond_error('Thieu id tai khoan.', 422);
+        respond_error('Thiếu id tài khoản.', 422);
     }
 
     if ($id === $currentUser['id']) {
-        respond_error('Khong the xoa tai khoan dang dang nhap.', 422);
+        respond_error('Không thể xóa tài khoản đang đăng nhập.', 422);
     }
 
     $deleteTokens = db()->prepare('DELETE FROM api_tokens WHERE user_id = :user_id');

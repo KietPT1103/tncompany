@@ -35,9 +35,9 @@ import { StoreType, useStore } from "@/context/StoreContext";
 const navItems = [
   { href: "/", label: "Dashboard", icon: Calculator, permission: "dashboard.access" },
   { href: "/pos", label: "Hoa don", icon: ReceiptText, permission: "bills.access" },
-  { href: "/reports", label: "Bao cao", icon: FileText, permission: "reports.access" },
-  { href: "/cash-flow", label: "Dong tien", icon: BarChart3, permission: "cash_flow.access" },
-  { href: "/product", label: "San pham", icon: Package, permission: "product.access" },
+  { href: "/reports", label: "Báo cáo", icon: FileText, permission: "reports.access" },
+  { href: "/cash-flow", label: "Dòng tiền", icon: BarChart3, permission: "cash_flow.access" },
+  { href: "/product", label: "Sản phẩm", icon: Package, permission: "product.access" },
   {
     href: "/product/checks",
     label: "Kiem kho",
@@ -50,11 +50,11 @@ const navItems = [
     icon: Package,
     permission: "inventory_receipts.access",
   },
-  { href: "/categories", label: "Danh muc", icon: Tags, permission: "categories.access" },
-  { href: "/payroll", label: "Tinh luong", icon: Wallet, permission: "payroll.access" },
+  { href: "/categories", label: "Danh mục", icon: Tags, permission: "categories.access" },
+  { href: "/payroll", label: "Tính lương", icon: Wallet, permission: "payroll.access" },
   {
     href: "/payroll-estimate",
-    label: "Uoc luong luong",
+    label: "Ước lượng lương",
     icon: CalendarDays,
     permission: "payroll_estimate.access",
   },
@@ -67,29 +67,29 @@ const navItems = [
   },
   {
     href: "/seo-articles",
-    label: "Bai viet SEO",
+    label: "Bài viết SEO",
     icon: FileText,
     permission: "seo_articles.access",
   },
   {
     href: "/internal-invoices",
-    label: "Hoa don noi bo",
+    label: "Hóa đơn nội bộ",
     icon: ReceiptText,
     permission: "internal_invoices.access",
   },
   {
     href: "/tax-invoices",
-    label: "Hoa don thue",
+    label: "Hóa đơn thuế",
     icon: ReceiptText,
     permission: "tax_invoices.access",
   },
   {
     href: "/activity-logs",
-    label: "Nhat ky may",
+    label: "Nhật ký máy",
     icon: Activity,
     permission: "activity_logs.access",
   },
-  { href: "/accounts", label: "Tai khoan", icon: KeyRound, permission: "accounts.access" },
+  { href: "/accounts", label: "Tài khoản", icon: KeyRound, permission: "accounts.access" },
 ] as const;
 
 const storeOptions: {
@@ -98,10 +98,10 @@ const storeOptions: {
   label: string;
   note: string;
 }[] = [
-  { id: "cafe", icon: Coffee, label: "Cafe", note: "Quay nuoc" },
-  { id: "restaurant", icon: UtensilsCrossed, label: "Lau / Bep", note: "Mo hinh bep" },
-  { id: "bakery", icon: CakeSlice, label: "Tiem banh", note: "Quay banh" },
-  { id: "farm", icon: Tractor, label: "Farm", note: "Khu trai nghiem" },
+  { id: "cafe", icon: Coffee, label: "Cafe", note: "Quầy nước" },
+  { id: "restaurant", icon: UtensilsCrossed, label: "Lẩu / Bếp", note: "Mô hình Bếp" },
+  { id: "bakery", icon: CakeSlice, label: "Tiệm bánh", note: "Quầy bánh" },
+  { id: "farm", icon: Tractor, label: "Farm", note: "Khu trải nghiệm" },
 ];
 
 export default function AdminSidebar({
@@ -181,7 +181,7 @@ export default function AdminSidebar({
                 type="button"
                 onClick={onToggleCollapsed}
                 className="hidden rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 lg:inline-flex"
-                aria-label="An sidebar"
+                aria-label="Ẩn sidebar"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </button>
@@ -200,7 +200,7 @@ export default function AdminSidebar({
                 </div>
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    Khu vuc hien tai
+                    Khu vực hiện tại
                   </div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
                     {currentStore.label}
@@ -289,7 +289,7 @@ export default function AdminSidebar({
             className="flex w-full items-center justify-start gap-3 px-3 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
           >
             <LogOut className="h-5 w-5" />
-            Dang xuat
+            Đăng xuất
           </Button>
         </div>
       </div>

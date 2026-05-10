@@ -23,18 +23,18 @@ import {
 import type { AppPermission, UserRole } from "@/types/auth";
 
 const STORE_OPTIONS = [
-  { value: "", label: "Khong gan cua hang" },
+  { value: "", label: "Không gắn cửa hàng" },
   { value: "cafe", label: "Cafe" },
-  { value: "restaurant", label: "Lau / Bep" },
-  { value: "bakery", label: "Tiem banh" },
+  { value: "restaurant", label: "Lẩu / Bếp" },
+  { value: "bakery", label: "Tiệm bánh" },
   { value: "farm", label: "Farm" },
 ];
 
 const ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
   { value: "manager", label: "Manager" },
-  { value: "user", label: "Thu ngan" },
-  { value: "server", label: "Phuc vu" },
+  { value: "user", label: "Thu ngân" },
+  { value: "server", label: "Phục vụ" },
 ] as const;
 
 type FormState = {
@@ -96,7 +96,7 @@ export default function AccountManagementPage() {
       setItems(users);
     } catch (loadErr) {
       console.error(loadErr);
-      setError(loadErr instanceof Error ? loadErr.message : "Khong tai duoc tai khoan.");
+      setError(loadErr instanceof Error ? loadErr.message : "Không tải được tài khoản.");
     } finally {
       setLoading(false);
     }
@@ -243,7 +243,7 @@ export default function AccountManagementPage() {
         setItems((current) =>
           current.map((item) => (item.id === updated.id ? updated : item))
         );
-        setMessage("Da cap nhat tai khoan.");
+        setMessage("Đã cập nhật tài khoản.");
       } else {
         const created = await createManagedUser({
           email: form.email,
@@ -261,20 +261,20 @@ export default function AccountManagementPage() {
         });
 
         setItems((current) => [created, ...current]);
-        setMessage("Da tao tai khoan moi.");
+        setMessage("Đã tạo tài khoản mới.");
         setEditingId(created.id);
         setForm((current) => ({ ...current, password: "" }));
       }
     } catch (submitErr) {
       console.error(submitErr);
-      setError(submitErr instanceof Error ? submitErr.message : "Khong luu duoc tai khoan.");
+      setError(submitErr instanceof Error ? submitErr.message : "Không lưu được tài khoản.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Xoa tai khoan nay?")) return;
+    if (!confirm("Xóa tài khoản này?")) return;
 
     setSaving(true);
     setError("");
@@ -288,10 +288,10 @@ export default function AccountManagementPage() {
         startCreate();
       }
 
-      setMessage("Da xoa tai khoan.");
+      setMessage("Đã xóa tài khoản.");
     } catch (deleteErr) {
       console.error(deleteErr);
-      setError(deleteErr instanceof Error ? deleteErr.message : "Khong xoa duoc tai khoan.");
+      setError(deleteErr instanceof Error ? deleteErr.message : "Không xóa được tài khoản.");
     } finally {
       setSaving(false);
     }
@@ -310,20 +310,20 @@ export default function AccountManagementPage() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1.5 text-sm font-semibold text-emerald-700">
               <Shield className="h-4 w-4" />
-              Quan ly tai khoan dang nhap
+              Quản lý tài khoản đăng nhập
             </div>
             <h1 className="mt-3 text-3xl font-semibold text-slate-900">
-              Tai khoan he thong
+              Tài khoản hệ thống
             </h1>
             <p className="mt-2 text-sm text-slate-500">
-              Admin co the tao, sua, khoa hoac xoa tai khoan, dong thoi bat/tat
-              tung module ma tai khoan duoc dung.
+              Admin có thể tạo, sửa, khóa hoặc xóa tài khoản, đồng thời bật/tắt
+              từng module mà tài khoản được dùng.
             </p>
           </div>
 
           <Button className="gap-2 rounded-2xl" onClick={startCreate}>
             <UserPlus className="h-4 w-4" />
-            Tao tai khoan moi
+            Tạo tài khoản mới
           </Button>
         </div>
 
@@ -343,9 +343,9 @@ export default function AccountManagementPage() {
           <Card className="rounded-[28px] border-slate-200">
             <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <CardTitle className="text-xl text-slate-900">Danh sach tai khoan</CardTitle>
+                <CardTitle className="text-xl text-slate-900">Danh sách tài khoản</CardTitle>
                 <p className="mt-2 text-sm text-slate-500">
-                  {items.length} tai khoan, dang nhap hien tai:{" "}
+                  {items.length} tài khoản, đăng nhập hiện tại:{" "}
                   <span className="font-medium text-slate-700">
                     {user?.displayName || user?.email}
                   </span>
@@ -355,7 +355,7 @@ export default function AccountManagementPage() {
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Tim theo email, ten, username, role, quyen"
+                  placeholder="Tìm theo email, tên, username, role, quyền"
                   className="h-11 rounded-2xl border-slate-200 bg-white"
                 />
               </div>
@@ -363,11 +363,11 @@ export default function AccountManagementPage() {
             <CardContent>
               {loading ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-slate-500">
-                  Dang tai tai khoan...
+                  Đang tải tài khoản...
                 </div>
               ) : filteredItems.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-slate-500">
-                  Khong co tai khoan phu hop.
+                  Không có tài khoản phù hợp.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -395,13 +395,13 @@ export default function AccountManagementPage() {
                                   : "bg-slate-100 text-slate-500"
                               }`}
                             >
-                              {item.isActive ? "Dang hoat dong" : "Da khoa"}
+                              {item.isActive ? "Đang hoạt động" : "Đã khóa"}
                             </span>
                           </div>
                           <div className="mt-2 text-sm text-slate-500">{item.email}</div>
                           <div className="mt-1 text-sm text-slate-500">
-                            {item.username ? `@${item.username}` : "Khong co username"} •{" "}
-                            {item.storeId || "Khong gan cua hang"}
+                            {item.username ? `@${item.username}` : "Không có username"} •{" "}
+                            {item.storeId || "Không gắn cửa hàng"}
                           </div>
                         </div>
 
@@ -411,7 +411,7 @@ export default function AccountManagementPage() {
                             className="rounded-2xl"
                             onClick={() => startEdit(item)}
                           >
-                            Sua
+                            Sửa
                           </Button>
                           <Button
                             variant="destructive"
@@ -419,7 +419,7 @@ export default function AccountManagementPage() {
                             onClick={() => void handleDelete(item.id)}
                             disabled={item.id === user?.id}
                           >
-                            Xoa
+                            Xóa
                           </Button>
                         </div>
                       </div>
@@ -435,7 +435,7 @@ export default function AccountManagementPage() {
               <div className="flex items-center gap-3">
                 <UserCog className="h-5 w-5 text-emerald-600" />
                 <CardTitle className="text-xl text-slate-900">
-                  {editingId ? "Sua tai khoan" : "Tao tai khoan"}
+                  {editingId ? "Sửa tài khoản" : "Tạo tài khoản"}
                 </CardTitle>
               </div>
             </CardHeader>
@@ -461,29 +461,29 @@ export default function AccountManagementPage() {
               />
 
               <Input
-                label="Ten hien thi"
+                label="Tên hiển thị"
                 value={form.displayName}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, displayName: event.target.value }))
                 }
-                placeholder="Quan ly ca"
+                placeholder="Quản lý ca"
                 className="h-11 rounded-2xl border-slate-200"
               />
 
               <Input
                 type="password"
-                label={editingId ? "Dat mat khau moi" : "Mat khau"}
+                label={editingId ? "Đặt mật khẩu mới" : "Mật khẩu"}
                 value={form.password}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, password: event.target.value }))
                 }
-                placeholder={editingId ? "De trong neu khong doi" : "Nhap mat khau"}
+                placeholder={editingId ? "Để trống nếu không đổi" : "Nhập mật khẩu"}
                 className="h-11 rounded-2xl border-slate-200"
               />
 
               {canManageAccess ? (
                 <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">Vai tro</span>
+                  <span className="mb-2 block text-sm font-medium text-slate-700">Vai trò</span>
                   <select
                     value={form.role}
                     onChange={(event) => handleRoleChange(event.target.value as UserRole)}
@@ -498,15 +498,15 @@ export default function AccountManagementPage() {
                 </label>
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-sm font-medium text-slate-900">Vai tro</div>
+                  <div className="text-sm font-medium text-slate-900">Vai trò</div>
                   <div className="mt-1 text-sm text-slate-600">
-                    Chi admin moi duoc sua vai tro tai khoan.
+                    Chỉ admin mới được sửa vai trò tài khoản.
                   </div>
                 </div>
               )}
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Cua hang</span>
+                <span className="mb-2 block text-sm font-medium text-slate-700">Cửa hàng</span>
                 <select
                   value={form.storeId}
                   onChange={(event) =>
@@ -525,10 +525,10 @@ export default function AccountManagementPage() {
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-medium text-slate-900">Phan quyen chuc nang</div>
+                    <div className="text-sm font-medium text-slate-900">Phân quyền chức năng</div>
                     <div className="mt-1 text-xs text-slate-500">
-                      Bat module nao thi tai khoan chi dung duoc module do, cac
-                      module con lai se bi khoa.
+                      Bật module nào thì tài khoản chỉ dùng được module đó, các
+                      module còn lại sẽ bị khóa.
                     </div>
                   </div>
                   <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
@@ -544,7 +544,7 @@ export default function AccountManagementPage() {
                     onClick={handleSelectAllPermissions}
                     disabled={!canManageAccess || form.role === "admin"}
                   >
-                    Bat tat ca
+                    Bật tất cả
                   </Button>
                   <Button
                     type="button"
@@ -553,7 +553,7 @@ export default function AccountManagementPage() {
                     onClick={handleClearPermissions}
                     disabled={!canManageAccess || form.role === "admin"}
                   >
-                    Bo het
+                    Bỏ hết
                   </Button>
                   <Button
                     type="button"
@@ -562,18 +562,18 @@ export default function AccountManagementPage() {
                     onClick={handleResetPermissions}
                     disabled={!canManageAccess}
                   >
-                    Mac dinh theo vai tro
+                    Mặc định theo vai trò
                   </Button>
                 </div>
 
                 {!canManageAccess ? (
                   <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                    Chi admin moi duoc sua phan quyen chuc nang.
+                    Chỉ admin mới được sửa phân quyền chức năng.
                   </div>
                 ) : form.role === "admin" ? (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Tai khoan admin luon co toan quyen de tranh tu khoa he
-                    thong quan tri.
+                    Tài khoản admin luôn có toàn quyền để tránh tự khóa hệ
+                    thống quản trị.
                   </div>
                 ) : (
                   <div className="mt-4 space-y-3">
@@ -624,9 +624,9 @@ export default function AccountManagementPage() {
 
               <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div>
-                  <div className="text-sm font-medium text-slate-900">Trang thai dang nhap</div>
+                  <div className="text-sm font-medium text-slate-900">Trạng thái đăng nhập</div>
                   <div className="text-xs text-slate-500">
-                    Tat de khoa tai khoan va ep dang xuat neu dang dung.
+                    Tắt để khóa tài khoản và ép đăng xuất nếu đang dùng.
                   </div>
                 </div>
                 <input
@@ -645,7 +645,7 @@ export default function AccountManagementPage() {
                   onClick={() => void handleSubmit()}
                   isLoading={saving}
                 >
-                  {editingId ? "Luu thay doi" : "Tao tai khoan"}
+                  {editingId ? "Lưu thay đổi" : "Tạo tài khoản"}
                 </Button>
                 {editingId ? (
                   <Button variant="outline" className="rounded-2xl" onClick={startCreate}>
