@@ -341,7 +341,7 @@ export default function ArticleDetailPage() {
           </div>
 
           {relatedArticles.length > 0 && (
-            <section className="editorial-related font-inter m-20">
+            <section className="editorial-related font-inter mt-6 mx-2 md:m-20">
               <div className="editorial-related-head">
                 <h2 className="font-inter">Có thể bạn quan tâm</h2>
               </div>
