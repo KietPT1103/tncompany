@@ -284,7 +284,6 @@ export default function ArticleDetailPage() {
                       strokeWidth="1.8"
                     />
                   </svg>
-                  <span>Sao chép link</span>
                 </button>
               </div>
               <span className="editorial-share-hint" role="status" aria-live="polite">
@@ -320,10 +319,10 @@ export default function ArticleDetailPage() {
               <aside className="editorial-side-card font-inter bg-[#EAE4DE]  ">
                 <p className="editorial-side-card-title font-inter font-bold">Trải nghiệm ngay</p>
                 <p className="py-1">Khám phá không gian yên bình và thưởng thức những ly cà phê tuyệt hảo tại {getStoreLabel(article.targetStore)} Ông Quan.</p>
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <div className="editorial-side-card-cta">
                   <a
                     href="tel:0772770789"
-                    style={{ textDecoration: 'none' }}
+                    className="editorial-side-card-button"
                   >
                     Đặt bàn ngay
                   </a>
