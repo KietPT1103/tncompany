@@ -37,12 +37,83 @@ function stripHtml(html: string) {
   return div.textContent || div.innerText || "";
 }
 
+function buildArticleShareUrl(slug: string) {
+  if (typeof window === "undefined") {
+    return `/tin-tuc/${slug}`;
+  }
+
+  return new URL(`/tin-tuc/${slug}`, window.location.origin).toString();
+}
+
+function buildFacebookShareUrl(url: string) {
+  return `https://www.facebook.com/sharer/sharer.php?${new URLSearchParams({
+    u: url,
+  }).toString()}`;
+}
+
+function buildZaloShareUrl(url: string) {
+  return `https://zalo.me/share?${new URLSearchParams({
+    url,
+  }).toString()}`;
+}
+
+function openShareWindow(url: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const width = 720;
+  const height = 680;
+  const left = Math.max(0, window.screenX + (window.outerWidth - width) / 2);
+  const top = Math.max(0, window.screenY + (window.outerHeight - height) / 2);
+  const popup = window.open(
+    url,
+    "tn-article-share",
+    `popup=yes,width=${width},height=${height},left=${Math.round(left)},top=${Math.round(top)},noopener,noreferrer`
+  );
+
+  if (popup) {
+    popup.focus();
+    return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+async function copyText(value: string) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard API unavailable");
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = value;
+  textArea.setAttribute("readonly", "true");
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textArea);
+
+  if (!copied) {
+    throw new Error("Copy command failed");
+  }
+}
+
 export default function ArticleDetailPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const [article, setArticle] = useState<SeoArticle | null>(null);
   const [relatedArticles, setRelatedArticles] = useState<SeoArticle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [shareNotice, setShareNotice] = useState("");
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -61,6 +132,20 @@ export default function ArticleDetailPage() {
         setLoading(false);
       });
   }, [slug]);
+
+  useEffect(() => {
+    if (!shareNotice || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShareNotice("");
+    }, 2400);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [shareNotice]);
 
   if (loading) {
     return (
@@ -103,6 +188,18 @@ export default function ArticleDetailPage() {
 
   // Extract a secondary image from content blocks if available
   const secondaryImage = article.contentJson?.find(b => b.imageUrl)?.imageUrl || defaultImage;
+  const shareUrl = buildArticleShareUrl(article.slug);
+  const facebookShareUrl = buildFacebookShareUrl(shareUrl);
+  const zaloShareUrl = buildZaloShareUrl(shareUrl);
+
+  const handleCopyShareLink = async () => {
+    try {
+      await copyText(shareUrl);
+      setShareNotice("Đã sao chép liên kết bài viết.");
+    } catch {
+      setShareNotice("Không thể sao chép tự động. Vui lòng chép thủ công từ thanh địa chỉ.");
+    }
+  };
 
   return (
     <div className="overflow-x-hidden">
@@ -135,6 +232,64 @@ export default function ArticleDetailPage() {
               <span>{formatDateLong(article.publishedAt || article.createdAt)}</span>
               <span aria-hidden="true">•</span>
               <span>{getReadTime(article)}</span>
+            </div>
+            <div className="editorial-share-bar font-inter" aria-label="Chia sẻ bài viết">
+              <span className="editorial-share-label">Chia sẻ:</span>
+              <div className="editorial-share-actions">
+                <button
+                  type="button"
+                  className="editorial-share-button is-facebook"
+                  onClick={() => openShareWindow(facebookShareUrl)}
+                  aria-label="Chia sẻ bài viết lên Facebook"
+                  title="Chia sẻ lên Facebook"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M13.5 21v-7.2h2.4l.4-2.8h-2.8V9.2c0-.8.2-1.4 1.4-1.4H16V5.3c-.2 0-.9-.1-1.8-.1-1.8 0-3 1.1-3 3.2V11H9v2.8h2.4V21h2.1Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="editorial-share-button is-zalo"
+                  onClick={() => openShareWindow(zaloShareUrl)}
+                  aria-label="Chia sẻ bài viết lên Zalo"
+                  title="Chia sẻ lên Zalo"
+                >
+                  <span>Zalo</span>
+                </button>
+                <button
+                  type="button"
+                  className="editorial-share-button is-copy"
+                  onClick={handleCopyShareLink}
+                  aria-label="Sao chép liên kết bài viết"
+                  title="Sao chép liên kết"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M10.6 13.4a3 3 0 0 0 4.2 0l2.8-2.8a3 3 0 1 0-4.2-4.2l-.7.7"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                    <path
+                      d="M13.4 10.6a3 3 0 0 0-4.2 0l-2.8 2.8a3 3 0 1 0 4.2 4.2l.7-.7"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                  <span>Sao chép link</span>
+                </button>
+              </div>
+              <span className="editorial-share-hint" role="status" aria-live="polite">
+                {shareNotice || "Mở trực tiếp hộp chia sẻ bằng link public của bài viết."}
+              </span>
             </div>
           </header>
 

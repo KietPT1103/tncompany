@@ -1242,6 +1242,97 @@ a {
   font-weight: 600;
 }
 
+.editorial-share-bar {
+  margin-top: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.editorial-share-label {
+  color: #7f6d5f;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.editorial-share-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.editorial-share-button {
+  min-width: 46px;
+  height: 46px;
+  border: 1px solid rgba(133, 101, 77, 0.22);
+  border-radius: 999px;
+  background: #fffdfa;
+  color: #4f4339;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 0.95rem;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    background 0.18s ease;
+}
+
+.editorial-share-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(67, 46, 29, 0.1);
+}
+
+.editorial-share-button svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.editorial-share-button.is-facebook {
+  width: 46px;
+  padding: 0;
+  color: #1877f2;
+}
+
+.editorial-share-button.is-facebook:hover {
+  border-color: rgba(24, 119, 242, 0.34);
+  background: rgba(24, 119, 242, 0.08);
+}
+
+.editorial-share-button.is-zalo {
+  color: #0068ff;
+}
+
+.editorial-share-button.is-zalo:hover {
+  border-color: rgba(0, 104, 255, 0.26);
+  background: rgba(0, 104, 255, 0.06);
+}
+
+.editorial-share-button.is-copy:hover {
+  border-color: rgba(24, 51, 31, 0.24);
+  color: #18331f;
+  background: rgba(24, 51, 31, 0.05);
+}
+
+.editorial-share-hint {
+  width: 100%;
+  color: #8a7868;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
 .editorial-media {
   position: relative;
   width: 100%;
@@ -2632,6 +2723,18 @@ button.editorial-media {
     font-size: 1.7rem;
   }
 
+  .editorial-share-bar {
+    gap: 0.7rem;
+  }
+
+  .editorial-share-actions {
+    justify-content: center;
+  }
+
+  .editorial-share-button.is-copy {
+    min-width: 0;
+  }
+
   .editorial-meta,
   .editorial-story-copy p,
   .editorial-side-card p:last-of-type,
@@ -2727,6 +2830,14 @@ button.editorial-media {
 @media (max-width: 480px) {
   .homepage-main {
     width: calc(100% - 1rem);
+  }
+
+  .editorial-share-bar {
+    flex-direction: column;
+  }
+
+  .editorial-share-hint {
+    text-align: center;
   }
 
   .homepage-style-note,
