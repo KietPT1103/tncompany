@@ -300,7 +300,7 @@ export default function ArticleDetailPage() {
             />
           </div>
 
-          <div className="editorial-content-rail">
+          <div className="editorial-content-rail px-2">
             <section className="editorial-body-grid">
               <div className="editorial-story-copy font-inter">
                 {leadParagraphs.map((p, i) => (
