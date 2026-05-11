@@ -82,6 +82,8 @@ function getStatusClasses(status?: string | null) {
 export default function TikTokSearchPage() {
   const defaults = useMemo(() => getDefaultDateRange(), []);
   const [keyword, setKeyword] = useState("");
+  const [commentQuery, setCommentQuery] = useState("");
+  const [appliedCommentQuery, setAppliedCommentQuery] = useState("");
   const [dateFrom, setDateFrom] = useState(defaults.dateFrom);
   const [dateTo, setDateTo] = useState(defaults.dateTo);
   const [search, setSearch] = useState<TikTokSearchRecord | null>(null);
@@ -93,7 +95,7 @@ export default function TikTokSearchPage() {
   const [isPolling, setIsPolling] = useState(false);
   const [error, setError] = useState("");
 
-  async function syncSearch(searchId: string, nextPage = page, silent = false) {
+  async function syncSearch(searchId: string, nextPage = page, silent = false, query = appliedCommentQuery) {
     if (!silent) {
       setIsLoadingComments(true);
     } else {
@@ -107,6 +109,7 @@ export default function TikTokSearchPage() {
           search_id: searchId,
           page: nextPage,
           per_page: DEFAULT_PER_PAGE,
+          query,
         }),
       ]);
 
@@ -126,6 +129,8 @@ export default function TikTokSearchPage() {
     setError("");
     setIsSubmitting(true);
     setPage(1);
+    setCommentQuery("");
+    setAppliedCommentQuery("");
     setComments([]);
     setPagination(EMPTY_PAGINATION);
 
@@ -144,6 +149,13 @@ export default function TikTokSearchPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleCommentSearch() {
+    if (!search?.id) return;
+    setPage(1);
+    setAppliedCommentQuery(commentQuery);
+    await syncSearch(search.id, 1, false, commentQuery);
   }
 
   useEffect(() => {
@@ -294,8 +306,33 @@ export default function TikTokSearchPage() {
                 </p>
               </div>
 
-              <div className="inline-flex items-center gap-2 rounded-[20px] bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600">
-                {pagination.total > 0 ? (
+              <div className="flex flex-col gap-3 md:items-end">
+                <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+                  <Input
+                    value={commentQuery}
+                    onChange={(event) => setCommentQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void handleCommentSearch();
+                      }
+                    }}
+                    placeholder="Loc theo noi dung, user, video_id..."
+                    className="h-11 min-w-[280px] rounded-2xl"
+                  />
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-2xl"
+                    disabled={!search?.id}
+                    onClick={() => void handleCommentSearch()}
+                  >
+                    <Search className="mr-2 h-4 w-4" />
+                    Tim comment
+                  </Button>
+                </div>
+
+                <div className="inline-flex items-center gap-2 rounded-[20px] bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600">
+                  {pagination.total > 0 ? (
                   <>
                     <span className="flex h-2 w-2 rounded-full bg-emerald-500"></span>
                     Đang xem <strong className="text-slate-900">{pagination.from}-{pagination.to}</strong> / {pagination.total}
@@ -303,6 +340,7 @@ export default function TikTokSearchPage() {
                 ) : (
                   "Chưa có dữ liệu"
                 )}
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">

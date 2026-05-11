@@ -70,10 +70,8 @@ register_shutdown_function(static function (): void {
 });
 
 $configDirectory = dirname(__DIR__);
+$configPath = $configDirectory . DIRECTORY_SEPARATOR . 'config.php';
 $configLocalPath = $configDirectory . DIRECTORY_SEPARATOR . 'config.local.php';
-$configPath = file_exists($configLocalPath)
-    ? $configLocalPath
-    : $configDirectory . DIRECTORY_SEPARATOR . 'config.php';
 
 if (!file_exists($configPath)) {
     http_response_code(500);
@@ -85,6 +83,12 @@ if (!file_exists($configPath)) {
 }
 
 $config = require $configPath;
+if (file_exists($configLocalPath)) {
+    $localConfig = require $configLocalPath;
+    if (is_array($localConfig)) {
+        $config = array_replace($config, $localConfig);
+    }
+}
 
 date_default_timezone_set($config['timezone'] ?? 'Asia/Ho_Chi_Minh');
 

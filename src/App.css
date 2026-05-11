@@ -1446,6 +1446,8 @@ button.editorial-media {
   align-self: start;
   position: sticky;
   top: 94px;
+  z-index: 2;
+  height: fit-content;
   width: 190px;
   border-radius: 18px;
   background: #F5F3F0;
@@ -1484,6 +1486,10 @@ button.editorial-media {
   display: flex;
   justify-content: center;
   margin-top: 0.95rem;
+  position: sticky;
+  top: calc(94px + 7.1rem);
+  padding-top: 0.85rem;
+  background: linear-gradient(180deg, rgba(245, 243, 240, 0) 0%, #f5f3f0 24%);
 }
 
 .editorial-side-card-button {
@@ -2637,6 +2643,10 @@ button.editorial-media {
     font-size: 0.8rem;
     line-height: 1.66;
   }
+
+  .editorial-side-card-cta {
+    top: calc(82px + 6.6rem);
+  }
 }
 
 @media (max-width: 900px) {
@@ -2661,6 +2671,9 @@ button.editorial-media {
 
   .editorial-side-card-cta {
     justify-content: stretch;
+    position: static;
+    padding-top: 0;
+    background: transparent;
   }
 
   .editorial-side-card-button {

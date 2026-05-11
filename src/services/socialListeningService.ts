@@ -83,11 +83,13 @@ export async function getTikTokComments(params: {
   search_id: string;
   page?: number;
   per_page?: number;
+  query?: string;
 }) {
   const query = buildParams({
     search_id: params.search_id,
     page: params.page || 1,
     per_page: params.per_page || 10,
+    query: params.query,
   });
 
   return apiRequest<{

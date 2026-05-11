@@ -393,34 +393,40 @@ final class SocialListeningSearchRepository
         return (int) ($row['aggregate_total'] ?? 0);
     }
 
-    public function countComments(string $searchId): int
+    public function countComments(string $searchId, string $query = ''): int
     {
+        $params = ['search_id' => $searchId];
+        $queryClause = $this->buildCommentQueryClause($query, $params);
         $statement = db()->prepare(
             'SELECT COUNT(*) AS aggregate_total
              FROM social_listening_comments
-             WHERE search_id = :search_id'
+             WHERE search_id = :search_id' . $queryClause
         );
-        $statement->execute(['search_id' => $searchId]);
+        $statement->execute($params);
         $row = $statement->fetch();
 
         return (int) ($row['aggregate_total'] ?? 0);
     }
 
-    public function listComments(string $searchId, int $page = 1, int $perPage = 20): array
+    public function listComments(string $searchId, int $page = 1, int $perPage = 20, string $query = ''): array
     {
         $page = max(1, $page);
         $perPage = max(1, min(100, $perPage));
-        $total = $this->countComments($searchId);
+        $total = $this->countComments($searchId, $query);
         $offset = ($page - 1) * $perPage;
+        $params = ['search_id' => $searchId];
+        $queryClause = $this->buildCommentQueryClause($query, $params);
 
         $statement = db()->prepare(
             'SELECT *
              FROM social_listening_comments
-             WHERE search_id = :search_id
+             WHERE search_id = :search_id' . $queryClause . '
              ORDER BY comment_date DESC, platform_created_at DESC, created_at DESC
              LIMIT :limit_count OFFSET :offset_count'
         );
-        $statement->bindValue('search_id', $searchId);
+        foreach ($params as $key => $value) {
+            $statement->bindValue($key, $value);
+        }
         $statement->bindValue('limit_count', $perPage, PDO::PARAM_INT);
         $statement->bindValue('offset_count', $offset, PDO::PARAM_INT);
         $statement->execute();
@@ -467,6 +473,32 @@ final class SocialListeningSearchRepository
                 'last_page' => max(1, (int) ceil($total / $perPage)),
             ],
         ];
+    }
+
+    /**
+     * @param array<string, string> $params
+     */
+    private function buildCommentQueryClause(string $query, array &$params): string
+    {
+        $normalized = trim($query);
+        if ($normalized === '') {
+            return '';
+        }
+
+        $params['comment_query'] = '%' . strtr($normalized, [
+            '\\' => '\\\\',
+            '%' => '\\%',
+            '_' => '\\_',
+        ]) . '%';
+
+        return ' AND (
+            comment_text LIKE :comment_query ESCAPE "\\\\"
+            OR username LIKE :comment_query ESCAPE "\\\\"
+            OR author_name LIKE :comment_query ESCAPE "\\\\"
+            OR video_username LIKE :comment_query ESCAPE "\\\\"
+            OR comment_id LIKE :comment_query ESCAPE "\\\\"
+            OR video_id LIKE :comment_query ESCAPE "\\\\"
+        )';
     }
 
     private function ensureCommentColumn(string $columnName, string $definition): void

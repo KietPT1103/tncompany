@@ -18,14 +18,14 @@ final class TikTokCommentController
         $this->searchService = $searchService;
     }
 
-    public function index(string $searchId, int $page = 1, int $perPage = 20): array
+    public function index(string $searchId, int $page = 1, int $perPage = 20, string $query = ''): array
     {
         $search = $this->searchService->getSearch($searchId);
         if ($search === null) {
             throw new RuntimeException('Không tìm thấy search TikTok.');
         }
 
-        $comments = $this->searchRepository->listComments($searchId, $page, $perPage);
+        $comments = $this->searchRepository->listComments($searchId, $page, $perPage, $query);
 
         return [
             'search' => $search,

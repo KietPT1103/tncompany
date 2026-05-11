@@ -14,6 +14,7 @@ $controller = $services['tiktokCommentController'];
 
 if ($method === 'GET') {
     $searchId = trim((string) ($_GET['search_id'] ?? $_GET['searchId'] ?? ''));
+    $query = trim((string) ($_GET['query'] ?? $_GET['keyword'] ?? ''));
     $page = max(1, (int) ($_GET['page'] ?? 1));
     $perPage = max(1, min(100, (int) ($_GET['per_page'] ?? $_GET['perPage'] ?? 10)));
 
@@ -22,7 +23,7 @@ if ($method === 'GET') {
     }
 
     try {
-        respond_ok($controller->index($searchId, $page, $perPage));
+        respond_ok($controller->index($searchId, $page, $perPage, $query));
     } catch (RuntimeException $exception) {
         respond_error($exception->getMessage(), 404);
     }
