@@ -177,7 +177,11 @@ export default function LoginPage() {
       router.push(nextPath);
     } catch (err: unknown) {
       console.error(err);
-      setError("Đăng nhập thất bại. Vui lòng kiểm tra tài khoản và mật khẩu.");
+      setError(
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : "Dang nhap that bai. Vui long kiem tra tai khoan va mat khau."
+      );
     } finally {
       setLoading(false);
     }

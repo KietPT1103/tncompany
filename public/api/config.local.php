@@ -11,6 +11,6 @@ return [
     'db_name' => 'tnservic69a7_tnservice',
     'db_user' => 'tnservic69a7_tnservice',
     'db_password' => 'nhungkiet04',
-    'cors_origin' => 'http://127.0.0.1:5173',
+    'cors_origin' => '*',
     'timezone' => 'Asia/Ho_Chi_Minh',
 ];

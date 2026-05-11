@@ -2,8 +2,9 @@ import { AppUser } from "@/types/auth";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 const LOCAL_API_FALLBACK_BASE = (
-  import.meta.env.VITE_LOCAL_API_BASE_URL || "http://127.0.0.1:8000/api"
+  import.meta.env.VITE_LOCAL_API_BASE_URL || ""
 ).replace(/\/$/, "");
+const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 15000);
 const TOKEN_KEY = "tn_company_api_token";
 
 type ApiEnvelope<T> = {
@@ -64,6 +65,20 @@ function buildNetworkError(requestUrl: string) {
   }
 
   return new Error(`Khong ket noi duoc API ${pathname}.`);
+}
+
+function buildTimeoutError(requestUrl: string) {
+  let pathname = requestUrl;
+
+  try {
+    pathname = new URL(requestUrl, typeof window !== "undefined" ? window.location.origin : undefined).pathname;
+  } catch {
+    pathname = requestUrl;
+  }
+
+  return new Error(
+    `API ${pathname} phan hoi qua lau. Hay kiem tra PHP/MySQL local hoac VITE_PROXY_TARGET.`
+  );
 }
 
 function buildApiTransportError(response: Response, rawBody: string) {
@@ -170,12 +185,21 @@ export async function apiRequest<T>(
 
   for (let index = 0; index < requestUrls.length; index += 1) {
     const requestUrl = requestUrls[index];
+    const controller =
+      typeof AbortController !== "undefined" && !options.signal
+        ? new AbortController()
+        : null;
+    const timeoutId =
+      controller && Number.isFinite(API_TIMEOUT_MS) && API_TIMEOUT_MS > 0
+        ? globalThis.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+        : null;
 
     try {
       const response = await fetch(requestUrl, {
         ...options,
         cache: options.cache ?? "no-store",
         headers,
+        signal: options.signal ?? controller?.signal,
       });
 
       if (response.status === 401) {
@@ -185,7 +209,9 @@ export async function apiRequest<T>(
       return await parseResponse<T>(response);
     } catch (error) {
       lastError =
-        error instanceof TypeError
+        error instanceof Error && error.name === "AbortError"
+          ? buildTimeoutError(requestUrl)
+          : error instanceof TypeError
           ? buildNetworkError(requestUrl)
           : error instanceof Error
           ? error
@@ -193,13 +219,23 @@ export async function apiRequest<T>(
 
       const canRetry =
         index < requestUrls.length - 1 &&
-        (error instanceof ApiTransportError ? error.retryable : true);
+        (error instanceof Error && error.name === "AbortError"
+          ? true
+          : error instanceof TypeError
+          ? true
+          : error instanceof ApiTransportError
+          ? error.retryable
+          : false);
 
       if (canRetry) {
         continue;
       }
 
       throw lastError;
+    } finally {
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
     }
   }
 
