@@ -503,7 +503,14 @@ final class SocialListeningSearchRepository
 
     private function ensureCommentColumn(string $columnName, string $definition): void
     {
-        $statement = db()->prepare('SHOW COLUMNS FROM social_listening_comments LIKE :column_name');
+        $statement = db()->prepare(
+            'SELECT 1
+             FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = "social_listening_comments"
+               AND column_name = :column_name
+             LIMIT 1'
+        );
         $statement->execute(['column_name' => $columnName]);
         $column = $statement->fetch();
 
