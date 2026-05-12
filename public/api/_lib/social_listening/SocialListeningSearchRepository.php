@@ -518,11 +518,14 @@ final class SocialListeningSearchRepository
             return;
         }
 
-        db()->exec(sprintf(
-            'ALTER TABLE social_listening_comments ADD COLUMN %s %s',
-            $columnName,
-            $definition
-        ));
+        $this->runSchemaStatement(
+            sprintf(
+                'ALTER TABLE social_listening_comments ADD COLUMN %s %s',
+                $columnName,
+                $definition
+            ),
+            [1060]
+        );
     }
 
     private function ensureCommentIndex(string $indexName, string $columnName): void
@@ -541,11 +544,14 @@ final class SocialListeningSearchRepository
             return;
         }
 
-        db()->exec(sprintf(
-            'ALTER TABLE social_listening_comments ADD INDEX %s (%s)',
-            $indexName,
-            $columnName
-        ));
+        $this->runSchemaStatement(
+            sprintf(
+                'ALTER TABLE social_listening_comments ADD INDEX %s (%s)',
+                $indexName,
+                $columnName
+            ),
+            [1061]
+        );
     }
 
     private function ensureCommentUniqueIndex(): void
@@ -571,13 +577,34 @@ final class SocialListeningSearchRepository
         }
 
         if ($columns !== []) {
-            db()->exec('ALTER TABLE social_listening_comments DROP INDEX uniq_social_platform_comment');
+            $this->runSchemaStatement(
+                'ALTER TABLE social_listening_comments DROP INDEX uniq_social_platform_comment',
+                [1091]
+            );
         }
 
-        db()->exec(
+        $this->runSchemaStatement(
             'ALTER TABLE social_listening_comments
-             ADD UNIQUE INDEX uniq_social_platform_comment (platform, search_id, comment_id)'
+             ADD UNIQUE INDEX uniq_social_platform_comment (platform, search_id, comment_id)',
+            [1061]
         );
+    }
+
+    /**
+     * @param array<int, int> $ignorableMysqlCodes
+     */
+    private function runSchemaStatement(string $sql, array $ignorableMysqlCodes = []): void
+    {
+        try {
+            db()->exec($sql);
+        } catch (PDOException $exception) {
+            $mysqlCode = isset($exception->errorInfo[1]) ? (int) $exception->errorInfo[1] : null;
+            if ($mysqlCode !== null && in_array($mysqlCode, $ignorableMysqlCodes, true)) {
+                return;
+            }
+
+            throw $exception;
+        }
     }
 
     private function nullableString($value): ?string
