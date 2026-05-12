@@ -158,15 +158,25 @@ final class TikTokCollectorService implements TikTokCollectorInterface
      */
     private function runApifyActor(string $actorId, array $input, string $token): array
     {
+        $waitForFinish = max(15, (int) ($this->config['tiktok_apify_wait_for_finish'] ?? 300));
+        $requestTimeout = max(
+            $waitForFinish + 30,
+            (int) ($this->config['tiktok_request_timeout'] ?? 45)
+        );
         $runResponse = $this->httpClient->request(
             'POST',
             sprintf(
-                'https://api.apify.com/v2/acts/%s/runs?token=%s&waitForFinish=300',
+                'https://api.apify.com/v2/acts/%s/runs?token=%s&waitForFinish=%d',
                 rawurlencode($actorId),
-                rawurlencode($token)
+                rawurlencode($token),
+                $waitForFinish
             ),
             [],
-            $input
+            $input,
+            [
+                'timeout' => $requestTimeout,
+                'connect_timeout' => min(15, $requestTimeout),
+            ]
         );
 
         $json = is_array($runResponse['json']) ? $runResponse['json'] : [];

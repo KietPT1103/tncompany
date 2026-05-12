@@ -287,6 +287,7 @@ final class SocialListeningSearchRepository
 
     public function claimNextJob(): ?array
     {
+        $this->requeueStaleProcessingJobs();
         db()->beginTransaction();
 
         try {
@@ -325,6 +326,27 @@ final class SocialListeningSearchRepository
             db()->rollBack();
             throw $exception;
         }
+    }
+
+    private function requeueStaleProcessingJobs(): void
+    {
+        $staleSeconds = max(300, 60 * 15);
+        $statement = db()->prepare(
+            'UPDATE social_listening_queue_jobs
+             SET status = "queued",
+                 locked_at = NULL,
+                 available_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP,
+                 error_message = COALESCE(
+                     CONCAT("Recovered stale processing lock at ", DATE_FORMAT(CURRENT_TIMESTAMP, "%Y-%m-%d %H:%i:%s")),
+                     error_message
+                 )
+             WHERE status = "processing"
+               AND locked_at IS NOT NULL
+               AND locked_at <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL :stale_seconds SECOND)'
+        );
+        $statement->bindValue('stale_seconds', $staleSeconds, PDO::PARAM_INT);
+        $statement->execute();
     }
 
     public function markJobCompleted(int $jobId): void

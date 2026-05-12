@@ -15,9 +15,10 @@ final class TikTokHttpClient
     /**
      * @param array<string, string> $headers
      * @param array<string, mixed>|null $body
+     * @param array{timeout?:int,connect_timeout?:int}|array<string, mixed> $options
      * @return array{status:int, headers:array<string, string>, body:string, json:mixed}
      */
-    public function request(string $method, string $url, array $headers = [], ?array $body = null): array
+    public function request(string $method, string $url, array $headers = [], ?array $body = null, array $options = []): array
     {
         $curl = curl_init();
         if ($curl === false) {
@@ -25,7 +26,8 @@ final class TikTokHttpClient
         }
 
         $responseHeaders = [];
-        $timeout = max(5, (int) ($this->config['tiktok_request_timeout'] ?? 45));
+        $timeout = max(5, (int) ($options['timeout'] ?? $this->config['tiktok_request_timeout'] ?? 45));
+        $connectTimeout = max(3, min($timeout, (int) ($options['connect_timeout'] ?? min(15, $timeout))));
         $normalizedHeaders = [];
 
         foreach ($headers as $name => $value) {
@@ -40,7 +42,7 @@ final class TikTokHttpClient
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => strtoupper($method),
-            CURLOPT_CONNECTTIMEOUT => min(15, $timeout),
+            CURLOPT_CONNECTTIMEOUT => $connectTimeout,
             CURLOPT_TIMEOUT => $timeout,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTPHEADER => $normalizedHeaders,
