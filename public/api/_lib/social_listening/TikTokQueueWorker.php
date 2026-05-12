@@ -28,9 +28,9 @@ final class TikTokQueueWorker
         $this->fetchCommentJob = $fetchCommentJob;
     }
 
-    public function runNext(): bool
+    public function runNext(?string $searchId = null): bool
     {
-        $job = $this->searchRepository->claimNextJob();
+        $job = $this->searchRepository->claimNextJob($searchId);
         if ($job === null) {
             return false;
         }

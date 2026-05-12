@@ -285,21 +285,30 @@ final class SocialListeningSearchRepository
         return (int) db()->lastInsertId();
     }
 
-    public function claimNextJob(): ?array
+    public function claimNextJob(?string $searchId = null): ?array
     {
         $this->requeueStaleProcessingJobs();
         db()->beginTransaction();
 
         try {
-            $statement = db()->query(
-                'SELECT *
-                 FROM social_listening_queue_jobs
-                 WHERE status = "queued"
-                   AND available_at <= CURRENT_TIMESTAMP
-                 ORDER BY id ASC
-                 LIMIT 1
-                 FOR UPDATE'
-            );
+            $sql = 'SELECT *
+                    FROM social_listening_queue_jobs
+                    WHERE status = "queued"
+                      AND available_at <= CURRENT_TIMESTAMP';
+            $params = [];
+
+            if ($searchId !== null && trim($searchId) !== '') {
+                $sql .= ' AND search_id = :search_id';
+                $params['search_id'] = trim($searchId);
+            }
+
+            $sql .= '
+                    ORDER BY id ASC
+                    LIMIT 1
+                    FOR UPDATE';
+
+            $statement = db()->prepare($sql);
+            $statement->execute($params);
             $row = $statement->fetch();
 
             if (!is_array($row)) {
