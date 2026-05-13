@@ -69,6 +69,64 @@ register_shutdown_function(static function (): void {
     ]);
 });
 
+function bootstrap_load_env_file(string $path, bool $override = false): void
+{
+    if (!is_file($path)) {
+        return;
+    }
+
+    $lines = file($path, FILE_IGNORE_NEW_LINES);
+    if (!is_array($lines)) {
+        return;
+    }
+
+    foreach ($lines as $line) {
+        $trimmed = trim($line);
+        if ($trimmed === '' || str_starts_with($trimmed, '#')) {
+            continue;
+        }
+
+        if (str_starts_with($trimmed, 'export ')) {
+            $trimmed = trim(substr($trimmed, 7));
+        }
+
+        $separatorPosition = strpos($trimmed, '=');
+        if ($separatorPosition === false) {
+            continue;
+        }
+
+        $name = trim(substr($trimmed, 0, $separatorPosition));
+        if ($name === '' || preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $name) !== 1) {
+            continue;
+        }
+
+        if (!$override && getenv($name) !== false) {
+            continue;
+        }
+
+        $value = trim(substr($trimmed, $separatorPosition + 1));
+        if (
+            strlen($value) >= 2
+            && (($value[0] === '"' && substr($value, -1) === '"')
+                || ($value[0] === "'" && substr($value, -1) === "'"))
+        ) {
+            $value = substr($value, 1, -1);
+        }
+
+        if ($value !== '' && str_contains($value, '\\n')) {
+            $value = str_replace('\\n', "\n", $value);
+        }
+
+        putenv($name . '=' . $value);
+        $_ENV[$name] = $value;
+        $_SERVER[$name] = $value;
+    }
+}
+
+$projectRoot = dirname(__DIR__, 3);
+bootstrap_load_env_file($projectRoot . DIRECTORY_SEPARATOR . '.env', false);
+bootstrap_load_env_file($projectRoot . DIRECTORY_SEPARATOR . '.env.local', true);
+
 $configDirectory = dirname(__DIR__);
 $configPath = $configDirectory . DIRECTORY_SEPARATOR . 'config.php';
 $configLocalPath = $configDirectory . DIRECTORY_SEPARATOR . 'config.local.php';

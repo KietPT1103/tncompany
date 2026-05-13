@@ -11,8 +11,9 @@ VITE_PROXY_TARGET=http://127.0.0.1:8000
 ```
 
 3. Copy `public/api/config.php.example` to `public/api/config.php`
-4. Fill valid local MySQL credentials in `public/api/config.php`
-5. Run:
+4. Fill valid local MySQL credentials in `public/api/config.php` hoặc `public/api/config.local.php`
+5. Nếu dùng TikTok social listening, điền `TIKTOK_*` trong `.env.local` hoặc `public/api/config.local.php`
+6. Run:
 
 ```bash
 npm run dev:full
@@ -63,3 +64,4 @@ Note: if a PHP endpoint exists only in this repo and has not been deployed to `t
 - run MySQL locally
 - point `VITE_PROXY_TARGET` or `VITE_API_BASE_URL` to that local PHP server
 - or simply use `npm run dev:full`
+- PHP API và worker cũng đọc `.env.local`, không chỉ frontend Vite

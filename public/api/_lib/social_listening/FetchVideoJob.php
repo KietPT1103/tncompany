@@ -35,6 +35,8 @@ final class FetchVideoJob
             throw new RuntimeException('Search job target not found.');
         }
 
+        $this->collector->assertConfigured();
+
         $this->searchService->syncSearchMetrics($searchId, [
             'status' => 'fetching_videos',
             'progress_message' => 'Đang lấy danh sách video TikTok từ nguồn dữ liệu thật.',

@@ -6,6 +6,8 @@ interface TikTokCollectorInterface
 {
     public function providerName(): string;
 
+    public function assertConfigured(): void;
+
     /**
      * @return array<int, array<string, mixed>>
      */

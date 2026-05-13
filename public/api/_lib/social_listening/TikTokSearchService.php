@@ -39,6 +39,8 @@ final class TikTokSearchService
             throw new InvalidArgumentException('date_from không được lớn hơn date_to.');
         }
 
+        $this->collector->assertConfigured();
+
         $search = $this->searchRepository->createSearch([
             'keyword' => $keyword,
             'date_from' => $dateFrom,

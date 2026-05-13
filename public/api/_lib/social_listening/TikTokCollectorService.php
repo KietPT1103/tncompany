@@ -21,6 +21,43 @@ final class TikTokCollectorService implements TikTokCollectorInterface
         return trim((string) ($this->config['tiktok_provider'] ?? 'disabled')) ?: 'disabled';
     }
 
+    public function assertConfigured(): void
+    {
+        $provider = $this->providerName();
+
+        if (!in_array($provider, ['apify', 'webhook'], true)) {
+            throw new RuntimeException(
+                'TikTok provider chưa được cấu hình. Hãy set TIKTOK_PROVIDER=apify hoặc webhook trong .env.local hoặc public/api/config.local.php.'
+            );
+        }
+
+        if ($provider === 'webhook') {
+            $baseUrl = rtrim((string) ($this->config['tiktok_upstream_base_url'] ?? ''), '/');
+            if ($baseUrl === '') {
+                throw new RuntimeException('TikTok webhook chưa đủ cấu hình: thiếu TIKTOK_UPSTREAM_BASE_URL.');
+            }
+
+            return;
+        }
+
+        $missing = [];
+        if (trim((string) ($this->config['tiktok_apify_token'] ?? '')) === '') {
+            $missing[] = 'TIKTOK_APIFY_TOKEN';
+        }
+        if (trim((string) ($this->config['tiktok_apify_search_actor_id'] ?? '')) === '') {
+            $missing[] = 'TIKTOK_APIFY_SEARCH_ACTOR_ID';
+        }
+        if (trim((string) ($this->config['tiktok_apify_comment_actor_id'] ?? '')) === '') {
+            $missing[] = 'TIKTOK_APIFY_COMMENT_ACTOR_ID';
+        }
+
+        if ($missing !== []) {
+            throw new RuntimeException(
+                'TikTok Apify chưa đủ cấu hình: thiếu ' . implode(', ', $missing) . '.'
+            );
+        }
+    }
+
     public function searchVideos(string $keyword, string $dateFrom, string $dateTo): array
     {
         $provider = $this->providerName();

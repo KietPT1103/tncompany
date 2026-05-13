@@ -19,17 +19,18 @@ This module only accepts real TikTok data.
 
 ## Provider Modes
 
-Set one provider in `public/api/config.php`:
+Set one provider in `.env.local` or `public/api/config.local.php`:
 
 - `tiktok_provider = webhook`
 - `tiktok_provider = apify`
 
-If no provider is configured, the module stays in real-data-only mode and returns empty results instead of mock data.
+If provider config is missing, `POST /api/tiktok/search.php` now fails immediately with a clear config error instead of silently returning empty results.
 
 ## Queue Worker
 
 - One-off: `php scripts/tiktok-social-listening-worker.php --once`
 - Daemon: `npm run worker:tiktok-social-listening`
+- Config check: `php scripts/tiktok-social-listening-check.php`
 
 ## Main Files
 

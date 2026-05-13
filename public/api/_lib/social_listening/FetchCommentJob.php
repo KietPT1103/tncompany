@@ -46,6 +46,8 @@ final class FetchCommentJob
             throw new RuntimeException('Comment job target video not found.');
         }
 
+        $this->collector->assertConfigured();
+
         $this->searchService->syncSearchMetrics($searchId, [
             'status' => 'fetching_comments',
             'progress_message' => 'Đang lấy comment thật từ TikTok.',
