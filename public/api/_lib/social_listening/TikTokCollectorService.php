@@ -165,6 +165,7 @@ final class TikTokCollectorService implements TikTokCollectorInterface
     {
         $token = trim((string) ($this->config['tiktok_apify_token'] ?? ''));
         $actorId = trim((string) ($this->config['tiktok_apify_comment_actor_id'] ?? ''));
+        $maxComments = (int) ($this->config['tiktok_max_comments_per_video'] ?? 200);
         $videoUrl = TikTokUrlHelper::buildDirectUrl(
             $keyword,
             (string) ($video['share_url'] ?? $video['shareUrl'] ?? ''),
@@ -180,8 +181,11 @@ final class TikTokCollectorService implements TikTokCollectorInterface
 
         $response = $this->runApifyActor($actorId, [
             'startUrls' => [['url' => $videoUrl]],
+            'postURLs' => [$videoUrl],
+            'videoURLs' => [$videoUrl],
             'videoUrl' => $videoUrl,
-            'maxItems' => (int) ($this->config['tiktok_max_comments_per_video'] ?? 200),
+            'commentsPerPost' => $maxComments,
+            'maxItems' => $maxComments,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
         ], $token);
@@ -347,6 +351,7 @@ final class TikTokCollectorService implements TikTokCollectorInterface
                 'comment_text' => $content,
                 'author_name' => trim((string) (
                     $item['username']
+                    ?? $item['uniqueId']
                     ?? $item['author_name']
                     ?? $item['authorName']
                     ?? $item['user']['uniqueId']
