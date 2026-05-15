@@ -163,6 +163,57 @@ const hasExpectedHeader = (row: unknown[]) => {
   );
 };
 
+type InvoiceImportColumnMap = {
+  name: number;
+  invoiceDate: number;
+  quantity: number;
+  unit: number;
+  sourceUnitPrice: number;
+  surcharge: number;
+  total: number;
+};
+
+const findColumnIndex = (headers: string[], matchers: string[]) =>
+  headers.findIndex((header) => matchers.some((matcher) => header.includes(matcher)));
+
+const findInvoiceImportColumnMap = (row: unknown[]): InvoiceImportColumnMap | null => {
+  const headers = row.map(normalizeHeader);
+
+  const nameIndex = findColumnIndex(headers, [
+    "ten",
+    "ten hang",
+    "mat hang",
+    "hang hoa",
+    "noi dung",
+    "vat tu",
+    "san pham",
+  ]);
+  const dateIndex = findColumnIndex(headers, ["ngay"]);
+  const quantityIndex = findColumnIndex(headers, ["so luong", "so lg", "sl"]);
+  const unitIndex = findColumnIndex(headers, ["don vi", "dvt"]);
+  const unitPriceIndex = findColumnIndex(headers, ["don gia"]);
+  const surchargeIndex = findColumnIndex(headers, ["phat sinh", "ship", "van chuyen"]);
+  const totalIndex = findColumnIndex(headers, ["tong gia", "thanh tien", "tong tien", "tong cong"]);
+
+  if (nameIndex === -1 || dateIndex === -1) {
+    return null;
+  }
+
+  if (quantityIndex === -1 && unitPriceIndex === -1 && totalIndex === -1) {
+    return null;
+  }
+
+  return {
+    name: nameIndex,
+    invoiceDate: dateIndex,
+    quantity: quantityIndex,
+    unit: unitIndex,
+    sourceUnitPrice: unitPriceIndex,
+    surcharge: surchargeIndex,
+    total: totalIndex,
+  };
+};
+
 export function parseExcel(file: File): Promise<any[]> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -316,8 +367,16 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
             dateNF: "d/m/yyyy",
           }) as unknown[][];
 
-          const headerRowIndex = rows.findIndex(hasExpectedHeader);
+          const headerRowIndex = rows.findIndex(
+            (row) => hasExpectedHeader(row) || findInvoiceImportColumnMap(row) !== null
+          );
           if (headerRowIndex === -1) {
+            continue;
+          }
+
+          const headerRow = rows[headerRowIndex] || [];
+          const columnMap = findInvoiceImportColumnMap(headerRow);
+          if (!columnMap) {
             continue;
           }
 
@@ -330,17 +389,24 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
               continue;
             }
 
-            const name = trimCell(row[0]);
-            const invoiceDate = toDateInputValue(row[1]);
-            const quantity = parseQuantityValue(row[2]);
-            const sourceUnitPrice = parseMoneyValue(row[3]);
-            const surcharge = parseMoneyValue(row[4]);
-            const total = parseMoneyValue(row[5]);
+            const name = trimCell(row[columnMap.name]);
+            const invoiceDate = toDateInputValue(row[columnMap.invoiceDate]);
+            const quantity =
+              columnMap.quantity >= 0 ? parseQuantityValue(row[columnMap.quantity]) : 0;
+            const unit = columnMap.unit >= 0 ? trimCell(row[columnMap.unit]) : "";
+            const sourceUnitPrice =
+              columnMap.sourceUnitPrice >= 0
+                ? parseMoneyValue(row[columnMap.sourceUnitPrice])
+                : 0;
+            const surcharge =
+              columnMap.surcharge >= 0 ? parseMoneyValue(row[columnMap.surcharge]) : 0;
+            const total = columnMap.total >= 0 ? parseMoneyValue(row[columnMap.total]) : 0;
 
             const isCategoryRow =
               name &&
               !invoiceDate &&
               quantity <= 0 &&
+              !unit &&
               sourceUnitPrice <= 0 &&
               surcharge <= 0 &&
               total <= 0;
@@ -371,7 +437,7 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
               {
                 name,
                 quantity: effectiveQuantity,
-                unit: "",
+                unit,
                 unitPrice: effectiveUnitPrice,
               },
             ];

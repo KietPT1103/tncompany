@@ -193,6 +193,17 @@ const buildItemPayload = (items: EditableItem[]) =>
     }))
     .filter((item) => item.name && item.quantity > 0 && item.unitPrice > 0);
 
+const FALLBACK_SITE_URL = "https://tnservice.vn";
+const CONFIGURED_SITE_URL = (import.meta.env.VITE_SITE_URL || "").trim();
+
+type ExportRowValue = string | number;
+type ExportRow = Record<string, ExportRowValue>;
+type ExportHyperlinkCell = {
+  column: string;
+  rowIndex: number;
+  url: string;
+};
+
 function buildExportRows(entries: InvoiceEntry[], scopeLabel: string) {
   return entries.flatMap((entry) => {
     const evidenceUrls =
@@ -218,6 +229,153 @@ function buildExportRows(entries: InvoiceEntry[], scopeLabel: string) {
       "Tạo lúc": index === 0 ? entry.createdAt : "",
       "Cập nhật lúc": index === 0 ? entry.updatedAt : "",
     }));
+  });
+}
+
+const buildExportBaseUrl = () => {
+  if (typeof window !== "undefined" && window.location.origin) {
+    return window.location.origin.replace(/\/+$/, "");
+  }
+
+  return (CONFIGURED_SITE_URL || FALLBACK_SITE_URL).replace(/\/+$/, "");
+};
+
+const resolveEvidenceExportUrl = (fileUrl: string) => {
+  const normalizedUrl = fileUrl.trim();
+  if (!normalizedUrl) {
+    return "";
+  }
+
+  try {
+    return new URL(normalizedUrl).toString();
+  } catch {
+    try {
+      return new URL(normalizedUrl, `${buildExportBaseUrl()}/`).toString();
+    } catch {
+      return normalizedUrl;
+    }
+  }
+};
+
+function buildExportWorkbookData(entries: InvoiceEntry[], scopeLabel: string) {
+  const evidenceLinkHeaders = Array.from(
+    {
+      length: entries.reduce(
+        (maxCount, entry) => Math.max(maxCount, entry.evidences.length),
+        0
+      ),
+    },
+    (_, index) => `Link minh chung ${index + 1}`
+  );
+
+  const headers = [
+    "Loai man",
+    "Ngay hoa don",
+    "Ma phieu",
+    "So hoa don",
+    "Don vi / nguoi ban",
+    "Tong hoa don",
+    "Mat hang",
+    "So luong",
+    "Don vi",
+    "Don gia",
+    "Thanh tien",
+    "Ghi chu",
+    "Minh chung",
+    ...evidenceLinkHeaders,
+    "Nguoi tao",
+    "Tao luc",
+    "Cap nhat luc",
+  ];
+
+  const rows: ExportRow[] = [];
+  const hyperlinkCells: ExportHyperlinkCell[] = [];
+
+  entries.forEach((entry) => {
+    const evidenceUrls = entry.evidences.map((evidence) =>
+      resolveEvidenceExportUrl(evidence.fileUrl)
+    );
+
+    entry.items.forEach((item, index) => {
+      const row = headers.reduce<ExportRow>((accumulator, header) => {
+        accumulator[header] = "";
+        return accumulator;
+      }, {});
+
+      row["Loai man"] = scopeLabel;
+      row["Ngay hoa don"] = entry.invoiceDate;
+      row["Ma phieu"] = entry.id;
+      row["So hoa don"] = entry.invoiceNumber || "";
+      row["Don vi / nguoi ban"] = entry.partnerName || "";
+      row["Tong hoa don"] = entry.totalAmount;
+      row["Mat hang"] = item.name;
+      row["So luong"] = item.quantity;
+      row["Don vi"] = item.unit;
+      row["Don gia"] = item.unitPrice;
+      row["Thanh tien"] = item.lineTotal;
+      row["Ghi chu"] = index === 0 ? entry.note || "" : "";
+      row["Minh chung"] = index === 0 ? evidenceUrls.join("\n") : "";
+      row["Nguoi tao"] = index === 0 ? entry.createdBy || "" : "";
+      row["Tao luc"] = index === 0 ? entry.createdAt : "";
+      row["Cap nhat luc"] = index === 0 ? entry.updatedAt : "";
+
+      if (index === 0) {
+        evidenceLinkHeaders.forEach((header, evidenceIndex) => {
+          const url = evidenceUrls[evidenceIndex] || "";
+          row[header] = url;
+
+          if (url) {
+            hyperlinkCells.push({
+              column: header,
+              rowIndex: rows.length,
+              url,
+            });
+          }
+        });
+      }
+
+      rows.push(row);
+    });
+  });
+
+  return {
+    headers,
+    rows,
+    hyperlinkCells,
+  };
+}
+
+function attachExportHyperlinks(
+  worksheet: XLSX.WorkSheet,
+  headers: string[],
+  hyperlinkCells: ExportHyperlinkCell[]
+) {
+  const headerColumnIndex = new Map(
+    headers.map((header, index) => [header, index] as const)
+  );
+
+  hyperlinkCells.forEach(({ column, rowIndex, url }) => {
+    const columnIndex = headerColumnIndex.get(column);
+    if (columnIndex === undefined) {
+      return;
+    }
+
+    const cellAddress = XLSX.utils.encode_cell({
+      r: rowIndex + 1,
+      c: columnIndex,
+    });
+    const cell = worksheet[cellAddress] as
+      | (XLSX.CellObject & { l?: { Target: string; Tooltip?: string } })
+      | undefined;
+
+    if (!cell) {
+      return;
+    }
+
+    cell.l = {
+      Target: url,
+      Tooltip: "Mo minh chung tren web",
+    };
   });
 }
 
@@ -435,7 +593,11 @@ export default function InvoiceAdminPage({
       return;
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(buildExportRows(entries, scopeLabel));
+    const { headers, rows, hyperlinkCells } = buildExportWorkbookData(entries, scopeLabel);
+    const worksheet = XLSX.utils.json_to_sheet(rows, {
+      header: headers,
+    });
+    attachExportHyperlinks(worksheet, headers, hyperlinkCells);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "HoaDon");
     XLSX.writeFile(
