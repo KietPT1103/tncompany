@@ -382,6 +382,7 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
 
           let currentCategory = "";
           let importedRowCount = 0;
+          let latestInvoiceDate = "";
 
           for (let rowIndex = headerRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
             const row = rows[rowIndex] || [];
@@ -390,7 +391,11 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
             }
 
             const name = trimCell(row[columnMap.name]);
-            const invoiceDate = toDateInputValue(row[columnMap.invoiceDate]);
+            const rawInvoiceDate = toDateInputValue(row[columnMap.invoiceDate]);
+            if (rawInvoiceDate && (!latestInvoiceDate || rawInvoiceDate > latestInvoiceDate)) {
+              latestInvoiceDate = rawInvoiceDate;
+            }
+            const invoiceDate = rawInvoiceDate || latestInvoiceDate;
             const quantity =
               columnMap.quantity >= 0 ? parseQuantityValue(row[columnMap.quantity]) : 0;
             const unit = columnMap.unit >= 0 ? trimCell(row[columnMap.unit]) : "";

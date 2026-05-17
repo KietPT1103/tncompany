@@ -96,7 +96,7 @@ function buildInvoiceFormData(
 
 export async function getInvoiceEntries(params: {
   scope: InvoiceScope;
-  storeId: string;
+  storeId?: string;
   search?: string;
   startDate?: string;
   endDate?: string;
@@ -104,10 +104,12 @@ export async function getInvoiceEntries(params: {
 }) {
   const query = new URLSearchParams({
     scope: params.scope,
-    storeId: params.storeId,
     limit: String(params.limit || 200),
   });
 
+  if (params.storeId?.trim()) {
+    query.set("storeId", params.storeId.trim());
+  }
   if (params.search?.trim()) {
     query.set("search", params.search.trim());
   }

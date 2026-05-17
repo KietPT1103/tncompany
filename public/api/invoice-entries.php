@@ -82,6 +82,16 @@ function invoice_normalize_store_id($value): string
     return $storeId !== '' ? $storeId : 'cafe';
 }
 
+function invoice_optional_store_id($value): ?string
+{
+    $storeId = trim((string) $value);
+    if ($storeId === '' || strtolower($storeId) === 'all') {
+        return null;
+    }
+
+    return $storeId;
+}
+
 function invoice_normalize_date($value): string
 {
     $raw = trim((string) $value);
@@ -528,10 +538,7 @@ function invoice_save_entry(array $user): array
         $existingScope = (string) ($existingRow['invoice_scope'] ?? '');
         invoice_require_scope_access($user, $existingScope);
 
-        if (
-            (string) ($existingRow['store_id'] ?? '') !== $storeId
-            || $existingScope !== $scope
-        ) {
+        if ($existingScope !== $scope) {
             respond_error('Invoice not found', 404);
         }
     }
@@ -543,6 +550,7 @@ function invoice_save_entry(array $user): array
             $updateStatement = db()->prepare(
                 'UPDATE invoice_entries
                  SET invoice_number = :invoice_number,
+                     store_id = :store_id,
                      partner_name = :partner_name,
                      invoice_date = :invoice_date,
                      note = :note,
@@ -552,6 +560,7 @@ function invoice_save_entry(array $user): array
             $updateStatement->execute([
                 'id' => $invoiceId,
                 'invoice_number' => $invoiceNumber,
+                'store_id' => $storeId,
                 'partner_name' => $partnerName,
                 'invoice_date' => $invoiceDate,
                 'note' => $note,
@@ -703,7 +712,7 @@ if ($method === 'GET') {
         ]);
     }
 
-    $storeId = invoice_normalize_store_id($_GET['storeId'] ?? 'cafe');
+    $storeId = invoice_optional_store_id($_GET['storeId'] ?? '');
     $scope = invoice_normalize_scope($_GET['scope'] ?? '');
     invoice_require_scope_access($user, $scope);
     $search = trim((string) ($_GET['search'] ?? ''));
@@ -713,12 +722,15 @@ if ($method === 'GET') {
 
     $sql = 'SELECT *
             FROM invoice_entries
-            WHERE store_id = :store_id
-              AND invoice_scope = :invoice_scope';
+            WHERE invoice_scope = :invoice_scope';
     $params = [
-        'store_id' => $storeId,
         'invoice_scope' => $scope,
     ];
+
+    if ($storeId !== null) {
+        $sql .= ' AND store_id = :store_id';
+        $params['store_id'] = $storeId;
+    }
 
     if ($search !== '') {
         $sql .= ' AND (

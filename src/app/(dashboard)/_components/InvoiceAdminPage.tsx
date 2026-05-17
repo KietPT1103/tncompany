@@ -12,7 +12,7 @@ import {
   updateInvoiceEntry,
 } from "@/services/invoiceEntryService";
 import { parseInvoiceImportWorkbook } from "@/services/excel";
-import { useStore } from "@/context/StoreContext";
+import { STORE_NAMES, type StoreType, useStore } from "@/context/StoreContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -52,6 +52,16 @@ type InvoiceDateQuery = {
   startDate?: string;
   endDate?: string;
 };
+
+type InvoiceStoreFilter = "all" | StoreType;
+
+const STORE_FILTER_OPTIONS: Array<{ value: InvoiceStoreFilter; label: string }> = [
+  { value: "all", label: "Tất cả store" },
+  { value: "cafe", label: "Cafe" },
+  { value: "restaurant", label: "Lẩu / Bếp" },
+  { value: "bakery", label: "Tiệm bánh" },
+  { value: "farm", label: "Farm" },
+];
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
@@ -387,6 +397,8 @@ export default function InvoiceAdminPage({
 }: InvoiceAdminPageProps) {
   const { storeId, storeName } = useStore();
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const autoApplyInitializedRef = useRef(false);
+  const skipNextAutoApplyRef = useRef(false);
 
   const [entries, setEntries] = useState<InvoiceEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -403,10 +415,13 @@ export default function InvoiceAdminPage({
     createDefaultFilterState().quarterYear
   );
   const [filterYear, setFilterYear] = useState(createDefaultFilterState().year);
+  const [storeFilterId, setStoreFilterId] = useState<InvoiceStoreFilter>("all");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [appliedDateQuery, setAppliedDateQuery] = useState<InvoiceDateQuery>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<InvoiceEntry | null>(null);
+  const [invoiceStoreId, setInvoiceStoreId] = useState<StoreType>(storeId);
   const [invoiceDate, setInvoiceDate] = useState(todayValue());
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [partnerName, setPartnerName] = useState("");
@@ -415,24 +430,31 @@ export default function InvoiceAdminPage({
   const [keptEvidenceIds, setKeptEvidenceIds] = useState<number[]>([]);
   const [newEvidenceFiles, setNewEvidenceFiles] = useState<File[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
+  const [movingStore, setMovingStore] = useState(false);
+  const [batchStoreId, setBatchStoreId] = useState<StoreType>(storeId);
 
   const scopeLabel = scope === "internal" ? "Nội bộ" : "Thuế";
 
   const loadEntries = async (
     dateQuery: InvoiceDateQuery = appliedDateQuery,
-    keyword: string = appliedSearch
+    keyword: string = appliedSearch,
+    targetStoreFilter: InvoiceStoreFilter = storeFilterId
   ) => {
     setLoading(true);
     try {
       const data = await getInvoiceEntries({
         scope,
-        storeId,
+        storeId: targetStoreFilter === "all" ? undefined : targetStoreFilter,
         search: keyword,
         startDate: dateQuery.startDate,
         endDate: dateQuery.endDate,
         limit: 300,
       });
       setEntries(data);
+      setSelectedEntryIds((current) =>
+        current.filter((entryId) => data.some((entry) => entry.id === entryId))
+      );
     } catch (error) {
       console.error(error);
       alert("Không thể tải danh sách hóa đơn.");
@@ -444,7 +466,72 @@ export default function InvoiceAdminPage({
   useEffect(() => {
     void loadEntries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, storeId]);
+  }, [scope]);
+
+  useEffect(() => {
+    if (!editingEntry) {
+      setInvoiceStoreId(storeId);
+    }
+    setBatchStoreId(storeId);
+  }, [editingEntry, storeId]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [search]);
+
+  useEffect(() => {
+    if (!autoApplyInitializedRef.current) {
+      autoApplyInitializedRef.current = true;
+      return;
+    }
+
+    if (skipNextAutoApplyRef.current) {
+      skipNextAutoApplyRef.current = false;
+      return;
+    }
+
+    const dateQuery = buildDateQuery({
+      mode: filterMode,
+      day: filterDay,
+      startDate,
+      endDate,
+      month: filterMonth,
+      quarter: filterQuarter,
+      quarterYear: filterQuarterYear,
+      year: filterYear,
+    });
+
+    if (dateQuery.error) {
+      return;
+    }
+
+    const keyword = debouncedSearch.trim();
+    const nextDateQuery = {
+      startDate: dateQuery.startDate,
+      endDate: dateQuery.endDate,
+    };
+
+    setAppliedSearch(keyword);
+    setAppliedDateQuery(nextDateQuery);
+    void loadEntries(nextDateQuery, keyword, storeFilterId);
+  }, [
+    debouncedSearch,
+    endDate,
+    filterDay,
+    filterMode,
+    filterMonth,
+    filterQuarter,
+    filterQuarterYear,
+    filterYear,
+    storeFilterId,
+    startDate,
+  ]);
 
   const totalAmount = useMemo(
     () => entries.reduce((sum, entry) => sum + entry.totalAmount, 0),
@@ -455,6 +542,19 @@ export default function InvoiceAdminPage({
     () => entries.reduce((sum, entry) => sum + entry.evidences.length, 0),
     [entries]
   );
+
+  const selectedEntries = useMemo(
+    () => entries.filter((entry) => selectedEntryIds.includes(entry.id)),
+    [entries, selectedEntryIds]
+  );
+
+  const selectedTotalAmount = useMemo(
+    () => selectedEntries.reduce((sum, entry) => sum + entry.totalAmount, 0),
+    [selectedEntries]
+  );
+
+  const isAllEntriesSelected =
+    entries.length > 0 && selectedEntryIds.length === entries.length;
 
   const formTotal = useMemo(
     () =>
@@ -467,6 +567,7 @@ export default function InvoiceAdminPage({
 
   const resetForm = () => {
     setEditingEntry(null);
+    setInvoiceStoreId(storeId);
     setInvoiceDate(todayValue());
     setInvoiceNumber("");
     setPartnerName("");
@@ -483,6 +584,7 @@ export default function InvoiceAdminPage({
 
   const openEditModal = (entry: InvoiceEntry) => {
     setEditingEntry(entry);
+    setInvoiceStoreId(entry.storeId as StoreType);
     setInvoiceDate(entry.invoiceDate);
     setInvoiceNumber(entry.invoiceNumber || "");
     setPartnerName(entry.partnerName || "");
@@ -543,7 +645,7 @@ export default function InvoiceAdminPage({
     try {
       const payload = {
         scope,
-        storeId,
+        storeId: invoiceStoreId,
         invoiceDate,
         invoiceNumber,
         partnerName,
@@ -570,6 +672,24 @@ export default function InvoiceAdminPage({
     }
   };
 
+  const toggleEntrySelection = (entryId: string) => {
+    setSelectedEntryIds((current) =>
+      current.includes(entryId)
+        ? current.filter((id) => id !== entryId)
+        : [...current, entryId]
+    );
+  };
+
+  const toggleSelectAllEntries = () => {
+    setSelectedEntryIds((current) =>
+      current.length === entries.length ? [] : entries.map((entry) => entry.id)
+    );
+  };
+
+  const clearSelection = () => {
+    setSelectedEntryIds([]);
+  };
+
   const handleDelete = async (entry: InvoiceEntry) => {
     if (!confirm(`Xóa hóa đơn ${entry.invoiceNumber || entry.id}?`)) {
       return;
@@ -587,13 +707,45 @@ export default function InvoiceAdminPage({
     }
   };
 
-  const handleExport = () => {
-    if (entries.length === 0) {
+  const handleDeleteSelected = async () => {
+    if (selectedEntries.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 hóa đơn.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Xóa ${selectedEntries.length} hóa đơn đã chọn? Hành động này không thể hoàn tác.`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId("batch");
+    try {
+      for (const entry of selectedEntries) {
+        await deleteInvoiceEntry(entry.id);
+      }
+      clearSelection();
+      await loadEntries();
+    } catch (error) {
+      console.error(error);
+      alert("Không thể xóa các hóa đơn đã chọn.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleExport = (targetEntries: InvoiceEntry[] = entries) => {
+    if (targetEntries.length === 0) {
       alert("Chưa có dữ liệu để xuất.");
       return;
     }
 
-    const { headers, rows, hyperlinkCells } = buildExportWorkbookData(entries, scopeLabel);
+    const { headers, rows, hyperlinkCells } = buildExportWorkbookData(
+      targetEntries,
+      scopeLabel
+    );
     const worksheet = XLSX.utils.json_to_sheet(rows, {
       header: headers,
     });
@@ -604,6 +756,100 @@ export default function InvoiceAdminPage({
       workbook,
       `hoa-don-${scope}-${storeId}-${new Date().toISOString().slice(0, 10)}.xlsx`
     );
+  };
+
+  const updateEntryStore = async (entry: InvoiceEntry, nextStoreId: StoreType) => {
+    if (entry.storeId === nextStoreId) {
+      return;
+    }
+
+    await updateInvoiceEntry(entry.id, {
+      scope,
+      storeId: nextStoreId,
+      invoiceDate: entry.invoiceDate,
+      invoiceNumber: entry.invoiceNumber || "",
+      partnerName: entry.partnerName || "",
+      note: entry.note || "",
+      items: entry.items.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit || "",
+        unitPrice: item.unitPrice,
+      })),
+      keptEvidenceIds: entry.evidences.map((evidence) => evidence.id),
+      evidences: [],
+    });
+  };
+
+  const handleQuickStoreChange = async (entry: InvoiceEntry, nextStoreId: StoreType) => {
+    setMovingStore(true);
+    try {
+      await updateEntryStore(entry, nextStoreId);
+      await loadEntries();
+    } catch (error) {
+      console.error(error);
+      alert("Không thể cập nhật store cho hóa đơn.");
+    } finally {
+      setMovingStore(false);
+    }
+  };
+
+  const handleMoveSelectedToStore = async () => {
+    if (selectedEntries.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 hóa đơn.");
+      return;
+    }
+
+    setMovingStore(true);
+    try {
+      for (const entry of selectedEntries) {
+        await updateEntryStore(entry, batchStoreId);
+      }
+      await loadEntries();
+    } catch (error) {
+      console.error(error);
+      alert("Không thể chuyển store cho các hóa đơn đã chọn.");
+    } finally {
+      setMovingStore(false);
+    }
+  };
+
+  const handleDeleteSelectedAction = async () => {
+    if (selectedEntries.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 hóa đơn.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Xóa ${selectedEntries.length} hóa đơn đã chọn? Hành động này không thể hoàn tác.`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId("batch");
+    try {
+      for (const entry of selectedEntries) {
+        await deleteInvoiceEntry(entry.id);
+      }
+      clearSelection();
+      await loadEntries();
+    } catch (error) {
+      console.error(error);
+      alert("Không thể xóa các hóa đơn đã chọn.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleExportSelected = () => {
+    if (selectedEntries.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 hóa đơn.");
+      return;
+    }
+
+    handleExport(selectedEntries);
   };
 
   const openImportPicker = () => {
@@ -690,39 +936,14 @@ export default function InvoiceAdminPage({
     }
   };
 
-  const applyFilters = async () => {
-    const dateQuery = buildDateQuery({
-      mode: filterMode,
-      day: filterDay,
-      startDate,
-      endDate,
-      month: filterMonth,
-      quarter: filterQuarter,
-      quarterYear: filterQuarterYear,
-      year: filterYear,
-    });
-
-    if (dateQuery.error) {
-      alert(dateQuery.error);
-      return;
-    }
-
-    const keyword = search.trim();
-    const nextDateQuery = {
-      startDate: dateQuery.startDate,
-      endDate: dateQuery.endDate,
-    };
-
-    setAppliedSearch(keyword);
-    setAppliedDateQuery(nextDateQuery);
-    await loadEntries(nextDateQuery, keyword);
-  };
-
   const resetFilters = async () => {
     const defaults = createDefaultFilterState();
+    skipNextAutoApplyRef.current = true;
 
+    setStoreFilterId("all");
     setFilterMode(defaults.mode);
     setSearch("");
+    setDebouncedSearch("");
     setFilterDay(defaults.day);
     setStartDate(defaults.startDate);
     setEndDate(defaults.endDate);
@@ -733,7 +954,7 @@ export default function InvoiceAdminPage({
     setAppliedSearch("");
     setAppliedDateQuery({});
 
-    await loadEntries({}, "");
+    await loadEntries({}, "", "all");
   };
 
   return (
@@ -769,7 +990,12 @@ export default function InvoiceAdminPage({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="gap-2" onClick={loadEntries} disabled={importing}>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => void loadEntries()}
+              disabled={importing}
+            >
               <RefreshCcw className="h-4 w-4" />
               Tải lại
             </Button>
@@ -782,7 +1008,12 @@ export default function InvoiceAdminPage({
               <Upload className="h-4 w-4" />
               Import Excel
             </Button>
-            <Button variant="outline" className="gap-2" onClick={handleExport} disabled={importing}>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => handleExport()}
+              disabled={importing}
+            >
               <Download className="h-4 w-4" />
               Xuất Excel
             </Button>
@@ -797,13 +1028,63 @@ export default function InvoiceAdminPage({
           </div>
         </div>
 
+        {selectedEntryIds.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="text-sm text-emerald-900">
+              <span className="font-semibold">{selectedEntryIds.length}</span> hóa đơn được chọn
+              {selectedTotalAmount > 0 ? ` • ${formatCurrency(selectedTotalAmount)} VND` : ""}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={batchStoreId}
+                onChange={(event) => setBatchStoreId(event.target.value as StoreType)}
+                className="h-10 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-700"
+                disabled={movingStore}
+              >
+                {STORE_FILTER_OPTIONS.filter((option) => option.value !== "all").map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => void handleMoveSelectedToStore()}
+                isLoading={movingStore}
+                disabled={importing}
+              >
+                Chuyển store
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={handleExportSelected}>
+                <Download className="h-4 w-4" />
+                Xuất đã chọn
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                onClick={() => void handleDeleteSelectedAction()}
+                isLoading={deletingId === "batch"}
+                disabled={importing}
+              >
+                <Trash2 className="h-4 w-4" />
+                Xóa đã chọn
+              </Button>
+              <Button variant="ghost" className="gap-2" onClick={clearSelection}>
+                <X className="h-4 w-4" />
+                Bỏ chọn
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="space-y-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">Bộ lọc</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_220px_minmax(0,1fr)_160px_160px]">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_220px_220px_minmax(0,1fr)_72px]">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
                     Tìm kiếm
@@ -813,17 +1094,26 @@ export default function InvoiceAdminPage({
                     <Input
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          void applyFilters();
-                        }
-                      }}
                       className="pl-9"
                       placeholder="Số HĐ, đơn vị, chi tiết, ghi chú"
                     />
                   </div>
                 </div>
                 <div className="space-y-1">
+                  <label className="text-sm font-medium leading-none text-slate-700">
+                    Store
+                  </label>
+                  <select
+                    value={storeFilterId}
+                    onChange={(event) => setStoreFilterId(event.target.value as InvoiceStoreFilter)}
+                    className="mb-4 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    {STORE_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                   <label className="text-sm font-medium leading-none text-slate-700">
                     Kiểu lọc
                   </label>
@@ -915,12 +1205,15 @@ export default function InvoiceAdminPage({
                   ) : null}
                 </div>
                 <div className="flex items-end">
-                  <div className="flex w-full gap-2">
-                    <Button variant="outline" className="flex-1" onClick={applyFilters}>
-                      Áp dụng
-                    </Button>
-                    <Button variant="ghost" className="flex-1" onClick={resetFilters}>
-                      Xóa lọc
+                  <div className="flex w-full justify-end">
+                    <Button
+                      variant="ghost"
+                      className="h-10 w-10 rounded-full p-0"
+                      onClick={() => void resetFilters()}
+                      title="Xóa lọc"
+                      aria-label="Xóa lọc"
+                    >
+                      <X className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -968,8 +1261,19 @@ export default function InvoiceAdminPage({
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50 text-slate-600">
                     <tr>
+                      <th className="px-4 py-3 text-center font-medium">
+                        <input
+                          type="checkbox"
+                          aria-label="Chọn tất cả hóa đơn"
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          checked={isAllEntriesSelected}
+                          onChange={toggleSelectAllEntries}
+                          disabled={loading || entries.length === 0 || importing}
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left font-medium">Ngày</th>
                       <th className="px-4 py-3 text-left font-medium">Số HĐ / Mã</th>
+                      <th className="px-4 py-3 text-left font-medium">Store</th>
                       <th className="px-4 py-3 text-left font-medium">Đơn vị</th>
                       <th className="px-4 py-3 text-left font-medium">Chi tiết</th>
                       <th className="px-4 py-3 text-left font-medium">Minh chứng</th>
@@ -980,25 +1284,61 @@ export default function InvoiceAdminPage({
                   <tbody className="divide-y divide-slate-100">
                     {loading ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                           Đang tải dữ liệu...
                         </td>
                       </tr>
                     ) : entries.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                           Chưa có hóa đơn trong khoảng lọc hiện tại.
                         </td>
                       </tr>
                     ) : (
                       entries.map((entry) => (
-                        <tr key={entry.id} className="align-top hover:bg-slate-50">
+                        <tr
+                          key={entry.id}
+                          className={`align-top hover:bg-slate-50 ${
+                            selectedEntryIds.includes(entry.id) ? "bg-emerald-50/60" : ""
+                          }`}
+                        >
+                          <td className="px-4 py-4 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Chọn hóa đơn ${entry.invoiceNumber || entry.id}`}
+                              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                              checked={selectedEntryIds.includes(entry.id)}
+                              onChange={() => toggleEntrySelection(entry.id)}
+                              disabled={importing}
+                            />
+                          </td>
                           <td className="px-4 py-4 text-slate-700">{entry.invoiceDate}</td>
                           <td className="px-4 py-4">
                             <p className="font-semibold text-slate-900">
                               {entry.invoiceNumber || "Chưa nhập số hóa đơn"}
                             </p>
                             <p className="font-mono text-xs text-slate-500">{entry.id}</p>
+                          </td>
+                          <td className="px-4 py-4">
+                            <select
+                              value={entry.storeId}
+                              onChange={(event) =>
+                                void handleQuickStoreChange(entry, event.target.value as StoreType)
+                              }
+                              className="flex h-9 w-full min-w-[140px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                              disabled={importing || movingStore}
+                            >
+                              {STORE_FILTER_OPTIONS.filter((option) => option.value !== "all").map(
+                                (option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {STORE_NAMES[entry.storeId as StoreType] || entry.storeId}
+                            </p>
                           </td>
                           <td className="px-4 py-4 text-slate-700">
                             <p>{entry.partnerName || "Chưa khai báo"}</p>
@@ -1098,7 +1438,23 @@ export default function InvoiceAdminPage({
             </div>
 
             <div className="max-h-[calc(90vh-144px)] overflow-auto px-6 py-5">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium leading-none text-slate-700">
+                    Store
+                  </label>
+                  <select
+                    value={invoiceStoreId}
+                    onChange={(event) => setInvoiceStoreId(event.target.value as StoreType)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    {STORE_FILTER_OPTIONS.filter((option) => option.value !== "all").map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <Input
                   type="date"
                   label="Ngày hóa đơn *"
