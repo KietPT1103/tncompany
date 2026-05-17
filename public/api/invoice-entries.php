@@ -504,23 +504,26 @@ function invoice_fetch_summary(string $whereSql, array $params): array
     $summaryStatement = db()->prepare(
         'SELECT
             COUNT(*) AS invoice_count,
-            COALESCE(SUM(total_amount), 0) AS total_amount,
-            COALESCE((
-                SELECT COUNT(*)
-                FROM invoice_entry_evidences evidences
-                INNER JOIN invoice_entries summary_entries ON summary_entries.id = evidences.invoice_id
-                WHERE ' . $subqueryWhereSql . '
-            ), 0) AS total_evidence
+            COALESCE(SUM(entries.total_amount), 0) AS total_amount
          FROM invoice_entries entries
          WHERE ' . $whereSql
     );
     $summaryStatement->execute($params);
     $row = $summaryStatement->fetch() ?: [];
 
+    $evidenceStatement = db()->prepare(
+        'SELECT COUNT(*) AS total_evidence
+         FROM invoice_entry_evidences evidences
+         INNER JOIN invoice_entries summary_entries ON summary_entries.id = evidences.invoice_id
+         WHERE ' . $subqueryWhereSql
+    );
+    $evidenceStatement->execute($params);
+    $evidenceRow = $evidenceStatement->fetch() ?: [];
+
     return [
         'count' => (int) ($row['invoice_count'] ?? 0),
         'totalAmount' => (float) ($row['total_amount'] ?? 0),
-        'totalEvidence' => (int) ($row['total_evidence'] ?? 0),
+        'totalEvidence' => (int) ($evidenceRow['total_evidence'] ?? 0),
     ];
 }
 
