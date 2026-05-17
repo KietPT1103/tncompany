@@ -12,7 +12,7 @@ import {
   updateInvoiceEntry,
 } from "@/services/invoiceEntryService";
 import { parseInvoiceImportWorkbook } from "@/services/excel";
-import { STORE_NAMES, type StoreType, useStore } from "@/context/StoreContext";
+import { type StoreType, useStore } from "@/context/StoreContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -781,19 +781,6 @@ export default function InvoiceAdminPage({
     });
   };
 
-  const handleQuickStoreChange = async (entry: InvoiceEntry, nextStoreId: StoreType) => {
-    setMovingStore(true);
-    try {
-      await updateEntryStore(entry, nextStoreId);
-      await loadEntries();
-    } catch (error) {
-      console.error(error);
-      alert("Không thể cập nhật store cho hóa đơn.");
-    } finally {
-      setMovingStore(false);
-    }
-  };
-
   const handleMoveSelectedToStore = async () => {
     if (selectedEntries.length === 0) {
       alert("Vui lòng chọn ít nhất 1 hóa đơn.");
@@ -1273,7 +1260,6 @@ export default function InvoiceAdminPage({
                       </th>
                       <th className="px-4 py-3 text-left font-medium">Ngày</th>
                       <th className="px-4 py-3 text-left font-medium">Số HĐ / Mã</th>
-                      <th className="px-4 py-3 text-left font-medium">Store</th>
                       <th className="px-4 py-3 text-left font-medium">Đơn vị</th>
                       <th className="px-4 py-3 text-left font-medium">Chi tiết</th>
                       <th className="px-4 py-3 text-left font-medium">Minh chứng</th>
@@ -1284,13 +1270,13 @@ export default function InvoiceAdminPage({
                   <tbody className="divide-y divide-slate-100">
                     {loading ? (
                       <tr>
-                        <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                           Đang tải dữ liệu...
                         </td>
                       </tr>
                     ) : entries.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                           Chưa có hóa đơn trong khoảng lọc hiện tại.
                         </td>
                       </tr>
@@ -1318,27 +1304,6 @@ export default function InvoiceAdminPage({
                               {entry.invoiceNumber || "Chưa nhập số hóa đơn"}
                             </p>
                             <p className="font-mono text-xs text-slate-500">{entry.id}</p>
-                          </td>
-                          <td className="px-4 py-4">
-                            <select
-                              value={entry.storeId}
-                              onChange={(event) =>
-                                void handleQuickStoreChange(entry, event.target.value as StoreType)
-                              }
-                              className="flex h-9 w-full min-w-[140px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-                              disabled={importing || movingStore}
-                            >
-                              {STORE_FILTER_OPTIONS.filter((option) => option.value !== "all").map(
-                                (option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                )
-                              )}
-                            </select>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {STORE_NAMES[entry.storeId as StoreType] || entry.storeId}
-                            </p>
                           </td>
                           <td className="px-4 py-4 text-slate-700">
                             <p>{entry.partnerName || "Chưa khai báo"}</p>
