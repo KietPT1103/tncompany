@@ -8,7 +8,9 @@ import {
   deleteInvoiceEntry,
   getInvoiceEntries,
   InvoiceEntry,
+  InvoiceEntryPagination,
   InvoiceScope,
+  InvoiceEntrySummary,
   updateInvoiceEntry,
 } from "@/services/invoiceEntryService";
 import { parseInvoiceImportWorkbook } from "@/services/excel";
@@ -62,6 +64,48 @@ const STORE_FILTER_OPTIONS: Array<{ value: InvoiceStoreFilter; label: string }> 
   { value: "bakery", label: "Tiệm bánh" },
   { value: "farm", label: "Farm" },
 ];
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
+
+const EMPTY_PAGINATION: InvoiceEntryPagination = {
+  page: 1,
+  perPage: 25,
+  total: 0,
+  lastPage: 1,
+  from: 0,
+  to: 0,
+};
+
+const EMPTY_SUMMARY: InvoiceEntrySummary = {
+  count: 0,
+  totalAmount: 0,
+  totalEvidence: 0,
+};
+
+function buildVisiblePages(currentPage: number, lastPage: number) {
+  if (lastPage <= 7) {
+    return Array.from({ length: lastPage }, (_, index) => index + 1);
+  }
+
+  const pages: Array<number | string> = [1];
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(lastPage - 1, currentPage + 1);
+
+  if (start > 2) {
+    pages.push("start-ellipsis");
+  }
+
+  for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+    pages.push(pageNumber);
+  }
+
+  if (end < lastPage - 1) {
+    pages.push("end-ellipsis");
+  }
+
+  pages.push(lastPage);
+  return pages;
+}
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
@@ -404,6 +448,12 @@ export default function InvoiceAdminPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
+  const [pageJump, setPageJump] = useState("1");
+  const [pagination, setPagination] = useState<InvoiceEntryPagination>(EMPTY_PAGINATION);
+  const [overallSummary, setOverallSummary] = useState<InvoiceEntrySummary>(EMPTY_SUMMARY);
+  const [filteredSummary, setFilteredSummary] = useState<InvoiceEntrySummary>(EMPTY_SUMMARY);
   const [filterMode, setFilterMode] = useState<FilterMode>(createDefaultFilterState().mode);
   const [search, setSearch] = useState("");
   const [filterDay, setFilterDay] = useState(createDefaultFilterState().day);
@@ -439,7 +489,9 @@ export default function InvoiceAdminPage({
   const loadEntries = async (
     dateQuery: InvoiceDateQuery = appliedDateQuery,
     keyword: string = appliedSearch,
-    targetStoreFilter: InvoiceStoreFilter = storeFilterId
+    targetStoreFilter: InvoiceStoreFilter = storeFilterId,
+    targetPage: number = page,
+    targetPageSize: number = pageSize
   ) => {
     setLoading(true);
     try {
@@ -449,11 +501,17 @@ export default function InvoiceAdminPage({
         search: keyword,
         startDate: dateQuery.startDate,
         endDate: dateQuery.endDate,
-        limit: 300,
+        page: targetPage,
+        perPage: targetPageSize,
       });
-      setEntries(data);
+      setEntries(data.items);
+      setPagination(data.pagination);
+      setPage(data.pagination.page);
+      setPageJump(String(data.pagination.page));
+      setOverallSummary(data.summary.overall);
+      setFilteredSummary(data.summary.filtered);
       setSelectedEntryIds((current) =>
-        current.filter((entryId) => data.some((entry) => entry.id === entryId))
+        current.filter((entryId) => data.items.some((entry) => entry.id === entryId))
       );
     } catch (error) {
       console.error(error);
@@ -464,7 +522,9 @@ export default function InvoiceAdminPage({
   };
 
   useEffect(() => {
-    void loadEntries();
+    setPage(1);
+    setPageJump("1");
+    void loadEntries(appliedDateQuery, appliedSearch, storeFilterId, 1, pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope]);
 
@@ -519,7 +579,14 @@ export default function InvoiceAdminPage({
 
     setAppliedSearch(keyword);
     setAppliedDateQuery(nextDateQuery);
-    void loadEntries(nextDateQuery, keyword, storeFilterId);
+    if (page !== 1) {
+      setPage(1);
+      setPageJump("1");
+      void loadEntries(nextDateQuery, keyword, storeFilterId, 1, pageSize);
+      return;
+    }
+
+    void loadEntries(nextDateQuery, keyword, storeFilterId, 1, pageSize);
   }, [
     debouncedSearch,
     endDate,
@@ -533,12 +600,12 @@ export default function InvoiceAdminPage({
     startDate,
   ]);
 
-  const totalAmount = useMemo(
+  const currentPageTotalAmount = useMemo(
     () => entries.reduce((sum, entry) => sum + entry.totalAmount, 0),
     [entries]
   );
 
-  const totalEvidence = useMemo(
+  const currentPageTotalEvidence = useMemo(
     () => entries.reduce((sum, entry) => sum + entry.evidences.length, 0),
     [entries]
   );
@@ -944,6 +1011,30 @@ export default function InvoiceAdminPage({
     await loadEntries({}, "", "all");
   };
 
+  const handlePageChange = async (nextPage: number) => {
+    const safePage = Math.max(1, Math.min(nextPage, pagination.lastPage || 1));
+    setPage(safePage);
+    setPageJump(String(safePage));
+    await loadEntries(appliedDateQuery, appliedSearch, storeFilterId, safePage, pageSize);
+  };
+
+  const handlePageSizeChange = async (nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setPage(1);
+    setPageJump("1");
+    await loadEntries(appliedDateQuery, appliedSearch, storeFilterId, 1, nextPageSize);
+  };
+
+  const handleJumpPage = async () => {
+    const targetPage = Number(pageJump);
+    if (!Number.isFinite(targetPage)) {
+      setPageJump(String(page));
+      return;
+    }
+
+    await handlePageChange(targetPage);
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-10">
       <input
@@ -1208,31 +1299,49 @@ export default function InvoiceAdminPage({
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold uppercase text-slate-500">
-                  Số hóa đơn
+                  Tất cả hóa đơn
                 </p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{entries.length}</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{overallSummary.count}</p>
+                <p className="mt-2 text-sm text-slate-500">Theo toàn bộ hóa đơn đã nhập</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold uppercase text-slate-500">
-                  Tổng giá trị
+                  Tổng toàn bộ
                 </p>
                 <p className="mt-2 text-3xl font-bold text-emerald-700">
-                  {formatCurrency(totalAmount)} VND
+                  {formatCurrency(overallSummary.totalAmount)} VND
+                </p>
+                <p className="mt-2 text-sm text-slate-500">Không phụ thuộc bộ lọc hiện tại</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  Theo bộ lọc
+                </p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{filteredSummary.count}</p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Đang xem {pagination.from}-{pagination.to} trên trang này
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold uppercase text-slate-500">
-                  Minh chứng đã tải
+                  Tổng theo bộ lọc
                 </p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{totalEvidence}</p>
+                <p className="mt-2 text-3xl font-bold text-emerald-700">
+                  {formatCurrency(filteredSummary.totalAmount)} VND
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Trang này: {formatCurrency(currentPageTotalAmount)} VND • {currentPageTotalEvidence} minh chứng
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -1240,10 +1349,30 @@ export default function InvoiceAdminPage({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle>
-                Danh sách hóa đơn {scopeLabel.toLowerCase()} ({entries.length})
+                Danh sách hóa đơn {scopeLabel.toLowerCase()} ({filteredSummary.count})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
+              <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-slate-500">
+                  Hiển thị {pagination.from}-{pagination.to} / {filteredSummary.count} hóa đơn theo bộ lọc
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-slate-500">Mỗi trang</span>
+                  <select
+                    value={pageSize}
+                    onChange={(event) => void handlePageSizeChange(Number(event.target.value))}
+                    className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                    disabled={loading}
+                  >
+                    {PAGE_SIZE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50 text-slate-600">
@@ -1381,6 +1510,84 @@ export default function InvoiceAdminPage({
                     )}
                   </tbody>
                 </table>
+              </div>
+              <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-slate-500">
+                  Trang {pagination.page}/{pagination.lastPage} • Tổng {filteredSummary.count} hóa đơn sau lọc
+                </div>
+                <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handlePageChange(1)}
+                    disabled={loading || pagination.page <= 1}
+                  >
+                    Đầu
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handlePageChange(pagination.page - 1)}
+                    disabled={loading || pagination.page <= 1}
+                  >
+                    Trước
+                  </Button>
+                  {buildVisiblePages(pagination.page, pagination.lastPage).map((pageItem) =>
+                    typeof pageItem === "number" ? (
+                      <Button
+                        key={pageItem}
+                        variant={pageItem === pagination.page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => void handlePageChange(pageItem)}
+                        disabled={loading}
+                        className="min-w-10"
+                      >
+                        {pageItem}
+                      </Button>
+                    ) : (
+                      <span key={pageItem} className="px-1 text-sm text-slate-400">
+                        ...
+                      </span>
+                    )
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handlePageChange(pagination.page + 1)}
+                    disabled={loading || pagination.page >= pagination.lastPage}
+                  >
+                    Sau
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handlePageChange(pagination.lastPage)}
+                    disabled={loading || pagination.page >= pagination.lastPage}
+                  >
+                    Cuối
+                  </Button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={pagination.lastPage}
+                    value={pageJump}
+                    onChange={(event) => setPageJump(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        void handleJumpPage();
+                      }
+                    }}
+                    className="h-9 w-20 rounded-md border border-slate-200 bg-white px-2 text-sm outline-none focus:border-emerald-500"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleJumpPage()}
+                    disabled={loading}
+                  >
+                    Đến trang
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

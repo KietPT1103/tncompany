@@ -54,6 +54,30 @@ export type InvoiceEntryPayload = {
   evidences?: File[];
 };
 
+export type InvoiceEntryPagination = {
+  page: number;
+  perPage: number;
+  total: number;
+  lastPage: number;
+  from: number;
+  to: number;
+};
+
+export type InvoiceEntrySummary = {
+  count: number;
+  totalAmount: number;
+  totalEvidence: number;
+};
+
+export type InvoiceEntryListResponse = {
+  items: InvoiceEntry[];
+  pagination: InvoiceEntryPagination;
+  summary: {
+    overall: InvoiceEntrySummary;
+    filtered: InvoiceEntrySummary;
+  };
+};
+
 function buildInvoiceFormData(
   payload: InvoiceEntryPayload,
   mode: "create" | "update",
@@ -100,11 +124,13 @@ export async function getInvoiceEntries(params: {
   search?: string;
   startDate?: string;
   endDate?: string;
-  limit?: number;
+  page?: number;
+  perPage?: number;
 }) {
   const query = new URLSearchParams({
     scope: params.scope,
-    limit: String(params.limit || 200),
+    page: String(Math.max(1, params.page || 1)),
+    perPage: String(Math.max(1, params.perPage || 25)),
   });
 
   if (params.storeId?.trim()) {
@@ -120,14 +146,12 @@ export async function getInvoiceEntries(params: {
     query.set("endDate", params.endDate);
   }
 
-  const { items } = await apiRequest<{ items: InvoiceEntry[] }>(
+  return apiRequest<InvoiceEntryListResponse>(
     `/invoice-entries.php?${query.toString()}`,
     {
       method: "GET",
     }
   );
-
-  return items;
 }
 
 export async function createInvoiceEntry(payload: InvoiceEntryPayload) {

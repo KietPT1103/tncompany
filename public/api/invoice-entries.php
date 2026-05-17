@@ -498,6 +498,37 @@ function invoice_get_entry_or_null(string $id): ?array
     return invoice_map_entry($row, $itemsByInvoiceId, $evidencesByInvoiceId);
 }
 
+function invoice_fetch_summary(string $whereSql, array $params): array
+{
+    $subqueryWhereSql = invoice_with_alias($whereSql, 'summary_entries');
+    $summaryStatement = db()->prepare(
+        'SELECT
+            COUNT(*) AS invoice_count,
+            COALESCE(SUM(total_amount), 0) AS total_amount,
+            COALESCE((
+                SELECT COUNT(*)
+                FROM invoice_entry_evidences evidences
+                INNER JOIN invoice_entries summary_entries ON summary_entries.id = evidences.invoice_id
+                WHERE ' . $subqueryWhereSql . '
+            ), 0) AS total_evidence
+         FROM invoice_entries entries
+         WHERE ' . $whereSql
+    );
+    $summaryStatement->execute($params);
+    $row = $summaryStatement->fetch() ?: [];
+
+    return [
+        'count' => (int) ($row['invoice_count'] ?? 0),
+        'totalAmount' => (float) ($row['total_amount'] ?? 0),
+        'totalEvidence' => (int) ($row['total_evidence'] ?? 0),
+    ];
+}
+
+function invoice_with_alias(string $whereSql, string $alias): string
+{
+    return str_replace('entries.', $alias . '.', $whereSql);
+}
+
 function invoice_save_entry(array $user): array
 {
     $action = trim((string) ($_POST['action'] ?? 'create'));
@@ -718,30 +749,29 @@ if ($method === 'GET') {
     $search = trim((string) ($_GET['search'] ?? ''));
     $startDate = trim((string) ($_GET['startDate'] ?? ''));
     $endDate = trim((string) ($_GET['endDate'] ?? ''));
-    $limit = max(1, min(500, (int) ($_GET['limit'] ?? 200)));
+    $page = max(1, (int) ($_GET['page'] ?? 1));
+    $perPage = max(1, min(500, (int) ($_GET['perPage'] ?? 25)));
 
-    $sql = 'SELECT *
-            FROM invoice_entries
-            WHERE invoice_scope = :invoice_scope';
-    $params = [
+    $baseWhereSql = 'entries.invoice_scope = :invoice_scope';
+    $baseParams = [
         'invoice_scope' => $scope,
     ];
 
     if ($storeId !== null) {
-        $sql .= ' AND store_id = :store_id';
-        $params['store_id'] = $storeId;
+        $baseWhereSql .= ' AND entries.store_id = :store_id';
+        $baseParams['store_id'] = $storeId;
     }
 
     if ($search !== '') {
-        $sql .= ' AND (
-            id LIKE :search_id
-            OR invoice_number LIKE :search_invoice_number
-            OR partner_name LIKE :search_partner_name
-            OR note LIKE :search_note
+        $baseWhereSql .= ' AND (
+            entries.id LIKE :search_id
+            OR entries.invoice_number LIKE :search_invoice_number
+            OR entries.partner_name LIKE :search_partner_name
+            OR entries.note LIKE :search_note
             OR EXISTS (
                 SELECT 1
                 FROM invoice_entry_items invoice_items
-                WHERE invoice_items.invoice_id = invoice_entries.id
+                WHERE invoice_items.invoice_id = entries.id
                   AND (
                     invoice_items.item_name LIKE :search_item_name
                     OR COALESCE(invoice_items.unit, "") LIKE :search_item_unit
@@ -749,27 +779,40 @@ if ($method === 'GET') {
             )
         )';
         $searchValue = '%' . $search . '%';
-        $params['search_id'] = $searchValue;
-        $params['search_invoice_number'] = $searchValue;
-        $params['search_partner_name'] = $searchValue;
-        $params['search_note'] = $searchValue;
-        $params['search_item_name'] = $searchValue;
-        $params['search_item_unit'] = $searchValue;
+        $baseParams['search_id'] = $searchValue;
+        $baseParams['search_invoice_number'] = $searchValue;
+        $baseParams['search_partner_name'] = $searchValue;
+        $baseParams['search_note'] = $searchValue;
+        $baseParams['search_item_name'] = $searchValue;
+        $baseParams['search_item_unit'] = $searchValue;
     }
 
     if ($startDate !== '') {
-        $sql .= ' AND invoice_date >= :start_date';
-        $params['start_date'] = invoice_normalize_date($startDate);
+        $baseWhereSql .= ' AND entries.invoice_date >= :start_date';
+        $baseParams['start_date'] = invoice_normalize_date($startDate);
     }
 
     if ($endDate !== '') {
-        $sql .= ' AND invoice_date <= :end_date';
-        $params['end_date'] = invoice_normalize_date($endDate);
+        $baseWhereSql .= ' AND entries.invoice_date <= :end_date';
+        $baseParams['end_date'] = invoice_normalize_date($endDate);
     }
 
-    $sql .= ' ORDER BY invoice_date DESC, created_at DESC LIMIT ' . $limit;
+    $filteredSummary = invoice_fetch_summary($baseWhereSql, $baseParams);
+    $overallSummary = invoice_fetch_summary('entries.invoice_scope = :invoice_scope', [
+        'invoice_scope' => $scope,
+    ]);
+
+    $lastPage = max(1, (int) ceil($filteredSummary['count'] / $perPage));
+    $page = min($page, $lastPage);
+    $offset = ($page - 1) * $perPage;
+
+    $sql = 'SELECT entries.*
+            FROM invoice_entries entries
+            WHERE ' . $baseWhereSql . '
+            ORDER BY entries.invoice_date DESC, entries.created_at DESC
+            LIMIT ' . $perPage . ' OFFSET ' . $offset;
     $statement = db()->prepare($sql);
-    $statement->execute($params);
+    $statement->execute($baseParams);
     $rows = $statement->fetchAll();
 
     $invoiceIds = array_map(
@@ -789,6 +832,18 @@ if ($method === 'GET') {
             },
             $rows
         ),
+        'pagination' => [
+            'page' => $page,
+            'perPage' => $perPage,
+            'total' => $filteredSummary['count'],
+            'lastPage' => $lastPage,
+            'from' => $filteredSummary['count'] > 0 ? $offset + 1 : 0,
+            'to' => $filteredSummary['count'] > 0 ? $offset + count($rows) : 0,
+        ],
+        'summary' => [
+            'overall' => $overallSummary,
+            'filtered' => $filteredSummary,
+        ],
     ]);
 }
 
