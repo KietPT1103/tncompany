@@ -47,6 +47,19 @@ export type TikTokCommentPagination = {
   last_page: number;
 };
 
+export type TikTokVideoRecord = {
+  id: string;
+  search_id: string;
+  video_id: string;
+  video_url?: string | null;
+  share_url?: string | null;
+  video_username?: string | null;
+  description?: string | null;
+  published_at?: string | null;
+  post_url: string;
+  raw?: Record<string, unknown>;
+};
+
 function buildParams(params: Record<string, string | number | undefined | null>) {
   const searchParams = new URLSearchParams();
 
@@ -97,6 +110,28 @@ export async function getTikTokComments(params: {
     items: TikTokCommentRecord[];
     pagination: TikTokCommentPagination;
   }>(`/tiktok/comments.php?${query}`, {
+    method: "GET",
+  });
+}
+
+export async function getTikTokVideos(params: {
+  search_id: string;
+  page?: number;
+  per_page?: number;
+  query?: string;
+}) {
+  const query = buildParams({
+    search_id: params.search_id,
+    page: params.page || 1,
+    per_page: params.per_page || 10,
+    query: params.query,
+  });
+
+  return apiRequest<{
+    search: TikTokSearchRecord;
+    items: TikTokVideoRecord[];
+    pagination: TikTokCommentPagination;
+  }>(`/tiktok/videos.php?${query}`, {
     method: "GET",
   });
 }

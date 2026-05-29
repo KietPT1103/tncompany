@@ -439,6 +439,72 @@ final class SocialListeningSearchRepository
         return (int) ($row['aggregate_total'] ?? 0);
     }
 
+    public function countVideos(string $searchId, string $query = ''): int
+    {
+        $params = ['search_id' => $searchId];
+        $queryClause = $this->buildVideoQueryClause($query, $params);
+        $statement = db()->prepare(
+            'SELECT COUNT(*) AS aggregate_total
+             FROM social_listening_search_videos
+             WHERE search_id = :search_id' . $queryClause
+        );
+        $statement->execute($params);
+        $row = $statement->fetch();
+
+        return (int) ($row['aggregate_total'] ?? 0);
+    }
+
+    public function listVideos(string $searchId, int $page = 1, int $perPage = 20, string $query = ''): array
+    {
+        $page = max(1, $page);
+        $perPage = max(1, min(100, $perPage));
+        $total = $this->countVideos($searchId, $query);
+        $offset = ($page - 1) * $perPage;
+        $params = ['search_id' => $searchId];
+        $queryClause = $this->buildVideoQueryClause($query, $params);
+
+        $statement = db()->prepare(
+            'SELECT *
+             FROM social_listening_search_videos
+             WHERE search_id = :search_id' . $queryClause . '
+             ORDER BY published_at DESC, created_at DESC
+             LIMIT :limit_count OFFSET :offset_count'
+        );
+        foreach ($params as $key => $value) {
+            $statement->bindValue($key, $value);
+        }
+        $statement->bindValue('limit_count', $perPage, PDO::PARAM_INT);
+        $statement->bindValue('offset_count', $offset, PDO::PARAM_INT);
+        $statement->execute();
+
+        return [
+            'items' => array_map(
+                function (array $row): array {
+                    $video = $this->mapVideoRow($row);
+                    return [
+                        ...$video,
+                        'post_url' => TikTokUrlHelper::buildDirectUrl(
+                            '',
+                            $video['share_url'],
+                            $video['video_url'],
+                            $video['video_username'],
+                            $video['video_id']
+                        ),
+                    ];
+                },
+                $statement->fetchAll()
+            ),
+            'pagination' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'from' => $total === 0 ? 0 : ($offset + 1),
+                'to' => min($total, $offset + $perPage),
+                'last_page' => max(1, (int) ceil($total / $perPage)),
+            ],
+        ];
+    }
+
     public function listComments(string $searchId, int $page = 1, int $perPage = 20, string $query = ''): array
     {
         $page = max(1, $page);
@@ -529,6 +595,31 @@ final class SocialListeningSearchRepository
             OR video_username LIKE :comment_query ESCAPE "\\\\"
             OR comment_id LIKE :comment_query ESCAPE "\\\\"
             OR video_id LIKE :comment_query ESCAPE "\\\\"
+        )';
+    }
+
+    /**
+     * @param array<string, string> $params
+     */
+    private function buildVideoQueryClause(string $query, array &$params): string
+    {
+        $normalized = trim($query);
+        if ($normalized === '') {
+            return '';
+        }
+
+        $params['video_query'] = '%' . strtr($normalized, [
+            '\\' => '\\\\',
+            '%' => '\\%',
+            '_' => '\\_',
+        ]) . '%';
+
+        return ' AND (
+            video_id LIKE :video_query ESCAPE "\\\\"
+            OR video_username LIKE :video_query ESCAPE "\\\\"
+            OR description LIKE :video_query ESCAPE "\\\\"
+            OR video_url LIKE :video_query ESCAPE "\\\\"
+            OR share_url LIKE :video_query ESCAPE "\\\\"
         )';
     }
 

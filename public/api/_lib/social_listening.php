@@ -21,6 +21,7 @@ require_once __DIR__ . '/social_listening/FetchCommentJob.php';
 require_once __DIR__ . '/social_listening/TikTokQueueWorker.php';
 require_once __DIR__ . '/social_listening/TikTokSearchController.php';
 require_once __DIR__ . '/social_listening/TikTokCommentController.php';
+require_once __DIR__ . '/social_listening/TikTokVideoController.php';
 
 function social_listening_services(): array
 {
@@ -63,6 +64,7 @@ function social_listening_services(): array
         'queueWorker' => new TikTokQueueWorker($searchRepository, $searchService, $fetchVideoJob, $fetchCommentJob),
         'tiktokSearchController' => new TikTokSearchController($searchService),
         'tiktokCommentController' => new TikTokCommentController($searchRepository, $searchService),
+        'tiktokVideoController' => new TikTokVideoController($searchRepository, $searchService),
     ];
 
     return $services;
