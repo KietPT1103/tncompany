@@ -258,6 +258,8 @@ type ExportHyperlinkCell = {
   url: string;
 };
 
+type ExportMode = "filtered" | "all";
+
 function buildExportRows(entries: InvoiceEntry[], scopeLabel: string) {
   return entries.flatMap((entry) => {
     const evidenceUrls =
@@ -448,6 +450,7 @@ export default function InvoiceAdminPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [exportingMode, setExportingMode] = useState<ExportMode | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
   const [pageJump, setPageJump] = useState("1");
@@ -609,6 +612,12 @@ export default function InvoiceAdminPage({
     () => entries.reduce((sum, entry) => sum + entry.evidences.length, 0),
     [entries]
   );
+
+  const hasActiveFilters =
+    storeFilterId !== "all" ||
+    appliedSearch.trim().length > 0 ||
+    Boolean(appliedDateQuery.startDate) ||
+    Boolean(appliedDateQuery.endDate);
 
   const selectedEntries = useMemo(
     () => entries.filter((entry) => selectedEntryIds.includes(entry.id)),
@@ -803,7 +812,10 @@ export default function InvoiceAdminPage({
     }
   };
 
-  const handleExport = (targetEntries: InvoiceEntry[] = entries) => {
+  const handleExport = (
+    targetEntries: InvoiceEntry[] = entries,
+    fileLabel: "page" | "filtered" | "all" = "page"
+  ) => {
     if (targetEntries.length === 0) {
       alert("Chưa có dữ liệu để xuất.");
       return;
@@ -821,8 +833,76 @@ export default function InvoiceAdminPage({
     XLSX.utils.book_append_sheet(workbook, worksheet, "HoaDon");
     XLSX.writeFile(
       workbook,
-      `hoa-don-${scope}-${storeId}-${new Date().toISOString().slice(0, 10)}.xlsx`
+      `hoa-don-${scope}-${fileLabel}-${new Date().toISOString().slice(0, 10)}.xlsx`
     );
+  };
+
+  const fetchEntriesForExport = async (mode: ExportMode) => {
+    const exportPageSize = 500;
+    const exportDateQuery = mode === "filtered" ? appliedDateQuery : {};
+    const exportKeyword = mode === "filtered" ? appliedSearch : "";
+    const exportStoreFilter: InvoiceStoreFilter =
+      mode === "filtered" ? storeFilterId : "all";
+
+    const firstPage = await getInvoiceEntries({
+      scope,
+      storeId: exportStoreFilter === "all" ? undefined : exportStoreFilter,
+      search: exportKeyword,
+      startDate: exportDateQuery.startDate,
+      endDate: exportDateQuery.endDate,
+      page: 1,
+      perPage: exportPageSize,
+    });
+
+    const collectedEntries = [...firstPage.items];
+
+    for (let nextPage = 2; nextPage <= firstPage.pagination.lastPage; nextPage += 1) {
+      const nextPageData = await getInvoiceEntries({
+        scope,
+        storeId: exportStoreFilter === "all" ? undefined : exportStoreFilter,
+        search: exportKeyword,
+        startDate: exportDateQuery.startDate,
+        endDate: exportDateQuery.endDate,
+        page: nextPage,
+        perPage: exportPageSize,
+      });
+
+      collectedEntries.push(...nextPageData.items);
+    }
+
+    return collectedEntries;
+  };
+
+  const handleExportByMode = async (mode: ExportMode) => {
+    setExportingMode(mode);
+    try {
+      const exportEntries = await fetchEntriesForExport(mode);
+
+      if (exportEntries.length === 0) {
+        alert(
+          mode === "filtered"
+            ? "Không có dữ liệu theo bộ lọc hiện tại để xuất."
+            : "Chưa có dữ liệu để xuất."
+        );
+        return;
+      }
+
+      handleExport(exportEntries, mode);
+    } catch (error) {
+      console.error(error);
+      alert(
+        mode === "filtered"
+          ? "Không thể xuất Excel theo bộ lọc hiện tại."
+          : "Không thể xuất toàn bộ dữ liệu Excel."
+      );
+    } finally {
+      setExportingMode(null);
+    }
+  };
+
+  const handleExportUsingCurrentFilters = async () => {
+    const exportMode: ExportMode = hasActiveFilters ? "filtered" : "all";
+    await handleExportByMode(exportMode);
   };
 
   const updateEntryStore = async (entry: InvoiceEntry, nextStoreId: StoreType) => {
@@ -1089,11 +1169,12 @@ export default function InvoiceAdminPage({
             <Button
               variant="outline"
               className="gap-2"
-              onClick={() => handleExport()}
-              disabled={importing}
+              onClick={() => void handleExportUsingCurrentFilters()}
+              isLoading={exportingMode !== null}
+              disabled={importing || exportingMode !== null}
             >
               <Download className="h-4 w-4" />
-              Xuất Excel
+              Xuat Excel
             </Button>
             <Button
               className="gap-2 bg-emerald-600 hover:bg-emerald-700"
