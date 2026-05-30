@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 final class TikTokCollectorService implements TikTokCollectorInterface
 {
+    private const DEFAULT_MAX_VIDEOS = 100;
+    private const DEFAULT_MAX_COMMENTS_PER_VIDEO = 500;
+
     /** @var array<string, mixed> */
     private $config;
 
@@ -106,7 +109,7 @@ final class TikTokCollectorService implements TikTokCollectorInterface
                 'keyword' => $keyword,
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo,
-                'max_videos' => (int) ($this->config['tiktok_max_videos'] ?? 20),
+                'max_videos' => max(1, (int) ($this->config['tiktok_max_videos'] ?? self::DEFAULT_MAX_VIDEOS)),
             ]
         );
 
@@ -133,7 +136,7 @@ final class TikTokCollectorService implements TikTokCollectorInterface
                 'video_url' => (string) ($video['video_url'] ?? $video['videoUrl'] ?? ''),
                 'share_url' => (string) ($video['share_url'] ?? $video['shareUrl'] ?? ''),
                 'video_username' => (string) ($video['video_username'] ?? $video['videoUsername'] ?? ''),
-                'max_comments' => (int) ($this->config['tiktok_max_comments_per_video'] ?? 200),
+                'max_comments' => max(1, (int) ($this->config['tiktok_max_comments_per_video'] ?? self::DEFAULT_MAX_COMMENTS_PER_VIDEO)),
             ]
         );
 
@@ -155,7 +158,7 @@ final class TikTokCollectorService implements TikTokCollectorInterface
             'keyword' => $keyword,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
-            'maxItems' => (int) ($this->config['tiktok_max_videos'] ?? 20),
+            'maxItems' => max(1, (int) ($this->config['tiktok_max_videos'] ?? self::DEFAULT_MAX_VIDEOS)),
         ], $token);
 
         return $this->normalizeVideoItems($response);
@@ -165,7 +168,7 @@ final class TikTokCollectorService implements TikTokCollectorInterface
     {
         $token = trim((string) ($this->config['tiktok_apify_token'] ?? ''));
         $actorId = trim((string) ($this->config['tiktok_apify_comment_actor_id'] ?? ''));
-        $maxComments = (int) ($this->config['tiktok_max_comments_per_video'] ?? 200);
+        $maxComments = max(1, (int) ($this->config['tiktok_max_comments_per_video'] ?? self::DEFAULT_MAX_COMMENTS_PER_VIDEO));
         $videoUrl = TikTokUrlHelper::buildDirectUrl(
             $keyword,
             (string) ($video['share_url'] ?? $video['shareUrl'] ?? ''),

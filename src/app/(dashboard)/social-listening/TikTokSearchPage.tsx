@@ -21,20 +21,14 @@ import {
   createTikTokSearch,
   getTikTokComments,
   getTikTokSearchStatus,
-  getTikTokVideos,
   TikTokCommentRecord,
   TikTokSearchRecord,
-  TikTokVideoRecord,
 } from "@/services/socialListeningService";
 
 const DEFAULT_PER_PAGE = 10;
 const COMMENT_FETCH_BATCH_SIZE = 100;
 
 type AggregatedTikTokComment = TikTokCommentRecord & {
-  matchedKeywords: string[];
-};
-
-type AggregatedTikTokVideo = TikTokVideoRecord & {
   matchedKeywords: string[];
 };
 
@@ -130,40 +124,6 @@ function buildAggregatedComments(items: TikTokCommentRecord[]) {
   });
 }
 
-function buildAggregatedVideos(items: TikTokVideoRecord[], searchMap: Map<string, TikTokSearchRecord>) {
-  const videoMap = new Map<string, AggregatedTikTokVideo>();
-
-  items.forEach((video) => {
-    const key = video.video_id;
-    const keyword = normalizeKeyword(searchMap.get(video.search_id)?.keyword || "");
-    const existing = videoMap.get(key);
-
-    if (existing) {
-      const nextKeywords = new Set(existing.matchedKeywords);
-      if (keyword) {
-        nextKeywords.add(keyword);
-      }
-
-      videoMap.set(key, {
-        ...existing,
-        matchedKeywords: Array.from(nextKeywords),
-      });
-      return;
-    }
-
-    videoMap.set(key, {
-      ...video,
-      matchedKeywords: keyword ? [keyword] : [],
-    });
-  });
-
-  return Array.from(videoMap.values()).sort((left, right) => {
-    const leftTime = left.published_at ? new Date(left.published_at).getTime() : 0;
-    const rightTime = right.published_at ? new Date(right.published_at).getTime() : 0;
-    return rightTime - leftTime;
-  });
-}
-
 async function fetchAllCommentsForSearch(searchId: string, query: string) {
   const firstPage = await getTikTokComments({
     search_id: searchId,
@@ -187,45 +147,16 @@ async function fetchAllCommentsForSearch(searchId: string, query: string) {
 
   return items;
 }
-
-async function fetchAllVideosForSearch(searchId: string, query: string) {
-  const firstPage = await getTikTokVideos({
-    search_id: searchId,
-    page: 1,
-    per_page: COMMENT_FETCH_BATCH_SIZE,
-    query,
-  });
-
-  const items = [...(firstPage.items || [])];
-  const lastPage = Math.max(1, firstPage.pagination?.last_page || 1);
-
-  for (let nextPage = 2; nextPage <= lastPage; nextPage += 1) {
-    const response = await getTikTokVideos({
-      search_id: searchId,
-      page: nextPage,
-      per_page: COMMENT_FETCH_BATCH_SIZE,
-      query,
-    });
-    items.push(...(response.items || []));
-  }
-
-  return items;
-}
-
 export default function TikTokSearchPage() {
   const defaults = useMemo(() => getDefaultDateRange(), []);
   const [keywordInput, setKeywordInput] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
   const [commentQuery, setCommentQuery] = useState("");
   const [appliedCommentQuery, setAppliedCommentQuery] = useState("");
-  const [videoQuery, setVideoQuery] = useState("");
-  const [appliedVideoQuery, setAppliedVideoQuery] = useState("");
   const [dateFrom, setDateFrom] = useState(defaults.dateFrom);
   const [dateTo, setDateTo] = useState(defaults.dateTo);
   const [searches, setSearches] = useState<TikTokSearchRecord[]>([]);
-  const [videos, setVideos] = useState<AggregatedTikTokVideo[]>([]);
   const [comments, setComments] = useState<AggregatedTikTokComment[]>([]);
-  const [videoPage, setVideoPage] = useState(1);
   const [page, setPage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
@@ -290,7 +221,6 @@ export default function TikTokSearchPage() {
     [searches]
   );
   const totalComments = comments.length;
-  const totalUniqueVideos = videos.length;
   const activeJobs = useMemo(
     () => searches.reduce((sum, search) => sum + (search.active_jobs || 0), 0),
     [searches]
@@ -322,39 +252,11 @@ export default function TikTokSearchPage() {
     return comments.slice(startIndex, startIndex + DEFAULT_PER_PAGE);
   }, [comments, pagination.page]);
 
-  const videoPagination = useMemo(() => {
-    const total = videos.length;
-    const lastPage = Math.max(1, Math.ceil(total / DEFAULT_PER_PAGE));
-    const safePage = Math.min(videoPage, lastPage);
-    const from = total === 0 ? 0 : (safePage - 1) * DEFAULT_PER_PAGE + 1;
-    const to = total === 0 ? 0 : Math.min(total, safePage * DEFAULT_PER_PAGE);
-
-    return {
-      page: safePage,
-      per_page: DEFAULT_PER_PAGE,
-      total,
-      from,
-      to,
-      last_page: lastPage,
-    };
-  }, [videoPage, videos.length]);
-
-  const paginatedVideos = useMemo(() => {
-    const startIndex = (videoPagination.page - 1) * DEFAULT_PER_PAGE;
-    return videos.slice(startIndex, startIndex + DEFAULT_PER_PAGE);
-  }, [videoPagination.page, videos]);
-
   useEffect(() => {
     if (page !== pagination.page) {
       setPage(pagination.page);
     }
   }, [page, pagination.page]);
-
-  useEffect(() => {
-    if (videoPage !== videoPagination.page) {
-      setVideoPage(videoPagination.page);
-    }
-  }, [videoPage, videoPagination.page]);
 
   function addKeyword(rawValue: string) {
     const normalized = normalizeKeyword(rawValue);
@@ -380,8 +282,7 @@ export default function TikTokSearchPage() {
   async function syncSearches(
     commentFilter = appliedCommentQuery,
     silent = false,
-    targetSearches: TikTokSearchRecord[] = searches,
-    videoFilter = appliedVideoQuery
+    targetSearches: TikTokSearchRecord[] = searches
   ) {
     if (!targetSearches.length) return;
 
@@ -397,19 +298,12 @@ export default function TikTokSearchPage() {
       );
 
       const nextSearches = statusResponses.map((response) => response.search);
-      const searchMap = new Map(nextSearches.map((search) => [search.id, search] as const));
-      const [commentGroups, videoGroups] = await Promise.all([
-        Promise.all(
-          nextSearches.map((search) => fetchAllCommentsForSearch(search.id, commentFilter))
-        ),
-        Promise.all(
-          nextSearches.map((search) => fetchAllVideosForSearch(search.id, videoFilter))
-        ),
-      ]);
+      const commentGroups = await Promise.all(
+        nextSearches.map((search) => fetchAllCommentsForSearch(search.id, commentFilter))
+      );
 
       setSearches(nextSearches);
       setComments(buildAggregatedComments(commentGroups.flat()));
-      setVideos(buildAggregatedVideos(videoGroups.flat(), searchMap));
     } catch (loadError) {
       console.error(loadError);
       setError(loadError instanceof Error ? loadError.message : "Không tải được dữ liệu TikTok.");
@@ -440,12 +334,8 @@ export default function TikTokSearchPage() {
     setError("");
     setIsSubmitting(true);
     setPage(1);
-    setVideoPage(1);
     setCommentQuery("");
     setAppliedCommentQuery("");
-    setVideoQuery("");
-    setAppliedVideoQuery("");
-    setVideos([]);
     setComments([]);
     setSearches([]);
     setKeywordInput("");
@@ -476,7 +366,7 @@ export default function TikTokSearchPage() {
       }
 
       setSearches(succeededSearches);
-      await syncSearches("", false, succeededSearches, "");
+      await syncSearches("", false, succeededSearches);
 
       if (failedMessages.length) {
         setError(`Có ${failedMessages.length} từ khóa tạo job thất bại. ${failedMessages[0]}`);
@@ -493,14 +383,7 @@ export default function TikTokSearchPage() {
     if (!searches.length) return;
     setPage(1);
     setAppliedCommentQuery(commentQuery);
-    await syncSearches(commentQuery, false, searches, appliedVideoQuery);
-  }
-
-  async function handleVideoSearch() {
-    if (!searches.length) return;
-    setVideoPage(1);
-    setAppliedVideoQuery(videoQuery);
-    await syncSearches(appliedCommentQuery, false, searches, videoQuery);
+    await syncSearches(commentQuery, false, searches);
   }
 
   useEffect(() => {
@@ -508,11 +391,11 @@ export default function TikTokSearchPage() {
     if (searches.every((search) => search.is_terminal)) return;
 
     const timer = window.setInterval(() => {
-      void syncSearches(appliedCommentQuery, true, searches, appliedVideoQuery);
+      void syncSearches(appliedCommentQuery, true, searches);
     }, 3000);
 
     return () => window.clearInterval(timer);
-  }, [appliedCommentQuery, appliedVideoQuery, searches]);
+  }, [appliedCommentQuery, searches]);
 
   return (
     <RoleGuard allowedRoles={["admin"]}>
@@ -667,10 +550,6 @@ export default function TikTokSearchPage() {
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{totalVideos}</div>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="text-slate-500">Video unique hiển thị</div>
-                  <div className="mt-2 text-2xl font-semibold text-slate-900">{totalUniqueVideos}</div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
                   <div className="text-slate-500">Comments unique</div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{totalComments}</div>
                 </div>
@@ -693,175 +572,6 @@ export default function TikTokSearchPage() {
               </CardContent>
             </Card>
           </section>
-
-          <Card className="rounded-[28px] border-slate-200">
-            <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <CardTitle className="text-xl text-slate-900">Danh sách video</CardTitle>
-                <p className="mt-2 text-sm text-slate-500">
-                  Đây là tập video TikTok tìm được từ các keyword trước khi hệ thống đi lấy comment.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3 md:items-end">
-                <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
-                  <Input
-                    value={videoQuery}
-                    onChange={(event) => setVideoQuery(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void handleVideoSearch();
-                      }
-                    }}
-                    placeholder="Lọc theo mô tả, username, video_id..."
-                    className="h-11 min-w-[280px] rounded-2xl"
-                  />
-                  <Button
-                    variant="outline"
-                    className="h-11 rounded-2xl"
-                    disabled={!searches.length}
-                    onClick={() => void handleVideoSearch()}
-                  >
-                    <Search className="mr-2 h-4 w-4" />
-                    Tìm video
-                  </Button>
-                </div>
-
-                <div className="inline-flex items-center gap-2 rounded-[20px] bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600">
-                  {videoPagination.total > 0 ? (
-                    <>
-                      <span className="flex h-2 w-2 rounded-full bg-sky-500"></span>
-                      Đang xem <strong className="text-slate-900">{videoPagination.from}-{videoPagination.to}</strong> / {videoPagination.total}
-                    </>
-                  ) : (
-                    "Chưa có video"
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isLoadingComments && !videos.length ? (
-                <div className="flex min-h-[180px] items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50">
-                  <Loader2 className="h-6 w-6 animate-spin text-sky-600" />
-                </div>
-              ) : paginatedVideos.length ? (
-                paginatedVideos.map((video) => (
-                  <article
-                    key={video.video_id}
-                    className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm"
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900">
-                          @{video.video_username || "unknown"}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {formatDisplayDate(video.published_at)}
-                        </div>
-                      </div>
-
-                      <a
-                        href={video.post_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex h-10 items-center justify-center rounded-2xl bg-sky-700 px-4 text-sm font-medium text-white transition hover:bg-sky-800"
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Xem video TikTok
-                      </a>
-                    </div>
-
-                    <p className="mt-4 text-sm leading-6 text-slate-700">
-                      {video.description || "Không có mô tả video."}
-                    </p>
-
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
-                      <span className="rounded-full bg-slate-100 px-3 py-1">video_id: {video.video_id}</span>
-                      {video.matchedKeywords.map((keyword) => (
-                        <span
-                          key={`${video.video_id}-${keyword}`}
-                          className="rounded-full bg-sky-50 px-3 py-1 text-sky-700"
-                        >
-                          {keyword}
-                        </span>
-                      ))}
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">
-                  {searches.length
-                    ? "Không có video thỏa điều kiện hoặc worker chưa đồng bộ xong."
-                    : "Nhập từ khóa và khoảng ngày để bắt đầu crawl dữ liệu TikTok."}
-                </div>
-              )}
-
-              {videoPagination.total > 0 && (
-                <div className="mt-8 flex flex-col items-center gap-4 py-4 md:flex-row md:justify-center">
-                  <div className="flex items-center gap-1">
-                    <button
-                      disabled={videoPagination.page <= 1}
-                      onClick={() => setVideoPage(1)}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      <ChevronsLeft className="h-5 w-5" />
-                    </button>
-                    <button
-                      disabled={videoPagination.page <= 1}
-                      onClick={() => setVideoPage((current) => Math.max(1, current - 1))}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-
-                    {Array.from({ length: Math.min(5, videoPagination.last_page) }, (_, i) => {
-                      let start = Math.max(1, videoPagination.page - 2);
-                      let end = Math.min(videoPagination.last_page, start + 4);
-                      if (end - start < 4) {
-                        start = Math.max(1, end - 4);
-                      }
-                      const currentPage = start + i;
-                      if (currentPage > videoPagination.last_page) return null;
-
-                      const isCurrent = currentPage === videoPagination.page;
-
-                      return (
-                        <button
-                          key={`video-page-${currentPage}`}
-                          onClick={() => setVideoPage(currentPage)}
-                          className={`flex h-10 w-10 items-center justify-center rounded-full text-sm transition-colors ${
-                            isCurrent
-                              ? "bg-sky-700 font-medium text-white shadow-sm"
-                              : "text-slate-600 hover:bg-slate-100"
-                          }`}
-                        >
-                          {currentPage}
-                        </button>
-                      );
-                    })}
-
-                    <button
-                      disabled={videoPagination.page >= videoPagination.last_page}
-                      onClick={() =>
-                        setVideoPage((current) => Math.min(videoPagination.last_page || 1, current + 1))
-                      }
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-                    <button
-                      disabled={videoPagination.page >= videoPagination.last_page}
-                      onClick={() => setVideoPage(videoPagination.last_page)}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      <ChevronsRight className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
           <Card className="rounded-[28px] border-slate-200">
             <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
