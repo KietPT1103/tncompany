@@ -72,15 +72,15 @@ function getStatusLabel(status?: string | null) {
     case "queued":
       return "Queued";
     case "fetching_videos":
-      return "Dang lay video";
+      return "Đang lấy video";
     case "fetching_comments":
-      return "Dang lay comment";
+      return "Đang lấy comment";
     case "completed":
-      return "Hoan tat";
+      return "Hoàn tất";
     case "failed":
-      return "That bai";
+      return "Thất bại";
     case "partial_failed":
-      return "Co loi mot phan";
+      return "Có lỗi một phần";
     default:
       return status || "N/A";
   }
@@ -266,11 +266,11 @@ export default function TikTokSearchPage() {
 
   const aggregateProgressMessage = useMemo(() => {
     if (!searches.length) {
-      return "Chua co search nao.";
+      return "Chưa có search nào.";
     }
 
     const activeSearch = searches.find((search) => !search.is_terminal) || searches[0];
-    return activeSearch?.progress_message || `Dang theo doi ${searches.length} tu khoa.`;
+    return activeSearch?.progress_message || `Đang theo dõi ${searches.length} từ khóa.`;
   }, [searches]);
 
   const aggregateProvider = useMemo(() => {
@@ -412,7 +412,7 @@ export default function TikTokSearchPage() {
       setVideos(buildAggregatedVideos(videoGroups.flat(), searchMap));
     } catch (loadError) {
       console.error(loadError);
-      setError(loadError instanceof Error ? loadError.message : "Khong tai duoc du lieu TikTok.");
+      setError(loadError instanceof Error ? loadError.message : "Không tải được dữ liệu TikTok.");
     } finally {
       setIsLoadingComments(false);
       setIsPolling(false);
@@ -433,7 +433,7 @@ export default function TikTokSearchPage() {
     }
 
     if (!nextKeywords.length) {
-      setError("Vui long nhap it nhat mot tu khoa.");
+      setError("Vui lòng nhập ít nhất một từ khóa.");
       return;
     }
 
@@ -467,23 +467,23 @@ export default function TikTokSearchPage() {
       );
       const failedMessages = responses.flatMap((response) =>
         response.status === "rejected"
-          ? [response.reason instanceof Error ? response.reason.message : "Khong tao duoc search TikTok."]
+          ? [response.reason instanceof Error ? response.reason.message : "Không tạo được search TikTok."]
           : []
       );
 
       if (!succeededSearches.length) {
-        throw new Error(failedMessages[0] || "Khong tao duoc search TikTok.");
+        throw new Error(failedMessages[0] || "Không tạo được search TikTok.");
       }
 
       setSearches(succeededSearches);
       await syncSearches("", false, succeededSearches, "");
 
       if (failedMessages.length) {
-        setError(`Co ${failedMessages.length} tu khoa tao job that bai. ${failedMessages[0]}`);
+        setError(`Có ${failedMessages.length} từ khóa tạo job thất bại. ${failedMessages[0]}`);
       }
     } catch (submitError) {
       console.error(submitError);
-      setError(submitError instanceof Error ? submitError.message : "Khong tao duoc search TikTok.");
+      setError(submitError instanceof Error ? submitError.message : "Không tạo được search TikTok.");
     } finally {
       setIsSubmitting(false);
     }
@@ -526,11 +526,11 @@ export default function TikTokSearchPage() {
                   TikTok Social Listening
                 </div>
                 <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-                  Tim comment TikTok that theo keyword va khoang ngay
+                  Tìm comment TikTok thật theo keyword và khoảng ngày
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">
-                  Module nay chi doc du lieu that tu TikTok thong qua provider duoc cau hinh. Neu
-                  khong lay duoc du lieu, he thong tra ve rong va khong sinh comment gia.
+                  Module này chỉ đọc dữ liệu thật từ TikTok thông qua provider được cấu hình. Nếu
+                  không lấy được dữ liệu, hệ thống trả về rỗng và không sinh comment giả.
                 </p>
               </div>
 
@@ -538,7 +538,7 @@ export default function TikTokSearchPage() {
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="md:col-span-3">
                     <Input
-                      label="Tu khoa"
+                      label="Từ khóa"
                       value={keywordInput}
                       onChange={(event) => setKeywordInput(event.target.value)}
                       onKeyDown={(event) => {
@@ -553,7 +553,7 @@ export default function TikTokSearchPage() {
                           removeKeyword(keywords[keywords.length - 1]);
                         }
                       }}
-                      placeholder="Nhap tu khoa roi nhan Enter de them"
+                      placeholder="Nhập từ khóa rồi nhấn Enter để thêm"
                       className="h-11 rounded-2xl border-white/10 bg-white/10 text-white placeholder:text-slate-300"
                     />
 
@@ -575,14 +575,14 @@ export default function TikTokSearchPage() {
                   </div>
 
                   <Input
-                    label="Tu ngay"
+                    label="Từ ngày"
                     type="date"
                     value={dateFrom}
                     onChange={(event) => setDateFrom(event.target.value)}
                     className="h-11 rounded-2xl border-white/10 bg-white/10 text-white"
                   />
                   <Input
-                    label="Den ngay"
+                    label="Đến ngày"
                     type="date"
                     value={dateTo}
                     onChange={(event) => setDateTo(event.target.value)}
@@ -590,7 +590,7 @@ export default function TikTokSearchPage() {
                   />
                   <div className="flex items-end">
                     <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                      Dang theo doi <strong className="text-white">{keywords.length || 0}</strong> tu khoa
+                      Đang theo dõi <strong className="text-white">{keywords.length || 0}</strong> từ khóa
                     </div>
                   </div>
                 </div>
@@ -601,7 +601,7 @@ export default function TikTokSearchPage() {
                     isLoading={isSubmitting}
                   >
                     <Search className="mr-2 h-4 w-4" />
-                    Thu thap du lieu
+                    Thu thập dữ liệu
                   </Button>
                   <Button
                     variant="outline"
@@ -611,7 +611,7 @@ export default function TikTokSearchPage() {
                     isLoading={isLoadingComments && !isSubmitting}
                   >
                     <RefreshCcw className="mr-2 h-4 w-4" />
-                    Tai lai
+                    Tải lại
                   </Button>
                 </div>
               </div>
@@ -627,7 +627,7 @@ export default function TikTokSearchPage() {
           <section className="grid gap-4 md:grid-cols-4">
             <Card className="rounded-[28px] border-slate-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg text-slate-900">Trang thai job</CardTitle>
+                <CardTitle className="text-lg text-slate-900">Trạng thái job</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -643,15 +643,15 @@ export default function TikTokSearchPage() {
 
             <Card className="rounded-[28px] border-slate-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg text-slate-900">Tu khoa</CardTitle>
+                <CardTitle className="text-lg text-slate-900">Từ khóa</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="text-slate-500">Da nhap</div>
+                  <div className="text-slate-500">Đã nhập</div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{keywords.length}</div>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="text-slate-500">Job tao thanh cong</div>
+                  <div className="text-slate-500">Job tạo thành công</div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{searches.length}</div>
                 </div>
               </CardContent>
@@ -659,15 +659,15 @@ export default function TikTokSearchPage() {
 
             <Card className="rounded-[28px] border-slate-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg text-slate-900">Ket qua thu thap</CardTitle>
+                <CardTitle className="text-lg text-slate-900">Kết quả thu thập</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="text-slate-500">Videos da thu thap</div>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="text-slate-500">Videos đã thu thập</div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{totalVideos}</div>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="text-slate-500">Video unique hien thi</div>
+                  <div className="text-slate-500">Video unique hiển thị</div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{totalUniqueVideos}</div>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-4">
@@ -683,11 +683,11 @@ export default function TikTokSearchPage() {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="text-slate-500">Job dang chay</div>
+                  <div className="text-slate-500">Job đang chạy</div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{activeJobs}</div>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="text-slate-500">Da xu ly</div>
+                  <div className="text-slate-500">Đã xử lý</div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{processedJobs}</div>
                 </div>
               </CardContent>
@@ -697,9 +697,9 @@ export default function TikTokSearchPage() {
           <Card className="rounded-[28px] border-slate-200">
             <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle className="text-xl text-slate-900">Danh sach video</CardTitle>
+                <CardTitle className="text-xl text-slate-900">Danh sách video</CardTitle>
                 <p className="mt-2 text-sm text-slate-500">
-                  Day la tap video TikTok tim duoc tu cac keyword truoc khi he thong di lay comment.
+                  Đây là tập video TikTok tìm được từ các keyword trước khi hệ thống đi lấy comment.
                 </p>
               </div>
 
@@ -714,7 +714,7 @@ export default function TikTokSearchPage() {
                         void handleVideoSearch();
                       }
                     }}
-                    placeholder="Loc theo mo ta, username, video_id..."
+                    placeholder="Lọc theo mô tả, username, video_id..."
                     className="h-11 min-w-[280px] rounded-2xl"
                   />
                   <Button
@@ -724,7 +724,7 @@ export default function TikTokSearchPage() {
                     onClick={() => void handleVideoSearch()}
                   >
                     <Search className="mr-2 h-4 w-4" />
-                    Tim video
+                    Tìm video
                   </Button>
                 </div>
 
@@ -732,10 +732,10 @@ export default function TikTokSearchPage() {
                   {videoPagination.total > 0 ? (
                     <>
                       <span className="flex h-2 w-2 rounded-full bg-sky-500"></span>
-                      Dang xem <strong className="text-slate-900">{videoPagination.from}-{videoPagination.to}</strong> / {videoPagination.total}
+                      Đang xem <strong className="text-slate-900">{videoPagination.from}-{videoPagination.to}</strong> / {videoPagination.total}
                     </>
                   ) : (
-                    "Chua co video"
+                    "Chưa có video"
                   )}
                 </div>
               </div>
@@ -773,7 +773,7 @@ export default function TikTokSearchPage() {
                     </div>
 
                     <p className="mt-4 text-sm leading-6 text-slate-700">
-                      {video.description || "Khong co mo ta video."}
+                      {video.description || "Không có mô tả video."}
                     </p>
 
                     <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
@@ -792,8 +792,8 @@ export default function TikTokSearchPage() {
               ) : (
                 <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">
                   {searches.length
-                    ? "Khong co video thoa dieu kien hoac worker chua dong bo xong."
-                    : "Nhap tu khoa va khoang ngay de bat dau crawl du lieu TikTok."}
+                    ? "Không có video thỏa điều kiện hoặc worker chưa đồng bộ xong."
+                    : "Nhập từ khóa và khoảng ngày để bắt đầu crawl dữ liệu TikTok."}
                 </div>
               )}
 
@@ -866,9 +866,9 @@ export default function TikTokSearchPage() {
           <Card className="rounded-[28px] border-slate-200">
             <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle className="text-xl text-slate-900">Danh sach comment that</CardTitle>
+                <CardTitle className="text-xl text-slate-900">Danh sách comment thật</CardTitle>
                 <p className="mt-2 text-sm text-slate-500">
-                  He thong dang gop comment tu tat ca keyword da tao job. Khong co mock data.
+                  Hệ thống đang gộp comment từ tất cả keyword đã tạo job. Không có mock data.
                 </p>
               </div>
 
@@ -883,7 +883,7 @@ export default function TikTokSearchPage() {
                         void handleCommentSearch();
                       }
                     }}
-                    placeholder="Loc theo noi dung, user, video_id..."
+                    placeholder="Lọc theo nội dung, user, video_id..."
                     className="h-11 min-w-[280px] rounded-2xl"
                   />
                   <Button
@@ -893,7 +893,7 @@ export default function TikTokSearchPage() {
                     onClick={() => void handleCommentSearch()}
                   >
                     <Search className="mr-2 h-4 w-4" />
-                    Tim comment
+                    Tìm comment
                   </Button>
                 </div>
 
@@ -901,10 +901,10 @@ export default function TikTokSearchPage() {
                   {pagination.total > 0 ? (
                     <>
                       <span className="flex h-2 w-2 rounded-full bg-emerald-500"></span>
-                      Dang xem <strong className="text-slate-900">{pagination.from}-{pagination.to}</strong> / {pagination.total}
+                      Đang xem <strong className="text-slate-900">{pagination.from}-{pagination.to}</strong> / {pagination.total}
                     </>
                   ) : (
-                    "Chua co du lieu"
+                    "Chưa có dữ liệu"
                   )}
                 </div>
               </div>
@@ -937,7 +937,7 @@ export default function TikTokSearchPage() {
                         className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
                       >
                         <ExternalLink className="mr-2 h-4 w-4" />
-                        Xem bai TikTok
+                        Xem bài TikTok
                       </a>
                     </div>
 
@@ -964,8 +964,8 @@ export default function TikTokSearchPage() {
               ) : (
                 <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">
                   {searches.length
-                    ? "Khong co comment thoa dieu kien hoac worker chua dong bo xong."
-                    : "Nhap tu khoa va khoang ngay de bat dau crawl du lieu TikTok."}
+                    ? "Không có comment thỏa điều kiện hoặc worker chưa đồng bộ xong."
+                    : "Nhập từ khóa và khoảng ngày để bắt đầu crawl dữ liệu TikTok."}
                 </div>
               )}
 

@@ -428,6 +428,18 @@ CREATE TABLE IF NOT EXISTS payrolls (
   CONSTRAINT fk_payrolls_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS role_start_times (
+  id VARCHAR(64) PRIMARY KEY,
+  store_id VARCHAR(32) NOT NULL,
+  role_name VARCHAR(100) NOT NULL,
+  start_time CHAR(5) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_role_start_time (store_id, role_name),
+  KEY idx_role_start_times_store (store_id),
+  CONSTRAINT fk_role_start_times_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS payroll_entries (
   id VARCHAR(64) PRIMARY KEY,
   payroll_id VARCHAR(64) NOT NULL,

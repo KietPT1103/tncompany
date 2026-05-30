@@ -6,17 +6,19 @@ import { useStore } from "@/context/StoreContext";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, FileSpreadsheet, Users } from "lucide-react";
+import { ArrowLeft, Clock3, FileSpreadsheet, Users } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import EmployeeManager from "./_components/EmployeeManager";
 import PayrollManager from "./_components/PayrollManager";
 import PayrollDetail from "./_components/PayrollDetail";
+import RoleStartTimeManager from "./_components/RoleStartTimeManager";
 
-type PayrollTab = "employee" | "payroll";
+type PayrollTab = "employee" | "payroll" | "roleStartTime";
 
 const tabs = [
   { id: "payroll" as const, label: "Bảng lương", icon: FileSpreadsheet },
   { id: "employee" as const, label: "Nhân sự", icon: Users },
+  { id: "roleStartTime" as const, label: "Gi\u1edd vào theo vị trí", icon: Clock3 },
 ];
 
 export default function PayrollPage() {
@@ -105,6 +107,8 @@ export default function PayrollPage() {
 
         {activeTab === "employee" ? (
           <EmployeeManager storeId={storeId} refreshKey={employeeRefreshKey} />
+        ) : activeTab === "roleStartTime" ? (
+          <RoleStartTimeManager storeId={storeId} />
         ) : selectedPayrollId ? (
           <PayrollDetail
             payrollId={selectedPayrollId}

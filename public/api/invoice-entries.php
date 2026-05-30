@@ -498,6 +498,78 @@ function invoice_get_entry_or_null(string $id): ?array
     return invoice_map_entry($row, $itemsByInvoiceId, $evidencesByInvoiceId);
 }
 
+function invoice_build_items_fingerprint(array $items): string
+{
+    $parts = [];
+
+    foreach ($items as $item) {
+        $parts[] = implode('::', [
+            strtolower(trim((string) ($item['name'] ?? ''))),
+            number_format((float) ($item['quantity'] ?? 0), 3, '.', ''),
+            strtolower(trim((string) ($item['unit'] ?? ''))),
+            number_format((float) ($item['unitPrice'] ?? 0), 2, '.', ''),
+            number_format((float) ($item['lineTotal'] ?? 0), 2, '.', ''),
+        ]);
+    }
+
+    return implode('||', $parts);
+}
+
+function invoice_find_existing_import_duplicate_id(
+    string $storeId,
+    string $scope,
+    string $invoiceDate,
+    ?string $note,
+    float $totalAmount,
+    array $items
+): ?string {
+    if ($note === null || strpos($note, 'Import Excel sheet:') !== 0) {
+        return null;
+    }
+
+    $statement = db()->prepare(
+        'SELECT id
+         FROM invoice_entries
+         WHERE store_id = :store_id
+           AND invoice_scope = :invoice_scope
+           AND invoice_date = :invoice_date
+           AND note = :note
+           AND ABS(total_amount - :total_amount) < 0.005
+         ORDER BY created_at DESC
+         LIMIT 10'
+    );
+    $statement->execute([
+        'store_id' => $storeId,
+        'invoice_scope' => $scope,
+        'invoice_date' => $invoiceDate,
+        'note' => $note,
+        'total_amount' => $totalAmount,
+    ]);
+
+    $candidateIds = array_values(array_filter(array_map(
+        static function ($row): string {
+            return trim((string) ($row['id'] ?? ''));
+        },
+        $statement->fetchAll()
+    )));
+
+    if ($candidateIds === []) {
+        return null;
+    }
+
+    $incomingFingerprint = invoice_build_items_fingerprint($items);
+    $itemsByInvoiceId = invoice_fetch_items_grouped($candidateIds);
+
+    foreach ($candidateIds as $candidateId) {
+        $existingItems = $itemsByInvoiceId[$candidateId] ?? [];
+        if (invoice_build_items_fingerprint($existingItems) === $incomingFingerprint) {
+            return $candidateId;
+        }
+    }
+
+    return null;
+}
+
 function invoice_fetch_summary(string $whereSql, array $params): array
 {
     $subqueryWhereSql = invoice_with_alias($whereSql, 'summary_entries');
@@ -574,6 +646,21 @@ function invoice_save_entry(array $user): array
 
         if ($existingScope !== $scope) {
             respond_error('Invoice not found', 404);
+        }
+    } else {
+        $existingImportDuplicateId = invoice_find_existing_import_duplicate_id(
+            $storeId,
+            $scope,
+            $invoiceDate,
+            $note,
+            $totalAmount,
+            $items
+        );
+        if ($existingImportDuplicateId !== null) {
+            $existingEntry = invoice_get_entry_or_null($existingImportDuplicateId);
+            if ($existingEntry !== null) {
+                return $existingEntry;
+            }
         }
     }
 

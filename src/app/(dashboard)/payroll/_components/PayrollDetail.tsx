@@ -18,6 +18,7 @@ import {
   getEmployees,
   updateEmployee,
 } from "@/services/employees.firebase";
+import { getRoleStartTimes } from "@/services/roleStartTimes";
 
 import { useStore } from "@/context/StoreContext";
 
@@ -55,6 +56,7 @@ import {
   getAttendanceBonusProgress,
   getAttendanceBonusValue,
   getDefaultRoleForStore,
+  getEntryLateSummary,
   getPayrollBreakdown,
   getRoleGroupsForStore,
   normalizePayrollSalaryType,
@@ -71,6 +73,8 @@ type VisibleColumns = {
   name: boolean;
 
   role: boolean;
+
+  late: boolean;
 
   hours: boolean;
 
@@ -94,6 +98,8 @@ const DEFAULT_COLUMNS: VisibleColumns = {
 
   role: true,
 
+  late: true,
+
   hours: true,
 
   workDays: true,
@@ -114,6 +120,7 @@ const DEFAULT_COLUMNS: VisibleColumns = {
 const COLUMN_OPTIONS: { key: keyof VisibleColumns; label: string }[] = [
   { key: "name", label: "Nhân viên" },
   { key: "role", label: "Vai trò" },
+  { key: "late", label: "Đi trễ" },
   { key: "hours", label: "Giờ làm" },
   { key: "workDays", label: "Ngày công" },
   { key: "rate", label: "Đơn giá" },
@@ -398,6 +405,8 @@ export default function PayrollDetail({
   const [hasLoadedColumnPrefs, setHasLoadedColumnPrefs] = useState(false);
 
   const [filterError, setFilterError] = useState(false);
+  const [filterLateOnly, setFilterLateOnly] = useState(false);
+  const [roleStartTimes, setRoleStartTimes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadEntries();
@@ -405,6 +414,10 @@ export default function PayrollDetail({
 
   useEffect(() => {
     if (storeId) loadSavedEmployees();
+  }, [storeId]);
+  useEffect(() => {
+    if (!storeId) return;
+    void loadRoleStartTimeConfig();
   }, [storeId]);
   useEffect(() => {
     if (savedEmployees.length === 0) return;
@@ -531,6 +544,22 @@ export default function PayrollDetail({
   async function loadSavedEmployees() {
     if (!storeId) return;
     setSavedEmployees(await getEmployees(storeId));
+  }
+
+  async function loadRoleStartTimeConfig() {
+    if (!storeId) return;
+    try {
+      const items = await getRoleStartTimes(storeId);
+      setRoleStartTimes(
+        items.reduce<Record<string, string>>((result, item) => {
+          result[item.role] = item.startTime;
+          return result;
+        }, {}),
+      );
+    } catch (error) {
+      console.error(error);
+      setRoleStartTimes({});
+    }
   }
 
   const availableEmployees = useMemo(
@@ -959,6 +988,10 @@ export default function PayrollDetail({
     .filter((entry) => {
       const keyword = searchTerm.trim().toLowerCase();
       const code = (entry.employeeCode || "").toLowerCase();
+      const lateSummary = getEntryLateSummary(
+        entry,
+        roleStartTimes[entry.role || defaultRole],
+      );
 
       const matchesSearch =
         !keyword ||
@@ -969,8 +1002,9 @@ export default function PayrollDetail({
       const matchesRole = filterRole === "All" || entry.role === filterRole;
 
       const matchesError = !filterError || hasEntryError(entry);
+      const matchesLate = !filterLateOnly || lateSummary.lateShiftCount > 0;
 
-      return matchesSearch && matchesRole && matchesError;
+      return matchesSearch && matchesRole && matchesError && matchesLate;
     })
     .sort((left, right) => {
       if (sortBy === "name_asc")
@@ -1011,6 +1045,16 @@ export default function PayrollDetail({
   );
 
   const warnings = entries.filter((entry) => hasInvalidShift(entry)).length;
+  const lateSummaries = entries.map((entry) =>
+    getEntryLateSummary(entry, roleStartTimes[entry.role || defaultRole]),
+  );
+  const lateEmployees = lateSummaries.filter(
+    (summary) => summary.lateShiftCount > 0,
+  ).length;
+  const lateShiftCount = lateSummaries.reduce(
+    (sum, summary) => sum + summary.lateShiftCount,
+    0,
+  );
 
   const monthlyEntries = entries.filter(
     (entry) => resolvePayrollSalaryType(entry) === "monthly",
@@ -1039,6 +1083,12 @@ export default function PayrollDetail({
 
   const salaryDetailBreakdown = salaryDetailEntry
     ? getPayrollBreakdown(salaryDetailEntry)
+    : null;
+  const salaryDetailLateSummary = salaryDetailEntry
+    ? getEntryLateSummary(
+        salaryDetailEntry,
+        roleStartTimes[salaryDetailEntry.role || defaultRole],
+      )
     : null;
   const salaryDetailAttendanceProgress = salaryDetailEntry
     ? getAttendanceBonusProgress(salaryDetailEntry)
@@ -1125,7 +1175,7 @@ export default function PayrollDetail({
           </Button>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-[24px] bg-slate-900 p-5 text-white">
             <p className="text-sm text-slate-300">Nhân viên</p>
             <p className="mt-4 text-3xl font-semibold">{entries.length}</p>
@@ -1142,6 +1192,15 @@ export default function PayrollDetail({
             <p className="text-sm text-slate-500">Tổng giờ</p>
             <p className="mt-4 text-2xl font-semibold text-slate-900">
               {formatHours(filteredHours)}h
+            </p>
+          </div>
+          <div className="rounded-[24px] border border-amber-200 bg-amber-50 p-5">
+            <p className="text-sm text-amber-700">Đi trễ</p>
+            <p className="mt-4 text-2xl font-semibold text-amber-800">
+              {lateEmployees}
+            </p>
+            <p className="mt-1 text-xs text-amber-700/80">
+              {lateShiftCount} ca đi trễ
             </p>
           </div>
           <div className="rounded-[24px] border border-slate-200 bg-white p-5">
@@ -1264,6 +1323,20 @@ export default function PayrollDetail({
                     <AlertCircle className="h-4 w-4" />
                     <span>Lỗi</span>
                   </Button>
+                  <Button
+                    variant={filterLateOnly ? "default" : "outline"}
+                    className={cn(
+                      "h-11 gap-2 rounded-2xl",
+                      filterLateOnly
+                        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        : "text-slate-600",
+                    )}
+                    onClick={() => setFilterLateOnly((current) => !current)}
+                    title="Chỉ hiện nhân viên đi trễ"
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                    <span>Đi trễ</span>
+                  </Button>
                   <select
                     value={sortBy}
                     onChange={(event) => setSortBy(event.target.value)}
@@ -1338,6 +1411,9 @@ export default function PayrollDetail({
                   {visibleColumns.role ? (
                     <th className="px-4 py-3 text-left">Vai trò</th>
                   ) : null}
+                  {visibleColumns.late ? (
+                    <th className="px-4 py-3 text-center">Đi trễ</th>
+                  ) : null}
                   {visibleColumns.hours ? (
                     <th className="px-4 py-3 text-center">Số giờ</th>
                   ) : null}
@@ -1374,6 +1450,12 @@ export default function PayrollDetail({
               <tbody>
                 {filteredEntries.map((entry) => {
                   const breakdown = getPayrollBreakdown(entry);
+                  const scheduledStartTime =
+                    roleStartTimes[entry.role || defaultRole] || "";
+                  const lateSummary = getEntryLateSummary(
+                    entry,
+                    scheduledStartTime,
+                  );
 
                   const isMonthly = breakdown.salaryType === "monthly";
 
@@ -1385,6 +1467,7 @@ export default function PayrollDetail({
                         isMonthly
                           ? "bg-gradient-to-r from-sky-100 via-cyan-50 to-white"
                           : "bg-white",
+                        lateSummary.lateShiftCount > 0 && "ring-1 ring-inset ring-amber-200",
                         hasEntryError(entry) && "bg-red-50/60",
                       )}
                     >
@@ -1413,6 +1496,14 @@ export default function PayrollDetail({
                               className="min-w-0 w-full bg-transparent font-semibold text-slate-900 outline-none"
                             />
                           </div>
+                          {lateSummary.lateShiftCount > 0 ? (
+                            <div className="mt-2 text-xs font-medium text-amber-700">
+                              Trễ {lateSummary.lateShiftCount} ca
+                              {lateSummary.totalLateMinutes > 0
+                                ? ` • ${lateSummary.totalLateMinutes} phút`
+                                : ""}
+                            </div>
+                          ) : null}
                         </td>
                       ) : null}
 
@@ -1430,6 +1521,36 @@ export default function PayrollDetail({
                               )
                             }
                           />
+                        </td>
+                      ) : null}
+
+                      {visibleColumns.late ? (
+                        <td className="px-4 py-4 border-b border-slate-500 text-center">
+                          {scheduledStartTime ? (
+                            lateSummary.lateShiftCount > 0 ? (
+                              <div className="inline-flex min-w-[120px] flex-col rounded-[20px] border border-amber-200 bg-amber-50 px-3 py-2 text-left">
+                                <span className="text-xs font-semibold text-amber-800">
+                                  Trễ {lateSummary.lateShiftCount} ca
+                                </span>
+                                <span className="mt-1 text-xs text-amber-700/80">
+                                  Vào chuẩn {scheduledStartTime}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="inline-flex min-w-[120px] flex-col rounded-[20px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-left">
+                                <span className="text-xs font-semibold text-emerald-700">
+                                  Đúng giờ
+                                </span>
+                                <span className="mt-1 text-xs text-emerald-700/80">
+                                  Vào chuẩn {scheduledStartTime}
+                                </span>
+                              </div>
+                            )
+                          ) : (
+                            <div className="text-xs text-slate-400">
+                              Chưa cấu hình
+                            </div>
+                          )}
                         </td>
                       ) : null}
 
@@ -1673,7 +1794,9 @@ export default function PayrollDetail({
 
           <div className="flex flex-col gap-4 border-t border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
             <p className="text-sm text-slate-500">
-              Có {warnings} dòng cần kiểm tra lại dữ liệu chấm công.
+              Có {warnings} dòng cần kiểm tra lại dữ liệu chấm công và{" "}
+              {lateEmployees} nhân viên đi trễ ({lateShiftCount} ca).
+              {filterLateOnly ? " Đang bật lọc chỉ xem người đi trễ." : ""}
             </p>
             <div className="flex flex-wrap gap-5 text-sm">
               <div>
@@ -1739,6 +1862,27 @@ export default function PayrollDetail({
             </div>
 
             <div className="mt-5 space-y-3 text-sm">
+              {salaryDetailLateSummary?.configuredStartTime ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-amber-800">
+                      Giờ vào chuẩn: {salaryDetailLateSummary.configuredStartTime}
+                    </span>
+                    <span className="font-semibold text-amber-900">
+                      {salaryDetailLateSummary.lateShiftCount > 0
+                        ? `Trễ ${salaryDetailLateSummary.lateShiftCount} ca`
+                        : "Đúng giờ"}
+                    </span>
+                  </div>
+                  {salaryDetailLateSummary.lateShiftCount > 0 ? (
+                    <div className="mt-2 text-xs text-amber-800/80">
+                      Tổng trễ {salaryDetailLateSummary.totalLateMinutes} phút,
+                      trễ nhiều nhất {salaryDetailLateSummary.maxLateMinutes} phút.
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               {salaryDetailBreakdown.baseSalary > 0 ? (
               <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
                 <span className="text-slate-600">
@@ -2008,6 +2152,11 @@ export default function PayrollDetail({
           currentShiftEntry?.employeeCode || currentShiftEntry?.employeeId || ""
         }
         initialShifts={currentShiftEntry?.shifts || []}
+        scheduledStartTime={
+          currentShiftEntry
+            ? roleStartTimes[currentShiftEntry.role || defaultRole]
+            : ""
+        }
       />
     </div>
   );

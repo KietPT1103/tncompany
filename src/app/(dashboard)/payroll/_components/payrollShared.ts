@@ -143,6 +143,79 @@ export function getAttendanceBonusProgress(entry: PayrollEntry) {
   };
 }
 
+function parseTimeToMinutes(value?: string) {
+  if (!value) return null;
+  const match = value.match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+
+  return hours * 60 + minutes;
+}
+
+function extractShiftStartTime(value?: string) {
+  if (!value) return "";
+  if (value.includes(" ")) {
+    return value.split(" ")[1]?.slice(0, 5) || "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return `${String(date.getHours()).padStart(2, "0")}:${String(
+    date.getMinutes(),
+  ).padStart(2, "0")}`;
+}
+
+export function getEntryLateSummary(
+  entry: PayrollEntry,
+  scheduledStartTime?: string,
+) {
+  const scheduledMinutes = parseTimeToMinutes(scheduledStartTime);
+  if (scheduledMinutes === null) {
+    return {
+      configuredStartTime: scheduledStartTime || "",
+      lateShiftCount: 0,
+      totalLateMinutes: 0,
+      maxLateMinutes: 0,
+      lateShifts: [],
+    };
+  }
+
+  const lateShifts = (entry.shifts || [])
+    .filter((shift) => shift.isValid && shift.inTime && shift.outTime)
+    .map((shift) => {
+      const actualStartTime = extractShiftStartTime(shift.inTime);
+      const actualMinutes = parseTimeToMinutes(actualStartTime);
+      const lateMinutes =
+        actualMinutes === null ? 0 : Math.max(0, actualMinutes - scheduledMinutes);
+
+      return {
+        id: shift.id,
+        date: getShiftDateKey(shift) || shift.date || "",
+        actualStartTime,
+        lateMinutes,
+      };
+    })
+    .filter((shift) => shift.lateMinutes > 0);
+
+  return {
+    configuredStartTime: scheduledStartTime || "",
+    lateShiftCount: lateShifts.length,
+    totalLateMinutes: lateShifts.reduce(
+      (sum, shift) => sum + shift.lateMinutes,
+      0,
+    ),
+    maxLateMinutes: lateShifts.reduce(
+      (max, shift) => Math.max(max, shift.lateMinutes),
+      0,
+    ),
+    lateShifts,
+  };
+}
+
 export function getPayrollBreakdown(entry: PayrollEntry) {
   const salaryType = resolvePayrollSalaryType(entry);
   const allowanceTotal = getAllowanceTotal(entry);

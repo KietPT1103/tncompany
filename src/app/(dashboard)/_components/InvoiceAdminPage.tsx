@@ -110,6 +110,8 @@ function buildVisiblePages(currentPage: number, lastPage: number) {
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
 
+const roundCurrencyLikeBackend = (value: number) => Math.round(value * 100) / 100;
+
 const createLocalId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -246,6 +248,30 @@ const buildItemPayload = (items: EditableItem[]) =>
       unitPrice: parseDecimal(item.unitPrice),
     }))
     .filter((item) => item.name && item.quantity > 0 && item.unitPrice > 0);
+
+const buildImportedInvoiceFingerprint = (entry: {
+  invoiceDate: string;
+  note: string;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unit: string;
+    unitPrice: number;
+  }>;
+}) => {
+  const itemFingerprint = entry.items
+    .map((item) =>
+      [
+        item.name.trim().toLowerCase(),
+        String(item.quantity),
+        item.unit.trim().toLowerCase(),
+        String(roundCurrencyLikeBackend(item.unitPrice)),
+      ].join("::")
+    )
+    .join("||");
+
+  return [entry.invoiceDate, entry.note.trim(), itemFingerprint].join("###");
+};
 
 const FALLBACK_SITE_URL = "https://tnservice.vn";
 const CONFIGURED_SITE_URL = (import.meta.env.VITE_SITE_URL || "").trim();
@@ -1011,8 +1037,22 @@ export default function InvoiceAdminPage({
     setImporting(true);
     try {
       const parsed = await parseInvoiceImportWorkbook(file);
+      const uniqueEntries: typeof parsed.entries = [];
+      const seenFingerprints = new Set<string>();
 
-      if (parsed.entries.length === 0) {
+      for (const entry of parsed.entries) {
+        const fingerprint = buildImportedInvoiceFingerprint(entry);
+        if (seenFingerprints.has(fingerprint)) {
+          continue;
+        }
+
+        seenFingerprints.add(fingerprint);
+        uniqueEntries.push(entry);
+      }
+
+      const duplicateRows = parsed.entries.length - uniqueEntries.length;
+
+      if (uniqueEntries.length === 0) {
         alert("Không tìm thấy dòng dữ liệu hợp lệ theo mẫu Excel.");
         return;
       }
@@ -1023,10 +1063,11 @@ export default function InvoiceAdminPage({
 
       const confirmed = confirm(
         [
-          `Sẽ import ${parsed.entries.length} hóa đơn từ ${parsed.sheets.length} sheet.`,
+          `Sẽ import ${uniqueEntries.length} hóa đơn từ ${parsed.sheets.length} sheet.`,
           `File: ${file.name}`,
           sheetSummary ? `Chi tiết: ${sheetSummary}` : "",
           parsed.skippedRows > 0 ? `Bỏ qua ${parsed.skippedRows} dòng không hợp lệ.` : "",
+          duplicateRows > 0 ? `Tự động loại ${duplicateRows} dòng import trùng trong cùng file.` : "",
           "",
           "Tiếp tục import?",
         ]
@@ -1038,7 +1079,7 @@ export default function InvoiceAdminPage({
         return;
       }
 
-      for (const entry of parsed.entries) {
+      for (const entry of uniqueEntries) {
         await createInvoiceEntry({
           scope,
           storeId,
@@ -1054,9 +1095,10 @@ export default function InvoiceAdminPage({
 
       alert(
         [
-          `Đã import ${parsed.entries.length} hóa đơn.`,
+          `Đã import ${uniqueEntries.length} hóa đơn.`,
           `Từ ${parsed.sheets.length} sheet trong file ${file.name}.`,
           parsed.skippedRows > 0 ? `Đã bỏ qua ${parsed.skippedRows} dòng không hợp lệ.` : "",
+          duplicateRows > 0 ? `Đã loại ${duplicateRows} dòng trùng trong file import.` : "",
         ]
           .filter(Boolean)
           .join(" ")

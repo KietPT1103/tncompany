@@ -26,6 +26,7 @@ interface ShiftDetailModalProps {
   employeeName: string;
   employeeId: string;
   initialShifts: Shift[];
+  scheduledStartTime?: string;
 }
 
 const TimeSelect = ({
@@ -133,6 +134,7 @@ export default function ShiftDetailModal({
   employeeName,
   employeeId,
   initialShifts,
+  scheduledStartTime,
 }: ShiftDetailModalProps) {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -145,6 +147,20 @@ export default function ShiftDetailModal({
   }, [isOpen, initialShifts]);
 
   if (!isOpen) return null;
+
+  const getLateMinutes = (inTime: string) => {
+    if (!scheduledStartTime || !inTime) return 0;
+    const scheduleMatch = scheduledStartTime.match(/^(\d{2}):(\d{2})$/);
+    if (!scheduleMatch) return 0;
+
+    const actual = new Date(inTime);
+    if (Number.isNaN(actual.getTime())) return 0;
+
+    const scheduledMinutes =
+      Number(scheduleMatch[1]) * 60 + Number(scheduleMatch[2]);
+    const actualMinutes = actual.getHours() * 60 + actual.getMinutes();
+    return Math.max(0, actualMinutes - scheduledMinutes);
+  };
 
   const handleTimeChange = (
     id: string,
@@ -431,6 +447,11 @@ export default function ShiftDetailModal({
               <span className="text-blue-600">{employeeName}</span>
             </h3>
             <p className="text-sm text-gray-500">Mã NV: {employeeId}</p>
+            {scheduledStartTime ? (
+              <p className="text-sm text-amber-600">
+                Giờ vào chuẩn: {scheduledStartTime}
+              </p>
+            ) : null}
           </div>
           <button
             onClick={onClose}
@@ -461,6 +482,8 @@ export default function ShiftDetailModal({
                   className={`shift-row group peer transition-colors ${
                     !shift.inTime || !shift.outTime || shift.hours === 0
                       ? "bg-red-50 border-l-4 border-red-400"
+                      : getLateMinutes(shift.inTime) > 0
+                        ? "bg-amber-50 border-l-4 border-amber-400"
                       : "hover:bg-gray-50 border-l-4 border-transparent"
                   } ${draggedIndex === index ? "opacity-40" : ""}`}
                   draggable
@@ -517,7 +540,12 @@ export default function ShiftDetailModal({
                     </button>
                   </td>
                   <td className="p-3 text-right font-mono align-middle">
-                    {calculateHours(shift.inTime, shift.outTime)}
+                    <div>{calculateHours(shift.inTime, shift.outTime)}</div>
+                    {getLateMinutes(shift.inTime) > 0 ? (
+                      <div className="mt-1 text-xs font-medium text-amber-700">
+                        Trễ {getLateMinutes(shift.inTime)} phút
+                      </div>
+                    ) : null}
                   </td>
                   <td className="p-3 text-center align-middle">
                     {/* We can re-check weekend based on InTime dynamically */}
