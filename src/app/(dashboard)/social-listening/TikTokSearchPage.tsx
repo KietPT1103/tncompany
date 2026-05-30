@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Download,
   ExternalLink,
   Loader2,
   MessageSquareText,
@@ -59,6 +61,16 @@ function formatDisplayDate(value?: string | null) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+function formatExportTimestamp(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  const hour = String(value.getHours()).padStart(2, "0");
+  const minute = String(value.getMinutes()).padStart(2, "0");
+
+  return `${year}${month}${day}-${hour}${minute}`;
 }
 
 function getStatusLabel(status?: string | null) {
@@ -161,6 +173,7 @@ export default function TikTokSearchPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState("");
 
   const aggregateStatus = useMemo(() => {
@@ -386,6 +399,39 @@ export default function TikTokSearchPage() {
     await syncSearches(commentQuery, false, searches);
   }
 
+  function handleExportComments() {
+    if (!comments.length) {
+      setError("Không có comment để xuất Excel.");
+      return;
+    }
+
+    setError("");
+    setIsExporting(true);
+
+    try {
+      const rows = comments.map((comment, index) => ({
+        STT: index + 1,
+        "Từ khóa": comment.matchedKeywords.join(", "),
+        Username: comment.username || "",
+        "Nội dung comment": comment.content || "",
+        "Ngày comment": formatDisplayDate(comment.created_at),
+        video_id: comment.video_id,
+        "Video username": comment.video_username || "",
+        "Link video": comment.post_url || "",
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "TikTokComments");
+      XLSX.writeFile(
+        workbook,
+        `tiktok-comments-${formatExportTimestamp(new Date())}.xlsx`
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   useEffect(() => {
     if (!searches.length) return;
     if (searches.every((search) => search.is_terminal)) return;
@@ -604,6 +650,16 @@ export default function TikTokSearchPage() {
                   >
                     <Search className="mr-2 h-4 w-4" />
                     Tìm comment
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-2xl"
+                    disabled={!comments.length || isLoadingComments}
+                    isLoading={isExporting}
+                    onClick={handleExportComments}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Xuất Excel
                   </Button>
                 </div>
 
