@@ -2231,7 +2231,7 @@ export default function PayrollDetail({
             </div>
           </div>
 
-          <div className="max-h-[72vh] overflow-auto px-6 py-5">
+          <div className="max-h-[72vh] overflow-auto px-6 pb-5">
             <table className="w-full min-w-[980px] text-sm border-separate border-spacing-0">
               <thead className="bg-slate-50">
                 <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
