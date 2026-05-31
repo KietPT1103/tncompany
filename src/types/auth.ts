@@ -2,6 +2,7 @@ export type UserRole = "admin" | "manager" | "user" | "server";
 export type AppPermission =
   | "dashboard.access"
   | "bills.access"
+  | "virtual_bills.access"
   | "payroll_estimate.access"
   | "payroll.access"
   | "timesheet.access"

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { debounce } from "lodash";
+import * as XLSX from "xlsx";
 
 import {
   addPayrollEntry,
@@ -39,12 +40,16 @@ import { cn, preventNumberInputScroll } from "@/lib/utils";
 import {
   AlertCircle,
   CalendarClock,
+  CheckCircle2,
   Columns3,
   Loader2,
+  MoreHorizontal,
   Plus,
+  RotateCcw,
   Search,
   Settings2,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 
@@ -130,6 +135,368 @@ const COLUMN_OPTIONS: { key: keyof VisibleColumns; label: string }[] = [
   { key: "note", label: "Ghi chú" },
   { key: "action", label: "Tác vụ" },
 ];
+
+type TimesheetImportRow = {
+  employeeCode: string;
+  employeeName: string;
+  dateTime: string;
+};
+
+type EmployeeImportDialogState = {
+  entryId: string;
+  employeeCode: string;
+  employeeName: string;
+  startDate: string;
+  endDate: string;
+  fileName: string;
+};
+
+type EmployeeImportPreview = {
+  entryId: string;
+  startDate: string;
+  endDate: string;
+  oldHours: number;
+  newHours: number;
+  oldShiftCount: number;
+  newShiftCount: number;
+  replacedShiftCount: number;
+  importedShiftCount: number;
+};
+
+type EntryImportSnapshot = {
+  shifts: Shift[];
+  totalHours: number;
+  weekendHours: number;
+  preview: EmployeeImportPreview;
+};
+
+type PayrollEntryUiMeta = {
+  hasPendingSave?: boolean;
+  isImported?: boolean;
+  isManualEdited?: boolean;
+  lastImportPreview?: EmployeeImportPreview | null;
+  lastImportSnapshot?: EntryImportSnapshot | null;
+  lastSavedAt?: number | null;
+};
+
+type PreparedEmployeeImport = {
+  importedShifts: Shift[];
+  mergedShifts: Shift[];
+  preview: EmployeeImportPreview;
+  totals: {
+    totalHours: number;
+    weekendHours: number;
+  };
+};
+
+const formatDateInput = (date: Date) => {
+  const local = new Date(date.getTime());
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+  return local.toISOString().split("T")[0];
+};
+
+const normalizeTimesheetHeader = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d");
+
+const normalizeDateOnly = (value: string) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const firstToken = raw.replace("T", " ").split(" ")[0] || "";
+  if (!firstToken) return "";
+
+  const normalizedToken = firstToken.replace(/\//g, "-").replace(/\./g, "-");
+  const isoMatch = normalizedToken.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  const localMatch = normalizedToken.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (localMatch) {
+    const [, day, month, year] = localMatch;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(
+    parsed.getDate(),
+  ).padStart(2, "0")}`;
+};
+
+const isDateWithinRange = (date: string, startDate: string, endDate: string) => {
+  if (!date) return false;
+  if (startDate && date < startDate) return false;
+  if (endDate && date > endDate) return false;
+  return true;
+};
+
+const parseTimesheetDateTime = (value: string) => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const parsed = new Date(raw.replace(" ", "T"));
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  const match = raw.match(
+    /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const [, day, month, year, hour, minute, second] = match;
+  const localDate = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second || 0),
+  );
+  return Number.isNaN(localDate.getTime()) ? null : localDate;
+};
+
+const buildShiftId = (prefix: string, index: number, suffix: string) =>
+  `${prefix}-${index}-${suffix}`;
+
+const cloneShifts = (shifts: Shift[] = []) => shifts.map((shift) => ({ ...shift }));
+
+const summarizeImportedShifts = (
+  rows: TimesheetImportRow[],
+  employeeKey: string,
+): Shift[] => {
+  const sortedRows = [...rows].sort((left, right) => {
+    const leftTime = parseTimesheetDateTime(left.dateTime)?.getTime() || 0;
+    const rightTime = parseTimesheetDateTime(right.dateTime)?.getTime() || 0;
+    return leftTime - rightTime;
+  });
+
+  const shifts: Shift[] = [];
+  let pointer = 0;
+
+  while (pointer < sortedRows.length) {
+    const current = sortedRows[pointer];
+    const inTime = parseTimesheetDateTime(current.dateTime);
+    let matched = false;
+
+    if (inTime && pointer + 1 < sortedRows.length) {
+      const next = sortedRows[pointer + 1];
+      const outTime = parseTimesheetDateTime(next.dateTime);
+
+      if (outTime) {
+        const limitDate = new Date(inTime);
+        if (limitDate.getHours() >= 5) {
+          limitDate.setDate(limitDate.getDate() + 1);
+        }
+        limitDate.setHours(5, 0, 0, 0);
+
+        if (outTime <= limitDate) {
+          const diffMs = outTime.getTime() - inTime.getTime();
+          const hours = diffMs / (1000 * 60 * 60);
+
+          if (hours > 0) {
+            const isWeekend = inTime.getDay() === 0 || inTime.getDay() === 6;
+            shifts.push({
+              id: buildShiftId(employeeKey, pointer, "ok"),
+              date: normalizeDateOnly(current.dateTime).replace(/-/g, "/"),
+              inTime: current.dateTime,
+              outTime: next.dateTime,
+              hours: Number.parseFloat(hours.toFixed(2)),
+              isWeekend,
+              isValid: true,
+            });
+            pointer += 2;
+            matched = true;
+          }
+        }
+      }
+    }
+
+    if (!matched) {
+      shifts.push({
+        id: buildShiftId(employeeKey, pointer, "invalid"),
+        date: normalizeDateOnly(current.dateTime).replace(/-/g, "/"),
+        inTime: current.dateTime,
+        outTime: "",
+        hours: 0,
+        isWeekend: false,
+        isValid: false,
+      });
+      pointer += 1;
+    }
+  }
+
+  return shifts;
+};
+
+const mergeShiftsByDateRange = (
+  existingShifts: Shift[],
+  importedShifts: Shift[],
+  startDate: string,
+  endDate: string,
+) => {
+  const preserved = existingShifts.filter((shift) => {
+    const shiftDate = normalizeDateOnly(shift.date || shift.inTime || "");
+    return !isDateWithinRange(shiftDate, startDate, endDate);
+  });
+
+  return [...preserved, ...importedShifts].sort((left, right) => {
+    const leftTime = parseTimesheetDateTime(left.inTime || left.date)?.getTime() || 0;
+    const rightTime = parseTimesheetDateTime(right.inTime || right.date)?.getTime() || 0;
+    return leftTime - rightTime;
+  });
+};
+
+const summarizeShiftTotals = (shifts: Shift[]) =>
+  shifts.reduce(
+    (result, shift) => {
+      if (!shift.isValid) return result;
+      result.totalHours += shift.hours || 0;
+      if (shift.isWeekend) {
+        result.weekendHours += shift.hours || 0;
+      }
+      return result;
+    },
+    { totalHours: 0, weekendHours: 0 },
+  );
+
+const getEntryShiftDateDefaults = (entry: PayrollEntry) => {
+  const dates = (entry.shifts || [])
+    .map((shift) => normalizeDateOnly(shift.date || shift.inTime || ""))
+    .filter(Boolean)
+    .sort();
+
+  const today = formatDateInput(new Date());
+  return {
+    startDate: dates[0] || today,
+    endDate: dates[dates.length - 1] || today,
+  };
+};
+
+const parseTimesheetImportFile = async (file: File): Promise<TimesheetImportRow[]> => {
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(data, { type: "array" });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+
+  const headerIndex = rows.findIndex((row) => {
+    if (!Array.isArray(row)) return false;
+    const headers = row.map(normalizeTimesheetHeader);
+    return headers.includes("enno") && headers.includes("datetime");
+  });
+
+  if (headerIndex === -1) {
+    throw new Error("Không tìm thấy header file chấm công hợp lệ.");
+  }
+
+  const headerRow = rows[headerIndex] || [];
+  const dataRows = rows.slice(headerIndex + 1);
+  const employeeCodeIndex = headerRow.findIndex(
+    (cell) => normalizeTimesheetHeader(cell) === "enno",
+  );
+  const employeeNameIndex = headerRow.findIndex(
+    (cell) => normalizeTimesheetHeader(cell) === "name",
+  );
+  const dateTimeIndex = headerRow.findIndex(
+    (cell) => normalizeTimesheetHeader(cell) === "datetime",
+  );
+
+  if (employeeCodeIndex === -1 || dateTimeIndex === -1) {
+    throw new Error("Thiếu cột mã nhân viên hoặc thời gian chấm công.");
+  }
+
+  return dataRows
+    .map((row) => ({
+      employeeCode: String(row[employeeCodeIndex] ?? "").trim(),
+      employeeName: String(employeeNameIndex >= 0 ? row[employeeNameIndex] : "").trim(),
+      dateTime: String(row[dateTimeIndex] ?? "").trim(),
+    }))
+    .filter((row) => row.dateTime && parseTimesheetDateTime(row.dateTime));
+};
+
+const prepareEmployeeImportData = async ({
+  dialog,
+  file,
+  targetEntry,
+}: {
+  dialog: EmployeeImportDialogState;
+  file: File;
+  targetEntry: PayrollEntry;
+}): Promise<PreparedEmployeeImport> => {
+  const importedRows = await parseTimesheetImportFile(file);
+  const normalizedCode = (dialog.employeeCode || "").trim().toLowerCase();
+  const normalizedName = dialog.employeeName.trim().toLowerCase();
+
+  const matchedRows = importedRows.filter((row) => {
+    const rowDate = normalizeDateOnly(row.dateTime);
+    if (!isDateWithinRange(rowDate, dialog.startDate, dialog.endDate)) {
+      return false;
+    }
+
+    const rowCode = row.employeeCode.trim().toLowerCase();
+    const rowName = row.employeeName.trim().toLowerCase();
+
+    if (normalizedCode) {
+      return rowCode === normalizedCode;
+    }
+
+    return rowName === normalizedName;
+  });
+
+  if (matchedRows.length === 0) {
+    throw new Error(
+      "KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»‡u cháº¥m cÃ´ng cá»§a nhÃ¢n viÃªn nÃ y trong khoáº£ng Ä‘Ã£ chá»n.",
+    );
+  }
+
+  const importedShifts = summarizeImportedShifts(
+    matchedRows,
+    targetEntry.employeeCode || targetEntry.employeeId || targetEntry.employeeName,
+  );
+  const mergedShifts = mergeShiftsByDateRange(
+    (targetEntry.shifts || []) as Shift[],
+    importedShifts,
+    dialog.startDate,
+    dialog.endDate,
+  );
+  const totals = summarizeShiftTotals(mergedShifts);
+  const replacedShiftCount = (targetEntry.shifts || []).filter((shift) =>
+    isDateWithinRange(
+      normalizeDateOnly(shift.date || shift.inTime || ""),
+      dialog.startDate,
+      dialog.endDate,
+    ),
+  ).length;
+
+  return {
+    importedShifts,
+    mergedShifts,
+    preview: {
+      entryId: dialog.entryId,
+      startDate: dialog.startDate,
+      endDate: dialog.endDate,
+      oldHours: Number((targetEntry.totalHours || 0).toFixed(2)),
+      newHours: Number(totals.totalHours.toFixed(2)),
+      oldShiftCount: (targetEntry.shifts || []).length,
+      newShiftCount: mergedShifts.length,
+      replacedShiftCount,
+      importedShiftCount: importedShifts.length,
+    },
+    totals,
+  };
+};
 
 function RoleSelect({
   roleGroups,
@@ -383,6 +750,8 @@ export default function PayrollDetail({
   const [batchHourlyMultiplier, setBatchHourlyMultiplier] = useState(1);
   const [isApplyingBatchMultiplier, setIsApplyingBatchMultiplier] =
     useState(false);
+  const [showBatchMultiplierDialog, setShowBatchMultiplierDialog] =
+    useState(false);
 
   const [allowanceEntryId, setAllowanceEntryId] = useState<string | null>(null);
 
@@ -399,14 +768,81 @@ export default function PayrollDetail({
   const [salaryDetailEntryId, setSalaryDetailEntryId] = useState<string | null>(
     null,
   );
+  const [employeeImportDialog, setEmployeeImportDialog] =
+    useState<EmployeeImportDialogState | null>(null);
+  const [employeeImportFile, setEmployeeImportFile] = useState<File | null>(null);
+  const [employeeImportPreview, setEmployeeImportPreview] =
+    useState<EmployeeImportPreview | null>(null);
+  const [employeeImportError, setEmployeeImportError] = useState("");
+  const [isImportingEmployeeHours, setIsImportingEmployeeHours] = useState(false);
+  const [entryUiMeta, setEntryUiMeta] = useState<Record<string, PayrollEntryUiMeta>>(
+    {},
+  );
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
   const entrySaveQueuesRef = useRef<Record<string, Promise<void>>>({});
+  const saveHighlightTimeoutsRef = useRef<Record<string, number>>({});
 
   const [hasLoadedColumnPrefs, setHasLoadedColumnPrefs] = useState(false);
 
   const [filterError, setFilterError] = useState(false);
   const [filterLateOnly, setFilterLateOnly] = useState(false);
+  const [filterImportedOnly, setFilterImportedOnly] = useState(false);
+  const [filterHourlyOnly, setFilterHourlyOnly] = useState(false);
+  const [filterMonthlyOnly, setFilterMonthlyOnly] = useState(false);
   const [roleStartTimes, setRoleStartTimes] = useState<Record<string, string>>({});
+
+  const updateEntryUiMeta = useCallback(
+    (
+      entryId: string,
+      updater:
+        | Partial<PayrollEntryUiMeta>
+        | ((current: PayrollEntryUiMeta) => PayrollEntryUiMeta),
+    ) => {
+      setEntryUiMeta((current) => {
+        const previous = current[entryId] || {};
+        const next =
+          typeof updater === "function"
+            ? updater(previous)
+            : { ...previous, ...updater };
+        return {
+          ...current,
+          [entryId]: next,
+        };
+      });
+    },
+    [],
+  );
+
+  const markEntrySaved = useCallback(
+    (entryId: string) => {
+      const currentTimer = saveHighlightTimeoutsRef.current[entryId];
+      if (currentTimer) {
+        window.clearTimeout(currentTimer);
+      }
+
+      updateEntryUiMeta(entryId, {
+        hasPendingSave: false,
+        lastSavedAt: Date.now(),
+      });
+
+      saveHighlightTimeoutsRef.current[entryId] = window.setTimeout(() => {
+        setEntryUiMeta((current) => {
+          const meta = current[entryId];
+          if (!meta) return current;
+          return {
+            ...current,
+            [entryId]: {
+              ...meta,
+              lastSavedAt: null,
+            },
+          };
+        });
+        delete saveHighlightTimeoutsRef.current[entryId];
+      }, 4500);
+    },
+    [updateEntryUiMeta],
+  );
 
   useEffect(() => {
     loadEntries();
@@ -457,6 +893,62 @@ export default function PayrollDetail({
       JSON.stringify(visibleColumns),
     );
   }, [visibleColumns, hasLoadedColumnPrefs]);
+
+  useEffect(
+    () => () => {
+      Object.values(saveHighlightTimeoutsRef.current).forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!openActionMenuId) return;
+
+    const closeMenu = () => setOpenActionMenuId(null);
+    window.addEventListener("click", closeMenu);
+    return () => window.removeEventListener("click", closeMenu);
+  }, [openActionMenuId]);
+
+  useEffect(() => {
+    if (!employeeImportDialog || !employeeImportFile) {
+      setEmployeeImportPreview(null);
+      return;
+    }
+
+    const targetEntry = entries.find((entry) => entry.id === employeeImportDialog.entryId);
+    if (!targetEntry) {
+      setEmployeeImportPreview(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void prepareEmployeeImportData({
+      dialog: employeeImportDialog,
+      file: employeeImportFile,
+      targetEntry,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setEmployeeImportPreview(result.preview);
+        setEmployeeImportError("");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setEmployeeImportPreview(null);
+        setEmployeeImportError(
+          error instanceof Error
+            ? error.message
+            : "KhÃ´ng thá»ƒ xem trÆ°á»›c dá»¯ liá»‡u import.",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeImportDialog, employeeImportFile, entries]);
 
   function queueEntryPersist(
     nextEntry: PayrollEntry,
@@ -667,11 +1159,16 @@ export default function PayrollDetail({
                   employeeCode: resolvedEmployeeCode,
                 }
               : entry,
-          ),
+            ),
         );
       }
+      markEntrySaved(nextEntry.id);
     } catch (error) {
       console.error(error);
+      updateEntryUiMeta(nextEntry.id, {
+        hasPendingSave: false,
+        lastSavedAt: null,
+      });
     } finally {
       setSavingId((current) => (current === nextEntry.id ? null : current));
     }
@@ -688,48 +1185,42 @@ export default function PayrollDetail({
         ? settingsData.expectedWorkDays || 30
         : 0;
 
-    const nextEntry: PayrollEntry = {
-      ...currentEntry,
-      salaryType: resolvedSalaryType,
-      monthlySalary:
-        resolvedSalaryType === "monthly" ? settingsData.monthlySalary : 0,
-      fixedSalary:
-        resolvedSalaryType === "monthly" ? settingsData.monthlySalary : 0,
-      paidLeaveDays:
-        resolvedSalaryType === "monthly" ? settingsData.paidLeaveDays : 0,
-      expectedWorkDays: resolvedExpectedWorkDays,
-      standardHours:
-        resolvedSalaryType === "monthly" ? settingsData.standardHours : 0,
-      hourlyMultiplier:
-        resolvedSalaryType === "hourly" ? settingsData.hourlyMultiplier : 1,
-      hourlyRate:
-        resolvedSalaryType === "monthly"
-          ? settingsData.overtimeRate
-          : currentEntry.hourlyRate,
-    };
-    nextEntry.salary = calculatePayrollSalary(nextEntry);
-
-    setEntries((current) =>
-      current.map((entry) =>
-        entry.id === settingsEntryId ? nextEntry : entry,
-      ),
+    applyEntryPatch(
+      settingsEntryId,
+      {
+        salaryType: resolvedSalaryType,
+        monthlySalary:
+          resolvedSalaryType === "monthly" ? settingsData.monthlySalary : 0,
+        fixedSalary:
+          resolvedSalaryType === "monthly" ? settingsData.monthlySalary : 0,
+        paidLeaveDays:
+          resolvedSalaryType === "monthly" ? settingsData.paidLeaveDays : 0,
+        expectedWorkDays: resolvedExpectedWorkDays,
+        standardHours:
+          resolvedSalaryType === "monthly" ? settingsData.standardHours : 0,
+        hourlyMultiplier:
+          resolvedSalaryType === "hourly" ? settingsData.hourlyMultiplier : 1,
+        hourlyRate:
+          resolvedSalaryType === "monthly"
+            ? settingsData.overtimeRate
+            : currentEntry.hourlyRate,
+      },
+      {
+        salaryType: resolvedSalaryType,
+        monthlySalary:
+          resolvedSalaryType === "monthly" ? settingsData.monthlySalary : 0,
+        paidLeaveDays:
+          resolvedSalaryType === "monthly" ? settingsData.paidLeaveDays : 0,
+        expectedWorkDays: resolvedExpectedWorkDays,
+        standardHours:
+          resolvedSalaryType === "monthly" ? settingsData.standardHours : 0,
+        hourlyRate:
+          resolvedSalaryType === "monthly"
+            ? settingsData.overtimeRate
+            : currentEntry.hourlyRate,
+      },
+      { immediate: true },
     );
-    debouncedUpdate.cancel();
-
-    await queueEntryPersist(nextEntry, buildPayrollEntryPayload(nextEntry), {
-      salaryType: resolvedSalaryType,
-      monthlySalary:
-        resolvedSalaryType === "monthly" ? settingsData.monthlySalary : 0,
-      paidLeaveDays:
-        resolvedSalaryType === "monthly" ? settingsData.paidLeaveDays : 0,
-      expectedWorkDays: resolvedExpectedWorkDays,
-      standardHours:
-        resolvedSalaryType === "monthly" ? settingsData.standardHours : 0,
-      hourlyRate:
-        resolvedSalaryType === "monthly"
-          ? settingsData.overtimeRate
-          : currentEntry.hourlyRate,
-    });
 
     setSettingsEntryId(null);
   }
@@ -741,7 +1232,11 @@ export default function PayrollDetail({
 
     employeeChanges?: Partial<Employee>,
 
-    options?: { immediate?: boolean },
+    options?: {
+      immediate?: boolean;
+      meta?: Partial<PayrollEntryUiMeta>;
+      skipManualFlag?: boolean;
+    },
   ) {
     const currentEntry = entries.find((entry) => entry.id === entryId);
 
@@ -760,6 +1255,13 @@ export default function PayrollDetail({
     setEntries((current) =>
       current.map((entry) => (entry.id === entryId ? nextEntry : entry)),
     );
+
+    updateEntryUiMeta(entryId, (current) => ({
+      ...current,
+      hasPendingSave: true,
+      isManualEdited: options?.skipManualFlag ? current.isManualEdited : true,
+      ...options?.meta,
+    }));
 
     if (options?.immediate) {
       debouncedUpdate.cancel();
@@ -919,6 +1421,12 @@ export default function PayrollDetail({
       await deletePayrollEntry(entryId);
 
       setEntries((current) => current.filter((entry) => entry.id !== entryId));
+      setEntryUiMeta((current) => {
+        if (!current[entryId]) return current;
+        const next = { ...current };
+        delete next[entryId];
+        return next;
+      });
     } catch (error) {
       console.error(error);
 
@@ -951,37 +1459,236 @@ export default function PayrollDetail({
       if (shift.isWeekend) weekendHours += hours;
     });
 
-    let updatedEntry: PayrollEntry | null = null;
-
-    setEntries((current) =>
-      current.map((entry) => {
-        if (entry.id !== currentShiftEntry.id) return entry;
-
-        const nextEntry = {
-          ...entry,
-          shifts: newShifts,
-          totalHours: Number(totalHours.toFixed(2)),
-          weekendHours: Number(weekendHours.toFixed(2)),
-        };
-
-        nextEntry.salary = calculatePayrollSalary(nextEntry);
-
-        updatedEntry = nextEntry;
-
-        return nextEntry;
-      }),
+    applyEntryPatch(
+      currentShiftEntry.id,
+      {
+        shifts: newShifts,
+        totalHours: Number(totalHours.toFixed(2)),
+        weekendHours: Number(weekendHours.toFixed(2)),
+      },
+      undefined,
+      { immediate: true },
     );
-
     setShiftModalOpen(false);
+  }
 
-    if (!updatedEntry) return;
-
-    await updatePayrollEntry(currentShiftEntry.id, {
-      shifts: newShifts as any[],
-      totalHours: updatedEntry.totalHours,
-      weekendHours: updatedEntry.weekendHours,
-      salary: updatedEntry.salary,
+  function openEmployeeImportDialog(entry: PayrollEntry) {
+    const defaults = getEntryShiftDateDefaults(entry);
+    setEmployeeImportDialog({
+      entryId: entry.id || "",
+      employeeCode: entry.employeeCode || "",
+      employeeName: entry.employeeName,
+      startDate: defaults.startDate,
+      endDate: defaults.endDate,
+      fileName: "",
     });
+    setEmployeeImportFile(null);
+    setEmployeeImportPreview(null);
+    setEmployeeImportError("");
+  }
+
+  function openPayrollSettings(entry: PayrollEntry) {
+    setSettingsEntryId(entry.id || null);
+    const entrySalaryType = resolvePayrollSalaryType(entry);
+    setSettingsData({
+      salaryType: entrySalaryType,
+      monthlySalary: entry.monthlySalary || entry.fixedSalary || 0,
+      expectedWorkDays:
+        entrySalaryType === "monthly" ? entry.expectedWorkDays || 30 : 30,
+      paidLeaveDays: entrySalaryType === "monthly" ? entry.paidLeaveDays || 0 : 0,
+      standardHours: entrySalaryType === "monthly" ? entry.standardHours || 0 : 0,
+      overtimeRate: entry.hourlyRate || 0,
+      hourlyMultiplier: entry.hourlyMultiplier ?? 1,
+    });
+    setOpenActionMenuId(null);
+  }
+
+  function handleUndoEmployeeImport(entryId: string) {
+    const snapshot = entryUiMeta[entryId]?.lastImportSnapshot;
+    if (!snapshot) return;
+
+    applyEntryPatch(
+      entryId,
+      {
+        shifts: cloneShifts(snapshot.shifts),
+        totalHours: snapshot.totalHours,
+        weekendHours: snapshot.weekendHours,
+      },
+      undefined,
+      {
+        immediate: true,
+        meta: {
+          isImported: false,
+          lastImportPreview: null,
+          lastImportSnapshot: null,
+        },
+      },
+    );
+    setOpenActionMenuId(null);
+  }
+
+  async function handleImportEmployeeHours() {
+    if (!employeeImportDialog) return;
+    if (!employeeImportDialog.entryId) {
+      setEmployeeImportError("Không xác định được dòng lương cần import.");
+      return;
+    }
+    if (!employeeImportDialog.startDate || !employeeImportDialog.endDate) {
+      setEmployeeImportError("Vui lòng chọn khoảng ngày cần import.");
+      return;
+    }
+    if (employeeImportDialog.startDate > employeeImportDialog.endDate) {
+      setEmployeeImportError("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
+      return;
+    }
+    if (!employeeImportFile) {
+      setEmployeeImportError("Vui lòng chọn file chấm công.");
+      return;
+    }
+
+    const targetEntry = entries.find((entry) => entry.id === employeeImportDialog.entryId);
+    if (!targetEntry) {
+      setEmployeeImportError("Không tìm thấy nhân viên trong bảng lương hiện tại.");
+      return;
+    }
+
+    setIsImportingEmployeeHours(true);
+    try {
+      const importedRows = await parseTimesheetImportFile(employeeImportFile);
+      const normalizedCode = (employeeImportDialog.employeeCode || "").trim().toLowerCase();
+      const normalizedName = employeeImportDialog.employeeName.trim().toLowerCase();
+
+      const matchedRows = importedRows.filter((row) => {
+        const rowDate = normalizeDateOnly(row.dateTime);
+        if (!isDateWithinRange(rowDate, employeeImportDialog.startDate, employeeImportDialog.endDate)) {
+          return false;
+        }
+
+        const rowCode = row.employeeCode.trim().toLowerCase();
+        const rowName = row.employeeName.trim().toLowerCase();
+
+        if (normalizedCode) {
+          return rowCode === normalizedCode;
+        }
+
+        return rowName === normalizedName;
+      });
+
+      if (matchedRows.length === 0) {
+        throw new Error("Không tìm thấy dữ liệu chấm công của nhân viên này trong khoảng đã chọn.");
+      }
+
+      const importedShifts = summarizeImportedShifts(
+        matchedRows,
+        targetEntry.employeeCode || targetEntry.employeeId || targetEntry.employeeName,
+      );
+      const mergedShifts = mergeShiftsByDateRange(
+        (targetEntry.shifts || []) as Shift[],
+        importedShifts,
+        employeeImportDialog.startDate,
+        employeeImportDialog.endDate,
+      );
+      const totals = summarizeShiftTotals(mergedShifts);
+
+      applyEntryPatch(
+        targetEntry.id!,
+        {
+          shifts: mergedShifts,
+          totalHours: Number(totals.totalHours.toFixed(2)),
+          weekendHours: Number(totals.weekendHours.toFixed(2)),
+        },
+        undefined,
+        { immediate: true },
+      );
+
+      setEmployeeImportDialog(null);
+      setEmployeeImportFile(null);
+      setEmployeeImportError("");
+    } catch (error) {
+      console.error(error);
+      setEmployeeImportError(
+        error instanceof Error ? error.message : "Không thể import lại giờ làm cho nhân viên này.",
+      );
+    } finally {
+      setIsImportingEmployeeHours(false);
+    }
+  }
+
+  async function handleImportEmployeeHoursV2() {
+    if (!employeeImportDialog) return;
+    if (!employeeImportDialog.entryId) {
+      setEmployeeImportError("KhÃ´ng xÃ¡c Ä‘á»‹nh Ä‘Æ°á»£c dÃ²ng lÆ°Æ¡ng cáº§n import.");
+      return;
+    }
+    if (!employeeImportDialog.startDate || !employeeImportDialog.endDate) {
+      setEmployeeImportError("Vui lÃ²ng chá»n khoáº£ng ngÃ y cáº§n import.");
+      return;
+    }
+    if (employeeImportDialog.startDate > employeeImportDialog.endDate) {
+      setEmployeeImportError("NgÃ y báº¯t Ä‘áº§u khÃ´ng Ä‘Æ°á»£c lá»›n hÆ¡n ngÃ y káº¿t thÃºc.");
+      return;
+    }
+    if (!employeeImportFile) {
+      setEmployeeImportError("Vui lÃ²ng chá»n file cháº¥m cÃ´ng.");
+      return;
+    }
+
+    const targetEntry = entries.find(
+      (entry) => entry.id === employeeImportDialog.entryId,
+    );
+    if (!targetEntry) {
+      setEmployeeImportError(
+        "KhÃ´ng tÃ¬m tháº¥y nhÃ¢n viÃªn trong báº£ng lÆ°Æ¡ng hiá»‡n táº¡i.",
+      );
+      return;
+    }
+
+    setIsImportingEmployeeHours(true);
+    try {
+      const preparedImport = await prepareEmployeeImportData({
+        dialog: employeeImportDialog,
+        file: employeeImportFile,
+        targetEntry,
+      });
+
+      applyEntryPatch(
+        targetEntry.id!,
+        {
+          shifts: preparedImport.mergedShifts,
+          totalHours: Number(preparedImport.totals.totalHours.toFixed(2)),
+          weekendHours: Number(preparedImport.totals.weekendHours.toFixed(2)),
+        },
+        undefined,
+        {
+          immediate: true,
+          meta: {
+            isImported: true,
+            lastImportPreview: preparedImport.preview,
+            lastImportSnapshot: {
+              shifts: cloneShifts((targetEntry.shifts || []) as Shift[]),
+              totalHours: targetEntry.totalHours || 0,
+              weekendHours: targetEntry.weekendHours || 0,
+              preview: preparedImport.preview,
+            },
+          },
+        },
+      );
+
+      setEmployeeImportDialog(null);
+      setEmployeeImportFile(null);
+      setEmployeeImportPreview(null);
+      setEmployeeImportError("");
+      setOpenActionMenuId(null);
+    } catch (error) {
+      console.error(error);
+      setEmployeeImportError(
+        error instanceof Error
+          ? error.message
+          : "KhÃ´ng thá»ƒ import láº¡i giá» lÃ m cho nhÃ¢n viÃªn nÃ y.",
+      );
+    } finally {
+      setIsImportingEmployeeHours(false);
+    }
   }
 
   const filteredEntries = entries
@@ -1003,8 +1710,21 @@ export default function PayrollDetail({
 
       const matchesError = !filterError || hasEntryError(entry);
       const matchesLate = !filterLateOnly || lateSummary.lateShiftCount > 0;
+      const entryMeta = entry.id ? entryUiMeta[entry.id] : undefined;
+      const matchesImported = !filterImportedOnly || Boolean(entryMeta?.isImported);
+      const salaryType = resolvePayrollSalaryType(entry);
+      const matchesHourly = !filterHourlyOnly || salaryType === "hourly";
+      const matchesMonthly = !filterMonthlyOnly || salaryType === "monthly";
 
-      return matchesSearch && matchesRole && matchesError && matchesLate;
+      return (
+        matchesSearch &&
+        matchesRole &&
+        matchesError &&
+        matchesLate &&
+        matchesImported &&
+        matchesHourly &&
+        matchesMonthly
+      );
     })
     .sort((left, right) => {
       if (sortBy === "name_asc")
@@ -1055,6 +1775,15 @@ export default function PayrollDetail({
     (sum, summary) => sum + summary.lateShiftCount,
     0,
   );
+  const importedEntriesCount = entries.filter(
+    (entry) => entry.id && entryUiMeta[entry.id]?.isImported,
+  ).length;
+  const monthlyEntriesCount = entries.filter(
+    (entry) => resolvePayrollSalaryType(entry) === "monthly",
+  ).length;
+  const hourlyEntriesCount = entries.filter(
+    (entry) => resolvePayrollSalaryType(entry) === "hourly",
+  ).length;
 
   const monthlyEntries = entries.filter(
     (entry) => resolvePayrollSalaryType(entry) === "monthly",
@@ -1217,7 +1946,7 @@ export default function PayrollDetail({
           </div>
         </div>
 
-        <div className="mt-4 rounded-[24px] border border-amber-200 bg-amber-50/80 p-5">
+        <div className="mt-4 hidden rounded-[24px] border border-amber-200 bg-amber-50/80 p-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <h3 className="text-base font-semibold text-slate-900">
@@ -1262,6 +1991,32 @@ export default function PayrollDetail({
               </Button>
             </div>
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-amber-200 bg-amber-50/80 p-5">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Hệ số lương cho toàn đợt
+            </h3>
+            <p className="mt-1 text-sm text-amber-800">
+              {hourlyEntries.length === 0
+                ? "Hiện không có nhân viên theo giờ trong đợt này."
+                : uniformHourlyMultiplier === null
+                  ? `Đợt này đang có nhiều hệ số khác nhau trên ${hourlyEntries.length} nhân viên theo giờ.`
+                  : `Đợt này hiện đang dùng hệ số ${formatHours(
+                      uniformHourlyMultiplier,
+                    )} cho ${hourlyEntries.length} nhân viên theo giờ.`}
+            </p>
+          </div>
+
+          <Button
+            className="h-11 gap-2 rounded-2xl px-5"
+            onClick={() => setShowBatchMultiplierDialog(true)}
+            disabled={hourlyEntries.length === 0}
+          >
+            <Settings2 className="h-4 w-4" />
+            Chỉnh hệ số toàn đợt
+          </Button>
         </div>
       </section>
 
@@ -1353,6 +2108,81 @@ export default function PayrollDetail({
                   </select>
                 </div>
 
+                <div className="flex flex-wrap gap-2 xl:max-w-[760px]">
+                  <Button
+                    variant={filterLateOnly ? "default" : "outline"}
+                    className={cn(
+                      "h-9 rounded-full px-4 text-sm",
+                      filterLateOnly
+                        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        : "text-slate-600",
+                    )}
+                    onClick={() => setFilterLateOnly((current) => !current)}
+                  >
+                    Đi trễ ({lateEmployees})
+                  </Button>
+                  <Button
+                    variant={filterError ? "default" : "outline"}
+                    className={cn(
+                      "h-9 rounded-full px-4 text-sm",
+                      filterError
+                        ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                        : "text-slate-600",
+                    )}
+                    onClick={() => setFilterError((current) => !current)}
+                  >
+                    Lỗi ca ({warnings})
+                  </Button>
+                  <Button
+                    variant={filterImportedOnly ? "default" : "outline"}
+                    className={cn(
+                      "h-9 rounded-full px-4 text-sm",
+                      filterImportedOnly
+                        ? "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                        : "text-slate-600",
+                    )}
+                    onClick={() => setFilterImportedOnly((current) => !current)}
+                  >
+                    Đã import lại ({importedEntriesCount})
+                  </Button>
+                  <Button
+                    variant={filterHourlyOnly ? "default" : "outline"}
+                    className={cn(
+                      "h-9 rounded-full px-4 text-sm",
+                      filterHourlyOnly
+                        ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                        : "text-slate-600",
+                    )}
+                    onClick={() =>
+                      setFilterHourlyOnly((current) => {
+                        const next = !current;
+                        if (next) setFilterMonthlyOnly(false);
+                        return next;
+                      })
+                    }
+                  >
+                    Theo giờ ({hourlyEntriesCount})
+                  </Button>
+                  <Button
+                    variant={filterMonthlyOnly ? "default" : "outline"}
+                    className={cn(
+                      "h-9 rounded-full px-4 text-sm",
+                      filterMonthlyOnly
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        : "text-slate-600",
+                    )}
+                    onClick={() =>
+                      setFilterMonthlyOnly((current) => {
+                        const next = !current;
+                        if (next) setFilterHourlyOnly(false);
+                        return next;
+                      })
+                    }
+                  >
+                    Lương tháng ({monthlyEntriesCount})
+                  </Button>
+                </div>
+
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <div className="relative">
                     <Button
@@ -1401,48 +2231,68 @@ export default function PayrollDetail({
             </div>
           </div>
 
-          <div className="overflow-x-auto px-6 py-5">
+          <div className="max-h-[72vh] overflow-auto px-6 py-5">
             <table className="w-full min-w-[980px] text-sm border-separate border-spacing-0">
               <thead className="bg-slate-50">
                 <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
                   {visibleColumns.name ? (
-                    <th className="px-4 py-3 text-left">Tên nhân viên</th>
+                    <th className="sticky left-0 top-0 z-30 min-w-[240px] bg-slate-50 px-4 py-3 text-left shadow-[1px_0_0_0_rgba(226,232,240,1)]">
+                      Tên nhân viên
+                    </th>
                   ) : null}
                   {visibleColumns.role ? (
-                    <th className="px-4 py-3 text-left">Vai trò</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-left">
+                      Vai trò
+                    </th>
                   ) : null}
                   {visibleColumns.late ? (
-                    <th className="px-4 py-3 text-center">Đi trễ</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-center">
+                      Đi trễ
+                    </th>
                   ) : null}
                   {visibleColumns.hours ? (
-                    <th className="px-4 py-3 text-center">Số giờ</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-center">
+                      Số giờ
+                    </th>
                   ) : null}
 
                   {visibleColumns.workDays ? (
-                    <th className="pb-3 pr-4 text-center">Ngày công</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 pb-3 pr-4 text-center">
+                      Ngày công
+                    </th>
                   ) : null}
 
                   {visibleColumns.rate ? (
-                    <th className="px-4 py-3 text-center">Lương/h</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-center">
+                      Lương/h
+                    </th>
                   ) : null}
                   {visibleColumns.weekend ? (
-                    <th className="px-4 py-3 text-center">Bonus</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-center">
+                      Bonus
+                    </th>
                   ) : null}
                   {visibleColumns.allowance ? (
-                    <th className="pb-3 pr-4 text-center">Phụ cấp</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 pb-3 pr-4 text-center">
+                      Phụ cấp
+                    </th>
                   ) : null}
 
                   {visibleColumns.total ? (
-                    <th className="px-4 py-3 text-right text-emerald-700">
+                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-right text-emerald-700">
                       Tổng tiền
                     </th>
                   ) : null}
                   {visibleColumns.note ? (
-                    <th className="px-4 py-3 text-left">Ghi chú</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-left">
+                      Ghi chú
+                    </th>
                   ) : null}
 
                   {visibleColumns.action ? (
-                    <th className="px-4 py-3 text-center w-[96px]">Tác vụ</th>
+                    <th className="sticky top-0 z-20 w-[152px] bg-slate-50 px-4 py-3 text-center">
+                      Tác vụ
+                    </th>
                   ) : null}
                 </tr>
               </thead>
@@ -1458,24 +2308,49 @@ export default function PayrollDetail({
                   );
 
                   const isMonthly = breakdown.salaryType === "monthly";
+                  const rowMeta = entry.id ? entryUiMeta[entry.id] : undefined;
+                  const isRecentlySaved = Boolean(rowMeta?.lastSavedAt);
+                  const rowStatus = hasEntryError(entry)
+                    ? "error"
+                    : lateSummary.lateShiftCount > 0
+                      ? "warning"
+                      : rowMeta?.isImported || rowMeta?.isManualEdited
+                        ? "manual"
+                        : "valid";
+                  const rowBackground =
+                    rowStatus === "error"
+                      ? "bg-rose-50/80"
+                      : rowStatus === "warning"
+                        ? "bg-amber-50/80"
+                        : rowStatus === "manual"
+                          ? "bg-violet-50/70"
+                          : "bg-emerald-50/50";
+                  const stickyCellBackground =
+                    rowStatus === "error"
+                      ? "bg-rose-50"
+                      : rowStatus === "warning"
+                        ? "bg-amber-50"
+                        : rowStatus === "manual"
+                          ? "bg-violet-50"
+                          : "bg-emerald-50";
 
                   return (
                     <tr
                       key={entry.id}
                       className={cn(
                         "align-top transition-colors",
-                        isMonthly
-                          ? "bg-gradient-to-r from-sky-100 via-cyan-50 to-white"
-                          : "bg-white",
-                        lateSummary.lateShiftCount > 0 && "ring-1 ring-inset ring-amber-200",
-                        hasEntryError(entry) && "bg-red-50/60",
+                        rowBackground,
+                        rowMeta?.hasPendingSave && "ring-2 ring-inset ring-sky-200",
+                        isRecentlySaved &&
+                          !rowMeta?.hasPendingSave &&
+                          "ring-2 ring-inset ring-emerald-200",
                       )}
                     >
                       {visibleColumns.name ? (
                         <td
                           className={cn(
-                            "px-4 py-4 border-b border-slate-500 align-middle",
-                            isMonthly && "bg-sky-100/80",
+                            "sticky left-0 z-10 border-b border-slate-200 px-4 py-4 align-middle shadow-[1px_0_0_0_rgba(226,232,240,1)]",
+                            stickyCellBackground,
                           )}
                         >
                           <div className="flex items-center gap-2 min-w-0">
@@ -1495,6 +2370,39 @@ export default function PayrollDetail({
                               onBlur={() => debouncedUpdate.flush()}
                               className="min-w-0 w-full bg-transparent font-semibold text-slate-900 outline-none"
                             />
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-medium">
+                            <span
+                              className={cn(
+                                "rounded-full px-2.5 py-1",
+                                isMonthly
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-sky-100 text-sky-700",
+                              )}
+                            >
+                              {isMonthly ? "Lương tháng" : "Theo giờ"}
+                            </span>
+                            {rowMeta?.isManualEdited ? (
+                              <span className="rounded-full bg-slate-200 px-2.5 py-1 text-slate-700">
+                                Đã chỉnh tay
+                              </span>
+                            ) : null}
+                            {rowMeta?.isImported ? (
+                              <span className="rounded-full bg-violet-100 px-2.5 py-1 text-violet-700">
+                                Đã import lại
+                              </span>
+                            ) : null}
+                            {rowMeta?.hasPendingSave ? (
+                              <span className="rounded-full bg-sky-100 px-2.5 py-1 text-sky-700">
+                                Chưa lưu
+                              </span>
+                            ) : null}
+                            {isRecentlySaved ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Đã cập nhật
+                              </span>
+                            ) : null}
                           </div>
                           {lateSummary.lateShiftCount > 0 ? (
                             <div className="mt-2 text-xs font-medium text-amber-700">
@@ -1727,50 +2635,102 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.action ? (
-                        <td className="px-4 py-4 border-b border-slate-500 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                        <td className="border-b border-slate-200 px-4 py-4 text-center">
+                          <div
+                            className="relative flex items-center justify-center"
+                            onClick={(event) => event.stopPropagation()}
+                          >
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-9 w-9 rounded-xl text-slate-500 hover:bg-slate-100"
-                              onClick={() => {
-                                setSettingsEntryId(entry.id || null);
-                                const entrySalaryType =
-                                  resolvePayrollSalaryType(entry);
-                                setSettingsData({
-                                  salaryType: entrySalaryType,
-                                  monthlySalary:
-                                    entry.monthlySalary ||
-                                    entry.fixedSalary ||
-                                    0,
-                                  expectedWorkDays:
-                                    entrySalaryType === "monthly"
-                                      ? entry.expectedWorkDays || 30
-                                      : 30,
-                                  paidLeaveDays:
-                                    entrySalaryType === "monthly"
-                                      ? entry.paidLeaveDays || 0
-                                      : 0,
-                                  standardHours:
-                                    entrySalaryType === "monthly"
-                                      ? entry.standardHours || 0
-                                      : 0,
-                                  overtimeRate: entry.hourlyRate || 0,
-                                  hourlyMultiplier: entry.hourlyMultiplier ?? 1,
-                                });
-                              }}
+                              onClick={() =>
+                                setOpenActionMenuId((current) =>
+                                  current === entry.id ? null : entry.id || null,
+                                )
+                              }
+                              title="Mở danh sách tác vụ"
                             >
-                              <Settings2 className="h-4 w-4" />
+                              <MoreHorizontal className="h-4 w-4" />
                             </Button>
 
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9 rounded-xl text-rose-500 hover:bg-rose-50"
-                              onClick={() => handleDeleteEntry(entry.id!)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {openActionMenuId === entry.id ? (
+                              <div className="absolute right-0 top-11 z-30 w-56 rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-xl">
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                                  onClick={() => openPayrollSettings(entry)}
+                                  title="Chỉnh hệ số và cấu hình lương"
+                                >
+                                  <Settings2 className="h-4 w-4 text-slate-500" />
+                                  Chỉnh hệ số
+                                </button>
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-sky-50"
+                                  onClick={() => openEmployeeImportDialog(entry)}
+                                  title="Import lại giờ làm cho riêng nhân viên này"
+                                >
+                                  <Upload className="h-4 w-4 text-sky-600" />
+                                  Import giờ làm
+                                </button>
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-amber-50"
+                                  onClick={() => {
+                                    setCurrentShiftEntry(entry);
+                                    setShiftModalOpen(true);
+                                    setOpenActionMenuId(null);
+                                  }}
+                                  title="Mở chi tiết ca làm để chỉnh tay"
+                                >
+                                  <CalendarClock className="h-4 w-4 text-amber-600" />
+                                  Sửa ca
+                                </button>
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-emerald-50"
+                                  onClick={() => {
+                                    setAllowanceEntryId(entry.id || null);
+                                    setEditAllowances(entry.allowances || []);
+                                    setAttendanceBonusEnabled(
+                                      entry.attendanceBonusEnabled || false,
+                                    );
+                                    setAttendanceBonusDays(
+                                      entry.attendanceBonusDays || 0,
+                                    );
+                                    setAttendanceBonusAmount(
+                                      entry.attendanceBonusAmount || 0,
+                                    );
+                                    setOpenActionMenuId(null);
+                                  }}
+                                  title="Mở popup phụ cấp và chuyên cần"
+                                >
+                                  <Plus className="h-4 w-4 text-emerald-600" />
+                                  Phụ cấp
+                                </button>
+                                {rowMeta?.lastImportSnapshot ? (
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-violet-700 transition hover:bg-violet-50"
+                                    onClick={() => handleUndoEmployeeImport(entry.id!)}
+                                    title="Hoàn tác lần import giờ làm gần nhất"
+                                  >
+                                    <RotateCcw className="h-4 w-4" />
+                                    Hoàn tác import
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-50"
+                                  onClick={() => handleDeleteEntry(entry.id!)}
+                                  title="Xóa nhân viên này khỏi bảng lương"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Xóa dòng
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         </td>
                       ) : null}
@@ -1832,13 +2792,197 @@ export default function PayrollDetail({
         onClose={() => setShowAddDialog(false)}
         onCreateNew={handleCreateEmployee}
       />
-      {salaryDetailEntry && salaryDetailBreakdown ? (
+      {employeeImportDialog ? (
         <div
           className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/45 p-4"
+          onClick={() => {
+            if (isImportingEmployeeHours) return;
+            setEmployeeImportDialog(null);
+            setEmployeeImportFile(null);
+            setEmployeeImportPreview(null);
+            setEmployeeImportError("");
+          }}
+        >
+          <div
+            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Import lại ngày làm
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Chỉ cập nhật giờ làm của {employeeImportDialog.employeeName} trong bảng lương này.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isImportingEmployeeHours) return;
+                  setEmployeeImportDialog(null);
+                  setEmployeeImportFile(null);
+                  setEmployeeImportPreview(null);
+                  setEmployeeImportError("");
+                }}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Đóng"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                Hệ thống sẽ thay lại các ca trong khoảng ngày bạn chọn cho đúng nhân viên này,
+                rồi tự tính lại tổng giờ, giờ cuối tuần và lương của riêng dòng này.
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Từ ngày"
+                  type="date"
+                  value={employeeImportDialog.startDate}
+                  onChange={(event) =>
+                    setEmployeeImportDialog((current) =>
+                      current
+                        ? {
+                            ...current,
+                            startDate: event.target.value,
+                          }
+                        : current,
+                    )
+                  }
+                />
+                <Input
+                  label="Đến ngày"
+                  type="date"
+                  value={employeeImportDialog.endDate}
+                  onChange={(event) =>
+                    setEmployeeImportDialog((current) =>
+                      current
+                        ? {
+                            ...current,
+                            endDate: event.target.value,
+                          }
+                        : current,
+                    )
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">
+                  File chấm công
+                </label>
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 transition hover:border-sky-300 hover:bg-sky-50">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">
+                      {employeeImportDialog.fileName || "Chọn file Excel chấm công"}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Chỉ dùng cho nhân viên này và chỉ áp dụng cho kỳ lương đang mở.
+                    </div>
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                    <Upload className="h-4 w-4" />
+                    Chọn file
+                  </div>
+                  <input
+                    type="file"
+                    accept=".xls,.xlsx"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      setEmployeeImportFile(file);
+                      setEmployeeImportPreview(null);
+                      setEmployeeImportError("");
+                      setEmployeeImportDialog((current) =>
+                        current
+                          ? {
+                              ...current,
+                              fileName: file?.name || "",
+                            }
+                          : current,
+                      );
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+
+              {employeeImportPreview ? (
+                <div className="grid gap-3 rounded-2xl border border-violet-200 bg-violet-50/80 p-4 sm:grid-cols-3">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.14em] text-violet-500">
+                      Trước / sau
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-violet-900">
+                      {formatHours(employeeImportPreview.oldHours)}h to{" "}
+                      {formatHours(employeeImportPreview.newHours)}h
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.14em] text-violet-500">
+                      Ca bị thay
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-violet-900">
+                      {employeeImportPreview.replacedShiftCount} ca
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.14em] text-violet-500">
+                      Ca mới từ file
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-violet-900">
+                      {employeeImportPreview.importedShiftCount} ca
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {employeeImportError ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {employeeImportError}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                className="rounded-2xl"
+                disabled={isImportingEmployeeHours}
+                onClick={() => {
+                  setEmployeeImportDialog(null);
+                  setEmployeeImportFile(null);
+                  setEmployeeImportPreview(null);
+                  setEmployeeImportError("");
+                }}
+              >
+                Hủy
+              </Button>
+              <Button
+                className="gap-2 rounded-2xl bg-sky-600 hover:bg-sky-700"
+                onClick={() => {
+                  void handleImportEmployeeHoursV2();
+                }}
+                isLoading={isImportingEmployeeHours}
+              >
+                <Upload className="h-4 w-4" />
+                Import cho nhân viên này
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {salaryDetailEntry && salaryDetailBreakdown ? (
+        <div
+          className="fixed inset-0 z-[1000] flex justify-end bg-slate-900/45"
           onClick={() => setSalaryDetailEntryId(null)}
         >
           <div
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+            className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -2141,6 +3285,90 @@ export default function PayrollDetail({
           salaryType={settingsData.salaryType}
           standardHours={settingsData.standardHours}
         />
+      ) : null}
+
+      {showBatchMultiplierDialog ? (
+        <div
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/45 p-4"
+          onClick={() => {
+            if (isApplyingBatchMultiplier) return;
+            setShowBatchMultiplierDialog(false);
+          }}
+        >
+          <div
+            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Hệ số lương cho toàn đợt
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Áp dụng một lần cho toàn bộ nhân viên theo giờ của bảng lương này.
+                  Không ảnh hưởng hồ sơ nhân viên hay các đợt lương cũ.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isApplyingBatchMultiplier) return;
+                  setShowBatchMultiplierDialog(false);
+                }}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Đóng"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {hourlyEntries.length === 0
+                  ? "Hiện không có nhân viên theo giờ trong đợt này."
+                  : uniformHourlyMultiplier === null
+                    ? `Đợt này đang có nhiều hệ số khác nhau trên ${hourlyEntries.length} nhân viên theo giờ.`
+                    : `Đợt này hiện đang dùng hệ số ${formatHours(
+                        uniformHourlyMultiplier,
+                      )} cho ${hourlyEntries.length} nhân viên theo giờ.`}
+              </div>
+
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                label="Hệ số áp dụng"
+                value={batchHourlyMultiplier}
+                onChange={(event) =>
+                  setBatchHourlyMultiplier(Number(event.target.value) || 0)
+                }
+                className="h-11 rounded-2xl bg-white text-right"
+              />
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                className="rounded-2xl"
+                disabled={isApplyingBatchMultiplier}
+                onClick={() => setShowBatchMultiplierDialog(false)}
+              >
+                Hủy
+              </Button>
+              <Button
+                className="rounded-2xl px-5"
+                onClick={async () => {
+                  await handleApplyBatchHourlyMultiplier();
+                  setShowBatchMultiplierDialog(false);
+                }}
+                isLoading={isApplyingBatchMultiplier}
+                disabled={hourlyEntries.length === 0}
+              >
+                Áp dụng cho cả đợt
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <ShiftDetailModal

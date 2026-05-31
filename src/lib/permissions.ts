@@ -26,6 +26,13 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     path: "/pos",
   },
   {
+    id: "virtual_bills.access",
+    label: "Tao bill ao",
+    description: "Sinh bill ao theo tong doanh thu va so luong bill.",
+    category: "Giao dich",
+    path: "/virtual-bills",
+  },
+  {
     id: "payroll_estimate.access",
     label: "Uoc luong luong",
     description: "Lap lich va uoc luong luong.",

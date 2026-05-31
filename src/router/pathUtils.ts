@@ -4,6 +4,7 @@ const ADMIN_PATHS = [
   "/reports",
   "/cash-flow",
   "/bills",
+  "/virtual-bills",
   "/product",
   "/categories",
   "/accounts",

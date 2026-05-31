@@ -23,6 +23,7 @@ import NewSeoArticlePage from "./app/(dashboard)/seo-articles/new/page";
 import SeoArticlesPage from "./app/(dashboard)/seo-articles/page";
 import TaxInvoicesPage from "./app/(dashboard)/tax-invoices/page";
 import TimesheetPage from "./app/(dashboard)/timesheet/page";
+import VirtualBillsPage from "./app/(dashboard)/virtual-bills/page";
 import LoginPage from "./app/login/page";
 import RoleGuard from "./components/RoleGuard";
 import SeoManager from "./components/SeoManager";
@@ -104,6 +105,7 @@ export default function App() {
               <Route path="reports" element={<ReportsPage />} />
               <Route path="reports/:id" element={<ReportDetailPage />} />
               <Route path="cash-flow" element={<CashFlowPage />} />
+              <Route path="virtual-bills" element={<VirtualBillsPage />} />
               <Route path="product" element={<ProductsPage />} />
               <Route path="product/checks" element={<InventoryChecksPage />} />
               <Route path="product/receipts" element={<InventoryReceiptsPage />} />
