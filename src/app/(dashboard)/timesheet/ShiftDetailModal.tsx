@@ -4,6 +4,8 @@
 import React, { useState, useEffect } from "react";
 import { X, Plus, Trash2, Save, GripVertical, ArrowRightLeft } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import type { RoleStartTimeSetting } from "@/services/roleStartTimes";
+import { calculateShiftLateMinutes } from "../payroll/_components/payrollShared";
 
 // Helper constants for 24h time picker can be removed or kept if we switch back,
 // using simple validation now.
@@ -26,7 +28,7 @@ interface ShiftDetailModalProps {
   employeeName: string;
   employeeId: string;
   initialShifts: Shift[];
-  scheduledStartTime?: string;
+  scheduledStartTimes?: Partial<RoleStartTimeSetting>;
 }
 
 const TimeSelect = ({
@@ -134,7 +136,7 @@ export default function ShiftDetailModal({
   employeeName,
   employeeId,
   initialShifts,
-  scheduledStartTime,
+  scheduledStartTimes,
 }: ShiftDetailModalProps) {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -149,17 +151,8 @@ export default function ShiftDetailModal({
   if (!isOpen) return null;
 
   const getLateMinutes = (inTime: string) => {
-    if (!scheduledStartTime || !inTime) return 0;
-    const scheduleMatch = scheduledStartTime.match(/^(\d{2}):(\d{2})$/);
-    if (!scheduleMatch) return 0;
-
-    const actual = new Date(inTime);
-    if (Number.isNaN(actual.getTime())) return 0;
-
-    const scheduledMinutes =
-      Number(scheduleMatch[1]) * 60 + Number(scheduleMatch[2]);
-    const actualMinutes = actual.getHours() * 60 + actual.getMinutes();
-    return Math.max(0, actualMinutes - scheduledMinutes);
+    if (!inTime) return 0;
+    return calculateShiftLateMinutes(inTime, scheduledStartTimes);
   };
 
   const handleTimeChange = (
@@ -447,9 +440,21 @@ export default function ShiftDetailModal({
               <span className="text-blue-600">{employeeName}</span>
             </h3>
             <p className="text-sm text-gray-500">Mã NV: {employeeId}</p>
-            {scheduledStartTime ? (
+            {scheduledStartTimes &&
+            (scheduledStartTimes.shift1Start ||
+              scheduledStartTimes.shift2Start ||
+              scheduledStartTimes.shift3Start) ? (
               <p className="text-sm text-amber-600">
-                Giờ vào chuẩn: {scheduledStartTime}
+                Giờ vào chuẩn:
+                {scheduledStartTimes.shift1Start
+                  ? ` Ca 1 ${scheduledStartTimes.shift1Start}`
+                  : ""}
+                {scheduledStartTimes.shift2Start
+                  ? ` • Ca 2 ${scheduledStartTimes.shift2Start}`
+                  : ""}
+                {scheduledStartTimes.shift3Start
+                  ? ` • Ca 3 ${scheduledStartTimes.shift3Start}`
+                  : ""}
               </p>
             ) : null}
           </div>

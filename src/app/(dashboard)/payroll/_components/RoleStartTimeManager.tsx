@@ -10,13 +10,28 @@ import {
   saveRoleStartTimes,
 } from "@/services/roleStartTimes";
 
+type RoleShiftStartValues = Record<
+  string,
+  {
+    shift1Start: string;
+    shift2Start: string;
+    shift3Start: string;
+  }
+>;
+
+const SHIFT_FIELDS = [
+  { key: "shift1Start", label: "Ca 1" },
+  { key: "shift2Start", label: "Ca 2" },
+  { key: "shift3Start", label: "Ca 3" },
+] as const;
+
 export default function RoleStartTimeManager({
   storeId,
 }: {
   storeId: string;
 }) {
   const roleGroups = useMemo(() => getRoleGroupsForStore(storeId), [storeId]);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<RoleShiftStartValues>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -33,8 +48,12 @@ export default function RoleStartTimeManager({
         const items = await getRoleStartTimes(storeId);
         if (!active) return;
         setValues(
-          items.reduce<Record<string, string>>((result, item) => {
-            result[item.role] = item.startTime;
+          items.reduce<RoleShiftStartValues>((result, item) => {
+            result[item.role] = {
+              shift1Start: item.shift1Start || "",
+              shift2Start: item.shift2Start || "",
+              shift3Start: item.shift3Start || "",
+            };
             return result;
           }, {}),
         );
@@ -65,20 +84,31 @@ export default function RoleStartTimeManager({
       setError("");
       setMessage("");
       const items: RoleStartTimeSetting[] = Object.entries(values)
-        .map(([role, startTime]) => ({
+        .map(([role, shiftValues]) => ({
           role,
-          startTime: startTime.trim(),
+          shift1Start: shiftValues.shift1Start.trim(),
+          shift2Start: shiftValues.shift2Start.trim(),
+          shift3Start: shiftValues.shift3Start.trim(),
         }))
-        .filter((item) => item.startTime !== "");
+        .filter(
+          (item) =>
+            item.shift1Start !== "" ||
+            item.shift2Start !== "" ||
+            item.shift3Start !== "",
+        );
 
       const savedItems = await saveRoleStartTimes(storeId, items);
       setValues(
-        savedItems.reduce<Record<string, string>>((result, item) => {
-          result[item.role] = item.startTime;
+        savedItems.reduce<RoleShiftStartValues>((result, item) => {
+          result[item.role] = {
+            shift1Start: item.shift1Start || "",
+            shift2Start: item.shift2Start || "",
+            shift3Start: item.shift3Start || "",
+          };
           return result;
         }, {}),
       );
-      setMessage("Đã lưu giờ bắt đầu làm theo vai trò.");
+      setMessage("Đã lưu giờ bắt đầu làm cho 3 ca theo vai trò.");
     } catch (saveError) {
       console.error(saveError);
       setError(
@@ -106,8 +136,9 @@ export default function RoleStartTimeManager({
               Cấu hình giờ bắt đầu làm
             </h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              Mỗi vai trò có thể có giờ bắt đầu khác nhau. Khi đã cấu hình, trang
-              bảng lương sẽ tự đánh dấu những ca vào muộn hơn giờ này.
+              Mỗi vai trò có thể có 3 giờ bắt đầu tương ứng Ca 1, Ca 2 và Ca 3.
+              Khi đã cấu hình, hệ thống sẽ tự ghép ca chấm công vào mốc gần nhất
+              để đánh dấu đi trễ đúng theo từng ca.
             </p>
           </div>
           <Button
@@ -145,31 +176,55 @@ export default function RoleStartTimeManager({
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {roles.map((role) => (
-                <div
-                  key={role}
-                  className="rounded-[20px] border border-slate-200 bg-slate-50 p-4"
-                >
-                  <div className="text-sm font-semibold text-slate-900">
-                    {role}
+              {roles.map((role) => {
+                const roleValues = values[role] || {
+                  shift1Start: "",
+                  shift2Start: "",
+                  shift3Start: "",
+                };
+
+                return (
+                  <div
+                    key={role}
+                    className="rounded-[20px] border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="text-sm font-semibold text-slate-900">
+                      {role}
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Để trống ca nào nếu vai trò này không làm ca đó hoặc không
+                      cần kiểm tra.
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      {SHIFT_FIELDS.map((shift) => (
+                        <label
+                          key={shift.key}
+                          className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-3"
+                        >
+                          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            {shift.label}
+                          </span>
+                          <input
+                            type="time"
+                            step={60}
+                            value={roleValues[shift.key]}
+                            onChange={(event) =>
+                              setValues((current) => ({
+                                ...current,
+                                [role]: {
+                                  ...roleValues,
+                                  [shift.key]: event.target.value,
+                                },
+                              }))
+                            }
+                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                          />
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Để trống nếu vai trò này không cần kiểm tra đi trễ.
-                  </p>
-                  <input
-                    type="time"
-                    step={60}
-                    value={values[role] || ""}
-                    onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        [role]: event.target.value,
-                      }))
-                    }
-                    className="mt-4 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         ))}

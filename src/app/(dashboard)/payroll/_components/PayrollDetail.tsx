@@ -19,7 +19,10 @@ import {
   getEmployees,
   updateEmployee,
 } from "@/services/employees.firebase";
-import { getRoleStartTimes } from "@/services/roleStartTimes";
+import {
+  getRoleStartTimes,
+  type RoleStartTimeSetting,
+} from "@/services/roleStartTimes";
 
 import { useStore } from "@/context/StoreContext";
 
@@ -790,7 +793,9 @@ export default function PayrollDetail({
   const [filterImportedOnly, setFilterImportedOnly] = useState(false);
   const [filterHourlyOnly, setFilterHourlyOnly] = useState(false);
   const [filterMonthlyOnly, setFilterMonthlyOnly] = useState(false);
-  const [roleStartTimes, setRoleStartTimes] = useState<Record<string, string>>({});
+  const [roleStartTimes, setRoleStartTimes] = useState<
+    Record<string, RoleStartTimeSetting>
+  >({});
 
   const updateEntryUiMeta = useCallback(
     (
@@ -1043,8 +1048,8 @@ export default function PayrollDetail({
     try {
       const items = await getRoleStartTimes(storeId);
       setRoleStartTimes(
-        items.reduce<Record<string, string>>((result, item) => {
-          result[item.role] = item.startTime;
+        items.reduce<Record<string, RoleStartTimeSetting>>((result, item) => {
+          result[item.role] = item;
           return result;
         }, {}),
       );
@@ -2300,11 +2305,11 @@ export default function PayrollDetail({
               <tbody>
                 {filteredEntries.map((entry) => {
                   const breakdown = getPayrollBreakdown(entry);
-                  const scheduledStartTime =
-                    roleStartTimes[entry.role || defaultRole] || "";
+                  const scheduledStartTimes =
+                    roleStartTimes[entry.role || defaultRole];
                   const lateSummary = getEntryLateSummary(
                     entry,
-                    scheduledStartTime,
+                    scheduledStartTimes,
                   );
 
                   const isMonthly = breakdown.salaryType === "monthly";
@@ -2434,14 +2439,17 @@ export default function PayrollDetail({
 
                       {visibleColumns.late ? (
                         <td className="px-4 py-4 border-b border-slate-500 text-center">
-                          {scheduledStartTime ? (
+                          {scheduledStartTimes &&
+                          lateSummary.configuredStartTimes.length > 0 ? (
                             lateSummary.lateShiftCount > 0 ? (
                               <div className="inline-flex min-w-[120px] flex-col rounded-[20px] border border-amber-200 bg-amber-50 px-3 py-2 text-left">
                                 <span className="text-xs font-semibold text-amber-800">
                                   Trễ {lateSummary.lateShiftCount} ca
                                 </span>
                                 <span className="mt-1 text-xs text-amber-700/80">
-                                  Vào chuẩn {scheduledStartTime}
+                                  {lateSummary.configuredStartTimes
+                                    .map((item) => `${item.label} ${item.time}`)
+                                    .join(" • ")}
                                 </span>
                               </div>
                             ) : (
@@ -2450,7 +2458,9 @@ export default function PayrollDetail({
                                   Đúng giờ
                                 </span>
                                 <span className="mt-1 text-xs text-emerald-700/80">
-                                  Vào chuẩn {scheduledStartTime}
+                                  {lateSummary.configuredStartTimes
+                                    .map((item) => `${item.label} ${item.time}`)
+                                    .join(" • ")}
                                 </span>
                               </div>
                             )
@@ -3006,11 +3016,14 @@ export default function PayrollDetail({
             </div>
 
             <div className="mt-5 space-y-3 text-sm">
-              {salaryDetailLateSummary?.configuredStartTime ? (
+              {salaryDetailLateSummary?.configuredStartTimes?.length ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-amber-800">
-                      Giờ vào chuẩn: {salaryDetailLateSummary.configuredStartTime}
+                      Giờ vào chuẩn:{" "}
+                      {salaryDetailLateSummary.configuredStartTimes
+                        .map((item) => `${item.label} ${item.time}`)
+                        .join(" • ")}
                     </span>
                     <span className="font-semibold text-amber-900">
                       {salaryDetailLateSummary.lateShiftCount > 0
@@ -3380,10 +3393,10 @@ export default function PayrollDetail({
           currentShiftEntry?.employeeCode || currentShiftEntry?.employeeId || ""
         }
         initialShifts={currentShiftEntry?.shifts || []}
-        scheduledStartTime={
+        scheduledStartTimes={
           currentShiftEntry
             ? roleStartTimes[currentShiftEntry.role || defaultRole]
-            : ""
+            : undefined
         }
       />
     </div>

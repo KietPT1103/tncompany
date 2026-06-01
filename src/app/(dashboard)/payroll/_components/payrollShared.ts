@@ -1,5 +1,6 @@
-﻿import type { StoreType } from "@/context/StoreContext";
+import type { StoreType } from "@/context/StoreContext";
 import { PayrollEntry } from "@/services/payrolls.firebase";
+import type { RoleStartTimeSetting } from "@/services/roleStartTimes";
 
 export const ROLE_GROUPS: Record<string, string[]> = {
   Cafe: ["Phục vụ", "Pha chế", "Thu ngân"],
@@ -24,7 +25,8 @@ const hourFormatter = new Intl.NumberFormat("vi-VN", {
 });
 
 export function getRoleGroupsForStore(storeId?: StoreType | string) {
-  const groupKeys = STORE_ROLE_GROUPS[(storeId as StoreType) || "cafe"] || STORE_ROLE_GROUPS.cafe;
+  const groupKeys =
+    STORE_ROLE_GROUPS[(storeId as StoreType) || "cafe"] || STORE_ROLE_GROUPS.cafe;
   return groupKeys.reduce((result, key) => {
     result[key] = ROLE_GROUPS[key];
     return result;
@@ -100,7 +102,7 @@ export function getWorkingDays(entry: PayrollEntry) {
     (entry.shifts || [])
       .filter((shift) => shift.isValid && shift.inTime && shift.outTime)
       .map((shift) => getShiftDateKey(shift))
-      .filter(Boolean)
+      .filter(Boolean),
   );
   return dates.size;
 }
@@ -110,7 +112,7 @@ export function getAbsentDays(entry: PayrollEntry) {
     0,
     resolvePayrollSalaryType(entry) === "monthly"
       ? entry.expectedWorkDays || 30
-      : entry.expectedWorkDays || 0
+      : entry.expectedWorkDays || 0,
   );
   if (!expectedWorkDays) return 0;
   return Math.max(0, expectedWorkDays - getWorkingDays(entry));
@@ -169,14 +171,33 @@ function extractShiftStartTime(value?: string) {
   ).padStart(2, "0")}`;
 }
 
+function getConfiguredShiftStartTimes(setting?: Partial<RoleStartTimeSetting>) {
+  return [
+    { key: "shift1Start", label: "Ca 1", time: setting?.shift1Start || "" },
+    { key: "shift2Start", label: "Ca 2", time: setting?.shift2Start || "" },
+    { key: "shift3Start", label: "Ca 3", time: setting?.shift3Start || "" },
+  ].filter((item) => item.time !== "");
+}
+
 export function getEntryLateSummary(
   entry: PayrollEntry,
-  scheduledStartTime?: string,
+  shiftStartSetting?: Partial<RoleStartTimeSetting>,
 ) {
-  const scheduledMinutes = parseTimeToMinutes(scheduledStartTime);
-  if (scheduledMinutes === null) {
+  const configuredShiftStarts = getConfiguredShiftStartTimes(shiftStartSetting)
+    .map((item) => ({
+      ...item,
+      minutes: parseTimeToMinutes(item.time),
+    }))
+    .filter((item) => item.minutes !== null) as Array<{
+    key: string;
+    label: string;
+    time: string;
+    minutes: number;
+  }>;
+
+  if (configuredShiftStarts.length === 0) {
     return {
-      configuredStartTime: scheduledStartTime || "",
+      configuredStartTimes: [],
       lateShiftCount: 0,
       totalLateMinutes: 0,
       maxLateMinutes: 0,
@@ -189,31 +210,76 @@ export function getEntryLateSummary(
     .map((shift) => {
       const actualStartTime = extractShiftStartTime(shift.inTime);
       const actualMinutes = parseTimeToMinutes(actualStartTime);
+      const matchedConfiguredShift =
+        actualMinutes === null
+          ? null
+          : configuredShiftStarts.reduce((bestMatch, currentShift) => {
+              if (!bestMatch) return currentShift;
+              const bestDiff = Math.abs(actualMinutes - bestMatch.minutes);
+              const currentDiff = Math.abs(actualMinutes - currentShift.minutes);
+              return currentDiff < bestDiff ? currentShift : bestMatch;
+            }, null as (typeof configuredShiftStarts)[number] | null);
       const lateMinutes =
-        actualMinutes === null ? 0 : Math.max(0, actualMinutes - scheduledMinutes);
+        actualMinutes === null || !matchedConfiguredShift
+          ? 0
+          : Math.max(0, actualMinutes - matchedConfiguredShift.minutes);
 
       return {
         id: shift.id,
         date: getShiftDateKey(shift) || shift.date || "",
         actualStartTime,
+        matchedShiftLabel: matchedConfiguredShift?.label || "",
+        matchedScheduledStartTime: matchedConfiguredShift?.time || "",
         lateMinutes,
       };
     })
     .filter((shift) => shift.lateMinutes > 0);
 
   return {
-    configuredStartTime: scheduledStartTime || "",
+    configuredStartTimes: configuredShiftStarts.map((item) => ({
+      label: item.label,
+      time: item.time,
+    })),
     lateShiftCount: lateShifts.length,
-    totalLateMinutes: lateShifts.reduce(
-      (sum, shift) => sum + shift.lateMinutes,
-      0,
-    ),
+    totalLateMinutes: lateShifts.reduce((sum, shift) => sum + shift.lateMinutes, 0),
     maxLateMinutes: lateShifts.reduce(
       (max, shift) => Math.max(max, shift.lateMinutes),
       0,
     ),
     lateShifts,
   };
+}
+
+export function calculateShiftLateMinutes(
+  inTime: string,
+  shiftStartSetting?: Partial<RoleStartTimeSetting>,
+) {
+  const actualStartTime = extractShiftStartTime(inTime);
+  const actualMinutes = parseTimeToMinutes(actualStartTime);
+  if (actualMinutes === null) return 0;
+
+  const configuredShiftStarts = getConfiguredShiftStartTimes(shiftStartSetting)
+    .map((item) => ({
+      ...item,
+      minutes: parseTimeToMinutes(item.time),
+    }))
+    .filter((item) => item.minutes !== null) as Array<{
+    label: string;
+    time: string;
+    minutes: number;
+  }>;
+
+  if (configuredShiftStarts.length === 0) return 0;
+
+  const matchedConfiguredShift = configuredShiftStarts.reduce((bestMatch, currentShift) => {
+    if (!bestMatch) return currentShift;
+    const bestDiff = Math.abs(actualMinutes - bestMatch.minutes);
+    const currentDiff = Math.abs(actualMinutes - currentShift.minutes);
+    return currentDiff < bestDiff ? currentShift : bestMatch;
+  }, null as (typeof configuredShiftStarts)[number] | null);
+
+  if (!matchedConfiguredShift) return 0;
+  return Math.max(0, actualMinutes - matchedConfiguredShift.minutes);
 }
 
 export function getPayrollBreakdown(entry: PayrollEntry) {
@@ -228,17 +294,15 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
     salaryType === "monthly" && standardHours > 0
       ? Math.max(0, (entry.totalHours || 0) - standardHours)
       : 0;
-  const overtimeRate = salaryType === "monthly" ? Math.max(0, entry.hourlyRate || 0) : 0;
+  const overtimeRate =
+    salaryType === "monthly" ? Math.max(0, entry.hourlyRate || 0) : 0;
   const salaryMultiplier =
     typeof entry.hourlyMultiplier === "number" &&
     Number.isFinite(entry.hourlyMultiplier)
       ? Math.max(0, entry.hourlyMultiplier || 0)
       : 1;
   let overtimePay = overtimeHours * overtimeRate;
-  let weekendBonus =
-    salaryType === "hourly"
-      ? (entry.weekendHours || 0) * 1000
-      : 0;
+  let weekendBonus = salaryType === "hourly" ? (entry.weekendHours || 0) * 1000 : 0;
   let baseSalary = 0;
   let deduction = 0;
   if (salaryType === "monthly") {
@@ -256,7 +320,12 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
   }
   const rawSalary = Math.max(
     0,
-    baseSalary - deduction + overtimePay + weekendBonus + allowanceTotal + attendanceBonus
+    baseSalary -
+      deduction +
+      overtimePay +
+      weekendBonus +
+      allowanceTotal +
+      attendanceBonus,
   );
   return {
     absentDays,

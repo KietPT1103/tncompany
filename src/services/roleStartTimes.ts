@@ -2,7 +2,9 @@ import { apiRequest } from "@/lib/api";
 
 export type RoleStartTimeSetting = {
   role: string;
-  startTime: string;
+  shift1Start: string;
+  shift2Start: string;
+  shift3Start: string;
 };
 
 type RoleStartTimeResponse = {
