@@ -171,12 +171,71 @@ function extractShiftStartTime(value?: string) {
   ).padStart(2, "0")}`;
 }
 
-function getConfiguredShiftStartTimes(setting?: Partial<RoleStartTimeSetting>) {
+function getConfiguredShiftStartTimes(
+  setting?: Partial<RoleStartTimeSetting>,
+  useWeekendSchedule = false,
+) {
   return [
-    { key: "shift1Start", label: "Ca 1", time: setting?.shift1Start || "" },
-    { key: "shift2Start", label: "Ca 2", time: setting?.shift2Start || "" },
-    { key: "shift3Start", label: "Ca 3", time: setting?.shift3Start || "" },
+    {
+      key: "shift1Start",
+      label: useWeekendSchedule ? "Cuối tuần ca 1" : "Ca 1",
+      time: useWeekendSchedule
+        ? setting?.weekendShift1Start || ""
+        : setting?.shift1Start || "",
+    },
+    {
+      key: "shift2Start",
+      label: useWeekendSchedule ? "Cuối tuần ca 2" : "Ca 2",
+      time: useWeekendSchedule
+        ? setting?.weekendShift2Start || ""
+        : setting?.shift2Start || "",
+    },
+    {
+      key: "shift3Start",
+      label: useWeekendSchedule ? "Cuối tuần ca 3" : "Ca 3",
+      time: useWeekendSchedule
+        ? setting?.weekendShift3Start || ""
+        : setting?.shift3Start || "",
+    },
   ].filter((item) => item.time !== "");
+}
+
+function getDisplayConfiguredShiftStartTimes(setting?: Partial<RoleStartTimeSetting>) {
+  return [
+    ...getConfiguredShiftStartTimes(setting, false),
+    ...(setting?.weekendEnabled
+      ? getConfiguredShiftStartTimes(setting, true)
+      : []),
+  ];
+}
+
+function resolveShiftStartTimesForShift(
+  shiftStartSetting: Partial<RoleStartTimeSetting> | undefined,
+  shift?: NonNullable<PayrollEntry["shifts"]>[number],
+) {
+  if (!shiftStartSetting) return shiftStartSetting;
+  if (!shift?.inTime && !shift?.date) return shiftStartSetting;
+
+  let isWeekend = false;
+  if (typeof shift?.isWeekend === "boolean") {
+    isWeekend = shift.isWeekend;
+  } else if (shift?.inTime) {
+    const date = new Date(shift.inTime);
+    if (!Number.isNaN(date.getTime())) {
+      isWeekend = date.getDay() === 0 || date.getDay() === 6;
+    }
+  }
+
+  if (!isWeekend || !shiftStartSetting.weekendEnabled) {
+    return shiftStartSetting;
+  }
+
+  return {
+    ...shiftStartSetting,
+    shift1Start: shiftStartSetting.weekendShift1Start || "",
+    shift2Start: shiftStartSetting.weekendShift2Start || "",
+    shift3Start: shiftStartSetting.weekendShift3Start || "",
+  };
 }
 
 export function getEntryLateSummary(
@@ -208,12 +267,29 @@ export function getEntryLateSummary(
   const lateShifts = (entry.shifts || [])
     .filter((shift) => shift.isValid && shift.inTime && shift.outTime)
     .map((shift) => {
+      const resolvedShiftStartSetting = resolveShiftStartTimesForShift(
+        shiftStartSetting,
+        shift,
+      );
+      const configuredShiftStartsForShift = getConfiguredShiftStartTimes(
+        resolvedShiftStartSetting,
+      )
+        .map((item) => ({
+          ...item,
+          minutes: parseTimeToMinutes(item.time),
+        }))
+        .filter((item) => item.minutes !== null) as Array<{
+        key: string;
+        label: string;
+        time: string;
+        minutes: number;
+      }>;
       const actualStartTime = extractShiftStartTime(shift.inTime);
       const actualMinutes = parseTimeToMinutes(actualStartTime);
       const matchedConfiguredShift =
         actualMinutes === null
           ? null
-          : configuredShiftStarts.reduce((bestMatch, currentShift) => {
+          : configuredShiftStartsForShift.reduce((bestMatch, currentShift) => {
               if (!bestMatch) return currentShift;
               const bestDiff = Math.abs(actualMinutes - bestMatch.minutes);
               const currentDiff = Math.abs(actualMinutes - currentShift.minutes);
@@ -236,7 +312,7 @@ export function getEntryLateSummary(
     .filter((shift) => shift.lateMinutes > 0);
 
   return {
-    configuredStartTimes: configuredShiftStarts.map((item) => ({
+    configuredStartTimes: getDisplayConfiguredShiftStartTimes(shiftStartSetting).map((item) => ({
       label: item.label,
       time: item.time,
     })),
@@ -258,7 +334,23 @@ export function calculateShiftLateMinutes(
   const actualMinutes = parseTimeToMinutes(actualStartTime);
   if (actualMinutes === null) return 0;
 
-  const configuredShiftStarts = getConfiguredShiftStartTimes(shiftStartSetting)
+  const shiftDate = new Date(inTime);
+  const resolvedShiftStartSetting = resolveShiftStartTimesForShift(
+    shiftStartSetting,
+    {
+      id: "",
+      date: "",
+      inTime,
+      outTime: "",
+      hours: 0,
+      isWeekend:
+        !Number.isNaN(shiftDate.getTime()) &&
+        (shiftDate.getDay() === 0 || shiftDate.getDay() === 6),
+      isValid: true,
+    },
+  );
+
+  const configuredShiftStarts = getConfiguredShiftStartTimes(resolvedShiftStartSetting)
     .map((item) => ({
       ...item,
       minutes: parseTimeToMinutes(item.time),

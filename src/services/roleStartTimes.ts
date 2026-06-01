@@ -5,6 +5,10 @@ export type RoleStartTimeSetting = {
   shift1Start: string;
   shift2Start: string;
   shift3Start: string;
+  weekendEnabled?: boolean;
+  weekendShift1Start?: string;
+  weekendShift2Start?: string;
+  weekendShift3Start?: string;
 };
 
 type RoleStartTimeResponse = {

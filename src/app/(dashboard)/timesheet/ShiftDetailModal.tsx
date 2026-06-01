@@ -443,7 +443,10 @@ export default function ShiftDetailModal({
             {scheduledStartTimes &&
             (scheduledStartTimes.shift1Start ||
               scheduledStartTimes.shift2Start ||
-              scheduledStartTimes.shift3Start) ? (
+              scheduledStartTimes.shift3Start ||
+              scheduledStartTimes.weekendShift1Start ||
+              scheduledStartTimes.weekendShift2Start ||
+              scheduledStartTimes.weekendShift3Start) ? (
               <p className="text-sm text-amber-600">
                 Giờ vào chuẩn:
                 {scheduledStartTimes.shift1Start
@@ -454,6 +457,18 @@ export default function ShiftDetailModal({
                   : ""}
                 {scheduledStartTimes.shift3Start
                   ? ` • Ca 3 ${scheduledStartTimes.shift3Start}`
+                  : ""}
+                {scheduledStartTimes.weekendEnabled &&
+                scheduledStartTimes.weekendShift1Start
+                  ? ` • T7,CN ca 1 ${scheduledStartTimes.weekendShift1Start}`
+                  : ""}
+                {scheduledStartTimes.weekendEnabled &&
+                scheduledStartTimes.weekendShift2Start
+                  ? ` • T7,CN ca 2 ${scheduledStartTimes.weekendShift2Start}`
+                  : ""}
+                {scheduledStartTimes.weekendEnabled &&
+                scheduledStartTimes.weekendShift3Start
+                  ? ` • T7,CN ca 3 ${scheduledStartTimes.weekendShift3Start}`
                   : ""}
               </p>
             ) : null}

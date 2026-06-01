@@ -16,6 +16,10 @@ type RoleShiftStartValues = Record<
     shift1Start: string;
     shift2Start: string;
     shift3Start: string;
+    weekendEnabled: boolean;
+    weekendShift1Start: string;
+    weekendShift2Start: string;
+    weekendShift3Start: string;
   }
 >;
 
@@ -23,6 +27,12 @@ const SHIFT_FIELDS = [
   { key: "shift1Start", label: "Ca 1" },
   { key: "shift2Start", label: "Ca 2" },
   { key: "shift3Start", label: "Ca 3" },
+] as const;
+
+const WEEKEND_SHIFT_FIELDS = [
+  { key: "weekendShift1Start", label: "Cuối tuần ca 1" },
+  { key: "weekendShift2Start", label: "Cuối tuần ca 2" },
+  { key: "weekendShift3Start", label: "Cuối tuần ca 3" },
 ] as const;
 
 export default function RoleStartTimeManager({
@@ -53,6 +63,10 @@ export default function RoleStartTimeManager({
               shift1Start: item.shift1Start || "",
               shift2Start: item.shift2Start || "",
               shift3Start: item.shift3Start || "",
+              weekendEnabled: item.weekendEnabled || false,
+              weekendShift1Start: item.weekendShift1Start || "",
+              weekendShift2Start: item.weekendShift2Start || "",
+              weekendShift3Start: item.weekendShift3Start || "",
             };
             return result;
           }, {}),
@@ -89,12 +103,19 @@ export default function RoleStartTimeManager({
           shift1Start: shiftValues.shift1Start.trim(),
           shift2Start: shiftValues.shift2Start.trim(),
           shift3Start: shiftValues.shift3Start.trim(),
+          weekendEnabled: shiftValues.weekendEnabled,
+          weekendShift1Start: shiftValues.weekendShift1Start.trim(),
+          weekendShift2Start: shiftValues.weekendShift2Start.trim(),
+          weekendShift3Start: shiftValues.weekendShift3Start.trim(),
         }))
         .filter(
           (item) =>
             item.shift1Start !== "" ||
             item.shift2Start !== "" ||
-            item.shift3Start !== "",
+            item.shift3Start !== "" ||
+            item.weekendShift1Start !== "" ||
+            item.weekendShift2Start !== "" ||
+            item.weekendShift3Start !== "",
         );
 
       const savedItems = await saveRoleStartTimes(storeId, items);
@@ -104,6 +125,10 @@ export default function RoleStartTimeManager({
             shift1Start: item.shift1Start || "",
             shift2Start: item.shift2Start || "",
             shift3Start: item.shift3Start || "",
+            weekendEnabled: item.weekendEnabled || false,
+            weekendShift1Start: item.weekendShift1Start || "",
+            weekendShift2Start: item.weekendShift2Start || "",
+            weekendShift3Start: item.weekendShift3Start || "",
           };
           return result;
         }, {}),
@@ -181,6 +206,10 @@ export default function RoleStartTimeManager({
                   shift1Start: "",
                   shift2Start: "",
                   shift3Start: "",
+                  weekendEnabled: false,
+                  weekendShift1Start: "",
+                  weekendShift2Start: "",
+                  weekendShift3Start: "",
                 };
 
                 return (
@@ -221,6 +250,61 @@ export default function RoleStartTimeManager({
                           />
                         </label>
                       ))}
+
+                      <label className="mt-2 flex items-center gap-3 rounded-[16px] border border-slate-200 bg-white px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={roleValues.weekendEnabled}
+                          onChange={(event) =>
+                            setValues((current) => ({
+                              ...current,
+                              [role]: {
+                                ...roleValues,
+                                weekendEnabled: event.target.checked,
+                              },
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            Kiểm riêng thứ 7, chủ nhật
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            Bật để dùng giờ vào cuối tuần khác ngày thường.
+                          </p>
+                        </div>
+                      </label>
+
+                      {roleValues.weekendEnabled ? (
+                        <div className="space-y-3 rounded-[16px] border border-amber-200 bg-amber-50/60 p-3">
+                          {WEEKEND_SHIFT_FIELDS.map((shift) => (
+                            <label
+                              key={shift.key}
+                              className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3"
+                            >
+                              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">
+                                {shift.label}
+                              </span>
+                              <input
+                                type="time"
+                                step={60}
+                                value={roleValues[shift.key]}
+                                onChange={(event) =>
+                                  setValues((current) => ({
+                                    ...current,
+                                    [role]: {
+                                      ...roleValues,
+                                      [shift.key]: event.target.value,
+                                    },
+                                  }))
+                                }
+                                className="h-11 w-full rounded-2xl border border-amber-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );

@@ -620,6 +620,7 @@ const buildPayrollEntryPayload = (
     weekendHours: entry.weekendHours || 0,
     salary: entry.salary || 0,
     allowances: entry.allowances || [],
+    shifts: cloneShifts(entry.shifts || []),
     note: entry.note || "",
     salaryType,
     monthlySalary,

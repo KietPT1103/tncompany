@@ -16,6 +16,10 @@ function role_start_times_ensure_table(): void
             shift_1_start CHAR(5) NULL,
             shift_2_start CHAR(5) NULL,
             shift_3_start CHAR(5) NULL,
+            weekend_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            weekend_shift_1_start CHAR(5) NULL,
+            weekend_shift_2_start CHAR(5) NULL,
+            weekend_shift_3_start CHAR(5) NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NULL DEFAULT NULL,
             UNIQUE KEY uniq_role_start_time (store_id, role_name),
@@ -28,6 +32,10 @@ function role_start_times_ensure_table(): void
         'shift_1_start' => 'CHAR(5) NULL AFTER start_time',
         'shift_2_start' => 'CHAR(5) NULL AFTER shift_1_start',
         'shift_3_start' => 'CHAR(5) NULL AFTER shift_2_start',
+        'weekend_enabled' => 'TINYINT(1) NOT NULL DEFAULT 0 AFTER shift_3_start',
+        'weekend_shift_1_start' => 'CHAR(5) NULL AFTER weekend_enabled',
+        'weekend_shift_2_start' => 'CHAR(5) NULL AFTER weekend_shift_1_start',
+        'weekend_shift_3_start' => 'CHAR(5) NULL AFTER weekend_shift_2_start',
     ];
 
     foreach ($columns as $column => $definition) {
@@ -78,6 +86,10 @@ function role_start_times_map_row(array $row): array
         'shift1Start' => (string) ($row['shift_1_start'] ?? $row['start_time'] ?? ''),
         'shift2Start' => (string) ($row['shift_2_start'] ?? ''),
         'shift3Start' => (string) ($row['shift_3_start'] ?? ''),
+        'weekendEnabled' => (bool) ($row['weekend_enabled'] ?? false),
+        'weekendShift1Start' => (string) ($row['weekend_shift_1_start'] ?? ''),
+        'weekendShift2Start' => (string) ($row['weekend_shift_2_start'] ?? ''),
+        'weekendShift3Start' => (string) ($row['weekend_shift_3_start'] ?? ''),
     ];
 }
 
@@ -90,7 +102,8 @@ if ($method === 'GET') {
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
-        'SELECT role_name, start_time, shift_1_start, shift_2_start, shift_3_start
+        'SELECT role_name, start_time, shift_1_start, shift_2_start, shift_3_start,
+                weekend_enabled, weekend_shift_1_start, weekend_shift_2_start, weekend_shift_3_start
          FROM role_start_times
          WHERE store_id = :store_id
          ORDER BY role_name ASC'
@@ -127,9 +140,11 @@ if ($method === 'PUT') {
 
         $insertStatement = $pdo->prepare(
             'INSERT INTO role_start_times (
-                id, store_id, role_name, start_time, shift_1_start, shift_2_start, shift_3_start, created_at, updated_at
+                id, store_id, role_name, start_time, shift_1_start, shift_2_start, shift_3_start,
+                weekend_enabled, weekend_shift_1_start, weekend_shift_2_start, weekend_shift_3_start, created_at, updated_at
              ) VALUES (
-                :id, :store_id, :role_name, :start_time, :shift_1_start, :shift_2_start, :shift_3_start, NOW(), NOW()
+                :id, :store_id, :role_name, :start_time, :shift_1_start, :shift_2_start, :shift_3_start,
+                :weekend_enabled, :weekend_shift_1_start, :weekend_shift_2_start, :weekend_shift_3_start, NOW(), NOW()
              )'
         );
 
@@ -139,8 +154,22 @@ if ($method === 'PUT') {
             $shift1Start = trim((string) ($item['shift1Start'] ?? ''));
             $shift2Start = trim((string) ($item['shift2Start'] ?? ''));
             $shift3Start = trim((string) ($item['shift3Start'] ?? ''));
+            $weekendEnabled = !empty($item['weekendEnabled']) ? 1 : 0;
+            $weekendShift1Start = trim((string) ($item['weekendShift1Start'] ?? ''));
+            $weekendShift2Start = trim((string) ($item['weekendShift2Start'] ?? ''));
+            $weekendShift3Start = trim((string) ($item['weekendShift3Start'] ?? ''));
 
-            if ($role === '' || ($shift1Start === '' && $shift2Start === '' && $shift3Start === '')) {
+            if (
+                $role === '' ||
+                (
+                    $shift1Start === '' &&
+                    $shift2Start === '' &&
+                    $shift3Start === '' &&
+                    $weekendShift1Start === '' &&
+                    $weekendShift2Start === '' &&
+                    $weekendShift3Start === ''
+                )
+            ) {
                 continue;
             }
 
@@ -156,6 +185,18 @@ if ($method === 'PUT') {
                 }
             }
 
+            foreach (
+                [
+                    'Cuối tuần Ca 1' => $weekendShift1Start,
+                    'Cuối tuần Ca 2' => $weekendShift2Start,
+                    'Cuối tuần Ca 3' => $weekendShift3Start,
+                ] as $label => $shiftStart
+            ) {
+                if ($shiftStart !== '' && !role_start_times_is_valid($shiftStart)) {
+                    respond_error(sprintf('Invalid start time for %s - %s', $role, $label), 422);
+                }
+            }
+
             $insertStatement->execute([
                 'id' => uuidv4(),
                 'store_id' => $storeId,
@@ -164,6 +205,10 @@ if ($method === 'PUT') {
                 'shift_1_start' => $shift1Start !== '' ? $shift1Start : null,
                 'shift_2_start' => $shift2Start !== '' ? $shift2Start : null,
                 'shift_3_start' => $shift3Start !== '' ? $shift3Start : null,
+                'weekend_enabled' => $weekendEnabled,
+                'weekend_shift_1_start' => $weekendEnabled && $weekendShift1Start !== '' ? $weekendShift1Start : null,
+                'weekend_shift_2_start' => $weekendEnabled && $weekendShift2Start !== '' ? $weekendShift2Start : null,
+                'weekend_shift_3_start' => $weekendEnabled && $weekendShift3Start !== '' ? $weekendShift3Start : null,
             ]);
 
             $normalizedItems[] = [
@@ -171,6 +216,10 @@ if ($method === 'PUT') {
                 'shift1Start' => $shift1Start,
                 'shift2Start' => $shift2Start,
                 'shift3Start' => $shift3Start,
+                'weekendEnabled' => (bool) $weekendEnabled,
+                'weekendShift1Start' => $weekendEnabled ? $weekendShift1Start : '',
+                'weekendShift2Start' => $weekendEnabled ? $weekendShift2Start : '',
+                'weekendShift3Start' => $weekendEnabled ? $weekendShift3Start : '',
             ];
         }
 
