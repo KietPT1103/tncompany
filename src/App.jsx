@@ -31,6 +31,7 @@ import ArticlesIndexPage from "./app/tin-tuc/ArticlesIndexPage";
 import ArticleDetailPage from "./app/tin-tuc/ArticleDetailPage";
 import { useAuth } from "./context/AuthContext";
 import { getDefaultRouteForUser } from "./lib/permissions";
+import { normalizeAdminHref } from "./router/pathUtils";
 
 function ProtectedLayout({ allowedRoles, inferPermission = true }) {
   return (
@@ -60,7 +61,7 @@ function AdminIndexPage() {
   }
 
   const nextPath = getDefaultRouteForUser(user);
-  return nextPath === "/" ? <DashboardPage /> : <Navigate to={nextPath} replace />;
+  return nextPath === "/" ? <DashboardPage /> : <Navigate to={normalizeAdminHref(nextPath)} replace />;
 }
 
 export default function App() {
@@ -84,24 +85,10 @@ export default function App() {
         >
           <Route element={<AdminLayout />}>
             <Route index element={<AdminIndexPage />} />
-            <Route
-              path="bills"
-              element={
-                <RoleGuard allowedRoles={["admin", "user", "server"]}>
-                  <BillsPage />
-                </RoleGuard>
-              }
-            />
-            <Route path="pos" element={<Navigate to="/admin/bills" replace />} />
-            <Route
-              path="payroll-estimate"
-              element={
-                <RoleGuard allowedRoles={["admin", "manager"]}>
-                  <SalaryEstimatePage />
-                </RoleGuard>
-              }
-            />
-            <Route element={<ProtectedLayout allowedRoles={["admin"]} />}>
+            <Route element={<ProtectedLayout />}>
+              <Route path="bills" element={<BillsPage />} />
+              <Route path="pos" element={<Navigate to="/admin/bills" replace />} />
+              <Route path="payroll-estimate" element={<SalaryEstimatePage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="reports/:id" element={<ReportDetailPage />} />
               <Route path="cash-flow" element={<CashFlowPage />} />

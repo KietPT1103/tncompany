@@ -170,11 +170,7 @@ export default function LoginPage() {
           : selectedStore
       );
       const nextPath = getRedirectAfterLogin(user);
-      if (typeof window !== "undefined") {
-        window.location.replace(nextPath);
-        return;
-      }
-      router.push(nextPath);
+      router.replace(nextPath);
     } catch (err: unknown) {
       console.error(err);
       setError(
