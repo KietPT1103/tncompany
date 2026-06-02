@@ -2172,7 +2172,7 @@ export default function PayrollDetail({
 
               <div className="flex flex-col gap-3 xl:items-end">
                 <div className="grid gap-3 md:grid-cols-4 xl:w-[760px]">
-                  <div className="relative md:col-span-3 xl:col-span-1">
+                  <div className="relative md:col-span-2 xl:col-span-2">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
                     <input
@@ -2203,7 +2203,7 @@ export default function PayrollDetail({
                   <Button
                     variant={filterError ? "default" : "outline"}
                     className={cn(
-                      "h-11 gap-2 rounded-2xl",
+                      "hidden h-11 gap-2 rounded-2xl",
                       filterError
                         ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
                         : "text-slate-600",
@@ -2217,7 +2217,7 @@ export default function PayrollDetail({
                   <Button
                     variant={filterLateOnly ? "default" : "outline"}
                     className={cn(
-                      "h-11 gap-2 rounded-2xl",
+                      "hidden h-11 gap-2 rounded-2xl",
                       filterLateOnly
                         ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                         : "text-slate-600",
