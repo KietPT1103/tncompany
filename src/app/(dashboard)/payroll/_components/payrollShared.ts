@@ -97,6 +97,67 @@ function getShiftDateKey(shift: NonNullable<PayrollEntry["shifts"]>[number]) {
   return date.toISOString().slice(0, 10);
 }
 
+function parseShiftDate(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const normalized = raw.replace(/\//g, "-");
+  const isoMatch = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const localMatch = normalized.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (localMatch) {
+    const [, day, month, year] = localMatch;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function inferMonthlyExpectedWorkDays(entry: PayrollEntry) {
+  if ((entry.expectedWorkDays || 0) > 0) {
+    return Math.max(0, entry.expectedWorkDays || 0);
+  }
+
+  const monthCounts = new Map<string, number>();
+  for (const shift of entry.shifts || []) {
+    const date = parseShiftDate(shift.date || shift.inTime);
+    if (!date) continue;
+
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    monthCounts.set(key, (monthCounts.get(key) || 0) + 1);
+  }
+
+  if (monthCounts.size > 0) {
+    const [dominantMonthKey] = [...monthCounts.entries()].sort(
+      (left, right) => right[1] - left[1],
+    )[0];
+    const [yearText, monthIndexText] = dominantMonthKey.split("-");
+    const year = Number(yearText);
+    const monthIndex = Number(monthIndexText);
+    if (Number.isFinite(year) && Number.isFinite(monthIndex)) {
+      return new Date(year, monthIndex + 1, 0).getDate();
+    }
+  }
+
+  return 30;
+}
+
+export function getExpectedWorkDays(entry: PayrollEntry) {
+  return Math.max(
+    0,
+    resolvePayrollSalaryType(entry) === "monthly"
+      ? inferMonthlyExpectedWorkDays(entry)
+      : entry.expectedWorkDays || 0,
+  );
+}
+
 export function getWorkingDays(entry: PayrollEntry) {
   const dates = new Set(
     (entry.shifts || [])
@@ -108,12 +169,7 @@ export function getWorkingDays(entry: PayrollEntry) {
 }
 
 export function getAbsentDays(entry: PayrollEntry) {
-  const expectedWorkDays = Math.max(
-    0,
-    resolvePayrollSalaryType(entry) === "monthly"
-      ? entry.expectedWorkDays || 30
-      : entry.expectedWorkDays || 0,
-  );
+  const expectedWorkDays = getExpectedWorkDays(entry);
   if (!expectedWorkDays) return 0;
   return Math.max(0, expectedWorkDays - getWorkingDays(entry));
 }
@@ -376,6 +432,7 @@ export function calculateShiftLateMinutes(
 
 export function getPayrollBreakdown(entry: PayrollEntry) {
   const salaryType = resolvePayrollSalaryType(entry);
+  const expectedWorkDays = getExpectedWorkDays(entry);
   const allowanceTotal = getAllowanceTotal(entry);
   const attendanceBonus = getAttendanceBonusValue(entry);
   const workingDays = getWorkingDays(entry);
@@ -425,6 +482,7 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
     attendanceBonus,
     baseSalary,
     deduction,
+    expectedWorkDays,
     hourlyMultiplier: salaryMultiplier,
     overtimeHours,
     overtimePay,

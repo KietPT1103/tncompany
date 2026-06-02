@@ -45,6 +45,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Columns3,
+  Download,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -65,6 +66,7 @@ import {
   getAttendanceBonusValue,
   getDefaultRoleForStore,
   getEntryLateSummary,
+  getExpectedWorkDays,
   getPayrollBreakdown,
   getRoleGroupsForStore,
   normalizePayrollSalaryType,
@@ -138,6 +140,27 @@ const COLUMN_OPTIONS: { key: keyof VisibleColumns; label: string }[] = [
   { key: "note", label: "Ghi chú" },
   { key: "action", label: "Tác vụ" },
 ];
+
+const sanitizeWorksheetName = (value: string, fallback: string) => {
+  const normalized = value
+    .replace(/[\\/?*[\]:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return (normalized || fallback).slice(0, 31);
+};
+
+const sanitizeExportFileName = (value: string, fallback: string) => {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+
+  return normalized || fallback;
+};
 
 type TimesheetImportRow = {
   employeeCode: string;
@@ -1829,6 +1852,113 @@ export default function PayrollDetail({
     ? getAttendanceBonusProgress(salaryDetailEntry)
     : null;
 
+  function handleExportPayrollExcel() {
+    const exportDate = new Date().toISOString().slice(0, 10);
+    const workbook = XLSX.utils.book_new();
+
+    const summaryRows = filteredEntries.map((entry) => {
+      const breakdown = getPayrollBreakdown(entry);
+      const lateSummary = getEntryLateSummary(
+        entry,
+        roleStartTimes[entry.role || defaultRole],
+      );
+      const attendanceProgress = getAttendanceBonusProgress(entry);
+
+      return {
+        "Mã nhân viên": entry.employeeCode || "",
+        "Tên nhân viên": entry.employeeName,
+        "Vai trò": entry.role || "",
+        "Loại lương":
+          breakdown.salaryType === "monthly" ? "Lương tháng" : "Theo giờ",
+        "Tổng giờ": Number((entry.totalHours || 0).toFixed(2)),
+        "Giờ cuối tuần": Number((entry.weekendHours || 0).toFixed(2)),
+        "Ngày công": breakdown.workingDays,
+        "Ngày vắng": breakdown.absentDays,
+        "Ngày nghỉ không lương": breakdown.unpaidLeaveDays,
+        "Ngày phép": Math.max(0, entry.paidLeaveDays || 0),
+        "Lương cơ bản": Math.round(breakdown.baseSalary || 0),
+        "Khấu trừ": Math.round(breakdown.deduction || 0),
+        "Giờ tăng ca": Number((breakdown.overtimeHours || 0).toFixed(2)),
+        "Tiền tăng ca": Math.round(breakdown.overtimePay || 0),
+        "Thưởng cuối tuần": Math.round(breakdown.weekendBonus || 0),
+        "Phụ cấp": Math.round(breakdown.allowanceTotal || 0),
+        "Chuyên cần": Math.round(breakdown.attendanceBonus || 0),
+        "Tiến độ chuyên cần": attendanceProgress
+          ? `${attendanceProgress.qualifiedDays}/${attendanceProgress.targetDays}`
+          : "",
+        "Hệ số lương giờ": breakdown.hourlyMultiplier ?? 1,
+        "Lương giờ": Math.round(entry.hourlyRate || 0),
+        "Lương tháng": Math.round(
+          entry.monthlySalary || entry.fixedSalary || 0,
+        ),
+        "Số ca đi trễ": lateSummary.lateShiftCount,
+        "Tổng phút đi trễ": lateSummary.totalLateMinutes,
+        "Đi trễ nhiều nhất (phút)": lateSummary.maxLateMinutes,
+        "Chi tiết đi trễ": lateSummary.lateShifts
+          .map(
+            (shift) =>
+              `${shift.date}: ${shift.actualStartTime} > ${shift.matchedScheduledStartTime} (${shift.lateMinutes} phút)`,
+          )
+          .join(" | "),
+        "Ghi chú": entry.note || "",
+        "Tổng lương": Math.round(entry.salary || 0),
+      };
+    });
+
+    const lateDetailRows = filteredEntries.flatMap((entry) => {
+      const lateSummary = getEntryLateSummary(
+        entry,
+        roleStartTimes[entry.role || defaultRole],
+      );
+
+      return lateSummary.lateShifts.map((shift) => ({
+        "Mã nhân viên": entry.employeeCode || "",
+        "Tên nhân viên": entry.employeeName,
+        "Vai trò": entry.role || "",
+        Ngày: shift.date,
+        "Ca áp dụng": shift.matchedShiftLabel,
+        "Giờ chuẩn": shift.matchedScheduledStartTime,
+        "Giờ vào": shift.actualStartTime,
+        "Phút đi trễ": shift.lateMinutes,
+      }));
+    });
+
+    const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(
+      workbook,
+      summarySheet,
+      sanitizeWorksheetName("Bang luong", "BangLuong"),
+    );
+
+    const lateSheet = XLSX.utils.json_to_sheet(
+      lateDetailRows.length > 0
+        ? lateDetailRows
+        : [
+            {
+              "Mã nhân viên": "",
+              "Tên nhân viên": "",
+              "Vai trò": "",
+              Ngày: "",
+              "Ca áp dụng": "",
+              "Giờ chuẩn": "",
+              "Giờ vào": "",
+              "Phút đi trễ": 0,
+            },
+          ],
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      lateSheet,
+      sanitizeWorksheetName("Chi tiet di tre", "DiTre"),
+    );
+
+    const exportBaseName = sanitizeExportFileName(
+      `bang-luong-${payrollId}-${exportDate}`,
+      "bang-luong",
+    );
+    XLSX.writeFile(workbook, `${exportBaseName}.xlsx`);
+  }
+
   async function handleApplyBatchHourlyMultiplier() {
     if (hourlyEntries.length === 0) {
       alert("Bảng lương này không có nhân viên theo giờ để áp dụng hệ số.");
@@ -2190,6 +2320,15 @@ export default function PayrollDetail({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    className="gap-2 rounded-2xl"
+                    onClick={handleExportPayrollExcel}
+                    disabled={filteredEntries.length === 0}
+                  >
+                    <Download className="h-4 w-4" />
+                    Xuất Excel
+                  </Button>
                   <div className="relative">
                     <Button
                       variant="outline"
@@ -2339,6 +2478,8 @@ export default function PayrollDetail({
                         : rowStatus === "manual"
                           ? "bg-violet-50"
                           : "bg-emerald-50";
+                  const cellClass = "border-b border-slate-200 px-4 py-4";
+                  const centeredCellClass = `${cellClass} text-center`;
 
                   return (
                     <tr
@@ -2422,7 +2563,7 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.role ? (
-                        <td className="px-4 py-4 border-b border-slate-500">
+                        <td className={cellClass}>
                           <RoleSelect
                             roleGroups={roleGroups}
                             value={entry.role || defaultRole}
@@ -2439,11 +2580,11 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.late ? (
-                        <td className="px-4 py-4 border-b border-slate-500 text-center">
+                        <td className={centeredCellClass}>
                           {scheduledStartTimes &&
                           lateSummary.configuredStartTimes.length > 0 ? (
                             lateSummary.lateShiftCount > 0 ? (
-                              <div className="inline-flex min-w-[120px] flex-col rounded-[20px] border border-amber-200 bg-amber-50 px-3 py-2 text-left">
+                              <div className="inline-flex min-w-[156px] flex-col rounded-[20px] border border-amber-200 bg-amber-50 px-3 py-2 text-left shadow-sm">
                                 <span className="text-xs font-semibold text-amber-800">
                                   Trễ {lateSummary.lateShiftCount} ca
                                 </span>
@@ -2454,7 +2595,7 @@ export default function PayrollDetail({
                                 </span>
                               </div>
                             ) : (
-                              <div className="inline-flex min-w-[120px] flex-col rounded-[20px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-left">
+                              <div className="inline-flex min-w-[156px] flex-col rounded-[20px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-left shadow-sm">
                                 <span className="text-xs font-semibold text-emerald-700">
                                   Đúng giờ
                                 </span>
@@ -2466,7 +2607,7 @@ export default function PayrollDetail({
                               </div>
                             )
                           ) : (
-                            <div className="text-xs text-slate-400">
+                            <div className="inline-flex min-w-[156px] justify-center rounded-[20px] border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-400">
                               Chưa cấu hình
                             </div>
                           )}
@@ -2474,7 +2615,7 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.hours ? (
-                        <td className="px-4 py-4 border-b border-slate-500 text-center">
+                        <td className={centeredCellClass}>
                           <div className="inline-flex items-center gap-2">
                             <input
                               type="number"
@@ -2486,12 +2627,12 @@ export default function PayrollDetail({
                                 })
                               }
                               onBlur={() => debouncedUpdate.flush()}
-                              className="h-9 w-24 rounded-xl border border-slate-200 px-3 text-center outline-none"
+                              className="h-9 w-24 rounded-xl border border-slate-200 bg-white px-3 text-center shadow-sm outline-none"
                             />
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-9 w-9 rounded-xl"
+                              className="h-9 w-9 rounded-xl border-slate-200 bg-white shadow-sm"
                               onClick={() => {
                                 setCurrentShiftEntry(entry);
                                 setShiftModalOpen(true);
@@ -2504,10 +2645,10 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.workDays ? (
-                        <td className="py-4 pr-4 border-b border-slate-200">
+                        <td className={cellClass}>
                           <div
                             className={cn(
-                              "rounded-[20px] border px-4 py-3",
+                              "rounded-[20px] border px-4 py-3 shadow-sm",
                               isMonthly
                                 ? "border-sky-200 bg-white/80 shadow-sm shadow-sky-100"
                                 : "border-slate-200 bg-slate-50",
@@ -2518,7 +2659,7 @@ export default function PayrollDetail({
                               {isMonthly ? (
                                 <span className="text-sm text-slate-500">
                                   {" "}
-                                  / {entry.expectedWorkDays || 30}
+                                  / {getExpectedWorkDays(entry)}
                                 </span>
                               ) : null}
                             </div>
@@ -2537,7 +2678,7 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.rate ? (
-                        <td className="px-4 py-4 border-b border-slate-500 text-center">
+                        <td className={centeredCellClass}>
                           <div className="mx-auto max-w-[120px]">
                             <InputMoney
                               value={entry.hourlyRate}
@@ -2556,8 +2697,9 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.weekend ? (
-                        <td className="px-4 py-4 border-b border-slate-500 text-center">
-                          <input
+                        <td className={centeredCellClass}>
+                          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                            <input
                             type="number"
                             onWheel={preventNumberInputScroll}
                             value={entry.weekendHours || ""}
@@ -2567,13 +2709,14 @@ export default function PayrollDetail({
                               })
                             }
                             onBlur={() => debouncedUpdate.flush()}
-                            className="h-9 w-24 rounded-xl border border-slate-200 px-3 text-center outline-none"
-                          />
+                            className="h-9 w-24 rounded-xl border border-slate-200 bg-white px-3 text-center shadow-sm outline-none"
+                            />
+                          </div>
                         </td>
                       ) : null}
 
                       {visibleColumns.allowance ? (
-                        <td className="py-4 pr-4 border-b border-slate-200">
+                        <td className={cellClass}>
                           <button
                             onClick={() => {
                               setAllowanceEntryId(entry.id || null);
@@ -2588,7 +2731,7 @@ export default function PayrollDetail({
                                 entry.attendanceBonusAmount || 0,
                               );
                             }}
-                            className="w-full rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50"
+                            className="w-full rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
                           >
                             <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
                               {(entry.allowances || []).length} khoản
@@ -2607,11 +2750,11 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.total ? (
-                        <td className="px-4 py-4 border-b border-slate-500 text-right">
+                        <td className={cellClass}>
                           <button
                             type="button"
                             onClick={() => setSalaryDetailEntryId(entry.id || null)}
-                            className="text-right transition hover:opacity-90"
+                            className="ml-auto block min-w-[132px] rounded-[20px] border border-emerald-100 bg-white px-4 py-3 text-right shadow-sm transition hover:border-emerald-200 hover:opacity-90"
                             title="Xem chi tiết cách tính lương"
                           >
                             <div className="font-bold text-emerald-600 hover:underline">
@@ -2630,8 +2773,9 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.note ? (
-                        <td className="px-4 py-4 border-b border-slate-500">
-                          <input
+                        <td className={cellClass}>
+                          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                            <input
                             value={entry.note || ""}
                             onChange={(event) =>
                               applyEntryPatch(entry.id!, {
@@ -2640,13 +2784,14 @@ export default function PayrollDetail({
                             }
                             onBlur={() => debouncedUpdate.flush()}
                             placeholder="Ghi chú..."
-                            className="w-full bg-transparent text-sm italic text-slate-400 outline-none"
-                          />
+                            className="w-full bg-transparent text-sm italic text-slate-500 outline-none placeholder:text-slate-400"
+                            />
+                          </div>
                         </td>
                       ) : null}
 
                       {visibleColumns.action ? (
-                        <td className="border-b border-slate-200 px-4 py-4 text-center">
+                        <td className={centeredCellClass}>
                           <div
                             className="relative flex items-center justify-center"
                             onClick={(event) => event.stopPropagation()}
@@ -2654,7 +2799,7 @@ export default function PayrollDetail({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-9 w-9 rounded-xl text-slate-500 hover:bg-slate-100"
+                              className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-100"
                               onClick={() =>
                                 setOpenActionMenuId((current) =>
                                   current === entry.id ? null : entry.id || null,
