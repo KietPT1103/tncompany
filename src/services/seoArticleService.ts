@@ -41,6 +41,25 @@ export type SeoArticlePayload = {
   publishedAt: string | null;
 };
 
+export type GenerateSeoArticleInput = {
+  topic: string;
+  primaryKeyword: string;
+  secondaryKeywords: string[];
+  targetStore: SeoArticleTargetStore;
+  tone: string;
+  audience: string;
+  customNotes: string;
+};
+
+export type GeneratedSeoArticle = {
+  title: string;
+  slug: string;
+  excerpt: string;
+  metaTitle: string;
+  metaDescription: string;
+  blocks: SeoArticleBlock[];
+};
+
 export async function getSeoArticles(query = "", status = "all") {
   const params = new URLSearchParams();
   if (query.trim()) {
@@ -107,4 +126,16 @@ export async function uploadSeoArticleImage(file: File) {
   );
 
   return url;
+}
+
+export async function generateSeoArticleWithAi(payload: GenerateSeoArticleInput) {
+  const response = await apiRequest<{
+    article: GeneratedSeoArticle;
+    model: string;
+  }>("/seo-article-ai.php", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  return response;
 }

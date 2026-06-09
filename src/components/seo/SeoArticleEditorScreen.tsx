@@ -15,6 +15,7 @@ import {
   Plus,
   Save,
   Settings2,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import RoleGuard from "@/components/RoleGuard";
@@ -30,7 +31,9 @@ import {
 } from "@/features/seoArticles/articleBlocks";
 import {
   createSeoArticle,
+  generateSeoArticleWithAi,
   getSeoArticleById,
+  GenerateSeoArticleInput,
   SeoArticlePayload,
   SeoArticleTargetStore,
   uploadSeoArticleImage,
@@ -52,6 +55,15 @@ type EditorFormState = {
   blocks: ReturnType<typeof normalizeSeoArticleBlocks>;
 };
 
+type AiAssistFormState = {
+  topic: string;
+  primaryKeyword: string;
+  secondaryKeywords: string;
+  tone: string;
+  audience: string;
+  customNotes: string;
+};
+
 const initialFormState: EditorFormState = {
   slug: "",
   title: "",
@@ -63,6 +75,15 @@ const initialFormState: EditorFormState = {
   isPublished: false,
   publishedAt: null,
   blocks: [createEmptySeoArticleBlock()],
+};
+
+const initialAiAssistState: AiAssistFormState = {
+  topic: "",
+  primaryKeyword: "",
+  secondaryKeywords: "",
+  tone: "Chuyen nghiep, thuyet phuc, de doc",
+  audience: "Khach hang dang tim hieu dich vu va san pham",
+  customNotes: "",
 };
 
 const targetStoreOptions: Array<{ value: SeoArticleTargetStore; label: string }> = [
@@ -125,6 +146,8 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
   const [slugTouched, setSlugTouched] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
+  const [aiAssist, setAiAssist] = useState<AiAssistFormState>(initialAiAssistState);
+  const [generatingAi, setGeneratingAi] = useState(false);
 
   useEffect(() => {
     if (!isEditMode || !articleId) return;
@@ -177,6 +200,13 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
     value: EditorFormState[Key]
   ) {
     setForm((previous) => ({ ...previous, [field]: value }));
+  }
+
+  function updateAiAssistField<Key extends keyof AiAssistFormState>(
+    field: Key,
+    value: AiAssistFormState[Key]
+  ) {
+    setAiAssist((previous) => ({ ...previous, [field]: value }));
   }
 
   function updateBlock(
@@ -298,6 +328,54 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
       alert(error instanceof Error ? error.message : "Không thể lưu bài viết.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleGenerateWithAi() {
+    const topic = aiAssist.topic.trim() || form.title.trim();
+    const primaryKeyword = aiAssist.primaryKeyword.trim() || form.metaTitle.trim() || form.title.trim();
+
+    if (!topic) {
+      alert("Nhap chu de bai viet de AI co the viet noi dung.");
+      return;
+    }
+
+    if (!primaryKeyword) {
+      alert("Nhap tu khoa chinh de AI toi uu bai SEO.");
+      return;
+    }
+
+    const payload: GenerateSeoArticleInput = {
+      topic,
+      primaryKeyword,
+      secondaryKeywords: aiAssist.secondaryKeywords
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      targetStore: form.targetStore,
+      tone: aiAssist.tone.trim() || initialAiAssistState.tone,
+      audience: aiAssist.audience.trim() || initialAiAssistState.audience,
+      customNotes: aiAssist.customNotes.trim(),
+    };
+
+    setGeneratingAi(true);
+    try {
+      const { article } = await generateSeoArticleWithAi(payload);
+      setForm((previous) => ({
+        ...previous,
+        title: article.title || previous.title,
+        slug: article.slug || slugify(article.title || previous.title),
+        excerpt: article.excerpt || previous.excerpt,
+        metaTitle: article.metaTitle || previous.metaTitle,
+        metaDescription: article.metaDescription || previous.metaDescription,
+        blocks: normalizeSeoArticleBlocks(article.blocks, ""),
+      }));
+      setSlugTouched(true);
+    } catch (error) {
+      console.error(error);
+      alert(error instanceof Error ? error.message : "Khong the tao bai viet bang AI.");
+    } finally {
+      setGeneratingAi(false);
     }
   }
 
@@ -593,6 +671,92 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
               </div>
 
               <aside className="space-y-5 xl:sticky xl:top-24">
+                <section className="rounded-[28px] border border-[#e5dbcd] bg-white/92 p-6 shadow-sm">
+                  <div className="flex items-center gap-2 text-slate-900">
+                    <Sparkles className="h-5 w-5 text-[#1d4ed8]" />
+                    <h2 className="text-lg font-semibold">AI viet bai SEO</h2>
+                  </div>
+
+                  <div className="mt-5 space-y-4">
+                    <Input
+                      label="Chu de bai viet"
+                      value={aiAssist.topic}
+                      onChange={(event) => updateAiAssistField("topic", event.target.value)}
+                      placeholder="Vi du: kinh nghiem mo quan cafe thu hut khach"
+                      className="h-11 rounded-2xl border-[#ddd3c5] bg-[#faf7f2] focus-visible:ring-emerald-100"
+                    />
+
+                    <Input
+                      label="Tu khoa chinh"
+                      value={aiAssist.primaryKeyword}
+                      onChange={(event) => updateAiAssistField("primaryKeyword", event.target.value)}
+                      placeholder="Vi du: mo quan cafe"
+                      className="h-11 rounded-2xl border-[#ddd3c5] bg-[#faf7f2] focus-visible:ring-emerald-100"
+                    />
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-slate-700">
+                        Tu khoa phu
+                      </label>
+                      <textarea
+                        value={aiAssist.secondaryKeywords}
+                        onChange={(event) =>
+                          updateAiAssistField("secondaryKeywords", event.target.value)
+                        }
+                        rows={3}
+                        className="w-full rounded-[24px] border border-[#ddd3c5] bg-[#faf7f2] px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:bg-white"
+                        placeholder="Cach nhau bang dau phay, vi du: chi phi mo quan, kinh nghiem setup, thu hut khach"
+                      />
+                    </div>
+
+                    <Input
+                      label="Giong van"
+                      value={aiAssist.tone}
+                      onChange={(event) => updateAiAssistField("tone", event.target.value)}
+                      placeholder="Chuyen nghiep, de doc, thuyet phuc"
+                      className="h-11 rounded-2xl border-[#ddd3c5] bg-[#faf7f2] focus-visible:ring-emerald-100"
+                    />
+
+                    <Input
+                      label="Doi tuong doc gia"
+                      value={aiAssist.audience}
+                      onChange={(event) => updateAiAssistField("audience", event.target.value)}
+                      placeholder="Khach hang tiem nang, nguoi dang tim dich vu..."
+                      className="h-11 rounded-2xl border-[#ddd3c5] bg-[#faf7f2] focus-visible:ring-emerald-100"
+                    />
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-slate-700">
+                        Ghi chu them cho AI
+                      </label>
+                      <textarea
+                        value={aiAssist.customNotes}
+                        onChange={(event) => updateAiAssistField("customNotes", event.target.value)}
+                        rows={4}
+                        className="w-full rounded-[24px] border border-[#ddd3c5] bg-[#faf7f2] px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:bg-white"
+                        placeholder="Vi du: nhac den uu diem thuong hieu, chen CTA nhe, tranh van phong hoa"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-[24px] bg-[#f7f4ee] px-4 py-4 text-sm leading-6 text-slate-500">
+                    Backend se dung ChatGPT API qua `OPENAI_API_KEY` trong `.env.local`.
+                  </div>
+
+                  <Button
+                    onClick={handleGenerateWithAi}
+                    disabled={generatingAi || loading || saving}
+                    className="mt-5 w-full rounded-full"
+                  >
+                    {generatingAi ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-2 h-4 w-4" />
+                    )}
+                    {generatingAi ? "AI dang viet bai..." : "Tao bai bang AI"}
+                  </Button>
+                </section>
+
                 <section className="rounded-[28px] border border-[#e5dbcd] bg-white/92 p-6 shadow-sm">
                   <div className="flex items-center gap-2 text-slate-900">
                     <LayoutPanelTop className="h-5 w-5 text-[#1d4ed8]" />
