@@ -6,6 +6,16 @@ if (!ob_get_level()) {
     ob_start();
 }
 
+function bootstrap_starts_with(string $haystack, string $needle): bool
+{
+    return $needle === '' || strpos($haystack, $needle) === 0;
+}
+
+function bootstrap_contains(string $haystack, string $needle): bool
+{
+    return $needle === '' || strpos($haystack, $needle) !== false;
+}
+
 function bootstrap_emit_json(array $payload): void
 {
     while (ob_get_level() > 0) {
@@ -82,11 +92,11 @@ function bootstrap_load_env_file(string $path, bool $override = false): void
 
     foreach ($lines as $line) {
         $trimmed = trim($line);
-        if ($trimmed === '' || str_starts_with($trimmed, '#')) {
+        if ($trimmed === '' || bootstrap_starts_with($trimmed, '#')) {
             continue;
         }
 
-        if (str_starts_with($trimmed, 'export ')) {
+        if (bootstrap_starts_with($trimmed, 'export ')) {
             $trimmed = trim(substr($trimmed, 7));
         }
 
@@ -113,7 +123,7 @@ function bootstrap_load_env_file(string $path, bool $override = false): void
             $value = substr($value, 1, -1);
         }
 
-        if ($value !== '' && str_contains($value, '\\n')) {
+        if ($value !== '' && bootstrap_contains($value, '\\n')) {
             $value = str_replace('\\n', "\n", $value);
         }
 

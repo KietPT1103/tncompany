@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-function respond(array $payload, int $status = 200): never
+function respond(array $payload, int $status = 200): void
 {
     http_response_code($status);
 
@@ -20,7 +20,7 @@ function respond(array $payload, int $status = 200): never
     exit;
 }
 
-function respond_ok(array $data = [], int $status = 200): never
+function respond_ok(array $data = [], int $status = 200): void
 {
     respond([
         'ok' => true,
@@ -28,7 +28,7 @@ function respond_ok(array $data = [], int $status = 200): never
     ], $status);
 }
 
-function respond_error(string $message, int $status = 400, array $extra = []): never
+function respond_error(string $message, int $status = 400, array $extra = []): void
 {
     respond([
         'ok' => false,
