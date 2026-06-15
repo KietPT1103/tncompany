@@ -4,4 +4,4 @@ Disallow: /admin
 Disallow: /api
 Disallow: /login
 
-Sitemap: https://tnservice.vn/sitemap.xml
+Sitemap: https://tnservice.vn/sitemap.php

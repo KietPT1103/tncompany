@@ -141,6 +141,12 @@ const aboutSeo = {
     "T\u00ecm hi\u1ec3u th\u00f4ng tin doanh nghi\u1ec7p, n\u0103ng l\u1ef1c v\u1eadn h\u00e0nh v\u00e0 h\u1ec7 sinh th\u00e1i \u00d4ng Quan c\u1ee7a T&N Company t\u1ea1i C\u1ea7n Th\u01a1.",
 };
 
+const newsIndexSeo = {
+  title: "Tin tuc | T&N Company",
+  description:
+    "Cap nhat bai viet va tin tuc moi nhat cua he sinh thai Ong Quan, gom ca phe, tiem lau va farm tai Can Tho.",
+};
+
 const publicSeoByPath = {
   "/": {
     title: homepageSeo.title,
@@ -161,6 +167,22 @@ const publicSeoByPath = {
     openGraphType: "website",
     robots: "index,follow",
     schema: buildOrganizationSchema(),
+  },
+  "/tin-tuc": {
+    title: newsIndexSeo.title,
+    description: newsIndexSeo.description,
+    canonical: toAbsoluteUrl("/tin-tuc"),
+    image: DEFAULT_OG_IMAGE,
+    siteName: company.shortName,
+    openGraphType: "website",
+    robots: "index,follow",
+    schema: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: "Tin tuc",
+      description: newsIndexSeo.description,
+      url: toAbsoluteUrl("/tin-tuc"),
+    },
   },
   ...Object.fromEntries(
     venues.map((venue) => {
@@ -187,6 +209,10 @@ const publicSeoByPath = {
 export function getSeoForPath(pathname) {
   if (pathname === "/home") {
     return publicSeoByPath["/"];
+  }
+
+  if (pathname.startsWith("/tin-tuc/")) {
+    return null;
   }
 
   if (pathname === "/login" || pathname.startsWith("/admin") || pathname.startsWith("/api")) {

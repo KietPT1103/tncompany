@@ -6,6 +6,65 @@ import { navPages } from "../../data/siteData";
 import { getSeoArticles, SeoArticle } from "../../services/seoArticleService";
 import defaultImage from "../../optimized-media/cafe/cafe-hero.jpg";
 
+function upsertMetaByName(name: string, content: string) {
+  let meta = document.head.querySelector(`meta[name="${name}"]`);
+
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute("name", name);
+    document.head.appendChild(meta);
+  }
+
+  meta.setAttribute("content", content);
+  meta.setAttribute("data-managed-seo", "true");
+}
+
+function upsertMetaByProperty(property: string, content: string) {
+  let meta = document.head.querySelector(`meta[property="${property}"]`);
+
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute("property", property);
+    document.head.appendChild(meta);
+  }
+
+  meta.setAttribute("content", content);
+  meta.setAttribute("data-managed-seo", "true");
+}
+
+function upsertLink(rel: string, href: string) {
+  let link = document.head.querySelector(`link[rel="${rel}"]`);
+
+  if (!link) {
+    link = document.createElement("link");
+    link.setAttribute("rel", rel);
+    document.head.appendChild(link);
+  }
+
+  link.setAttribute("href", href);
+  link.setAttribute("data-managed-seo", "true");
+}
+
+function upsertStructuredData(schema: Record<string, unknown> | null) {
+  const scriptId = "app-seo-jsonld";
+  let script = document.getElementById(scriptId);
+
+  if (!schema) {
+    script?.remove();
+    return;
+  }
+
+  if (!script) {
+    script = document.createElement("script");
+    script.id = scriptId;
+    script.setAttribute("type", "application/ld+json");
+    script.setAttribute("data-managed-seo", "true");
+    document.head.appendChild(script);
+  }
+
+  script.textContent = JSON.stringify(schema);
+}
+
 function getStoreLabel(targetStore: string) {
   if (targetStore === "cafe") return "Cà phê";
   if (targetStore === "hotpot") return "Tiệm lẩu";
@@ -146,6 +205,60 @@ export default function ArticleDetailPage() {
       window.clearTimeout(timer);
     };
   }, [shareNotice]);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined" || !article) {
+      return;
+    }
+
+    const canonical = buildArticleShareUrl(article.slug);
+    const title = `${article.metaTitle || article.title} | T&N Company`;
+    const description =
+      article.metaDescription || article.excerpt || stripHtml(article.contentHtml).slice(0, 180);
+    const image = article.coverImageUrl || defaultImage;
+
+    document.documentElement.lang = "vi";
+    document.title = title;
+
+    upsertMetaByName("description", description);
+    upsertMetaByName("robots", "index,follow");
+    upsertMetaByName("twitter:card", "summary_large_image");
+    upsertMetaByName("twitter:title", title);
+    upsertMetaByName("twitter:description", description);
+    upsertMetaByName("twitter:image", image);
+
+    upsertMetaByProperty("og:type", "article");
+    upsertMetaByProperty("og:locale", "vi_VN");
+    upsertMetaByProperty("og:site_name", "T&N Company");
+    upsertMetaByProperty("og:title", title);
+    upsertMetaByProperty("og:description", description);
+    upsertMetaByProperty("og:url", canonical);
+    upsertMetaByProperty("og:image", image);
+
+    upsertLink("canonical", canonical);
+    upsertStructuredData({
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      headline: article.title,
+      description,
+      datePublished: article.publishedAt || article.createdAt,
+      dateModified: article.updatedAt,
+      mainEntityOfPage: canonical,
+      image: [image],
+      author: {
+        "@type": "Organization",
+        name: "T&N Company",
+      },
+      publisher: {
+        "@type": "Organization",
+        name: "T&N Company",
+        logo: {
+          "@type": "ImageObject",
+          url: `${window.location.origin}/favicon.svg`,
+        },
+      },
+    });
+  }, [article]);
 
   if (loading) {
     return (

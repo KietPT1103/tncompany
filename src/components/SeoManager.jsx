@@ -66,6 +66,9 @@ export default function SeoManager() {
 
   useEffect(() => {
     const seo = getSeoForPath(location.pathname);
+    if (!seo) {
+      return;
+    }
 
     document.documentElement.lang = "vi";
     document.title = seo.title;
