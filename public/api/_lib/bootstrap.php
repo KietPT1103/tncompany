@@ -34,6 +34,23 @@ function bootstrap_emit_json(array $payload): void
     echo $json;
 }
 
+function bootstrap_effective_request_method(): string
+{
+    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if ($method !== 'POST') {
+        return $method;
+    }
+
+    $override = $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? $_SERVER['REDIRECT_HTTP_X_HTTP_METHOD_OVERRIDE'] ?? '';
+    $override = strtoupper(trim((string) $override));
+
+    if (!in_array($override, ['PUT', 'PATCH', 'DELETE'], true)) {
+        return $method;
+    }
+
+    return $override;
+}
+
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
@@ -161,13 +178,15 @@ if (file_exists($configLocalPath)) {
 date_default_timezone_set($config['timezone'] ?? 'Asia/Ho_Chi_Minh');
 
 header('Access-Control-Allow-Origin: ' . ($config['cors_origin'] ?? '*'));
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Agent-Key');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Agent-Key, X-HTTP-Method-Override');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
+
+$_SERVER['REQUEST_METHOD'] = bootstrap_effective_request_method();
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/response.php';

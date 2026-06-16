@@ -46,6 +46,14 @@ function buildRequestUrls(path: string, options: RequestInit = {}) {
     : [primaryUrl, localFallbackUrl];
 }
 
+function shouldUseMethodOverride(path: string, method: string) {
+  if (!["PUT", "PATCH", "DELETE"].includes(method)) {
+    return false;
+  }
+
+  return /(?:^|\/)[^/?]+\.php(?:[?#]|$)/i.test(path);
+}
+
 function buildNetworkError(requestUrl: string) {
   let hostname = "";
   let pathname = requestUrl;
@@ -165,6 +173,7 @@ export async function apiRequest<T>(
   options: RequestInit = {},
   useAuth = true
 ) {
+  const originalMethod = (options.method || "GET").toUpperCase();
   const headers = new Headers(options.headers || {});
   headers.set("Accept", "application/json");
 
@@ -178,6 +187,13 @@ export async function apiRequest<T>(
   const token = useAuth ? getApiToken() : "";
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const useMethodOverride = shouldUseMethodOverride(path, originalMethod);
+  const requestMethod = useMethodOverride ? "POST" : originalMethod;
+
+  if (useMethodOverride) {
+    headers.set("X-HTTP-Method-Override", originalMethod);
   }
 
   const requestUrls = buildRequestUrls(path, options);
@@ -197,6 +213,7 @@ export async function apiRequest<T>(
     try {
       const response = await fetch(requestUrl, {
         ...options,
+        method: requestMethod,
         cache: options.cache ?? "no-store",
         headers,
         signal: options.signal ?? controller?.signal,
