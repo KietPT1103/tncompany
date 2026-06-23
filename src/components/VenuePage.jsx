@@ -19,14 +19,21 @@ function normalizePhoneLink(phoneValue) {
   return `tel:${String(phoneValue || "").replace(/[^\d+]/g, "")}`;
 }
 
-function EditorialMedia({ src, alt, className, onOpenImage, playButton = false }) {
-  const [loadFailed, setLoadFailed] = useState(false);
+function EditorialMedia({
+  src,
+  fallbackSrc = "",
+  alt,
+  className,
+  onOpenImage,
+  playButton = false,
+}) {
+  const [activeSrc, setActiveSrc] = useState(src || fallbackSrc || "");
 
   useEffect(() => {
-    setLoadFailed(false);
-  }, [src]);
+    setActiveSrc(src || fallbackSrc || "");
+  }, [src, fallbackSrc]);
 
-  const effectiveSrc = loadFailed ? "" : src;
+  const effectiveSrc = activeSrc;
   const canOpenImage = Boolean(effectiveSrc && onOpenImage);
 
   if (!effectiveSrc) {
@@ -40,7 +47,19 @@ function EditorialMedia({ src, alt, className, onOpenImage, playButton = false }
 
   const content = (
     <>
-      <img src={effectiveSrc} alt={alt} loading="lazy" onError={() => setLoadFailed(true)} />
+      <img
+        src={effectiveSrc}
+        alt={alt}
+        loading="lazy"
+        onError={() => {
+          if (effectiveSrc !== fallbackSrc && fallbackSrc) {
+            setActiveSrc(fallbackSrc);
+            return;
+          }
+
+          setActiveSrc("");
+        }}
+      />
       {playButton ? <span className="editorial-media-play" aria-hidden="true">▶</span> : null}
     </>
   );
@@ -53,7 +72,7 @@ function EditorialMedia({ src, alt, className, onOpenImage, playButton = false }
     <button
       type="button"
       className={`${className} editorial-media is-clickable`}
-      onClick={() => onOpenImage({ src, alt, caption: alt })}
+      onClick={() => onOpenImage({ src: effectiveSrc, alt, caption: alt })}
       aria-label={`Phóng to ảnh: ${alt}`}
     >
       {content}
@@ -116,7 +135,7 @@ function VenueBody({ activeVenue, content }) {
   );
 }
 
-function VenueRelated({ items }) {
+function VenueRelated({ items, fallbackItems = [] }) {
   return (
     <section className="editorial-related">
       <div className="editorial-related-head">
@@ -128,6 +147,7 @@ function VenueRelated({ items }) {
           <article className="editorial-related-card" key={`${index}-${item.title}`}>
             <EditorialMedia
               src={item.image}
+              fallbackSrc={fallbackItems[index]?.image || ""}
               alt={item.imageAlt || item.title}
               className="editorial-related-media"
             />
@@ -194,6 +214,7 @@ export default function VenuePage({ activeVenue, onOpenImage, onOpenPage }) {
 
       <EditorialMedia
         src={content.heroImage}
+        fallbackSrc={fallbackContent.heroImage}
         alt={content.heroAlt}
         className="editorial-hero-media"
         onOpenImage={onOpenImage}
@@ -204,6 +225,7 @@ export default function VenuePage({ activeVenue, onOpenImage, onOpenPage }) {
 
         <EditorialMedia
           src={content.secondaryImage}
+          fallbackSrc={fallbackContent.secondaryImage}
           alt={content.secondaryImageAlt}
           className="editorial-secondary-media"
           onOpenImage={onOpenImage}
@@ -211,7 +233,7 @@ export default function VenuePage({ activeVenue, onOpenImage, onOpenPage }) {
         />
       </div>
 
-      <VenueRelated items={content.relatedItems} />
+      <VenueRelated items={content.relatedItems} fallbackItems={fallbackContent.relatedItems} />
     </article>
   );
 }
