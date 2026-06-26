@@ -150,9 +150,42 @@ function bootstrap_load_env_file(string $path, bool $override = false): void
     }
 }
 
+/**
+ * @return array<int, string>
+ */
+function bootstrap_env_directories(string $startDirectory, int $maxLevels = 2): array
+{
+    $directories = [];
+    $current = rtrim($startDirectory, DIRECTORY_SEPARATOR);
+
+    for ($level = 0; $level <= $maxLevels; $level++) {
+        if ($current === '' || isset($directories[$current])) {
+            break;
+        }
+
+        $directories[$current] = $current;
+        $parent = dirname($current);
+
+        if ($parent === $current) {
+            break;
+        }
+
+        $current = $parent;
+    }
+
+    return array_values($directories);
+}
+
 $projectRoot = dirname(__DIR__, 3);
-bootstrap_load_env_file($projectRoot . DIRECTORY_SEPARATOR . '.env', false);
-bootstrap_load_env_file($projectRoot . DIRECTORY_SEPARATOR . '.env.local', true);
+$envDirectories = bootstrap_env_directories($projectRoot, 2);
+
+foreach (array_reverse($envDirectories) as $directory) {
+    bootstrap_load_env_file($directory . DIRECTORY_SEPARATOR . '.env', false);
+}
+
+foreach (array_reverse($envDirectories) as $directory) {
+    bootstrap_load_env_file($directory . DIRECTORY_SEPARATOR . '.env.local', true);
+}
 
 $configDirectory = dirname(__DIR__);
 $configPath = $configDirectory . DIRECTORY_SEPARATOR . 'config.php';
