@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Hand, Loader2, RefreshCcw, Sparkles } from "lucide-react";
-import RoleGuard from "@/components/RoleGuard";
 import { editGestureFrame } from "@/services/gestureStudioService";
 
 type Point = {
@@ -534,7 +533,6 @@ export default function GestureStudioPage() {
   }, [activeFrame, activePrompt, cameraReady, busy]);
 
   return (
-    <RoleGuard allowedRoles={["admin"]} permission="gesture_studio.access">
       <main className="h-screen overflow-hidden bg-black text-white">
         <div className="relative h-full w-full">
           <video
@@ -639,6 +637,5 @@ export default function GestureStudioPage() {
           </div>
         </div>
       </main>
-    </RoleGuard>
   );
 }

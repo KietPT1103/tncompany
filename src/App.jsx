@@ -75,6 +75,7 @@ export default function App() {
         <Route path="/" element={<LandingApp />} />
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/gesture-studio" element={<GestureStudioPage />} />
         <Route
           path="/admin"
           element={
@@ -84,7 +85,7 @@ export default function App() {
             />
           }
         >
-          <Route path="gesture-studio" element={<GestureStudioPage />} />
+          <Route path="gesture-studio" element={<Navigate to="/gesture-studio" replace />} />
           <Route element={<AdminLayout />}>
             <Route index element={<AdminIndexPage />} />
             <Route element={<ProtectedLayout />}>
