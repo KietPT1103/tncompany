@@ -84,6 +84,7 @@ export default function App() {
             />
           }
         >
+          <Route path="gesture-studio" element={<GestureStudioPage />} />
           <Route element={<AdminLayout />}>
             <Route index element={<AdminIndexPage />} />
             <Route element={<ProtectedLayout />}>
@@ -103,7 +104,6 @@ export default function App() {
               <Route path="internal-invoices" element={<InternalInvoicesPage />} />
               <Route path="payroll" element={<PayrollPage />} />
               <Route path="social-listening" element={<SocialListeningPage />} />
-              <Route path="gesture-studio" element={<GestureStudioPage />} />
               <Route path="seo-articles" element={<SeoArticlesPage />} />
               <Route path="seo-articles/new" element={<NewSeoArticlePage />} />
               <Route path="seo-articles/:id" element={<EditSeoArticlePage />} />

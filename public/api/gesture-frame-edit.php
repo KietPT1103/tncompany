@@ -78,6 +78,15 @@ function gesture_store_output(string $binary): string
     return '/uploads/gesture-studio/' . $fileName;
 }
 
+function gesture_timeout_seconds(): int
+{
+    return max(30, (int) gesture_config_value(
+        'GESTURE_EDIT_TIMEOUT_SECONDS',
+        'gesture_edit_timeout_seconds',
+        openai_env('OPENAI_TIMEOUT_SECONDS', '180') ?? '180'
+    ));
+}
+
 /**
  * @param array<int|string, CURLFile|string> $payload
  * @param array<int, string> $headers
@@ -95,7 +104,7 @@ function gesture_post_multipart(string $url, array $payload, array $headers = []
         CURLOPT_POSTFIELDS => $payload,
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => max(10, (int) (openai_env('OPENAI_TIMEOUT_SECONDS', '90') ?? '90')),
+        CURLOPT_TIMEOUT => gesture_timeout_seconds(),
     ]);
 
     $rawResponse = curl_exec($ch);

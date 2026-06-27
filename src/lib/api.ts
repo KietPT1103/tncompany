@@ -14,6 +14,10 @@ type ApiEnvelope<T> = {
   meta?: Record<string, unknown>;
 };
 
+type ApiRequestOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
 class ApiTransportError extends Error {
   retryable: boolean;
 
@@ -170,15 +174,16 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 export async function apiRequest<T>(
   path: string,
-  options: RequestInit = {},
+  options: ApiRequestOptions = {},
   useAuth = true
 ) {
-  const originalMethod = (options.method || "GET").toUpperCase();
-  const headers = new Headers(options.headers || {});
+  const { timeoutMs, ...fetchOptions } = options;
+  const originalMethod = (fetchOptions.method || "GET").toUpperCase();
+  const headers = new Headers(fetchOptions.headers || {});
   headers.set("Accept", "application/json");
 
   const isFormDataBody =
-    typeof FormData !== "undefined" && options.body instanceof FormData;
+    typeof FormData !== "undefined" && fetchOptions.body instanceof FormData;
 
   if (!isFormDataBody) {
     headers.set("Content-Type", "application/json");
@@ -191,6 +196,12 @@ export async function apiRequest<T>(
 
   const useMethodOverride = shouldUseMethodOverride(path, originalMethod);
   const requestMethod = useMethodOverride ? "POST" : originalMethod;
+  const requestTimeoutMs =
+    typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
+      ? timeoutMs
+      : /\/gesture-frame-edit\.php(?:[?#]|$)/i.test(path)
+      ? Math.max(API_TIMEOUT_MS, 120000)
+      : API_TIMEOUT_MS;
 
   if (useMethodOverride) {
     headers.set("X-HTTP-Method-Override", originalMethod);
@@ -202,21 +213,21 @@ export async function apiRequest<T>(
   for (let index = 0; index < requestUrls.length; index += 1) {
     const requestUrl = requestUrls[index];
     const controller =
-      typeof AbortController !== "undefined" && !options.signal
+      typeof AbortController !== "undefined" && !fetchOptions.signal
         ? new AbortController()
         : null;
     const timeoutId =
-      controller && Number.isFinite(API_TIMEOUT_MS) && API_TIMEOUT_MS > 0
-        ? globalThis.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+      controller && Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0
+        ? globalThis.setTimeout(() => controller.abort(), requestTimeoutMs)
         : null;
 
     try {
       const response = await fetch(requestUrl, {
-        ...options,
+        ...fetchOptions,
         method: requestMethod,
-        cache: options.cache ?? "no-store",
+        cache: fetchOptions.cache ?? "no-store",
         headers,
-        signal: options.signal ?? controller?.signal,
+        signal: fetchOptions.signal ?? controller?.signal,
       });
 
       if (response.status === 401) {

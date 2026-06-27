@@ -24,4 +24,5 @@ return [
     'gesture_edit_provider' => 'openai',
     'gesture_edit_model' => 'gpt-image-1',
     'gesture_edit_size' => '1024x1024',
+    'gesture_edit_timeout_seconds' => 180,
 ];

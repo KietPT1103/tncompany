@@ -27,5 +27,6 @@ export async function editGestureFrame(request: GestureStudioEditRequest) {
   return apiRequest<GestureStudioEditResponse>("/gesture-frame-edit.php", {
     method: "POST",
     body: JSON.stringify(request),
+    timeoutMs: 120000,
   });
 }

@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Hand, Loader2, ScanSearch, Sparkles, Wand2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Hand, Loader2, RefreshCcw, Sparkles } from "lucide-react";
 import RoleGuard from "@/components/RoleGuard";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
 import { editGestureFrame } from "@/services/gestureStudioService";
 
 type Point = {
@@ -21,12 +18,19 @@ type FrameBox = {
   points: Point[];
 };
 
+type HandPoints = Array<{ x: number; y: number; z?: number }>;
+
+type DetectedHand = {
+  points: HandPoints;
+  handedness: string;
+};
+
 type HandLandmarkerInstance = {
   detectForVideo: (
     video: HTMLVideoElement,
     timestampMs: number
   ) => {
-    landmarks?: Array<Array<{ x: number; y: number; z?: number }>>;
+    landmarks?: HandPoints[];
     handednesses?: Array<Array<{ categoryName?: string }>>;
   };
   close?: () => void;
@@ -36,15 +40,47 @@ const MODEL_ASSET_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const VISION_BUNDLE_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+const AUTO_GENERATE_STABLE_MS = 900;
+const PROMPT_COOLDOWN_MS = 1800;
+const PROMPTS = [
+  {
+    id: "clay",
+    label: "Đất nặn điện ảnh",
+    prompt:
+      "Biến phần trong khung thành chân dung đất nặn điện ảnh, ánh sáng ấm, chi tiết khuôn mặt rõ, giữ nguyên bối cảnh bên ngoài.",
+  },
+  {
+    id: "anime",
+    label: "Anime sắc nét",
+    prompt:
+      "Biến phần trong khung thành chân dung anime điện ảnh, màu sắc sạch, mắt nổi bật, giữ viền hòa tự nhiên với nền gốc.",
+  },
+  {
+    id: "pixel",
+    label: "Pixel retro",
+    prompt:
+      "Biến phần trong khung thành chân dung pixel art retro 16-bit, màu tươi, giữ bố cục nhân vật ở giữa khung.",
+  },
+  {
+    id: "oil",
+    label: "Sơn dầu",
+    prompt:
+      "Biến phần trong khung thành tranh sơn dầu chân dung, cọ dày, ánh sáng gallery, vẫn giữ góc nhìn trực diện.",
+  },
+  {
+    id: "robot",
+    label: "Robot sci-fi",
+    prompt:
+      "Biến phần trong khung thành chân dung robot sci-fi, kim loại sáng, neon tinh tế, giữ đường nét gương mặt dễ nhận ra.",
+  },
+];
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
 function distance(a: Point, b: Point) {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.hypot(dx, dy);
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 async function loadHandLandmarker() {
@@ -62,29 +98,55 @@ async function loadHandLandmarker() {
   }) as Promise<HandLandmarkerInstance>;
 }
 
-function isLShapeGesture(landmarks: Array<{ x: number; y: number }>) {
-  const wrist = landmarks[0];
-  const thumbTip = landmarks[4];
-  const indexTip = landmarks[8];
-  const middleTip = landmarks[12];
-  const ringTip = landmarks[16];
-  const pinkyTip = landmarks[20];
+function normalizeHands(
+  landmarks: HandPoints[] | undefined,
+  handednesses: Array<Array<{ categoryName?: string }>> | undefined
+): DetectedHand[] {
+  return (landmarks || []).map((handPoints, index) => ({
+    points: handPoints.map((point) => ({
+      x: 1 - point.x,
+      y: point.y,
+      z: point.z,
+    })),
+    handedness: handednesses?.[index]?.[0]?.categoryName || "",
+  }));
+}
+
+function isClosedFist(points: HandPoints) {
+  const wrist = points[0];
+  const fingerPairs: Array<[number, number]> = [
+    [8, 5],
+    [12, 9],
+    [16, 13],
+    [20, 17],
+  ];
+
+  const foldedFingers = fingerPairs.every(([tip, base]) => {
+    return distance(points[tip], wrist) < distance(points[base], wrist) * 1.05;
+  });
+
+  const thumbCurled = distance(points[4], points[2]) < distance(points[4], wrist) * 0.75;
+  return foldedFingers && thumbCurled;
+}
+
+function isLShapeGesture(points: HandPoints) {
+  const wrist = points[0];
+  const thumbTip = points[4];
+  const indexTip = points[8];
+  const middleTip = points[12];
+  const ringTip = points[16];
+  const pinkyTip = points[20];
 
   const thumbOpen = distance(thumbTip, indexTip) > distance(wrist, indexTip) * 0.35;
-  const indexOpen = distance(indexTip, wrist) > distance(landmarks[6], wrist) * 1.08;
-  const middleCurled = distance(middleTip, wrist) < distance(landmarks[9], wrist) * 1.18;
-  const ringCurled = distance(ringTip, wrist) < distance(landmarks[13], wrist) * 1.18;
-  const pinkyCurled = distance(pinkyTip, wrist) < distance(landmarks[17], wrist) * 1.18;
+  const indexOpen = distance(indexTip, wrist) > distance(points[6], wrist) * 1.08;
+  const middleCurled = distance(middleTip, wrist) < distance(points[9], wrist) * 1.18;
+  const ringCurled = distance(ringTip, wrist) < distance(points[13], wrist) * 1.18;
+  const pinkyCurled = distance(pinkyTip, wrist) < distance(points[17], wrist) * 1.18;
 
   return thumbOpen && indexOpen && middleCurled && ringCurled && pinkyCurled;
 }
 
-function buildFrameBox(
-  hands: Array<{
-    points: Array<{ x: number; y: number }>;
-    handedness: string;
-  }>
-): FrameBox | null {
+function buildFrameBox(hands: DetectedHand[]): FrameBox | null {
   if (hands.length < 2) {
     return null;
   }
@@ -107,7 +169,7 @@ function buildFrameBox(
   const points = [leftHand.points[8], rightHand.points[8], rightHand.points[4], leftHand.points[4]];
   const xs = points.map((point) => point.x);
   const ys = points.map((point) => point.y);
-  const padding = 0.03;
+  const padding = 0.035;
   const x = clamp(Math.min(...xs) - padding, 0, 1);
   const y = clamp(Math.min(...ys) - padding, 0, 1);
   const right = clamp(Math.max(...xs) + padding, 0, 1);
@@ -124,52 +186,17 @@ function buildFrameBox(
     y,
     width,
     height,
-    points,
+    points: points.map((point) => ({ x: point.x, y: point.y })),
   };
 }
 
-function drawOverlay(
-  canvas: HTMLCanvasElement,
-  video: HTMLVideoElement,
-  frame: FrameBox | null,
-  active: boolean
-) {
-  const width = video.videoWidth || 1280;
-  const height = video.videoHeight || 720;
-  canvas.width = width;
-  canvas.height = height;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "rgba(15, 23, 42, 0.18)";
-  ctx.fillRect(0, 0, width, height);
-
-  if (!frame) {
-    ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.font = "600 28px sans-serif";
-    ctx.fillText("Giữ 2 tay thành khung L để chọn vùng", 32, 52);
-    return;
-  }
-
-  const boxX = frame.x * width;
-  const boxY = frame.y * height;
-  const boxWidth = frame.width * width;
-  const boxHeight = frame.height * height;
-
-  ctx.clearRect(boxX, boxY, boxWidth, boxHeight);
-  ctx.strokeStyle = active ? "#10b981" : "#f59e0b";
-  ctx.lineWidth = 6;
-  ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
-
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.font = "600 24px sans-serif";
-  ctx.fillText(
-    active ? "Đã nhận khung, có thể tạo ảnh" : "Đang khóa khung",
-    boxX,
-    Math.max(28, boxY - 12)
-  );
+function frameSimilarity(a: FrameBox | null, b: FrameBox | null) {
+  if (!a || !b) return 0;
+  const dx = Math.abs(a.x - b.x);
+  const dy = Math.abs(a.y - b.y);
+  const dw = Math.abs(a.width - b.width);
+  const dh = Math.abs(a.height - b.height);
+  return dx + dy + dw + dh;
 }
 
 function createMaskDataUrl(width: number, height: number, frame: FrameBox) {
@@ -178,7 +205,7 @@ function createMaskDataUrl(width: number, height: number, frame: FrameBox) {
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) {
-    throw new Error("Không tạo được mask canvas.");
+    throw new Error("Khong tao duoc mask canvas.");
   }
 
   ctx.fillStyle = "rgba(255,255,255,1)";
@@ -201,7 +228,7 @@ function captureFrameData(video: HTMLVideoElement, frame: FrameBox) {
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) {
-    throw new Error("Không tạo được frame canvas.");
+    throw new Error("Khong tao duoc frame canvas.");
   }
 
   ctx.save();
@@ -225,6 +252,58 @@ function captureFrameData(video: HTMLVideoElement, frame: FrameBox) {
   };
 }
 
+function drawOverlay(
+  canvas: HTMLCanvasElement,
+  video: HTMLVideoElement,
+  frame: FrameBox | null,
+  status: string,
+  activePromptLabel: string,
+  isBusy: boolean,
+  showClosedHint: boolean
+) {
+  const width = video.videoWidth || 1280;
+  const height = video.videoHeight || 720;
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return;
+  }
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "rgba(3, 7, 18, 0.22)";
+  ctx.fillRect(0, 0, width, height);
+
+  if (frame) {
+    const boxX = frame.x * width;
+    const boxY = frame.y * height;
+    const boxWidth = frame.width * width;
+    const boxHeight = frame.height * height;
+
+    ctx.clearRect(boxX, boxY, boxWidth, boxHeight);
+    ctx.strokeStyle = isBusy ? "#f59e0b" : "#10b981";
+    ctx.lineWidth = 6;
+    ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+  }
+
+  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.font = "600 22px sans-serif";
+  ctx.fillText(status, 28, 42);
+  ctx.font = "500 18px sans-serif";
+  ctx.fillText(`Style: ${activePromptLabel}`, 28, 72);
+
+  if (showClosedHint) {
+    ctx.fillStyle = "rgba(250, 204, 21, 0.98)";
+    ctx.font = "700 24px sans-serif";
+    ctx.fillText("Nam tay xong mo ra de doi style va tao anh", 28, height - 32);
+  } else {
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.font = "500 18px sans-serif";
+    ctx.fillText("Giu 2 tay thanh khung L. Nam tay roi mo ra de chuyen style.", 28, height - 28);
+  }
+}
+
 export default function GestureStudioPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -232,21 +311,25 @@ export default function GestureStudioPage() {
   const animationFrameRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastVideoTimeRef = useRef(-1);
+  const stableFrameRef = useRef<FrameBox | null>(null);
+  const stableSinceRef = useRef(0);
+  const autoGenerateArmedRef = useRef(true);
+  const lastGeneratedKeyRef = useRef("");
+  const gestureClosedRef = useRef(false);
+  const promptCooldownUntilRef = useRef(0);
 
-  const [prompt, setPrompt] = useState(
-    "Biến phần trong khung thành chân dung đất nặn điện ảnh, ánh sáng ấm, chi tiết khuôn mặt rõ."
-  );
-  const [cameraReady, setCameraReady] = useState(false);
   const [loadingModel, setLoadingModel] = useState(true);
-  const [frame, setFrame] = useState<FrameBox | null>(null);
-  const [lockedFrame, setLockedFrame] = useState<FrameBox | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resultImageUrl, setResultImageUrl] = useState("");
   const [providerInfo, setProviderInfo] = useState<{ provider: string; model: string } | null>(null);
+  const [activePromptIndex, setActivePromptIndex] = useState(0);
+  const [activeFrame, setActiveFrame] = useState<FrameBox | null>(null);
+  const [statusText, setStatusText] = useState("Dang khoi dong camera va hand tracking...");
+  const [closedHint, setClosedHint] = useState(false);
 
-  const activeFrame = lockedFrame || frame;
-  const canGenerate = cameraReady && !!lockedFrame && prompt.trim().length > 0 && !busy;
+  const activePrompt = PROMPTS[activePromptIndex];
 
   useEffect(() => {
     let mounted = true;
@@ -279,13 +362,14 @@ export default function GestureStudioPage() {
           video.srcObject = stream;
           await video.play();
           setCameraReady(true);
+          setStatusText("Giu 2 tay thanh khung L de bat dau.");
         }
       } catch (setupError) {
         console.error(setupError);
         setError(
           setupError instanceof Error
             ? setupError.message
-            : "Không thể khởi động camera hoặc MediaPipe."
+            : "Khong the khoi dong camera hoac MediaPipe."
         );
       } finally {
         if (mounted) {
@@ -311,20 +395,63 @@ export default function GestureStudioPage() {
       const video = videoRef.current;
       const overlay = canvasRef.current;
       const handLandmarker = handLandmarkerRef.current;
+      const now = performance.now();
 
       if (video && overlay && handLandmarker && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
         const videoTime = video.currentTime;
         if (videoTime !== lastVideoTimeRef.current) {
           lastVideoTimeRef.current = videoTime;
-          const detection = handLandmarker.detectForVideo(video, performance.now());
-          const hands = (detection.landmarks || []).map((landmarks, index) => ({
-            points: landmarks.map((point) => ({ x: 1 - point.x, y: point.y })),
-            handedness: detection.handednesses?.[index]?.[0]?.categoryName || "",
-          }));
-
+          const detection = handLandmarker.detectForVideo(video, now);
+          const hands = normalizeHands(detection.landmarks, detection.handednesses);
           const nextFrame = buildFrameBox(hands);
-          setFrame(nextFrame);
-          drawOverlay(overlay, video, lockedFrame || nextFrame, !!lockedFrame);
+          const bothClosed = hands.length >= 2 && hands.every((hand) => isClosedFist(hand.points));
+
+          if (nextFrame) {
+            if (frameSimilarity(nextFrame, stableFrameRef.current) > 0.03) {
+              stableFrameRef.current = nextFrame;
+              stableSinceRef.current = now;
+            }
+
+            setActiveFrame(nextFrame);
+          } else {
+            stableFrameRef.current = null;
+            stableSinceRef.current = 0;
+            setActiveFrame(null);
+          }
+
+          if (bothClosed) {
+            gestureClosedRef.current = true;
+            setClosedHint(true);
+            setStatusText("Da nhan dong tac nam tay. Mo ra de doi style va tao anh.");
+          } else if (
+            gestureClosedRef.current &&
+            nextFrame &&
+            now >= promptCooldownUntilRef.current
+          ) {
+            gestureClosedRef.current = false;
+            setClosedHint(false);
+            setActivePromptIndex((current) => (current + 1) % PROMPTS.length);
+            autoGenerateArmedRef.current = true;
+            promptCooldownUntilRef.current = now + PROMPT_COOLDOWN_MS;
+            setStatusText("Da doi style. Dang canh khung on dinh de tao anh moi.");
+          } else if (!bothClosed) {
+            setClosedHint(false);
+            if (!nextFrame && !busy) {
+              setStatusText("Giu 2 tay thanh khung L de bat dau.");
+            } else if (nextFrame && !busy) {
+              setStatusText("Khung da nhan. Giu on dinh de he thong tu tao anh.");
+            }
+          }
+
+          drawOverlay(
+            overlay,
+            video,
+            nextFrame,
+            statusText,
+            activePrompt.label,
+            busy,
+            bothClosed
+          );
         }
       }
 
@@ -338,202 +465,176 @@ export default function GestureStudioPage() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [lockedFrame]);
+  }, [activePrompt.label, busy, statusText]);
 
-  const frameMetrics = useMemo(() => {
-    if (!activeFrame || !videoRef.current?.videoWidth || !videoRef.current?.videoHeight) {
-      return null;
-    }
-
-    return {
-      width: Math.round(activeFrame.width * videoRef.current.videoWidth),
-      height: Math.round(activeFrame.height * videoRef.current.videoHeight),
-    };
-  }, [activeFrame]);
-
-  async function handleGenerate() {
-    const video = videoRef.current;
-    if (!video || !lockedFrame) {
+  useEffect(() => {
+    if (!cameraReady || !activeFrame || busy) {
       return;
     }
 
-    setBusy(true);
-    setError("");
-
-    try {
-      const payload = captureFrameData(video, lockedFrame);
-      const response = await editGestureFrame({
-        prompt: prompt.trim(),
-        ...payload,
-      });
-
-      setResultImageUrl(response.imageUrl);
-      setProviderInfo({
-        provider: response.provider,
-        model: response.model,
-      });
-    } catch (generationError) {
-      console.error(generationError);
-      setError(
-        generationError instanceof Error
-          ? generationError.message
-          : "Không thể tạo ảnh từ vùng đã chọn."
-      );
-    } finally {
-      setBusy(false);
+    const now = performance.now();
+    const stableFor = stableSinceRef.current > 0 ? now - stableSinceRef.current : 0;
+    if (stableFor < AUTO_GENERATE_STABLE_MS) {
+      return;
     }
-  }
+
+    const frameKey = [
+      activePrompt.id,
+      Math.round(activeFrame.x * 100),
+      Math.round(activeFrame.y * 100),
+      Math.round(activeFrame.width * 100),
+      Math.round(activeFrame.height * 100),
+    ].join(":");
+
+    if (!autoGenerateArmedRef.current && lastGeneratedKeyRef.current === frameKey) {
+      return;
+    }
+
+    autoGenerateArmedRef.current = false;
+    lastGeneratedKeyRef.current = frameKey;
+
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    async function run() {
+      setBusy(true);
+      setError("");
+      setStatusText("Dang tao anh tu dong, vui long giu khung on dinh...");
+
+      try {
+        const payload = captureFrameData(video, activeFrame);
+        const response = await editGestureFrame({
+          prompt: activePrompt.prompt,
+          ...payload,
+        });
+
+        setResultImageUrl(response.imageUrl);
+        setProviderInfo({
+          provider: response.provider,
+          model: response.model,
+        });
+        setStatusText("Da tao anh xong. Nam tay roi mo ra de doi style tiep.");
+      } catch (generationError) {
+        console.error(generationError);
+        setError(
+          generationError instanceof Error
+            ? generationError.message
+            : "Khong the tao anh tu vung da chon."
+        );
+        setStatusText("Tao anh that bai. Giu khung on dinh de thu lai.");
+        autoGenerateArmedRef.current = true;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    void run();
+  }, [activeFrame, activePrompt, cameraReady, busy]);
 
   return (
     <RoleGuard allowedRoles={["admin"]} permission="gesture_studio.access">
-      <main className="min-h-screen bg-slate-50 p-4 md:p-6">
-        <div className="mx-auto max-w-7xl space-y-6">
-          <div className="rounded-[32px] bg-[linear-gradient(135deg,#111827_0%,#134e4a_50%,#f59e0b_100%)] p-6 text-white shadow-xl">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-3xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-semibold">
-                  <Hand className="h-4 w-4" />
-                  MediaPipe hand landmarks + AI image edit
-                </div>
-                <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-                  Gesture Studio cho khung 4 ngón tay
-                </h1>
-                <p className="mt-2 text-sm leading-6 text-slate-100/90">
-                  Người dùng dựng hai bàn tay thành khung chữ L, hệ thống lấy 4 đầu ngón làm vùng chọn,
-                  khóa khung và gửi ảnh cùng mask sang model chỉnh sửa ảnh theo prompt.
-                </p>
-              </div>
+      <main className="h-screen overflow-hidden bg-black text-white">
+        <div className="relative h-full w-full">
+          <video
+            ref={videoRef}
+            className="h-full w-full scale-x-[-1] object-cover"
+            muted
+            playsInline
+            autoPlay
+          />
+          <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-200">Camera</div>
-                  <div className="mt-2 text-sm font-semibold">{cameraReady ? "Sẵn sàng" : "Chưa sẵn sàng"}</div>
-                </div>
-                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-200">Hand tracking</div>
-                  <div className="mt-2 text-sm font-semibold">
-                    {loadingModel ? "Đang nạp model" : frame ? "Đã thấy khung tay" : "Đợi gesture"}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
-                  <div className="text-xs uppercase tracking-[0.16em] text-slate-200">Khung hiện tại</div>
-                  <div className="mt-2 text-sm font-semibold">
-                    {frameMetrics ? `${frameMetrics.width} x ${frameMetrics.height}` : "Chưa có"}
-                  </div>
-                </div>
+          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-6">
+            <div className="max-w-2xl rounded-[28px] border border-white/15 bg-black/40 px-5 py-4 backdrop-blur-xl">
+              <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                <Hand className="h-4 w-4" />
+                Gesture Studio
+              </div>
+              <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+                Full-screen AI frame
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-white/80">
+                Giu 2 tay thanh khung L de tao vung edit. Nam tay va mo ra de chuyen style.
+                He thong se tu dong tao anh khi khung on dinh, khong can bam nut.
+              </p>
+            </div>
+
+            <div className="rounded-[28px] border border-white/15 bg-black/40 px-5 py-4 text-right backdrop-blur-xl">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/60">Trang thai</div>
+              <div className="mt-2 text-sm font-semibold">
+                {loadingModel ? "Dang nap model" : cameraReady ? "San sang" : "Dang cho camera"}
+              </div>
+              <div className="mt-3 text-xs text-white/70">
+                {providerInfo ? `${providerInfo.provider} / ${providerInfo.model}` : "Chua tao anh"}
               </div>
             </div>
           </div>
 
-          {error ? (
-            <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.9fr)]">
-            <Card className="overflow-hidden rounded-[28px] border-slate-200">
-              <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <div className="pointer-events-none absolute right-6 top-1/2 w-[340px] -translate-y-1/2">
+            <div className="rounded-[30px] border border-white/15 bg-black/45 p-4 backdrop-blur-xl">
+              <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl text-slate-900">Camera và vùng chọn</CardTitle>
-                  <p className="mt-2 text-sm text-slate-500">
-                    Giơ hai bàn tay thành khung chữ L. Khi khung ổn, bấm khóa để tạo ảnh.
-                  </p>
+                  <div className="text-xs uppercase tracking-[0.18em] text-white/60">Ket qua</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{activePrompt.label}</div>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="rounded-2xl"
-                    onClick={() => setLockedFrame(frame)}
-                    disabled={!frame || busy}
-                  >
-                    <ScanSearch className="mr-2 h-4 w-4" />
-                    Khóa khung
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="rounded-2xl"
-                    onClick={() => setLockedFrame(null)}
-                    disabled={!lockedFrame || busy}
-                  >
-                    <Camera className="mr-2 h-4 w-4" />
-                    Mở khóa
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="relative overflow-hidden rounded-[24px] bg-slate-950">
-                  <video
-                    ref={videoRef}
-                    className="aspect-video w-full scale-x-[-1] object-cover"
-                    muted
-                    playsInline
-                    autoPlay
-                  />
-                  <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
-                </div>
-              </CardContent>
-            </Card>
+                {busy ? <Loader2 className="h-5 w-5 animate-spin text-amber-300" /> : <Sparkles className="h-5 w-5 text-emerald-300" />}
+              </div>
 
-            <div className="space-y-6">
-              <Card className="rounded-[28px] border-slate-200">
-                <CardHeader>
-                  <CardTitle className="text-xl text-slate-900">Prompt và tạo ảnh</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Input
-                    label="Prompt chỉnh ảnh"
-                    value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
-                    placeholder="Ví dụ: Biến phần trong khung thành tranh màu nước..."
-                  />
-
-                  <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-                    Vùng cần sửa là phần trong khung 4 ngón tay. Bên ngoài khung được giữ nguyên nhờ mask.
+              <div className="mt-4 overflow-hidden rounded-[24px] border border-white/10 bg-white/5">
+                {resultImageUrl ? (
+                  <img src={resultImageUrl} alt="Gesture studio result" className="h-[420px] w-full object-cover" />
+                ) : (
+                  <div className="flex h-[420px] items-center justify-center px-6 text-center text-sm leading-6 text-white/70">
+                    Anh sau khi edit se hien tai day. Giu khung on dinh de bat dau.
                   </div>
+                )}
+              </div>
 
-                  <Button className="w-full rounded-2xl" onClick={() => void handleGenerate()} disabled={!canGenerate}>
-                    {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                    {busy ? "Đang tạo ảnh..." : "Tạo ảnh trong khung"}
-                  </Button>
+              <div className="mt-4 rounded-[22px] border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white/85">
+                {activePrompt.prompt}
+              </div>
+            </div>
+          </div>
 
-                  {providerInfo ? (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                      Provider: <strong>{providerInfo.provider}</strong>
-                      <br />
-                      Model: <strong>{providerInfo.model}</strong>
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
+          <div className="absolute inset-x-0 bottom-0 p-6">
+            <div className="mx-auto max-w-6xl rounded-[32px] border border-white/15 bg-black/40 p-4 backdrop-blur-xl">
+              <div className="flex flex-wrap items-center gap-3">
+                {PROMPTS.map((item, index) => {
+                  const active = index === activePromptIndex;
 
-              <Card className="rounded-[28px] border-slate-200">
-                <CardHeader>
-                  <CardTitle className="text-xl text-slate-900">Ảnh kết quả</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {resultImageUrl ? (
-                    <div className="space-y-3">
-                      <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
-                        <img src={resultImageUrl} alt="Gesture studio result" className="w-full object-cover" />
-                      </div>
-                      <a
-                        href={resultImageUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:text-emerald-800"
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        Mở ảnh kết quả
-                      </a>
-                    </div>
-                  ) : (
-                    <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                      Ảnh sau khi edit sẽ xuất hiện ở đây.
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setActivePromptIndex(index);
+                        autoGenerateArmedRef.current = true;
+                        setStatusText("Da doi style. Giu khung on dinh de tao anh.");
+                      }}
+                      className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                        active
+                          ? "border-emerald-300 bg-emerald-300 text-slate-950"
+                          : "border-white/15 bg-white/5 text-white hover:bg-white/10"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+
+                <div className="ml-auto flex items-center gap-3 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/80">
+                  <RefreshCcw className={`h-4 w-4 ${busy ? "animate-spin text-amber-300" : ""}`} />
+                  <span>{statusText}</span>
+                </div>
+              </div>
+
+              {error ? (
+                <div className="mt-4 rounded-[22px] border border-rose-400/30 bg-rose-500/15 px-4 py-3 text-sm text-rose-100">
+                  {error}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
