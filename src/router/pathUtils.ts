@@ -13,6 +13,7 @@ const ADMIN_PATHS = [
   "/payroll",
   "/payroll-estimate",
   "/social-listening",
+  "/gesture-studio",
   "/seo-articles",
   "/tax-invoices",
   "/timesheet",

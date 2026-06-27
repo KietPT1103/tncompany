@@ -21,4 +21,7 @@ return [
     'tiktok_apify_search_actor_id' => 'GdWCxBtKWOsKjdch',
     'tiktok_apify_comment_actor_id' => 'GdWCxBtKWOsKjdch',
     'tiktok_worker_key' => 'chuoi_random_cua_anh',
+    'gesture_edit_provider' => 'openai',
+    'gesture_edit_model' => 'gpt-image-1',
+    'gesture_edit_size' => '1024x1024',
 ];

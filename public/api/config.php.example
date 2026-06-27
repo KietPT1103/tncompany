@@ -7,4 +7,7 @@ return [
     'db_password' => 'replace_me',
     'cors_origin' => '*',
     'timezone' => 'Asia/Ho_Chi_Minh',
+    'gesture_edit_provider' => 'openai',
+    'gesture_edit_model' => 'gpt-image-1',
+    'gesture_edit_size' => '1024x1024',
 ];

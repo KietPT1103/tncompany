@@ -117,6 +117,13 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     path: "/social-listening",
   },
   {
+    id: "gesture_studio.access",
+    label: "Gesture studio",
+    description: "Dung khung 4 ngon tay de thay doi vung anh bang AI.",
+    category: "Marketing",
+    path: "/gesture-studio",
+  },
+  {
     id: "seo_articles.access",
     label: "Bai viet SEO",
     description: "Quan ly bai viet SEO.",
@@ -309,6 +316,7 @@ const DEFAULT_ROUTE_ORDER = [
   "/internal-invoices",
   "/tax-invoices",
   "/social-listening",
+  "/gesture-studio",
   "/seo-articles",
   "/activity-logs",
   "/accounts",

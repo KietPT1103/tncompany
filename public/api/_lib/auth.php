@@ -161,6 +161,7 @@ function auth_all_permissions(): array
         'internal_invoices.access',
         'tax_invoices.access',
         'social_listening.access',
+        'gesture_studio.access',
         'seo_articles.access',
         'activity_logs.access',
         'accounts.access',
