@@ -21,8 +21,12 @@ return [
     'tiktok_apify_search_actor_id' => 'GdWCxBtKWOsKjdch',
     'tiktok_apify_comment_actor_id' => 'GdWCxBtKWOsKjdch',
     'tiktok_worker_key' => 'chuoi_random_cua_anh',
-    'gesture_edit_provider' => 'openai',
+    'gesture_edit_provider' => 'local_flux',
     'gesture_edit_model' => 'gpt-image-1',
     'gesture_edit_size' => '1024x1024',
     'gesture_edit_timeout_seconds' => 180,
+    'gesture_edit_local_url' => 'http://127.0.0.1:8754/edit',
+    'gesture_edit_local_token' => '',
+    'gesture_edit_local_model_id' => 'black-forest-labs/FLUX.2-klein-4B',
+    'gesture_edit_local_output_size' => '1024x1024',
 ];

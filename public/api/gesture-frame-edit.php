@@ -88,6 +88,61 @@ function gesture_timeout_seconds(): int
 }
 
 /**
+ * @return array<string, mixed>
+ */
+function gesture_post_json(string $url, array $payload, array $headers = []): array
+{
+    if (!function_exists('curl_init')) {
+        respond_error('cURL is required for local image edit requests.', 500);
+    }
+
+    $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($jsonPayload === false) {
+        respond_error('Failed to encode local image edit payload.', 500);
+    }
+
+    $requestHeaders = array_merge([
+        'Content-Type: application/json',
+        'Accept: application/json',
+    ], $headers);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $jsonPayload,
+        CURLOPT_HTTPHEADER => $requestHeaders,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => gesture_timeout_seconds(),
+    ]);
+
+    $rawResponse = curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if (!is_string($rawResponse) || $rawResponse === '') {
+        respond_error(
+            $curlError !== '' ? 'Local FLUX service request failed: ' . $curlError : 'Empty response from local FLUX service.',
+            502
+        );
+    }
+
+    $decoded = json_decode($rawResponse, true);
+    if (!is_array($decoded)) {
+        respond_error('Local FLUX service returned invalid JSON.', 502, [
+            'body' => substr($rawResponse, 0, 500),
+        ]);
+    }
+
+    if ($httpCode < 200 || $httpCode >= 300) {
+        $message = (string) ($decoded['detail'] ?? $decoded['error'] ?? 'Local FLUX service request failed.');
+        respond_error($message, 502, ['status' => $httpCode]);
+    }
+
+    return $decoded;
+}
+
+/**
  * @param array<int|string, CURLFile|string> $payload
  * @param array<int, string> $headers
  * @return array<string, mixed>
@@ -202,6 +257,60 @@ function gesture_edit_with_openai(string $prompt, array $sourceImage, array $mas
     ];
 }
 
+/**
+ * @param array<string, mixed> $body
+ * @return array{provider:string,model:string,imageUrl:string,revisedPrompt:?string}
+ */
+function gesture_edit_with_local_flux(string $prompt, string $imageDataUrl, string $maskDataUrl, array $body): array
+{
+    $serviceUrl = gesture_config_value(
+        'GESTURE_EDIT_LOCAL_URL',
+        'gesture_edit_local_url',
+        'http://127.0.0.1:8754/edit'
+    );
+
+    $serviceToken = gesture_config_value('GESTURE_EDIT_LOCAL_TOKEN', 'gesture_edit_local_token', '');
+    $headers = [];
+    if ($serviceToken !== '') {
+        $headers[] = 'Authorization: Bearer ' . $serviceToken;
+    }
+
+    $response = gesture_post_json($serviceUrl, [
+        'prompt' => $prompt,
+        'image_data_url' => $imageDataUrl,
+        'mask_data_url' => $maskDataUrl,
+        'box' => $body['box'] ?? null,
+        'landmarks' => $body['landmarks'] ?? [],
+        'model_id' => gesture_config_value(
+            'GESTURE_EDIT_LOCAL_MODEL_ID',
+            'gesture_edit_local_model_id',
+            'black-forest-labs/FLUX.2-klein-4B'
+        ),
+        'output_size' => gesture_config_value(
+            'GESTURE_EDIT_LOCAL_OUTPUT_SIZE',
+            'gesture_edit_local_output_size',
+            gesture_config_value('GESTURE_EDIT_SIZE', 'gesture_edit_size', '1024x1024')
+        ),
+    ], $headers);
+
+    $base64Image = trim((string) ($response['image_base64'] ?? ''));
+    if ($base64Image === '') {
+        respond_error('Local FLUX service did not return image data.', 502);
+    }
+
+    $binary = base64_decode($base64Image, true);
+    if (!is_string($binary) || $binary === '') {
+        respond_error('Local FLUX output image is invalid.', 502);
+    }
+
+    return [
+        'provider' => 'local_flux',
+        'model' => (string) ($response['model'] ?? 'black-forest-labs/FLUX.2-klein-4B'),
+        'imageUrl' => gesture_store_output($binary),
+        'revisedPrompt' => isset($response['revised_prompt']) ? (string) $response['revised_prompt'] : null,
+    ];
+}
+
 $body = read_json_body();
 $prompt = trim((string) ($body['prompt'] ?? ''));
 $imageDataUrl = trim((string) ($body['imageDataUrl'] ?? ''));
@@ -232,11 +341,15 @@ foreach ([$sourceImage['mime'], $maskImage['mime']] as $mime) {
 }
 
 $provider = strtolower(gesture_config_value('GESTURE_EDIT_PROVIDER', 'gesture_edit_provider', 'openai'));
-if ($provider !== 'openai') {
-    respond_error(
-        'Configured gesture edit provider is not supported by this build. Set GESTURE_EDIT_PROVIDER=openai or extend the endpoint.',
-        500
-    );
+if ($provider === 'openai') {
+    respond_ok(gesture_edit_with_openai($prompt, $sourceImage, $maskImage));
 }
 
-respond_ok(gesture_edit_with_openai($prompt, $sourceImage, $maskImage));
+if (in_array($provider, ['local_flux', 'flux_local'], true)) {
+    respond_ok(gesture_edit_with_local_flux($prompt, $imageDataUrl, $maskDataUrl, $body));
+}
+
+respond_error(
+    'Configured gesture edit provider is not supported. Use GESTURE_EDIT_PROVIDER=openai or local_flux.',
+    500
+);
