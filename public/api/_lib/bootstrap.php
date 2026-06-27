@@ -221,5 +221,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
 
 $_SERVER['REQUEST_METHOD'] = bootstrap_effective_request_method();
 
-require_once __DIR__ . '/db.php';
+if (!defined('BOOTSTRAP_SKIP_DB') || BOOTSTRAP_SKIP_DB !== true) {
+    require_once __DIR__ . '/db.php';
+}
 require_once __DIR__ . '/response.php';

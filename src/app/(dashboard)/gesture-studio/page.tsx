@@ -17,6 +17,11 @@ type FrameBox = {
   points: Point[];
 };
 
+type OverlayResult = {
+  imageUrl: string;
+  frame: FrameBox;
+};
+
 type HandPoints = Array<{ x: number; y: number; z?: number }>;
 
 type DetectedHand = {
@@ -39,8 +44,10 @@ const MODEL_ASSET_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const VISION_BUNDLE_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
-const AUTO_GENERATE_STABLE_MS = 900;
+const AUTO_GENERATE_STABLE_MS = 500;
 const PROMPT_COOLDOWN_MS = 1800;
+const FRAME_STABILITY_THRESHOLD = 0.16;
+const FRAME_PRESENCE_RESET_THRESHOLD = 0.28;
 const PROMPTS = [
   {
     id: "clay",
@@ -258,7 +265,8 @@ function drawOverlay(
   status: string,
   activePromptLabel: string,
   isBusy: boolean,
-  showClosedHint: boolean
+  showClosedHint: boolean,
+  debugLines: string[]
 ) {
   const width = video.videoWidth || 1280;
   const height = video.videoHeight || 720;
@@ -301,6 +309,23 @@ function drawOverlay(
     ctx.font = "500 18px sans-serif";
     ctx.fillText("Giu 2 tay thanh khung L. Nam tay roi mo ra de chuyen style.", 28, height - 28);
   }
+
+  if (debugLines.length > 0) {
+    const boxWidth = 360;
+    const lineHeight = 22;
+    const boxHeight = 18 + debugLines.length * lineHeight;
+    const x = width - boxWidth - 24;
+    const y = 110;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
+    ctx.fillRect(x, y, boxWidth, boxHeight);
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.font = "500 15px monospace";
+
+    debugLines.forEach((line, index) => {
+      ctx.fillText(line, x + 16, y + 26 + index * lineHeight);
+    });
+  }
 }
 
 export default function GestureStudioPage() {
@@ -312,6 +337,7 @@ export default function GestureStudioPage() {
   const lastVideoTimeRef = useRef(-1);
   const stableFrameRef = useRef<FrameBox | null>(null);
   const stableSinceRef = useRef(0);
+  const frameVisibleSinceRef = useRef(0);
   const autoGenerateArmedRef = useRef(true);
   const lastGeneratedKeyRef = useRef("");
   const gestureClosedRef = useRef(false);
@@ -322,11 +348,21 @@ export default function GestureStudioPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resultImageUrl, setResultImageUrl] = useState("");
+  const [overlayResult, setOverlayResult] = useState<OverlayResult | null>(null);
   const [providerInfo, setProviderInfo] = useState<{ provider: string; model: string } | null>(null);
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const [activeFrame, setActiveFrame] = useState<FrameBox | null>(null);
   const [statusText, setStatusText] = useState("Dang khoi dong camera va hand tracking...");
   const [closedHint, setClosedHint] = useState(false);
+  const [debugInfo, setDebugInfo] = useState({
+    hands: 0,
+    frameValid: false,
+    bothClosed: false,
+    stableMs: 0,
+    armed: true,
+    requestCount: 0,
+    lastRequestAt: "",
+  });
 
   const activePrompt = PROMPTS[activePromptIndex];
 
@@ -406,15 +442,26 @@ export default function GestureStudioPage() {
           const bothClosed = hands.length >= 2 && hands.every((hand) => isClosedFist(hand.points));
 
           if (nextFrame) {
-            if (frameSimilarity(nextFrame, stableFrameRef.current) > 0.03) {
+            if (frameSimilarity(nextFrame, stableFrameRef.current) > FRAME_STABILITY_THRESHOLD) {
               stableFrameRef.current = nextFrame;
               stableSinceRef.current = now;
+            }
+
+            if (!stableFrameRef.current) {
+              stableFrameRef.current = nextFrame;
+            }
+
+            if (frameVisibleSinceRef.current === 0) {
+              frameVisibleSinceRef.current = now;
+            } else if (frameSimilarity(nextFrame, stableFrameRef.current) > FRAME_PRESENCE_RESET_THRESHOLD) {
+              frameVisibleSinceRef.current = now;
             }
 
             setActiveFrame(nextFrame);
           } else {
             stableFrameRef.current = null;
             stableSinceRef.current = 0;
+            frameVisibleSinceRef.current = 0;
             setActiveFrame(null);
           }
 
@@ -442,6 +489,21 @@ export default function GestureStudioPage() {
             }
           }
 
+          const stableMs = frameVisibleSinceRef.current > 0 ? Math.max(0, Math.round(now - frameVisibleSinceRef.current)) : 0;
+          const nextDebug = {
+            hands: hands.length,
+            frameValid: !!nextFrame,
+            bothClosed,
+            stableMs,
+            armed: autoGenerateArmedRef.current,
+            requestCount: debugInfo.requestCount,
+            lastRequestAt: debugInfo.lastRequestAt,
+          };
+          setDebugInfo((current) => ({
+            ...current,
+            ...nextDebug,
+          }));
+
           drawOverlay(
             overlay,
             video,
@@ -449,7 +511,15 @@ export default function GestureStudioPage() {
             statusText,
             activePrompt.label,
             busy,
-            bothClosed
+            bothClosed,
+            [
+              `hands=${hands.length}`,
+              `frame=${nextFrame ? "yes" : "no"}`,
+              `closed=${bothClosed ? "yes" : "no"}`,
+              `stableMs=${stableMs}`,
+              `armed=${autoGenerateArmedRef.current ? "yes" : "no"}`,
+              `requests=${debugInfo.requestCount}`,
+            ]
           );
         }
       }
@@ -472,7 +542,7 @@ export default function GestureStudioPage() {
     }
 
     const now = performance.now();
-    const stableFor = stableSinceRef.current > 0 ? now - stableSinceRef.current : 0;
+    const stableFor = frameVisibleSinceRef.current > 0 ? now - frameVisibleSinceRef.current : 0;
     if (stableFor < AUTO_GENERATE_STABLE_MS) {
       return;
     }
@@ -501,8 +571,20 @@ export default function GestureStudioPage() {
       setBusy(true);
       setError("");
       setStatusText("Dang tao anh tu dong, vui long giu khung on dinh...");
+      setDebugInfo((current) => ({
+        ...current,
+        requestCount: current.requestCount + 1,
+        lastRequestAt: new Date().toLocaleTimeString(),
+      }));
 
       try {
+        const frameSnapshot = {
+          x: activeFrame.x,
+          y: activeFrame.y,
+          width: activeFrame.width,
+          height: activeFrame.height,
+          points: activeFrame.points.map((point) => ({ x: point.x, y: point.y })),
+        };
         const payload = captureFrameData(video, activeFrame);
         const response = await editGestureFrame({
           prompt: activePrompt.prompt,
@@ -510,6 +592,10 @@ export default function GestureStudioPage() {
         });
 
         setResultImageUrl(response.imageUrl);
+        setOverlayResult({
+          imageUrl: response.imageUrl,
+          frame: frameSnapshot,
+        });
         setProviderInfo({
           provider: response.provider,
           model: response.model,
@@ -542,6 +628,18 @@ export default function GestureStudioPage() {
             playsInline
             autoPlay
           />
+          {overlayResult ? (
+            <img
+              src={overlayResult.imageUrl}
+              alt="Gesture overlay result"
+              className="pointer-events-none absolute inset-0 h-full w-full scale-x-[-1] object-cover"
+              style={{
+                clipPath: `inset(${overlayResult.frame.y * 100}% ${100 - (overlayResult.frame.x + overlayResult.frame.width) * 100}% ${
+                  100 - (overlayResult.frame.y + overlayResult.frame.height) * 100
+                }% ${overlayResult.frame.x * 100}%)`,
+              }}
+            />
+          ) : null}
           <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
 
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-6">
@@ -567,31 +665,14 @@ export default function GestureStudioPage() {
               <div className="mt-3 text-xs text-white/70">
                 {providerInfo ? `${providerInfo.provider} / ${providerInfo.model}` : "Chua tao anh"}
               </div>
-            </div>
-          </div>
-
-          <div className="pointer-events-none absolute right-6 top-1/2 w-[340px] -translate-y-1/2">
-            <div className="rounded-[30px] border border-white/15 bg-black/45 p-4 backdrop-blur-xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-white/60">Ket qua</div>
-                  <div className="mt-1 text-sm font-semibold text-white">{activePrompt.label}</div>
-                </div>
-                {busy ? <Loader2 className="h-5 w-5 animate-spin text-amber-300" /> : <Sparkles className="h-5 w-5 text-emerald-300" />}
-              </div>
-
-              <div className="mt-4 overflow-hidden rounded-[24px] border border-white/10 bg-white/5">
-                {resultImageUrl ? (
-                  <img src={resultImageUrl} alt="Gesture studio result" className="h-[420px] w-full object-cover" />
-                ) : (
-                  <div className="flex h-[420px] items-center justify-center px-6 text-center text-sm leading-6 text-white/70">
-                    Anh sau khi edit se hien tai day. Giu khung on dinh de bat dau.
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 rounded-[22px] border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white/85">
-                {activePrompt.prompt}
+              <div className="mt-3 space-y-1 text-left text-[11px] text-white/70">
+                <div>hands: {debugInfo.hands}</div>
+                <div>frame: {debugInfo.frameValid ? "yes" : "no"}</div>
+                <div>closed: {debugInfo.bothClosed ? "yes" : "no"}</div>
+                <div>stableMs: {debugInfo.stableMs}</div>
+                <div>armed: {debugInfo.armed ? "yes" : "no"}</div>
+                <div>requests: {debugInfo.requestCount}</div>
+                <div>last: {debugInfo.lastRequestAt || "--:--:--"}</div>
               </div>
             </div>
           </div>
