@@ -29,6 +29,7 @@ This starts:
 
 - Vite on `http://127.0.0.1:5173`
 - PHP built-in server on `http://127.0.0.1:8000`
+- TikTok social listening worker daemon
 
 Vite will proxy `/api/*` to the local PHP server, so pages like payroll and employees use the PHP files inside this repo.
 
@@ -61,6 +62,7 @@ Note: if a PHP endpoint exists only in this repo and has not been deployed to `t
 ## If you want full local
 
 - run PHP locally with `php -S 127.0.0.1:8000 -t public`
+- náº¿u dÃ¹ng TikTok social listening, cháº¡y thÃªm `php scripts/tiktok-social-listening-worker.php --daemon 5`
 - run MySQL locally
 - point `VITE_PROXY_TARGET` or `VITE_API_BASE_URL` to that local PHP server
 - or simply use `npm run dev:full`

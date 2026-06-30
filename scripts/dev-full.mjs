@@ -56,6 +56,9 @@ process.on("SIGTERM", () => stopAll(0));
 console.log("Starting PHP API on http://127.0.0.1:8000");
 startProcess("php", "php", ["-S", "127.0.0.1:8000", "-t", "public"]);
 
+console.log("Starting TikTok social listening worker");
+startProcess("tiktok-worker", "php", ["scripts/tiktok-social-listening-worker.php", "--daemon", "5"]);
+
 console.log("Starting Vite with /api proxied to http://127.0.0.1:8000");
 startProcess(
   "vite",

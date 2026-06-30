@@ -59,6 +59,13 @@ final class TikTokCollectorService implements TikTokCollectorInterface
                 'TikTok Apify chưa đủ cấu hình: thiếu ' . implode(', ', $missing) . '.'
             );
         }
+        $searchActorId = trim((string) ($this->config['tiktok_apify_search_actor_id'] ?? ''));
+        $commentActorId = trim((string) ($this->config['tiktok_apify_comment_actor_id'] ?? ''));
+        if ($searchActorId !== '' && $commentActorId !== '' && $searchActorId === $commentActorId) {
+            throw new RuntimeException(
+                'TikTok Apify chÆ°a Ä‘Ãºng cáº¥u hÃ¬nh: TIKTOK_APIFY_COMMENT_ACTOR_ID Ä‘ang trÃ¹ng TIKTOK_APIFY_SEARCH_ACTOR_ID. Hai actor nÃ y pháº£i tÃ¡ch riÃªng, náº¿u khÃ´ng job láº¥y comment sáº½ tráº£ rá»—ng.'
+            );
+        }
     }
 
     public function searchVideos(string $keyword, string $dateFrom, string $dateTo): array
