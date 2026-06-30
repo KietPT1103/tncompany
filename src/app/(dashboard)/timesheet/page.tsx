@@ -486,6 +486,10 @@ export default function TimesheetPage() {
         const matchedDbEmployee = dbEmployees.find(
           (employee) => employee.employeeCode?.trim() === employeeCode
         );
+        const { displayName, totalHours, weekendHours, errors, shifts } = summarizeRows(
+          employeeCode,
+          selectedRowsByEmployee[employeeCode] || []
+        );
         const resolvedImportedName = displayName.trim();
         const reusedEmployeeCode = isReusedEmployeeCode(
           matchedDbEmployee,
@@ -508,10 +512,10 @@ export default function TimesheetPage() {
           continue;
         }
 
-        const { displayName, totalHours, weekendHours, errors, shifts } = summarizeRows(
-          employeeCode,
-          sourceRows
-        );
+        const summarizedSource =
+          useMonthlySalary && sourceRows !== (selectedRowsByEmployee[employeeCode] || [])
+            ? summarizeRows(employeeCode, sourceRows)
+            : { displayName, totalHours, weekendHours, errors, shifts };
 
         /*
         while (pointer < rows.length) {
@@ -580,7 +584,7 @@ export default function TimesheetPage() {
         const summary: EmployeeSummary = {
           dbId: matchedDbEmployee?.id,
           Name:
-            resolvedImportedName ||
+            summarizedSource.displayName.trim() ||
             effectiveDbEmployee?.name ||
             `Unknown_${employeeCode}`,
           EnNo: employeeCode,
@@ -594,8 +598,8 @@ export default function TimesheetPage() {
               : "hourly",
           Allowance: 0,
           Note: "",
-          TotalHours: totalHours,
-          WeekendHours: weekendHours,
+          TotalHours: summarizedSource.totalHours,
+          WeekendHours: summarizedSource.weekendHours,
           SalaryPerHour:
             reusedEmployeeCode
               ? DEFAULT_IMPORTED_HOURLY_RATE
@@ -614,8 +618,8 @@ export default function TimesheetPage() {
             reusedEmployeeCode ? 0 : effectiveDbEmployee?.attendanceBonusAmount || 0,
           StandardHours: reusedEmployeeCode ? 0 : effectiveDbEmployee?.standardHours || 0,
           TotalSalary: 0,
-          Errors: errors,
-          Shifts: shifts,
+          Errors: summarizedSource.errors,
+          Shifts: summarizedSource.shifts,
         };
 
         summary.TotalSalary = calculateEmployeeTotal(summary);
