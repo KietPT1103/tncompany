@@ -2517,8 +2517,9 @@ export default function PayrollDetail({
                         : rowStatus === "manual"
                           ? "bg-violet-50"
                           : "bg-emerald-50";
-                  const cellClass = "border-b border-slate-200 px-4 py-4";
-                  const centeredCellClass = `${cellClass} text-center`;
+                  const cellClass =
+                    "border-b border-slate-200/90 px-4 py-5 align-middle";
+                  const centeredCellClass = `${cellClass} text-center align-middle`;
 
                   return (
                     <tr
@@ -2602,7 +2603,7 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.role ? (
-                        <td className={cellClass}>
+                        <td className={centeredCellClass}>
                           <RoleSelect
                             roleGroups={roleGroups}
                             value={entry.role || defaultRole}
@@ -2655,7 +2656,7 @@ export default function PayrollDetail({
 
                       {visibleColumns.hours ? (
                         <td className={centeredCellClass}>
-                          <div className="inline-flex items-center gap-2">
+                          <div className="inline-flex items-center justify-center gap-2">
                             <input
                               type="number"
                               onWheel={preventNumberInputScroll}
@@ -2666,7 +2667,7 @@ export default function PayrollDetail({
                                 })
                               }
                               onBlur={() => debouncedUpdate.flush()}
-                              className="h-9 w-24 rounded-xl border border-slate-200 bg-white px-3 text-center shadow-sm outline-none"
+                              className="h-10 w-24 rounded-xl border border-slate-200 bg-white px-3 text-center shadow-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <Button
                               variant="outline"
@@ -2684,10 +2685,10 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.workDays ? (
-                        <td className={cellClass}>
+                        <td className={centeredCellClass}>
                           <div
                             className={cn(
-                              "rounded-[20px] border px-4 py-3 shadow-sm",
+                              "mx-auto max-w-[120px] rounded-[20px] border px-4 py-3 text-left shadow-sm",
                               isMonthly
                                 ? "border-sky-200 bg-white/80 shadow-sm shadow-sky-100"
                                 : "border-slate-200 bg-slate-50",
@@ -2729,7 +2730,7 @@ export default function PayrollDetail({
                                 )
                               }
                               onBlur={() => debouncedUpdate.flush()}
-                              className="h-9 rounded-xl text-center"
+                              className="h-10 rounded-xl text-center"
                             />
                           </div>
                         </td>
@@ -2737,7 +2738,7 @@ export default function PayrollDetail({
 
                       {visibleColumns.weekend ? (
                         <td className={centeredCellClass}>
-                          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                          <div className="mx-auto max-w-[120px] rounded-[20px] border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
                             <input
                             type="number"
                             onWheel={preventNumberInputScroll}
@@ -2748,14 +2749,14 @@ export default function PayrollDetail({
                               })
                             }
                             onBlur={() => debouncedUpdate.flush()}
-                            className="h-9 w-24 rounded-xl border border-slate-200 bg-white px-3 text-center shadow-sm outline-none"
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center shadow-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                           </div>
                         </td>
                       ) : null}
 
                       {visibleColumns.allowance ? (
-                        <td className={cellClass}>
+                        <td className={centeredCellClass}>
                           <button
                             onClick={() => {
                               setAllowanceEntryId(entry.id || null);
@@ -2770,7 +2771,7 @@ export default function PayrollDetail({
                                 entry.attendanceBonusAmount || 0,
                               );
                             }}
-                            className="w-full rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+                            className="mx-auto block w-full max-w-[148px] rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
                           >
                             <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
                               {(entry.allowances || []).length} khoản
@@ -2789,18 +2790,18 @@ export default function PayrollDetail({
                       ) : null}
 
                       {visibleColumns.total ? (
-                        <td className={cellClass}>
+                        <td className={centeredCellClass}>
                           <button
                             type="button"
                             onClick={() => setSalaryDetailEntryId(entry.id || null)}
-                            className="ml-auto block min-w-[132px] rounded-[20px] border border-emerald-100 bg-white px-4 py-3 text-right shadow-sm transition hover:border-emerald-200 hover:opacity-90"
+                            className="mx-auto block min-w-[132px] rounded-[20px] border border-emerald-100 bg-white px-4 py-3 text-right shadow-sm transition hover:border-emerald-200 hover:opacity-90"
                             title="Xem chi tiết cách tính lương"
                           >
                             <div className="font-bold text-emerald-600 hover:underline">
                               {formatCurrency(entry.salary || 0)}
                             </div>
                           </button>
-                          <div className="mt-1 text-xs text-slate-400">
+                          <div className="mt-2 text-center text-xs text-slate-400">
                             {formatHours(entry.totalHours || 0)}h x{" "}
                             {formatCurrency(entry.hourlyRate || 0)}
                             {breakdown.salaryType === "hourly" &&
