@@ -418,21 +418,31 @@ const parsePlainTextTimesheetRows = async (
   const lines = text.split(/\r?\n/);
   const rows: TimesheetImportRow[] = [];
 
-  for (let index = 1; index < lines.length; index += 1) {
+  for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index].trim();
     if (!line) continue;
 
-    const values = line.split("\t");
+    const delimiter = line.includes("\t")
+      ? "\t"
+      : line.includes(";")
+        ? ";"
+        : ",";
+    const values = line.split(delimiter);
     if (values.length < 7) continue;
+
+    const dateTimeValue = String(values[6] ?? "").trim();
+    if (!dateTimeValue || !parseTimesheetDateTime(dateTimeValue)) {
+      continue;
+    }
 
     rows.push({
       employeeCode: String(values[2] ?? "").trim(),
       employeeName: String(values[3] ?? "").trim(),
-      dateTime: String(values[6] ?? "").trim(),
+      dateTime: dateTimeValue,
     });
   }
 
-  return rows.filter((row) => row.dateTime && parseTimesheetDateTime(row.dateTime));
+  return rows;
 };
 
 const parseTimesheetImportFile = async (file: File): Promise<TimesheetImportRow[]> => {
@@ -512,7 +522,7 @@ const prepareEmployeeImportData = async ({
 
   if (matchedRows.length === 0) {
     throw new Error(
-      "KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»‡u cháº¥m cÃ´ng cá»§a nhÃ¢n viÃªn nÃ y trong khoáº£ng Ä‘Ã£ chá»n.",
+      "Không tìm thấy dữ liệu chấm công của nhân viên này trong khoảng đã chọn.",
     );
   }
 
@@ -1675,19 +1685,19 @@ export default function PayrollDetail({
   async function handleImportEmployeeHoursV2() {
     if (!employeeImportDialog) return;
     if (!employeeImportDialog.entryId) {
-      setEmployeeImportError("KhÃ´ng xÃ¡c Ä‘á»‹nh Ä‘Æ°á»£c dÃ²ng lÆ°Æ¡ng cáº§n import.");
+      setEmployeeImportError("Không xác định được dòng lương cần import.");
       return;
     }
     if (!employeeImportDialog.startDate || !employeeImportDialog.endDate) {
-      setEmployeeImportError("Vui lÃ²ng chá»n khoáº£ng ngÃ y cáº§n import.");
+      setEmployeeImportError("Vui lòng chọn khoảng ngày cần import.");
       return;
     }
     if (employeeImportDialog.startDate > employeeImportDialog.endDate) {
-      setEmployeeImportError("NgÃ y báº¯t Ä‘áº§u khÃ´ng Ä‘Æ°á»£c lá»›n hÆ¡n ngÃ y káº¿t thÃºc.");
+      setEmployeeImportError("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
       return;
     }
     if (!employeeImportFile) {
-      setEmployeeImportError("Vui lÃ²ng chá»n file cháº¥m cÃ´ng.");
+      setEmployeeImportError("Vui lòng chọn file chấm công.");
       return;
     }
 
@@ -1696,7 +1706,7 @@ export default function PayrollDetail({
     );
     if (!targetEntry) {
       setEmployeeImportError(
-        "KhÃ´ng tÃ¬m tháº¥y nhÃ¢n viÃªn trong báº£ng lÆ°Æ¡ng hiá»‡n táº¡i.",
+        "Không tìm thấy nhân viên trong bảng lương hiện tại.",
       );
       return;
     }
@@ -1742,7 +1752,7 @@ export default function PayrollDetail({
       setEmployeeImportError(
         error instanceof Error
           ? error.message
-          : "KhÃ´ng thá»ƒ import láº¡i giá» lÃ m cho nhÃ¢n viÃªn nÃ y.",
+          : "Không thể import lại giờ làm cho nhân viên này.",
       );
     } finally {
       setIsImportingEmployeeHours(false);
@@ -3063,7 +3073,7 @@ export default function PayrollDetail({
                 <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 transition hover:border-sky-300 hover:bg-sky-50">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">
-                      {employeeImportDialog.fileName || "Chọn file Excel chấm công"}
+                      {employeeImportDialog.fileName || "Chọn file chấm công (.txt, .csv, .xls, .xlsx)"}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
                       Chỉ dùng cho nhân viên này và chỉ áp dụng cho kỳ lương đang mở.
@@ -3075,7 +3085,7 @@ export default function PayrollDetail({
                   </div>
                   <input
                     type="file"
-                    accept=".xls,.xlsx"
+                    accept=".txt,.csv,.xls,.xlsx"
                     className="hidden"
                     onChange={(event) => {
                       const file = event.target.files?.[0] || null;

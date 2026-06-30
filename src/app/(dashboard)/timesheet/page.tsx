@@ -1001,20 +1001,20 @@ export default function TimesheetPage() {
                 </select>
               </div>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex w-full flex-wrap gap-2">
                 <Input
                   type="date"
                   value={startDate}
                   onChange={(event) => setStartDate(event.target.value)}
                   placeholder="Từ ngày"
-                  className="flex-1"
+                  className="flex-1 w-full"
                 />
                 <Input
                   type="date"
                   value={endDate}
                   onChange={(event) => setEndDate(event.target.value)}
                   placeholder="Đến ngày"
-                  className="flex-1"
+                  className="flex-1 w-full"
                 />
               </div>
             )}
