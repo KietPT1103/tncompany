@@ -348,8 +348,25 @@ final class TikTokCollectorService implements TikTokCollectorInterface
         $videoUsername = trim((string) ($video['video_username'] ?? $video['videoUsername'] ?? ''));
 
         foreach ($items as $item) {
-            $commentId = trim((string) ($item['comment_id'] ?? $item['commentId'] ?? $item['cid'] ?? $item['id'] ?? ''));
-            $content = trim((string) ($item['content'] ?? $item['comment_text'] ?? $item['commentText'] ?? $item['text'] ?? ''));
+            $commentId = trim((string) (
+                $item['comment_id']
+                ?? $item['commentId']
+                ?? $item['cid']
+                ?? $item['comment_id_str']
+                ?? $item['commentPk']
+                ?? $item['pk']
+                ?? $item['id']
+                ?? ''
+            ));
+            $content = trim((string) (
+                $item['content']
+                ?? $item['comment_text']
+                ?? $item['commentText']
+                ?? $item['text']
+                ?? $item['comment']
+                ?? $item['desc']
+                ?? ''
+            ));
 
             if ($commentId === '' || $content === '' || $videoId === '') {
                 continue;
@@ -362,15 +379,30 @@ final class TikTokCollectorService implements TikTokCollectorInterface
                 'author_name' => trim((string) (
                     $item['username']
                     ?? $item['uniqueId']
+                    ?? $item['userName']
+                    ?? $item['ownerUsername']
                     ?? $item['author_name']
                     ?? $item['authorName']
                     ?? $item['user']['uniqueId']
+                    ?? $item['user']['unique_id']
+                    ?? $item['user']['nickname']
                     ?? $item['author']['uniqueId']
+                    ?? $item['author']['unique_id']
+                    ?? $item['author']['nickname']
                     ?? $item['authorMeta']['name']
                     ?? ''
                 )),
                 'created_at' => $this->normalizeDateTime(
-                    (string) ($item['created_at'] ?? $item['createdAt'] ?? $item['createTimeISO'] ?? $item['createTime'] ?? '')
+                    (string) (
+                        $item['created_at']
+                        ?? $item['createdAt']
+                        ?? $item['createTimeISO']
+                        ?? $item['create_time_iso']
+                        ?? $item['createTime']
+                        ?? $item['create_time']
+                        ?? $item['timestamp']
+                        ?? ''
+                    )
                 ),
                 'video_url' => $videoUrl,
                 'share_url' => $shareUrl,

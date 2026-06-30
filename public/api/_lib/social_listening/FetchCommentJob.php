@@ -50,7 +50,7 @@ final class FetchCommentJob
 
         $this->searchService->syncSearchMetrics($searchId, [
             'status' => 'fetching_comments',
-            'progress_message' => 'Đang lấy comment thật từ TikTok.',
+            'progress_message' => 'Dang lay comment that tu TikTok.',
         ]);
 
         $items = $this->collector->fetchComments(
@@ -60,37 +60,36 @@ final class FetchCommentJob
             (string) $search['date_to']
         );
 
-        $filteredItems = [];
+        $preparedItems = [];
         foreach ($items as $item) {
             $createdAt = trim((string) ($item['created_at'] ?? $item['createdAt'] ?? ''));
-            if ($createdAt !== '') {
-                $date = substr($createdAt, 0, 10);
-                if ($date < (string) $search['date_from'] || $date > (string) $search['date_to']) {
-                    continue;
-                }
-            }
 
-            $filteredItems[] = [
+            $preparedItems[] = [
                 'search_id' => $searchId,
                 'keyword' => (string) $search['keyword'],
                 'comment_id' => $item['comment_id'] ?? $item['commentId'] ?? null,
-                'comment_text' => $item['comment_text'] ?? $item['commentText'] ?? $item['content'] ?? null,
+                'comment_text' => $item['comment_text'] ?? $item['commentText'] ?? $item['content'] ?? $item['text'] ?? null,
                 'created_at' => $createdAt !== '' ? $createdAt : null,
-                'author_name' => $item['author_name'] ?? $item['authorName'] ?? $item['username'] ?? null,
-                'username' => $item['username'] ?? $item['author_name'] ?? $item['authorName'] ?? null,
+                'author_name' => $item['author_name'] ?? $item['authorName'] ?? $item['username'] ?? $item['uniqueId'] ?? null,
+                'username' => $item['username'] ?? $item['uniqueId'] ?? $item['author_name'] ?? $item['authorName'] ?? null,
                 'video_id' => $item['video_id'] ?? $videoId,
                 'video_username' => $item['video_username'] ?? $video['video_username'] ?? null,
                 'video_url' => $item['video_url'] ?? $video['video_url'] ?? null,
                 'share_url' => $item['share_url'] ?? $video['share_url'] ?? null,
-                'like_count' => $item['like_count'] ?? $item['likeCount'] ?? 0,
+                'like_count' => $item['like_count'] ?? $item['likeCount'] ?? $item['diggCount'] ?? 0,
                 'metadata' => $item['metadata'] ?? $item,
             ];
         }
 
-        $this->ingestionService->ingest($filteredItems);
+        $ingestion = $this->ingestionService->ingest($preparedItems);
+
         $this->searchService->syncSearchMetrics($searchId, [
             'status' => 'fetching_comments',
-            'progress_message' => sprintf('Đã đồng bộ comment cho video %s.', $videoId),
+            'progress_message' => sprintf(
+                'Da dong bo %d comment cho video %s.',
+                (int) ($ingestion['processed'] ?? count($preparedItems)),
+                $videoId
+            ),
         ]);
     }
 }
