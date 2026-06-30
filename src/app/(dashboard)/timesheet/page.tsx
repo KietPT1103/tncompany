@@ -65,6 +65,15 @@ interface EmployeeSummary {
   Shifts: Shift[];
 }
 
+type ImportConflictResolution = "same_employee" | "new_employee";
+
+type EmployeeImportConflict = {
+  employeeCode: string;
+  importedName: string;
+  existingEmployee: Employee;
+  resolution: ImportConflictResolution | null;
+};
+
 const DEFAULT_IMPORTED_HOURLY_RATE = 15000;
 
 function normalizeImportedEmployeeName(value?: string) {
@@ -75,7 +84,7 @@ function normalizeImportedEmployeeName(value?: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function isReusedEmployeeCode(existingEmployee: Employee | undefined, importedName: string) {
+function hasEmployeeNameConflict(existingEmployee: Employee | undefined, importedName: string) {
   if (!existingEmployee) return false;
 
   const normalizedImportedName = normalizeImportedEmployeeName(importedName);
@@ -175,6 +184,7 @@ export default function TimesheetPage() {
     y: number;
     errors: string[];
   } | null>(null);
+  const [importConflicts, setImportConflicts] = useState<EmployeeImportConflict[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEmpIndex, setSelectedEmpIndex] = useState<number | null>(null);
   const [dbEmployees, setDbEmployees] = useState<Employee[]>([]);
@@ -384,6 +394,11 @@ export default function TimesheetPage() {
       });
   }, [summaryData, searchTerm, filterRole, filterError, sortConfig]);
 
+  const unresolvedImportConflicts = useMemo(
+    () => importConflicts.filter((conflict) => !conflict.resolution),
+    [importConflicts]
+  );
+
   const handleSort = (key: "Name" | "TotalHours" | "TotalSalary") => {
     let direction: "asc" | "desc" | null = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") {
@@ -446,6 +461,8 @@ export default function TimesheetPage() {
     setLoading(true);
     setError("");
     setSummaryData([]);
+    setImportConflicts([]);
+    setSavedPayrollId("");
 
     try {
       const rawData = await parseFile(file);
@@ -482,6 +499,7 @@ export default function TimesheetPage() {
       }
 
       const summaries: EmployeeSummary[] = [];
+      const nextConflicts: EmployeeImportConflict[] = [];
       for (const employeeCode of employeeCodes) {
         const matchedDbEmployee = dbEmployees.find(
           (employee) => employee.employeeCode?.trim() === employeeCode
@@ -490,17 +508,10 @@ export default function TimesheetPage() {
           employeeCode,
           selectedRowsByEmployee[employeeCode] || []
         );
-        const resolvedImportedName = displayName.trim();
-        const reusedEmployeeCode = isReusedEmployeeCode(
-          matchedDbEmployee,
-          resolvedImportedName
-        );
-        const effectiveDbEmployee = reusedEmployeeCode ? undefined : matchedDbEmployee;
         const useMonthlySalary =
-          !reusedEmployeeCode &&
-          resolveImportedSalaryType(effectiveDbEmployee) === "monthly";
+          resolveImportedSalaryType(matchedDbEmployee) === "monthly";
 
-        if (mode === "month" && selectedPeriod === 1 && isMonthlyEmployee(effectiveDbEmployee)) {
+        if (mode === "month" && selectedPeriod === 1 && isMonthlyEmployee(matchedDbEmployee)) {
           continue;
         }
 
@@ -516,6 +527,16 @@ export default function TimesheetPage() {
           useMonthlySalary && sourceRows !== (selectedRowsByEmployee[employeeCode] || [])
             ? summarizeRows(employeeCode, sourceRows)
             : { displayName, totalHours, weekendHours, errors, shifts };
+        const resolvedImportedName = summarizedSource.displayName.trim();
+
+        if (hasEmployeeNameConflict(matchedDbEmployee, resolvedImportedName)) {
+          nextConflicts.push({
+            employeeCode,
+            importedName: resolvedImportedName,
+            existingEmployee: matchedDbEmployee as Employee,
+            resolution: null,
+          });
+        }
 
         /*
         while (pointer < rows.length) {
@@ -585,38 +606,23 @@ export default function TimesheetPage() {
           dbId: matchedDbEmployee?.id,
           Name:
             summarizedSource.displayName.trim() ||
-            effectiveDbEmployee?.name ||
+            matchedDbEmployee?.name ||
             `Unknown_${employeeCode}`,
           EnNo: employeeCode,
-          Role: reusedEmployeeCode
-            ? defaultRole
-            : effectiveDbEmployee?.role || "",
-          SalaryType: reusedEmployeeCode
-            ? "hourly"
-            : useMonthlySalary
-              ? "monthly"
-              : "hourly",
+          Role: matchedDbEmployee?.role || "",
+          SalaryType: useMonthlySalary ? "monthly" : "hourly",
           Allowance: 0,
           Note: "",
           TotalHours: summarizedSource.totalHours,
           WeekendHours: summarizedSource.weekendHours,
-          SalaryPerHour:
-            reusedEmployeeCode
-              ? DEFAULT_IMPORTED_HOURLY_RATE
-              : effectiveDbEmployee?.hourlyRate || DEFAULT_IMPORTED_HOURLY_RATE,
-          MonthlySalary: reusedEmployeeCode ? 0 : effectiveDbEmployee?.monthlySalary || 0,
-          ExpectedWorkDays:
-            reusedEmployeeCode ? 0 : effectiveDbEmployee?.expectedWorkDays || 30,
-          PaidLeaveDays: reusedEmployeeCode ? 0 : effectiveDbEmployee?.paidLeaveDays || 0,
-          AttendanceBonusEnabled:
-            reusedEmployeeCode
-              ? false
-              : effectiveDbEmployee?.attendanceBonusEnabled || false,
-          AttendanceBonusDays:
-            reusedEmployeeCode ? 0 : effectiveDbEmployee?.attendanceBonusDays || 0,
-          AttendanceBonusAmount:
-            reusedEmployeeCode ? 0 : effectiveDbEmployee?.attendanceBonusAmount || 0,
-          StandardHours: reusedEmployeeCode ? 0 : effectiveDbEmployee?.standardHours || 0,
+          SalaryPerHour: matchedDbEmployee?.hourlyRate || DEFAULT_IMPORTED_HOURLY_RATE,
+          MonthlySalary: matchedDbEmployee?.monthlySalary || 0,
+          ExpectedWorkDays: matchedDbEmployee?.expectedWorkDays || 30,
+          PaidLeaveDays: matchedDbEmployee?.paidLeaveDays || 0,
+          AttendanceBonusEnabled: matchedDbEmployee?.attendanceBonusEnabled || false,
+          AttendanceBonusDays: matchedDbEmployee?.attendanceBonusDays || 0,
+          AttendanceBonusAmount: matchedDbEmployee?.attendanceBonusAmount || 0,
+          StandardHours: matchedDbEmployee?.standardHours || 0,
           TotalSalary: 0,
           Errors: summarizedSource.errors,
           Shifts: summarizedSource.shifts,
@@ -629,6 +635,7 @@ export default function TimesheetPage() {
 
       summaries.sort((left, right) => (left.Role || "").localeCompare(right.Role || ""));
       setSummaryData(summaries);
+      setImportConflicts(nextConflicts);
     } catch (err) {
       console.error(err);
       setError("Có lỗi xảy ra khi xử lý file.");
@@ -729,10 +736,83 @@ export default function TimesheetPage() {
     );
   };
 
+  const handleConflictResolutionChange = (
+    employeeCode: string,
+    resolution: ImportConflictResolution
+  ) => {
+    const targetConflict = importConflicts.find(
+      (conflict) => conflict.employeeCode === employeeCode
+    );
+    if (!targetConflict) return;
+
+    setImportConflicts((current) =>
+      current.map((conflict) =>
+        conflict.employeeCode === employeeCode ? { ...conflict, resolution } : conflict
+      )
+    );
+
+    setSummaryData((current) =>
+      current.map((employee) => {
+        if (employee.EnNo !== employeeCode) return employee;
+
+        if (resolution === "same_employee") {
+          const salaryType = resolveImportedSalaryType(targetConflict.existingEmployee);
+          const nextEmployee: EmployeeSummary = {
+            ...employee,
+            dbId: targetConflict.existingEmployee.id,
+            Name: targetConflict.existingEmployee.name,
+            Role: targetConflict.existingEmployee.role || "",
+            SalaryType: salaryType,
+            SalaryPerHour:
+              targetConflict.existingEmployee.hourlyRate || DEFAULT_IMPORTED_HOURLY_RATE,
+            MonthlySalary: targetConflict.existingEmployee.monthlySalary || 0,
+            ExpectedWorkDays:
+              salaryType === "monthly"
+                ? targetConflict.existingEmployee.expectedWorkDays || 30
+                : targetConflict.existingEmployee.expectedWorkDays || 0,
+            PaidLeaveDays: targetConflict.existingEmployee.paidLeaveDays || 0,
+            AttendanceBonusEnabled:
+              targetConflict.existingEmployee.attendanceBonusEnabled || false,
+            AttendanceBonusDays: targetConflict.existingEmployee.attendanceBonusDays || 0,
+            AttendanceBonusAmount:
+              targetConflict.existingEmployee.attendanceBonusAmount || 0,
+            StandardHours: targetConflict.existingEmployee.standardHours || 0,
+          };
+          nextEmployee.TotalSalary = calculateEmployeeTotal(nextEmployee);
+          return nextEmployee;
+        }
+
+        const nextEmployee: EmployeeSummary = {
+          ...employee,
+          dbId: targetConflict.existingEmployee.id,
+          Name: targetConflict.importedName,
+          Role: defaultRole,
+          SalaryType: "hourly",
+          SalaryPerHour: DEFAULT_IMPORTED_HOURLY_RATE,
+          MonthlySalary: 0,
+          ExpectedWorkDays: 0,
+          PaidLeaveDays: 0,
+          AttendanceBonusEnabled: false,
+          AttendanceBonusDays: 0,
+          AttendanceBonusAmount: 0,
+          StandardHours: 0,
+        };
+        nextEmployee.TotalSalary = calculateEmployeeTotal(nextEmployee);
+        return nextEmployee;
+      })
+    );
+  };
+
   const handleSaveToDB = async () => {
     if (!storeId) return;
     if (summaryData.length === 0) {
       setError("Chưa có dữ liệu để lưu.");
+      return;
+    }
+    if (unresolvedImportConflicts.length > 0) {
+      setError(
+        `Có ${unresolvedImportConflicts.length} nhân viên cần kiểm tra do mã trùng nhưng tên khác. Vui lòng xác nhận trước khi lưu DB.`
+      );
       return;
     }
 
@@ -753,6 +833,9 @@ export default function TimesheetPage() {
             (emp) => emp.employeeCode?.trim() === employee.EnNo
           );
           const salaryType = employee.SalaryType || resolveImportedSalaryType(matchedDbEmployee);
+          const matchedConflict = importConflicts.find(
+            (conflict) => conflict.employeeCode === employee.EnNo
+          );
           
           return {
             employeeId: employee.dbId || `manual_${employee.EnNo || Date.now()}`,
@@ -774,6 +857,12 @@ export default function TimesheetPage() {
             attendanceBonusDays: salaryType === "monthly" ? employee.AttendanceBonusDays : 0,
             attendanceBonusAmount: salaryType === "monthly" ? employee.AttendanceBonusAmount : 0,
             standardHours: salaryType === "monthly" ? employee.StandardHours : 0,
+            employeeReuseDecision:
+              matchedConflict?.resolution === "new_employee"
+                ? "new_employee"
+                : matchedConflict?.resolution === "same_employee"
+                  ? "same_employee"
+                  : null,
             shifts: employee.Shifts,
           };
         }) as Array<Partial<PayrollEntry>>,
@@ -956,6 +1045,82 @@ export default function TimesheetPage() {
 
       {error ? (
         <div className="rounded-md border border-red-100 bg-red-50 p-4 text-red-600">{error}</div>
+      ) : null}
+
+      {importConflicts.length > 0 ? (
+        <Card className="border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-base font-semibold text-amber-900">
+                Có nhân viên cần kiểm tra trước khi lưu DB
+              </h3>
+              <p className="mt-1 text-sm text-amber-800">
+                Mã trùng nhưng tên trong file khác tên đang lưu. Hãy xác nhận đây là cùng người hay người mới dùng lại mã cũ.
+              </p>
+            </div>
+            <div className="space-y-3">
+              {importConflicts.map((conflict) => (
+                <div
+                  key={conflict.employeeCode}
+                  className="rounded-xl border border-amber-200 bg-white px-4 py-3"
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="space-y-1 text-sm">
+                      <div className="font-semibold text-slate-900">
+                        Mã {conflict.employeeCode}
+                      </div>
+                      <div className="text-slate-600">
+                        Hệ thống: <span className="font-medium">{conflict.existingEmployee.name}</span>
+                      </div>
+                      <div className="text-slate-600">
+                        File import: <span className="font-medium">{conflict.importedName}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant={conflict.resolution === "same_employee" ? "default" : "outline"}
+                        className={
+                          conflict.resolution === "same_employee"
+                            ? "bg-sky-600 text-white hover:bg-sky-700"
+                            : "border-sky-200 text-sky-700 hover:bg-sky-50"
+                        }
+                        onClick={() =>
+                          handleConflictResolutionChange(
+                            conflict.employeeCode,
+                            "same_employee"
+                          )
+                        }
+                      >
+                        Cùng người
+                      </Button>
+                      <Button
+                        variant={conflict.resolution === "new_employee" ? "default" : "outline"}
+                        className={
+                          conflict.resolution === "new_employee"
+                            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                            : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        }
+                        onClick={() =>
+                          handleConflictResolutionChange(
+                            conflict.employeeCode,
+                            "new_employee"
+                          )
+                        }
+                      >
+                        Người mới dùng lại mã
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-sm font-medium text-amber-900">
+              {unresolvedImportConflicts.length > 0
+                ? `Còn ${unresolvedImportConflicts.length} nhân viên chưa xác nhận, chưa thể lưu DB.`
+                : "Đã xác nhận xong tất cả nhân viên xung đột, có thể lưu DB."}
+            </div>
+          </div>
+        </Card>
       ) : null}
 
       {summaryData.length > 0 ? (

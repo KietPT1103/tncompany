@@ -411,7 +411,36 @@ const getEntryShiftDateDefaults = (entry: PayrollEntry) => {
   };
 };
 
+const parsePlainTextTimesheetRows = async (
+  file: File,
+): Promise<TimesheetImportRow[]> => {
+  const text = await file.text();
+  const lines = text.split(/\r?\n/);
+  const rows: TimesheetImportRow[] = [];
+
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) continue;
+
+    const values = line.split("\t");
+    if (values.length < 7) continue;
+
+    rows.push({
+      employeeCode: String(values[2] ?? "").trim(),
+      employeeName: String(values[3] ?? "").trim(),
+      dateTime: String(values[6] ?? "").trim(),
+    });
+  }
+
+  return rows.filter((row) => row.dateTime && parseTimesheetDateTime(row.dateTime));
+};
+
 const parseTimesheetImportFile = async (file: File): Promise<TimesheetImportRow[]> => {
+  const fileName = file.name.trim().toLowerCase();
+  if (fileName.endsWith(".txt") || fileName.endsWith(".csv")) {
+    return parsePlainTextTimesheetRows(file);
+  }
+
   const data = await file.arrayBuffer();
   const workbook = XLSX.read(data, { type: "array" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -3162,30 +3191,6 @@ export default function PayrollDetail({
             </div>
 
             <div className="mt-5 space-y-3 text-sm">
-              {salaryDetailLateSummary?.configuredStartTimes?.length ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-amber-800">
-                      Giờ vào chuẩn:{" "}
-                      {salaryDetailLateSummary.configuredStartTimes
-                        .map((item) => `${item.label} ${item.time}`)
-                        .join(" • ")}
-                    </span>
-                    <span className="font-semibold text-amber-900">
-                      {salaryDetailLateSummary.lateShiftCount > 0
-                        ? `Trễ ${salaryDetailLateSummary.lateShiftCount} ca`
-                        : "Đúng giờ"}
-                    </span>
-                  </div>
-                  {salaryDetailLateSummary.lateShiftCount > 0 ? (
-                    <div className="mt-2 text-xs text-amber-800/80">
-                      Tổng trễ {salaryDetailLateSummary.totalLateMinutes} phút,
-                      trễ nhiều nhất {salaryDetailLateSummary.maxLateMinutes} phút.
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
               {salaryDetailBreakdown.baseSalary > 0 ? (
               <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
                 <span className="text-slate-600">
@@ -3328,6 +3333,30 @@ export default function PayrollDetail({
                 {formatCurrency(salaryDetailEntry.salary || 0)}
               </span>
             </div>
+
+            {salaryDetailLateSummary?.configuredStartTimes?.length ? (
+              <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-amber-800">
+                    Giờ vào chuẩn:{" "}
+                    {salaryDetailLateSummary.configuredStartTimes
+                      .map((item) => `${item.label} ${item.time}`)
+                      .join(" • ")}
+                  </span>
+                  <span className="font-semibold text-amber-900">
+                    {salaryDetailLateSummary.lateShiftCount > 0
+                      ? `Trễ ${salaryDetailLateSummary.lateShiftCount} ca`
+                      : "Đúng giờ"}
+                  </span>
+                </div>
+                {salaryDetailLateSummary.lateShiftCount > 0 ? (
+                  <div className="mt-2 text-xs text-amber-800/80">
+                    Tổng trễ {salaryDetailLateSummary.totalLateMinutes} phút,
+                    trễ nhiều nhất {salaryDetailLateSummary.maxLateMinutes} phút.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

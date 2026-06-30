@@ -268,6 +268,7 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
     $attendanceBonusDays = (float) ($employee['attendanceBonusDays'] ?? 0);
     $attendanceBonusAmount = (float) ($employee['attendanceBonusAmount'] ?? 0);
     $standardHours = (float) ($employee['standardHours'] ?? 0);
+    $employeeReuseDecision = trim((string) ($employee['employeeReuseDecision'] ?? ''));
     $existingEmployee = null;
 
     if ($employeeId !== '' && strpos($employeeId, 'manual_') !== 0) {
@@ -297,7 +298,7 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
         $existingEmployee = $findByCode->fetch() ?: null;
     }
 
-    if (payrolls_should_reset_employee_profile($existingEmployee, $name)) {
+    if ($employeeReuseDecision === 'new_employee') {
         $salaryType = 'hourly';
         $hourlyRate = PAYROLLS_DEFAULT_HOURLY_RATE;
         $monthlySalary = 0;
