@@ -5,6 +5,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 
+const PAYROLLS_DEFAULT_HOURLY_RATE = 15000.0;
+
 function payrolls_ensure_column(string $table, string $column, string $definition): void
 {
     if (!preg_match('/^[a-z_]+$/', $table) || !preg_match('/^[a-z_]+$/', $column)) {
@@ -53,6 +55,37 @@ function payrolls_normalize_salary_type(?string $value, array $source = []): str
     }
 
     return payrolls_has_monthly_signals($source) ? 'monthly' : 'hourly';
+}
+
+function payrolls_normalize_employee_name(string $value): string
+{
+    $normalized = trim(mb_strtolower($value, 'UTF-8'));
+    if ($normalized === '') {
+        return '';
+    }
+
+    $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $normalized);
+    if ($ascii === false) {
+        return $normalized;
+    }
+
+    return preg_replace('/\s+/', ' ', trim($ascii)) ?: '';
+}
+
+function payrolls_should_reset_employee_profile(?array $existingEmployee, string $incomingName): bool
+{
+    if ($existingEmployee === null) {
+        return false;
+    }
+
+    $normalizedIncomingName = payrolls_normalize_employee_name($incomingName);
+    $normalizedExistingName = payrolls_normalize_employee_name((string) ($existingEmployee['name'] ?? ''));
+
+    if ($normalizedIncomingName === '' || $normalizedExistingName === '') {
+        return false;
+    }
+
+    return $normalizedIncomingName !== $normalizedExistingName;
 }
 
 function payrolls_ensure_tables(): void
@@ -235,8 +268,53 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
     $attendanceBonusDays = (float) ($employee['attendanceBonusDays'] ?? 0);
     $attendanceBonusAmount = (float) ($employee['attendanceBonusAmount'] ?? 0);
     $standardHours = (float) ($employee['standardHours'] ?? 0);
+    $existingEmployee = null;
 
     if ($employeeId !== '' && strpos($employeeId, 'manual_') !== 0) {
+        $findById = db()->prepare(
+            'SELECT id, employee_code, name
+             FROM employees
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $findById->execute([
+            'id' => $employeeId,
+        ]);
+        $existingEmployee = $findById->fetch() ?: null;
+    }
+
+    if ($existingEmployee === null && $employeeCode !== '') {
+        $findByCode = db()->prepare(
+            'SELECT id, employee_code, name
+             FROM employees
+             WHERE store_id = :store_id AND employee_code = :employee_code
+             LIMIT 1'
+        );
+        $findByCode->execute([
+            'store_id' => $storeId,
+            'employee_code' => $employeeCode,
+        ]);
+        $existingEmployee = $findByCode->fetch() ?: null;
+    }
+
+    if (payrolls_should_reset_employee_profile($existingEmployee, $name)) {
+        $salaryType = 'hourly';
+        $hourlyRate = PAYROLLS_DEFAULT_HOURLY_RATE;
+        $monthlySalary = 0;
+        $expectedWorkDays = 0;
+        $paidLeaveDays = 0;
+        $attendanceBonusEnabled = 0;
+        $attendanceBonusDays = 0;
+        $attendanceBonusAmount = 0;
+        $standardHours = 0;
+    }
+
+    if (
+        $employeeId !== ''
+        && strpos($employeeId, 'manual_') !== 0
+        && $existingEmployee !== null
+        && (string) ($existingEmployee['id'] ?? '') === $employeeId
+    ) {
         $update = db()->prepare(
             'UPDATE employees
              SET employee_code = :employee_code, name = :name, role = :role, hourly_rate = :hourly_rate,
@@ -268,16 +346,7 @@ function payrolls_upsert_employee(string $storeId, array $employee): string
     }
 
     if ($employeeCode !== '') {
-        $find = db()->prepare(
-            'SELECT id FROM employees
-             WHERE store_id = :store_id AND employee_code = :employee_code
-             LIMIT 1'
-        );
-        $find->execute([
-            'store_id' => $storeId,
-            'employee_code' => $employeeCode,
-        ]);
-        $existingId = (string) ($find->fetch()['id'] ?? '');
+        $existingId = (string) ($existingEmployee['id'] ?? '');
         if ($existingId !== '') {
             $update = db()->prepare(
                 'UPDATE employees

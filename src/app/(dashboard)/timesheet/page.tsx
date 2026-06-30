@@ -65,6 +65,29 @@ interface EmployeeSummary {
   Shifts: Shift[];
 }
 
+const DEFAULT_IMPORTED_HOURLY_RATE = 15000;
+
+function normalizeImportedEmployeeName(value?: string) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isReusedEmployeeCode(existingEmployee: Employee | undefined, importedName: string) {
+  if (!existingEmployee) return false;
+
+  const normalizedImportedName = normalizeImportedEmployeeName(importedName);
+  const normalizedExistingName = normalizeImportedEmployeeName(existingEmployee.name);
+
+  if (!normalizedImportedName || !normalizedExistingName) {
+    return false;
+  }
+
+  return normalizedImportedName !== normalizedExistingName;
+}
+
 function buildPayrollEntryFromSummary(employee: EmployeeSummary): PayrollEntry {
   return {
     payrollId: "",
@@ -463,10 +486,17 @@ export default function TimesheetPage() {
         const matchedDbEmployee = dbEmployees.find(
           (employee) => employee.employeeCode?.trim() === employeeCode
         );
+        const resolvedImportedName = displayName.trim();
+        const reusedEmployeeCode = isReusedEmployeeCode(
+          matchedDbEmployee,
+          resolvedImportedName
+        );
+        const effectiveDbEmployee = reusedEmployeeCode ? undefined : matchedDbEmployee;
         const useMonthlySalary =
-          resolveImportedSalaryType(matchedDbEmployee) === "monthly";
+          !reusedEmployeeCode &&
+          resolveImportedSalaryType(effectiveDbEmployee) === "monthly";
 
-        if (mode === "month" && selectedPeriod === 1 && isMonthlyEmployee(matchedDbEmployee)) {
+        if (mode === "month" && selectedPeriod === 1 && isMonthlyEmployee(effectiveDbEmployee)) {
           continue;
         }
 
@@ -549,22 +579,40 @@ export default function TimesheetPage() {
         */
         const summary: EmployeeSummary = {
           dbId: matchedDbEmployee?.id,
-          Name: matchedDbEmployee?.name || displayName,
+          Name:
+            resolvedImportedName ||
+            effectiveDbEmployee?.name ||
+            `Unknown_${employeeCode}`,
           EnNo: employeeCode,
-          Role: matchedDbEmployee?.role || "",
-          SalaryType: useMonthlySalary ? "monthly" : "hourly",
+          Role: reusedEmployeeCode
+            ? defaultRole
+            : effectiveDbEmployee?.role || "",
+          SalaryType: reusedEmployeeCode
+            ? "hourly"
+            : useMonthlySalary
+              ? "monthly"
+              : "hourly",
           Allowance: 0,
           Note: "",
           TotalHours: totalHours,
           WeekendHours: weekendHours,
-          SalaryPerHour: matchedDbEmployee?.hourlyRate || 15000,
-          MonthlySalary: matchedDbEmployee?.monthlySalary || 0,
-          ExpectedWorkDays: matchedDbEmployee?.expectedWorkDays || 30,
-          PaidLeaveDays: matchedDbEmployee?.paidLeaveDays || 0,
-          AttendanceBonusEnabled: matchedDbEmployee?.attendanceBonusEnabled || false,
-          AttendanceBonusDays: matchedDbEmployee?.attendanceBonusDays || 0,
-          AttendanceBonusAmount: matchedDbEmployee?.attendanceBonusAmount || 0,
-          StandardHours: matchedDbEmployee?.standardHours || 0,
+          SalaryPerHour:
+            reusedEmployeeCode
+              ? DEFAULT_IMPORTED_HOURLY_RATE
+              : effectiveDbEmployee?.hourlyRate || DEFAULT_IMPORTED_HOURLY_RATE,
+          MonthlySalary: reusedEmployeeCode ? 0 : effectiveDbEmployee?.monthlySalary || 0,
+          ExpectedWorkDays:
+            reusedEmployeeCode ? 0 : effectiveDbEmployee?.expectedWorkDays || 30,
+          PaidLeaveDays: reusedEmployeeCode ? 0 : effectiveDbEmployee?.paidLeaveDays || 0,
+          AttendanceBonusEnabled:
+            reusedEmployeeCode
+              ? false
+              : effectiveDbEmployee?.attendanceBonusEnabled || false,
+          AttendanceBonusDays:
+            reusedEmployeeCode ? 0 : effectiveDbEmployee?.attendanceBonusDays || 0,
+          AttendanceBonusAmount:
+            reusedEmployeeCode ? 0 : effectiveDbEmployee?.attendanceBonusAmount || 0,
+          StandardHours: reusedEmployeeCode ? 0 : effectiveDbEmployee?.standardHours || 0,
           TotalSalary: 0,
           Errors: errors,
           Shifts: shifts,
