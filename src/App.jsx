@@ -19,6 +19,7 @@ import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
 import SocialListeningPage from "./app/(dashboard)/social-listening/page";
 import GestureStudioPage from "./app/(dashboard)/gesture-studio/page";
+import DustRitualPage from "./app/dust-ritual/page";
 import EditSeoArticlePage from "./app/(dashboard)/seo-articles/[id]/page";
 import NewSeoArticlePage from "./app/(dashboard)/seo-articles/new/page";
 import SeoArticlesPage from "./app/(dashboard)/seo-articles/page";
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/gesture-studio" element={<GestureStudioPage />} />
+        <Route path="/dust-ritual" element={<DustRitualPage />} />
         <Route
           path="/admin"
           element={
