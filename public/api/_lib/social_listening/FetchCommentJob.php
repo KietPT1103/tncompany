@@ -50,7 +50,7 @@ final class FetchCommentJob
 
         $this->searchService->syncSearchMetrics($searchId, [
             'status' => 'fetching_comments',
-            'progress_message' => 'Dang lay comment that tu TikTok.',
+            'progress_message' => 'Đang thu thập comment từ TikTok.',
         ]);
 
         $items = $this->collector->fetchComments(
@@ -86,7 +86,7 @@ final class FetchCommentJob
         $this->searchService->syncSearchMetrics($searchId, [
             'status' => 'fetching_comments',
             'progress_message' => sprintf(
-                'Da dong bo %d comment cho video %s.',
+                'Đã đồng bộ %d comment cho video %s.',
                 (int) ($ingestion['processed'] ?? count($preparedItems)),
                 $videoId
             ),
