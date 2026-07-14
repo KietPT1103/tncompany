@@ -31,6 +31,14 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: "Sinh bill ao theo tong doanh thu va so luong bill.",
     category: "Giao dich",
     path: "/virtual-bills",
+    hidden: true,
+  },
+  {
+    id: "sample_bills.access",
+    label: "Tao bill mau",
+    description: "Quan ly san pham va tao file bill mau.",
+    category: "Giao dich",
+    path: "/sample-bills",
   },
   {
     id: "payroll_estimate.access",
@@ -304,6 +312,7 @@ export function canAccessPath(
 const DEFAULT_ROUTE_ORDER = [
   "/",
   "/pos",
+  "/sample-bills/products",
   "/payroll-estimate",
   "/payroll",
   "/timesheet",

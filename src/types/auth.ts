@@ -3,6 +3,7 @@ export type AppPermission =
   | "dashboard.access"
   | "bills.access"
   | "virtual_bills.access"
+  | "sample_bills.access"
   | "payroll_estimate.access"
   | "payroll.access"
   | "timesheet.access"

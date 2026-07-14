@@ -25,7 +25,10 @@ import NewSeoArticlePage from "./app/(dashboard)/seo-articles/new/page";
 import SeoArticlesPage from "./app/(dashboard)/seo-articles/page";
 import TaxInvoicesPage from "./app/(dashboard)/tax-invoices/page";
 import TimesheetPage from "./app/(dashboard)/timesheet/page";
-import VirtualBillsPage from "./app/(dashboard)/virtual-bills/page";
+import SampleBillProductsPage from "./app/(dashboard)/sample-bills/products/page";
+import CoffeeSampleBillsPage from "./app/(dashboard)/sample-bills/coffee/page";
+import HotpotSampleBillsPage from "./app/(dashboard)/sample-bills/hotpot/page";
+import FarmSampleBillsPage from "./app/(dashboard)/sample-bills/farm/page";
 import LoginPage from "./app/login/page";
 import RoleGuard from "./components/RoleGuard";
 import SeoManager from "./components/SeoManager";
@@ -97,7 +100,11 @@ export default function App() {
               <Route path="reports" element={<ReportsPage />} />
               <Route path="reports/:id" element={<ReportDetailPage />} />
               <Route path="cash-flow" element={<CashFlowPage />} />
-              <Route path="virtual-bills" element={<VirtualBillsPage />} />
+              <Route path="virtual-bills" element={<Navigate to="/admin/sample-bills/coffee" replace />} />
+              <Route path="sample-bills/products" element={<SampleBillProductsPage />} />
+              <Route path="sample-bills/coffee" element={<CoffeeSampleBillsPage />} />
+              <Route path="sample-bills/hotpot" element={<HotpotSampleBillsPage />} />
+              <Route path="sample-bills/farm" element={<FarmSampleBillsPage />} />
               <Route path="product" element={<ProductsPage />} />
               <Route path="product/checks" element={<InventoryChecksPage />} />
               <Route path="product/receipts" element={<InventoryReceiptsPage />} />

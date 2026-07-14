@@ -16,6 +16,7 @@ import {
   ChevronsUpDown,
   Coffee,
   FileText,
+  FileSpreadsheet,
   KeyRound,
   LogOut,
   Menu,
@@ -62,15 +63,43 @@ const navGroups: NavGroup[] = [
     icon: ReceiptText,
     items: [
       { href: "/pos", label: "Hóa đơn", icon: ReceiptText, permission: "bills.access" },
-      {
-        href: "/virtual-bills",
-        label: "Tạo bill ảo",
-        icon: ReceiptText,
-        permission: "virtual_bills.access",
-        roles: ["admin"],
-      },
       { href: "/reports", label: "Báo cáo", icon: FileText, permission: "reports.access" },
       { href: "/cash-flow", label: "Dòng tiền", icon: BarChart3, permission: "cash_flow.access" },
+    ],
+  },
+  {
+    key: "sample-bills",
+    label: "Tạo bill mẫu",
+    icon: FileSpreadsheet,
+    items: [
+      {
+        href: "/sample-bills/products",
+        label: "DS sản phẩm",
+        icon: Package,
+        permission: "sample_bills.access",
+        roles: ["admin"],
+      },
+      {
+        href: "/sample-bills/coffee",
+        label: "Mẫu nước",
+        icon: Coffee,
+        permission: "sample_bills.access",
+        roles: ["admin"],
+      },
+      {
+        href: "/sample-bills/hotpot",
+        label: "Mẫu lẩu",
+        icon: UtensilsCrossed,
+        permission: "sample_bills.access",
+        roles: ["admin"],
+      },
+      {
+        href: "/sample-bills/farm",
+        label: "Mẫu farm",
+        icon: Tractor,
+        permission: "sample_bills.access",
+        roles: ["admin"],
+      },
     ],
   },
   {
