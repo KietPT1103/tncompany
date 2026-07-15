@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createPayroll,
@@ -14,6 +14,11 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import { Input } from "@/components/ui/Input";
+import { Pagination } from "@/components/ui/Pagination";
+import {
+  paginateItems,
+  sortByCreatedAtDesc,
+} from "@/lib/listPagination";
 import {
   ArrowRight,
   CalendarRange,
@@ -52,10 +57,27 @@ export default function PayrollManager({
     useState<Payroll | null>(null);
   const [deletingPayrollId, setDeletingPayrollId] = useState<string | null>(null);
   const [notice, setNotice] = useState<PayrollNotice | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
+    setCurrentPage(1);
     loadPayrolls();
   }, [storeId]);
+
+  const sortedPayrolls = useMemo(
+    () => sortByCreatedAtDesc(payrolls),
+    [payrolls],
+  );
+  const payrollPage = useMemo(
+    () => paginateItems(sortedPayrolls, currentPage),
+    [currentPage, sortedPayrolls],
+  );
+
+  useEffect(() => {
+    if (currentPage !== payrollPage.pagination.currentPage) {
+      setCurrentPage(payrollPage.pagination.currentPage);
+    }
+  }, [currentPage, payrollPage.pagination.currentPage]);
 
   async function loadPayrolls() {
     if (!storeId) return;
@@ -109,6 +131,7 @@ export default function PayrollManager({
       );
       setNewPayrollName("");
       setLoadError("");
+      setCurrentPage(1);
       await loadPayrolls();
       onSelectPayroll(payrollId);
     } catch (error) {
@@ -321,7 +344,7 @@ export default function PayrollManager({
           </div>
 
           <div className="divide-y divide-slate-200">
-            {payrolls.map((payroll) => {
+            {payrollPage.items.map((payroll) => {
               const isEditing = editingId === payroll.id;
 
               return (
@@ -491,6 +514,11 @@ export default function PayrollManager({
               );
             })}
           </div>
+          <Pagination
+            currentPage={payrollPage.pagination.currentPage}
+            totalItems={sortedPayrolls.length}
+            onPageChange={setCurrentPage}
+          />
         </section>
       )}
 

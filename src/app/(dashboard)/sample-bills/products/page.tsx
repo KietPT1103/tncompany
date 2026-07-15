@@ -30,10 +30,15 @@ import {
 import RoleGuard from "@/components/RoleGuard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Pagination } from "@/components/ui/Pagination";
 import {
   SelectBox,
   type SelectBoxOption,
 } from "@/components/ui/SelectBox";
+import {
+  paginateItems,
+  sortByCreatedAtDesc,
+} from "@/lib/listPagination";
 import {
   parseSampleBillProductWorkbook,
   type ParsedSampleBillProductRow,
@@ -232,6 +237,7 @@ export default function SampleBillProductsPage() {
   const [sourceFileName, setSourceFileName] = useState("");
   const [duplicateCodes, setDuplicateCodes] = useState<string[]>([]);
   const [staging, setStaging] = useState<StagedProduct[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const loadProducts = async () => {
     setLoading(true);
@@ -265,24 +271,37 @@ export default function SampleBillProductsPage() {
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("vi");
-    return products.filter((product) => {
-      const matchesQuery =
-        !normalizedQuery ||
-        product.productCode
-          .toLocaleLowerCase("vi")
-          .includes(normalizedQuery) ||
-        product.productName
-          .toLocaleLowerCase("vi")
-          .includes(normalizedQuery);
-      const matchesType =
-        typeFilter === "all" || product.billType === typeFilter;
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active" && product.isActive) ||
-        (statusFilter === "inactive" && !product.isActive);
-      return matchesQuery && matchesType && matchesStatus;
-    });
+    return sortByCreatedAtDesc(
+      products.filter((product) => {
+        const matchesQuery =
+          !normalizedQuery ||
+          product.productCode
+            .toLocaleLowerCase("vi")
+            .includes(normalizedQuery) ||
+          product.productName
+            .toLocaleLowerCase("vi")
+            .includes(normalizedQuery);
+        const matchesType =
+          typeFilter === "all" || product.billType === typeFilter;
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "active" && product.isActive) ||
+          (statusFilter === "inactive" && !product.isActive);
+        return matchesQuery && matchesType && matchesStatus;
+      }),
+    );
   }, [products, query, statusFilter, typeFilter]);
+
+  const productPage = useMemo(
+    () => paginateItems(filteredProducts, currentPage),
+    [currentPage, filteredProducts],
+  );
+
+  useEffect(() => {
+    if (currentPage !== productPage.pagination.currentPage) {
+      setCurrentPage(productPage.pagination.currentPage);
+    }
+  }, [currentPage, productPage.pagination.currentPage]);
 
   const stats = useMemo(
     () => ({
@@ -356,6 +375,7 @@ export default function SampleBillProductsPage() {
         await updateSampleBillProduct(editing.id, payload);
       } else {
         await createSampleBillProduct(payload);
+        setCurrentPage(1);
       }
       setFormOpen(false);
       setNotice({
@@ -535,6 +555,7 @@ export default function SampleBillProductsPage() {
         title: "Đã nhập DS sản phẩm",
         detail: `Thêm mới ${result.created}, cập nhật ${result.updated}.`,
       });
+      if (result.created > 0) setCurrentPage(1);
       await loadProducts();
     } catch (error) {
       const detail =
@@ -617,7 +638,10 @@ export default function SampleBillProductsPage() {
                 <input
                   type="search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="Tìm mã hoặc tên sản phẩm"
                   className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow] placeholder:text-slate-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
@@ -627,14 +651,20 @@ export default function SampleBillProductsPage() {
                   ariaLabel="Lọc loại sản phẩm"
                   value={typeFilter}
                   options={billTypeFilterOptions}
-                  onValueChange={(nextValue) => setTypeFilter(nextValue)}
+                  onValueChange={(nextValue) => {
+                    setTypeFilter(nextValue);
+                    setCurrentPage(1);
+                  }}
                   className="w-full sm:w-[180px]"
                 />
                 <SelectBox
                   ariaLabel="Lọc trạng thái"
                   value={statusFilter}
                   options={statusFilterOptions}
-                  onValueChange={(nextValue) => setStatusFilter(nextValue)}
+                  onValueChange={(nextValue) => {
+                    setStatusFilter(nextValue);
+                    setCurrentPage(1);
+                  }}
                   className="w-full sm:w-[204px]"
                 />
               </div>
@@ -681,7 +711,7 @@ export default function SampleBillProductsPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredProducts.map((product) => (
+                    productPage.items.map((product) => (
                       <tr key={product.id} className="bg-white hover:bg-slate-50">
                         <td className="px-4 py-3 font-semibold">{product.productCode}</td>
                         <td className="px-4 py-3">
@@ -735,6 +765,13 @@ export default function SampleBillProductsPage() {
                 </tbody>
               </table>
             </div>
+            {!loading && filteredProducts.length > 0 ? (
+              <Pagination
+                currentPage={productPage.pagination.currentPage}
+                totalItems={filteredProducts.length}
+                onPageChange={setCurrentPage}
+              />
+            ) : null}
           </section>
         </div>
       </main>

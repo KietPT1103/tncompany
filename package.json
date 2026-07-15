@@ -10,6 +10,7 @@
     "dev:full": "node scripts/dev-full.mjs",
     "build": "vite build && vite build --ssr src/prerender/entry-server.jsx --outDir dist-ssr && node scripts/prerender.mjs",
     "preview": "vite preview",
+    "test:list-pagination": "node --experimental-strip-types --test scripts/list-pagination.test.mjs",
     "test:social-listening": "php scripts/social-listening-classification-test.php",
     "report:social-listening": "php scripts/social-listening-report.php",
     "worker:tiktok-social-listening": "php scripts/tiktok-social-listening-worker.php --daemon 5"
