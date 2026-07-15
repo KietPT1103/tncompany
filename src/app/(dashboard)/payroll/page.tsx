@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
+
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Clock3, FileSpreadsheet, Users } from "lucide-react";
+import { Clock3, FileSpreadsheet, Users } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import EmployeeManager from "./_components/EmployeeManager";
 import PayrollManager from "./_components/PayrollManager";
@@ -56,27 +56,23 @@ export default function PayrollPage() {
   }
 
   return (
-    <div className="min-h-full bg-slate-50">
-      <div className="mx-auto max-w-screen-2xl space-y-5 p-4 lg:p-6">
-        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-10 gap-2 px-0 text-slate-500"
-                onClick={() => router.back()}
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Quay lại
-              </Button>
-              <div>
-                <h1 className="text-2xl font-semibold text-slate-900">Tính lương</h1>
-                <p className="mt-1 text-sm text-slate-500">{storeName}</p>
-              </div>
+    <div className="min-h-full bg-slate-50/80">
+      <div className="mx-auto max-w-screen-2xl space-y-5 p-3 sm:p-5 lg:p-6">
+        <header className="border-b border-slate-200 pb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-slate-950 sm:text-2xl">Tính lương</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Quản lý kỳ lương và nhân sự tại{" "}
+                <span className="font-medium text-slate-700">{storeName}</span>
+              </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div
+              className="inline-flex w-full overflow-x-auto rounded-lg border border-slate-200 bg-slate-100 p-1 lg:w-auto"
+              role="tablist"
+              aria-label="Quản lý lương"
+            >
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -89,11 +85,13 @@ export default function PayrollPage() {
                       setActiveTab(tab.id);
                       if (tab.id !== "payroll") setSelectedPayrollId(null);
                     }}
+                    role="tab"
+                    aria-selected={isActive}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition",
+                      "inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1",
                       isActive
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        ? "bg-white text-emerald-700 shadow-sm"
+                        : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -103,7 +101,7 @@ export default function PayrollPage() {
               })}
             </div>
           </div>
-        </section>
+        </header>
 
         {activeTab === "employee" ? (
           <EmployeeManager storeId={storeId} refreshKey={employeeRefreshKey} />

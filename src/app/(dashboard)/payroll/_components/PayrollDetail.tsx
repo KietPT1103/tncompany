@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 
 import { debounce } from "lodash";
 import * as XLSX from "xlsx";
@@ -38,10 +46,13 @@ import { Card, CardContent } from "@/components/ui/Card";
 
 import { Input } from "@/components/ui/Input";
 
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
+
 import { cn, preventNumberInputScroll } from "@/lib/utils";
 
 import {
   AlertCircle,
+  ArrowLeft,
   CalendarClock,
   CheckCircle2,
   Columns3,
@@ -54,6 +65,7 @@ import {
   Settings2,
   Trash2,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 
@@ -259,7 +271,11 @@ const normalizeDateOnly = (value: string) => {
   ).padStart(2, "0")}`;
 };
 
-const isDateWithinRange = (date: string, startDate: string, endDate: string) => {
+const isDateWithinRange = (
+  date: string,
+  startDate: string,
+  endDate: string,
+) => {
   if (!date) return false;
   if (startDate && date < startDate) return false;
   if (endDate && date > endDate) return false;
@@ -297,7 +313,8 @@ const parseTimesheetDateTime = (value: string) => {
 const buildShiftId = (prefix: string, index: number, suffix: string) =>
   `${prefix}-${index}-${suffix}`;
 
-const cloneShifts = (shifts: Shift[] = []) => shifts.map((shift) => ({ ...shift }));
+const cloneShifts = (shifts: Shift[] = []) =>
+  shifts.map((shift) => ({ ...shift }));
 
 const summarizeImportedShifts = (
   rows: TimesheetImportRow[],
@@ -379,8 +396,10 @@ const mergeShiftsByDateRange = (
   });
 
   return [...preserved, ...importedShifts].sort((left, right) => {
-    const leftTime = parseTimesheetDateTime(left.inTime || left.date)?.getTime() || 0;
-    const rightTime = parseTimesheetDateTime(right.inTime || right.date)?.getTime() || 0;
+    const leftTime =
+      parseTimesheetDateTime(left.inTime || left.date)?.getTime() || 0;
+    const rightTime =
+      parseTimesheetDateTime(right.inTime || right.date)?.getTime() || 0;
     return leftTime - rightTime;
   });
 };
@@ -445,7 +464,9 @@ const parsePlainTextTimesheetRows = async (
   return rows;
 };
 
-const parseTimesheetImportFile = async (file: File): Promise<TimesheetImportRow[]> => {
+const parseTimesheetImportFile = async (
+  file: File,
+): Promise<TimesheetImportRow[]> => {
   const fileName = file.name.trim().toLowerCase();
   if (fileName.endsWith(".txt") || fileName.endsWith(".csv")) {
     return parsePlainTextTimesheetRows(file);
@@ -454,7 +475,10 @@ const parseTimesheetImportFile = async (file: File): Promise<TimesheetImportRow[
   const data = await file.arrayBuffer();
   const workbook = XLSX.read(data, { type: "array" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    defval: "",
+  });
 
   const headerIndex = rows.findIndex((row) => {
     if (!Array.isArray(row)) return false;
@@ -485,7 +509,9 @@ const parseTimesheetImportFile = async (file: File): Promise<TimesheetImportRow[
   return dataRows
     .map((row) => ({
       employeeCode: String(row[employeeCodeIndex] ?? "").trim(),
-      employeeName: String(employeeNameIndex >= 0 ? row[employeeNameIndex] : "").trim(),
+      employeeName: String(
+        employeeNameIndex >= 0 ? row[employeeNameIndex] : "",
+      ).trim(),
       dateTime: String(row[dateTimeIndex] ?? "").trim(),
     }))
     .filter((row) => row.dateTime && parseTimesheetDateTime(row.dateTime));
@@ -528,7 +554,9 @@ const prepareEmployeeImportData = async ({
 
   const importedShifts = summarizeImportedShifts(
     matchedRows,
-    targetEntry.employeeCode || targetEntry.employeeId || targetEntry.employeeName,
+    targetEntry.employeeCode ||
+      targetEntry.employeeId ||
+      targetEntry.employeeName,
   );
   const mergedShifts = mergeShiftsByDateRange(
     (targetEntry.shifts || []) as Shift[],
@@ -563,35 +591,57 @@ const prepareEmployeeImportData = async ({
   };
 };
 
+type PayrollSort =
+  | "hours_desc"
+  | "salary_desc"
+  | "days_desc"
+  | "name_asc"
+  | "role_asc";
+
+type ActionMenuPosition = {
+  top: number;
+  left: number;
+  placement: "top" | "bottom";
+};
+
+const PAYROLL_SORT_OPTIONS: readonly SelectBoxOption<PayrollSort>[] = [
+  { value: "hours_desc", label: "Giờ làm giảm dần" },
+  { value: "salary_desc", label: "Tổng lương giảm dần" },
+  { value: "days_desc", label: "Ngày công giảm dần" },
+  { value: "name_asc", label: "Tên A-Z" },
+  { value: "role_asc", label: "Vai trò A-Z" },
+];
+
+const createRoleOptions = (
+  roleGroups: Record<string, string[]>,
+): SelectBoxOption<string>[] =>
+  Object.entries(roleGroups).flatMap(([group, roles]) =>
+    roles.map((role) => ({
+      value: role,
+      label: role,
+      group,
+      inset: true,
+    })),
+  );
+
 function RoleSelect({
-  roleGroups,
-
+  options,
   value,
-
   onChange,
 }: {
-  roleGroups: Record<string, string[]>;
-
+  options: readonly SelectBoxOption<string>[];
   value: string;
-
   onChange: (value: string) => void;
 }) {
   return (
-    <select
+    <SelectBox
       value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-    >
-      {Object.entries(roleGroups).map(([group, roles]) => (
-        <optgroup key={group} label={group}>
-          {roles.map((role) => (
-            <option key={role} value={role}>
-              {role}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
+      options={options}
+      onValueChange={onChange}
+      ariaLabel="Vai trò nhân viên"
+      className="w-[116px]"
+      triggerClassName="border-slate-300 bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-400 hover:bg-white"
+    />
   );
 }
 const hasInvalidShift = (entry: PayrollEntry) =>
@@ -700,7 +750,8 @@ const buildPayrollEntryPayload = (
 const hasProfileAllowances = (employee?: Employee) =>
   Array.isArray(employee?.allowances) &&
   (employee?.allowances || []).some(
-    (allowance) => (allowance?.amount || 0) > 0 || (allowance?.name || "").trim() !== "",
+    (allowance) =>
+      (allowance?.amount || 0) > 0 || (allowance?.name || "").trim() !== "",
   );
 
 const mergeEntryWithEmployeeProfile = (
@@ -777,6 +828,15 @@ export default function PayrollDetail({
 
   const defaultRole = useMemo(() => getDefaultRoleForStore(storeId), [storeId]);
 
+  const roleOptions = useMemo(
+    () => createRoleOptions(roleGroups),
+    [roleGroups],
+  );
+  const roleFilterOptions = useMemo<readonly SelectBoxOption<string>[]>(
+    () => [{ value: "All", label: "Tất cả vai trò" }, ...roleOptions],
+    [roleOptions],
+  );
+
   const [entries, setEntries] = useState<PayrollEntry[]>([]);
 
   const [savedEmployees, setSavedEmployees] = useState<Employee[]>([]);
@@ -789,7 +849,7 @@ export default function PayrollDetail({
 
   const [filterRole, setFilterRole] = useState("All");
 
-  const [sortBy, setSortBy] = useState("hours_desc");
+  const [sortBy, setSortBy] = useState<PayrollSort>("hours_desc");
 
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_COLUMNS);
 
@@ -836,15 +896,59 @@ export default function PayrollDetail({
   );
   const [employeeImportDialog, setEmployeeImportDialog] =
     useState<EmployeeImportDialogState | null>(null);
-  const [employeeImportFile, setEmployeeImportFile] = useState<File | null>(null);
+  const [employeeImportFile, setEmployeeImportFile] = useState<File | null>(
+    null,
+  );
   const [employeeImportPreview, setEmployeeImportPreview] =
     useState<EmployeeImportPreview | null>(null);
   const [employeeImportError, setEmployeeImportError] = useState("");
-  const [isImportingEmployeeHours, setIsImportingEmployeeHours] = useState(false);
-  const [entryUiMeta, setEntryUiMeta] = useState<Record<string, PayrollEntryUiMeta>>(
-    {},
-  );
+  const [isImportingEmployeeHours, setIsImportingEmployeeHours] =
+    useState(false);
+  const [entryUiMeta, setEntryUiMeta] = useState<
+    Record<string, PayrollEntryUiMeta>
+  >({});
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [actionMenuPosition, setActionMenuPosition] =
+    useState<ActionMenuPosition>({
+      top: 0,
+      left: 0,
+      placement: "bottom",
+    });
+  const actionMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const updateActionMenuPosition = useCallback(() => {
+    const trigger = actionMenuTriggerRef.current;
+    if (!trigger || typeof window === "undefined") return;
+
+    const rect = trigger.getBoundingClientRect();
+    const viewportPadding = 8;
+    const menuGap = 4;
+    const menuWidth = 224;
+    const menuHeight = Math.min(
+      actionMenuRef.current?.offsetHeight || 272,
+      window.innerHeight - viewportPadding * 2,
+    );
+    const availableBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const availableAbove = rect.top - viewportPadding;
+    const placement =
+      availableBelow < menuHeight && availableAbove > availableBelow
+        ? "top"
+        : "bottom";
+    const left = Math.min(
+      Math.max(viewportPadding, rect.right - menuWidth),
+      window.innerWidth - menuWidth - viewportPadding,
+    );
+    const top =
+      placement === "top"
+        ? Math.max(viewportPadding, rect.top - menuHeight - menuGap)
+        : Math.min(
+            rect.bottom + menuGap,
+            window.innerHeight - menuHeight - viewportPadding,
+          );
+
+    setActionMenuPosition({ top, left, placement });
+  }, []);
 
   const entrySaveQueuesRef = useRef<Record<string, Promise<void>>>({});
   const saveHighlightTimeoutsRef = useRef<Record<string, number>>({});
@@ -971,12 +1075,43 @@ export default function PayrollDetail({
     [],
   );
 
+  useLayoutEffect(() => {
+    if (!openActionMenuId) return;
+
+    updateActionMenuPosition();
+    window.addEventListener("resize", updateActionMenuPosition);
+    window.addEventListener("scroll", updateActionMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateActionMenuPosition);
+      window.removeEventListener("scroll", updateActionMenuPosition, true);
+    };
+  }, [openActionMenuId, updateActionMenuPosition]);
+
   useEffect(() => {
     if (!openActionMenuId) return;
 
-    const closeMenu = () => setOpenActionMenuId(null);
-    window.addEventListener("click", closeMenu);
-    return () => window.removeEventListener("click", closeMenu);
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !actionMenuTriggerRef.current?.contains(target) &&
+        !actionMenuRef.current?.contains(target)
+      ) {
+        setOpenActionMenuId(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenActionMenuId(null);
+        actionMenuTriggerRef.current?.focus();
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [openActionMenuId]);
 
   useEffect(() => {
@@ -985,7 +1120,9 @@ export default function PayrollDetail({
       return;
     }
 
-    const targetEntry = entries.find((entry) => entry.id === employeeImportDialog.entryId);
+    const targetEntry = entries.find(
+      (entry) => entry.id === employeeImportDialog.entryId,
+    );
     if (!targetEntry) {
       setEmployeeImportPreview(null);
       return;
@@ -1009,7 +1146,7 @@ export default function PayrollDetail({
         setEmployeeImportError(
           error instanceof Error
             ? error.message
-            : "KhÃ´ng thá»ƒ xem trÆ°á»›c dá»¯ liá»‡u import.",
+            : "Không thể xem trước dữ liệu import.",
         );
       });
 
@@ -1183,7 +1320,9 @@ export default function PayrollDetail({
         standardHours:
           resolvedSalaryType === "monthly" ? nextEntry.standardHours || 0 : 0,
         hourlyMultiplier:
-          resolvedSalaryType === "hourly" ? nextEntry.hourlyMultiplier ?? 1 : 1,
+          resolvedSalaryType === "hourly"
+            ? (nextEntry.hourlyMultiplier ?? 1)
+            : 1,
       };
       persistedEntry.salary = calculatePayrollSalary(persistedEntry);
 
@@ -1227,7 +1366,7 @@ export default function PayrollDetail({
                   employeeCode: resolvedEmployeeCode,
                 }
               : entry,
-            ),
+          ),
         );
       }
       markEntrySaved(nextEntry.id);
@@ -1563,8 +1702,10 @@ export default function PayrollDetail({
       monthlySalary: entry.monthlySalary || entry.fixedSalary || 0,
       expectedWorkDays:
         entrySalaryType === "monthly" ? entry.expectedWorkDays || 30 : 30,
-      paidLeaveDays: entrySalaryType === "monthly" ? entry.paidLeaveDays || 0 : 0,
-      standardHours: entrySalaryType === "monthly" ? entry.standardHours || 0 : 0,
+      paidLeaveDays:
+        entrySalaryType === "monthly" ? entry.paidLeaveDays || 0 : 0,
+      standardHours:
+        entrySalaryType === "monthly" ? entry.standardHours || 0 : 0,
       overtimeRate: entry.hourlyRate || 0,
       hourlyMultiplier: entry.hourlyMultiplier ?? 1,
     });
@@ -1614,21 +1755,35 @@ export default function PayrollDetail({
       return;
     }
 
-    const targetEntry = entries.find((entry) => entry.id === employeeImportDialog.entryId);
+    const targetEntry = entries.find(
+      (entry) => entry.id === employeeImportDialog.entryId,
+    );
     if (!targetEntry) {
-      setEmployeeImportError("Không tìm thấy nhân viên trong bảng lương hiện tại.");
+      setEmployeeImportError(
+        "Không tìm thấy nhân viên trong bảng lương hiện tại.",
+      );
       return;
     }
 
     setIsImportingEmployeeHours(true);
     try {
       const importedRows = await parseTimesheetImportFile(employeeImportFile);
-      const normalizedCode = (employeeImportDialog.employeeCode || "").trim().toLowerCase();
-      const normalizedName = employeeImportDialog.employeeName.trim().toLowerCase();
+      const normalizedCode = (employeeImportDialog.employeeCode || "")
+        .trim()
+        .toLowerCase();
+      const normalizedName = employeeImportDialog.employeeName
+        .trim()
+        .toLowerCase();
 
       const matchedRows = importedRows.filter((row) => {
         const rowDate = normalizeDateOnly(row.dateTime);
-        if (!isDateWithinRange(rowDate, employeeImportDialog.startDate, employeeImportDialog.endDate)) {
+        if (
+          !isDateWithinRange(
+            rowDate,
+            employeeImportDialog.startDate,
+            employeeImportDialog.endDate,
+          )
+        ) {
           return false;
         }
 
@@ -1643,12 +1798,16 @@ export default function PayrollDetail({
       });
 
       if (matchedRows.length === 0) {
-        throw new Error("Không tìm thấy dữ liệu chấm công của nhân viên này trong khoảng đã chọn.");
+        throw new Error(
+          "Không tìm thấy dữ liệu chấm công của nhân viên này trong khoảng đã chọn.",
+        );
       }
 
       const importedShifts = summarizeImportedShifts(
         matchedRows,
-        targetEntry.employeeCode || targetEntry.employeeId || targetEntry.employeeName,
+        targetEntry.employeeCode ||
+          targetEntry.employeeId ||
+          targetEntry.employeeName,
       );
       const mergedShifts = mergeShiftsByDateRange(
         (targetEntry.shifts || []) as Shift[],
@@ -1675,7 +1834,9 @@ export default function PayrollDetail({
     } catch (error) {
       console.error(error);
       setEmployeeImportError(
-        error instanceof Error ? error.message : "Không thể import lại giờ làm cho nhân viên này.",
+        error instanceof Error
+          ? error.message
+          : "Không thể import lại giờ làm cho nhân viên này.",
       );
     } finally {
       setIsImportingEmployeeHours(false);
@@ -1779,7 +1940,8 @@ export default function PayrollDetail({
       const matchesError = !filterError || hasEntryError(entry);
       const matchesLate = !filterLateOnly || lateSummary.lateShiftCount > 0;
       const entryMeta = entry.id ? entryUiMeta[entry.id] : undefined;
-      const matchesImported = !filterImportedOnly || Boolean(entryMeta?.isImported);
+      const matchesImported =
+        !filterImportedOnly || Boolean(entryMeta?.isImported);
       const salaryType = resolvePayrollSalaryType(entry);
       const matchesHourly = !filterHourlyOnly || salaryType === "hourly";
       const matchesMonthly = !filterMonthlyOnly || salaryType === "monthly";
@@ -1865,7 +2027,7 @@ export default function PayrollDetail({
               (entry.hourlyMultiplier ?? 1) ===
               (hourlyEntries[0]?.hourlyMultiplier ?? 1),
           )
-        ? hourlyEntries[0]?.hourlyMultiplier ?? 1
+        ? (hourlyEntries[0]?.hourlyMultiplier ?? 1)
         : null;
 
   const allowanceEntry = entries.find((entry) => entry.id === allowanceEntryId);
@@ -2015,7 +2177,9 @@ export default function PayrollDetail({
       await Promise.resolve(debouncedUpdate.flush());
 
       const updatedHourlyEntries = hourlyEntries
-        .filter((entry): entry is PayrollEntry & { id: string } => Boolean(entry.id))
+        .filter((entry): entry is PayrollEntry & { id: string } =>
+          Boolean(entry.id),
+        )
         .map((entry) => {
           const nextEntry: PayrollEntry = {
             ...entry,
@@ -2049,383 +2213,423 @@ export default function PayrollDetail({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center rounded-[28px] border border-slate-200 bg-white/80 py-20">
+      <div className="flex items-center justify-center rounded-lg border border-slate-200 bg-white/80 py-20">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">
-              PAYROLL DETAIL
-            </p>
-
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-              Chi tiết bảng lương
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Nhân sự lương tháng được làm nổi bật, tự tính ngày công, nghỉ phép
-              và chuyên cần ngay trên từng dòng.
-            </p>
-          </div>
-
-          <Button variant="outline" className="rounded-2xl" onClick={onBack}>
-            Danh sách bảng lương
-          </Button>
-        </div>
-
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-[24px] bg-slate-900 p-5 text-white">
-            <p className="text-sm text-slate-300">Nhân viên</p>
-            <p className="mt-4 text-3xl font-semibold">{entries.length}</p>
-          </div>
-
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-            <p className="text-sm text-slate-500">Lương tháng</p>
-            <p className="mt-4 text-2xl font-semibold text-sky-700">
-              {monthlyEntries}
-            </p>
-          </div>
-
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-            <p className="text-sm text-slate-500">Tổng giờ</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900">
-              {formatHours(filteredHours)}h
-            </p>
-          </div>
-          <div className="rounded-[24px] border border-amber-200 bg-amber-50 p-5">
-            <p className="text-sm text-amber-700">Đi trễ</p>
-            <p className="mt-4 text-2xl font-semibold text-amber-800">
-              {lateEmployees}
-            </p>
-            <p className="mt-1 text-xs text-amber-700/80">
-              {lateShiftCount} ca đi trễ
-            </p>
-          </div>
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-            <p className="text-sm text-slate-500">Tong ngay cong</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900">
-              {filteredWorkDays}
-            </p>
-          </div>
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-            <p className="text-sm text-slate-500">Tổng lương</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900">
-              {formatCurrency(filteredTotal)}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 hidden rounded-[24px] border border-amber-200 bg-amber-50/80 p-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-slate-900">
-                Hệ số lương cho toàn đợt
-              </h3>
-              <p className="mt-1 text-sm text-slate-600">
-                Áp dụng một lần cho toàn bộ nhân viên theo giờ của bảng lương
-                này. Không ảnh hưởng hồ sơ nhân viên hay các đợt lương cũ.
-              </p>
-              <p className="mt-2 text-sm text-amber-800">
-                {hourlyEntries.length === 0
-                  ? "Hiện không có nhân viên theo giờ trong đợt này."
-                  : uniformHourlyMultiplier === null
-                    ? `Đợt này đang có nhiều hệ số khác nhau trên ${hourlyEntries.length} nhân viên theo giờ.`
-                    : `Đợt này hiện đang dùng hệ số ${formatHours(
-                        uniformHourlyMultiplier,
-                      )} cho ${hourlyEntries.length} nhân viên theo giờ.`}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <Input
-                type="number"
-                min="0"
-                step="0.1"
-                label="Hệ số áp dụng"
-                value={batchHourlyMultiplier}
-                onChange={(event) =>
-                  setBatchHourlyMultiplier(Number(event.target.value) || 0)
-                }
-                className="h-11 min-w-[180px] rounded-2xl bg-white text-right"
+    <div className="space-y-4">
+      <section
+        className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+        aria-labelledby="payroll-detail-title"
+      >
+        <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="
+                group h-10 w-12 shrink-0 rounded-[20px] border-0
+                bg-[#ffb800] text-slate-950
+                shadow-none
+                transition-all duration-200
+                hover:bg-[#f2aa00] hover:text-slate-950
+                active:scale-[0.96]
+              "
+              onClick={onBack}
+              aria-label="Quay lại danh sách kỳ lương"
+              title="Quay lại danh sách kỳ lương"
+            >
+              <ArrowLeft
+                className="
+                  h-4 w-4
+                  transition-transform duration-200
+                  group-hover:-translate-x-0.5
+                "
               />
-              <Button
-                className="h-11 rounded-2xl px-5"
-                onClick={() => {
-                  void handleApplyBatchHourlyMultiplier();
-                }}
-                isLoading={isApplyingBatchMultiplier}
-                disabled={hourlyEntries.length === 0}
-              >
-                Áp dụng cho cả đợt
-              </Button>
+            </Button>
+
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h2
+                  id="payroll-detail-title"
+                  className="text-balance text-lg font-semibold text-slate-950"
+                >
+                  Chi tiết bảng lương
+                </h2>
+
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-sm font-semibold tabular-nums text-sky-700 shadow-sm">
+                  <Users className="h-4 w-4" />
+                  {entries.length} nhân viên
+                </span>
+              </div>
             </div>
+          </div>
+
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <Button
+              variant="outline"
+              className="h-10 flex-1 gap-2 rounded-[2px] shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out active:scale-[0.96] sm:flex-none"
+              onClick={handleExportPayrollExcel}
+              disabled={filteredEntries.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              Xuất Excel
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="
+                h-10 flex-1 gap-2 rounded-[2px] border-0
+                bg-[#ffb800] px-4
+                font-semibold text-slate-950
+                shadow-none
+                transition-all duration-200
+                hover:bg-[#f2aa00] hover:text-slate-950
+                active:scale-[0.96]
+                sm:flex-none
+              "
+              onClick={() => setShowAddDialog(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Thêm nhân viên
+            </Button>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-amber-200 bg-amber-50/80 p-5">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">
-              Hệ số lương cho toàn đợt
-            </h3>
-            <p className="mt-1 text-sm text-amber-800">
-              {hourlyEntries.length === 0
-                ? "Hiện không có nhân viên theo giờ trong đợt này."
-                : uniformHourlyMultiplier === null
-                  ? `Đợt này đang có nhiều hệ số khác nhau trên ${hourlyEntries.length} nhân viên theo giờ.`
-                  : `Đợt này hiện đang dùng hệ số ${formatHours(
-                      uniformHourlyMultiplier,
-                    )} cho ${hourlyEntries.length} nhân viên theo giờ.`}
+        <dl className="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="border-b border-slate-200 px-4 py-3 sm:col-span-2 lg:col-span-1 lg:border-b-0 lg:border-r">
+            <dt className="text-xs font-medium text-slate-500">
+              Tổng lương đang hiển thị
+            </dt>
+            <dd className="mt-1 text-lg font-semibold tabular-nums text-emerald-700">
+              {formatCurrency(filteredTotal)}
+            </dd>
+          </div>
+          <div className="border-b border-slate-200 px-4 py-3 sm:border-r lg:border-b-0">
+            <dt className="text-xs font-medium text-slate-500">Nhân viên</dt>
+            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+              {filteredEntries.length}
+            </dd>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {monthlyEntries} lương tháng
             </p>
           </div>
+          <div className="border-b border-slate-200 px-4 py-3 lg:border-b-0 lg:border-r">
+            <dt className="text-xs font-medium text-slate-500">Tổng giờ</dt>
+            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+              {formatHours(filteredHours)}h
+            </dd>
+          </div>
+          <div className="border-b border-slate-200 px-4 py-3 sm:border-r lg:border-b-0">
+            <dt className="text-xs font-medium text-slate-500">Ngày công</dt>
+            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+              {filteredWorkDays}
+            </dd>
+          </div>
+          <div className="px-4 py-3">
+            <dt className="text-xs font-medium text-slate-500">Lỗi dữ liệu</dt>
+            <dd
+              className={cn(
+                "mt-1 text-lg font-semibold tabular-nums",
+                warnings > 0 ? "text-rose-700" : "text-slate-950",
+              )}
+            >
+              {warnings}
+            </dd>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {lateEmployees} nhân viên đi trễ
+            </p>
+          </div>
+        </dl>
 
+        <div className="flex flex-col gap-2 border-t border-amber-200 bg-amber-50/70 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Settings2 className="h-4 w-4 shrink-0 text-amber-700" />
+            <p className="min-w-0 text-sm text-amber-900">
+              <span className="font-semibold">Hệ số toàn đợt:</span>{" "}
+              {hourlyEntries.length === 0
+                ? "Không có nhân viên theo giờ"
+                : uniformHourlyMultiplier === null
+                  ? hourlyEntries.length + " nhân viên đang dùng nhiều hệ số"
+                  : formatHours(uniformHourlyMultiplier) +
+                    "x cho " +
+                    hourlyEntries.length +
+                    " nhân viên theo giờ"}
+            </p>
+          </div>
           <Button
-            className="h-11 gap-2 rounded-2xl px-5"
+            variant="outline"
+            size="sm"
+            className="
+              h-9 shrink-0 rounded-[2px]
+              border-amber-800 bg-white px-3
+              text-amber-800 shadow-none
+              transition-[background-color,border-color,color,transform]
+              duration-200 ease-out
+              hover:border-[#f2aa00]
+              hover:bg-[#f2aa00]
+              hover:text-slate-950
+              active:scale-[0.96]
+              disabled:hover:border-amber-300
+              disabled:hover:bg-white
+              disabled:hover:text-amber-800
+            "
             onClick={() => setShowBatchMultiplierDialog(true)}
             disabled={hourlyEntries.length === 0}
           >
-            <Settings2 className="h-4 w-4" />
-            Chỉnh hệ số toàn đợt
+            Điều chỉnh
           </Button>
         </div>
       </section>
-
-      <Card className="overflow-visible rounded-[28px] border border-slate-200 bg-white/90 shadow-sm">
+      <Card className="overflow-visible rounded-lg border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <CardContent className="p-0">
-          <div className="border-b border-slate-100 px-6 py-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <header className="border-b border-slate-200 px-4 py-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Bảng lương đang hiển thị
+                <h3 className="text-base font-semibold text-slate-950">
+                  Rà soát nhân viên
                 </h3>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-0.5 text-sm tabular-nums text-slate-500">
                   {filteredEntries.length}/{entries.length} nhân viên theo bộ
-                  lọc hiện tại.
+                  lọc hiện tại
                 </p>
               </div>
 
-              <div className="flex flex-col gap-3 xl:items-end">
-                <div className="grid gap-3 md:grid-cols-4 xl:w-[760px]">
-                  <div className="relative md:col-span-2 xl:col-span-2">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-
-                    <input
-                      value={searchTerm}
-                      onChange={(event) => setSearchTerm(event.target.value)}
-                      placeholder="Tìm theo mã, tên hoặc vai trò"
-                      className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                    />
+              <div className="relative self-start lg:self-auto">
+                <Button
+                  variant="outline"
+                  className="h-10 gap-2 rounded-md px-3 shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out active:scale-[0.96]"
+                  onClick={() => setShowColumns((current) => !current)}
+                  aria-expanded={showColumns}
+                  aria-label="Tùy chỉnh cột hiển thị"
+                >
+                  <Columns3 className="h-4 w-4" />
+                  Cột hiển thị
+                </Button>
+                {showColumns ? (
+                  <div className="absolute left-0 top-11 z-[60] w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-[0_8px_24px_rgba(15,23,42,0.12)] lg:left-auto lg:right-0">
+                    <div className="space-y-1">
+                      {COLUMN_OPTIONS.map((option) => (
+                        <label
+                          key={option.key}
+                          className="flex min-h-10 cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm text-slate-700 transition-colors duration-150 hover:bg-slate-50"
+                        >
+                          <span>{option.label}</span>
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns[option.key]}
+                            onChange={(event) =>
+                              setVisibleColumns((current) => ({
+                                ...current,
+                                [option.key]: event.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                        </label>
+                      ))}
+                    </div>
                   </div>
-
-                  <select
-                    value={filterRole}
-                    onChange={(event) => setFilterRole(event.target.value)}
-                    className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                  >
-                    <option value="All">Tất cả vai trò</option>
-
-                    {Object.entries(roleGroups).map(([group, roles]) => (
-                      <optgroup key={group} label={group}>
-                        {roles.map((role) => (
-                          <option key={role} value={role}>
-                            {role}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  <Button
-                    variant={filterError ? "default" : "outline"}
-                    className={cn(
-                      "hidden h-11 gap-2 rounded-2xl",
-                      filterError
-                        ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
-                        : "text-slate-600",
-                    )}
-                    onClick={() => setFilterError((current) => !current)}
-                    title="Chỉ hiện nhân viên có lỗi hoặc thiếu dữ liệu"
-                  >
-                    <AlertCircle className="h-4 w-4" />
-                    <span>Lỗi</span>
-                  </Button>
-                  <Button
-                    variant={filterLateOnly ? "default" : "outline"}
-                    className={cn(
-                      "hidden h-11 gap-2 rounded-2xl",
-                      filterLateOnly
-                        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                        : "text-slate-600",
-                    )}
-                    onClick={() => setFilterLateOnly((current) => !current)}
-                    title="Chỉ hiện nhân viên đi trễ"
-                  >
-                    <CalendarClock className="h-4 w-4" />
-                    <span>Đi trễ</span>
-                  </Button>
-                  <select
-                    value={sortBy}
-                    onChange={(event) => setSortBy(event.target.value)}
-                    className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                  >
-                    <option value="hours_desc">Giờ làm giảm dần</option>
-
-                    <option value="salary_desc">Tổng lương giáº£m dáº§n</option>
-                    <option value="days_desc">Ngày công giảm dần</option>
-
-                    <option value="name_asc">Tên A-Z</option>
-
-                    <option value="role_asc">Vai trò A-Z</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-wrap gap-2 xl:max-w-[760px]">
-                  <Button
-                    variant={filterLateOnly ? "default" : "outline"}
-                    className={cn(
-                      "h-9 rounded-full px-4 text-sm",
-                      filterLateOnly
-                        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                        : "text-slate-600",
-                    )}
-                    onClick={() => setFilterLateOnly((current) => !current)}
-                  >
-                    Đi trễ ({lateEmployees})
-                  </Button>
-                  <Button
-                    variant={filterError ? "default" : "outline"}
-                    className={cn(
-                      "h-9 rounded-full px-4 text-sm",
-                      filterError
-                        ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                        : "text-slate-600",
-                    )}
-                    onClick={() => setFilterError((current) => !current)}
-                  >
-                    Lỗi ca ({warnings})
-                  </Button>
-                  <Button
-                    variant={filterImportedOnly ? "default" : "outline"}
-                    className={cn(
-                      "h-9 rounded-full px-4 text-sm",
-                      filterImportedOnly
-                        ? "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
-                        : "text-slate-600",
-                    )}
-                    onClick={() => setFilterImportedOnly((current) => !current)}
-                  >
-                    Đã import lại ({importedEntriesCount})
-                  </Button>
-                  <Button
-                    variant={filterHourlyOnly ? "default" : "outline"}
-                    className={cn(
-                      "h-9 rounded-full px-4 text-sm",
-                      filterHourlyOnly
-                        ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
-                        : "text-slate-600",
-                    )}
-                    onClick={() =>
-                      setFilterHourlyOnly((current) => {
-                        const next = !current;
-                        if (next) setFilterMonthlyOnly(false);
-                        return next;
-                      })
-                    }
-                  >
-                    Theo giờ ({hourlyEntriesCount})
-                  </Button>
-                  <Button
-                    variant={filterMonthlyOnly ? "default" : "outline"}
-                    className={cn(
-                      "h-9 rounded-full px-4 text-sm",
-                      filterMonthlyOnly
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                        : "text-slate-600",
-                    )}
-                    onClick={() =>
-                      setFilterMonthlyOnly((current) => {
-                        const next = !current;
-                        if (next) setFilterHourlyOnly(false);
-                        return next;
-                      })
-                    }
-                  >
-                    Lương tháng ({monthlyEntriesCount})
-                  </Button>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    variant="outline"
-                    className="gap-2 rounded-2xl"
-                    onClick={handleExportPayrollExcel}
-                    disabled={filteredEntries.length === 0}
-                  >
-                    <Download className="h-4 w-4" />
-                    Xuất Excel
-                  </Button>
-                  <div className="relative">
-                    <Button
-                      variant="outline"
-                      className="gap-2 rounded-2xl"
-                      onClick={() => setShowColumns((current) => !current)}
-                    >
-                      <Columns3 className="h-4 w-4" />
-                    </Button>
-                    {showColumns ? (
-                      <div className="absolute right-0 top-14 z-20 w-60 rounded-[24px] border border-slate-200 bg-white p-4 shadow-xl">
-                        <div className="space-y-3">
-                          {COLUMN_OPTIONS.map((option) => (
-                            <label
-                              key={option.key}
-                              className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                            >
-                              <span>{option.label}</span>
-                              <input
-                                type="checkbox"
-                                checked={visibleColumns[option.key]}
-                                onChange={(event) =>
-                                  setVisibleColumns((current) => ({
-                                    ...current,
-                                    [option.key]: event.target.checked,
-                                  }))
-                                }
-                                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <Button
-                    className="gap-2 rounded-2xl"
-                    onClick={() => setShowAddDialog(true)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Thêm nhân viên
-                  </Button>
-                </div>
+                ) : null}
               </div>
             </div>
+
+            <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(280px,1fr)_220px_220px]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Tìm theo mã, tên hoặc vai trò"
+                  aria-label="Tìm nhân viên"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </div>
+
+              <SelectBox
+                value={filterRole}
+                options={roleFilterOptions}
+                onValueChange={setFilterRole}
+                ariaLabel="Lọc theo vai trò"
+                className="w-full"
+                triggerClassName="border-slate-300 bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-400 hover:bg-white"
+              />
+
+              <SelectBox<PayrollSort>
+                value={sortBy}
+                options={PAYROLL_SORT_OPTIONS}
+                onValueChange={setSortBy}
+                ariaLabel="Sắp xếp bảng lương"
+                className="w-full"
+                triggerClassName="border-slate-300 bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-400 hover:bg-white"
+              />
+            </div>
+
+            <div
+              className="mt-2 flex items-center gap-2 overflow-x-auto pb-1"
+              aria-label="Bộ lọc nhanh"
+            >
+              <span className="shrink-0 pr-1 text-xs font-medium text-slate-500">
+                Lọc nhanh
+              </span>
+              <Button
+                variant={filterError ? "default" : "outline"}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-sm shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out active:scale-[0.96]",
+                  filterError
+                    ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                    : "text-slate-600",
+                )}
+                onClick={() => setFilterError((current) => !current)}
+              >
+                Lỗi ca <span className="tabular-nums">({warnings})</span>
+              </Button>
+              <Button
+                variant={filterLateOnly ? "default" : "outline"}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-sm shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out active:scale-[0.96]",
+                  filterLateOnly
+                    ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    : "text-slate-600",
+                )}
+                onClick={() => setFilterLateOnly((current) => !current)}
+              >
+                Đi trễ <span className="tabular-nums">({lateEmployees})</span>
+              </Button>
+              <Button
+                variant={filterImportedOnly ? "default" : "outline"}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-sm shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out active:scale-[0.96]",
+                  filterImportedOnly
+                    ? "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                    : "text-slate-600",
+                )}
+                onClick={() => setFilterImportedOnly((current) => !current)}
+              >
+                Đã import{" "}
+                <span className="tabular-nums">({importedEntriesCount})</span>
+              </Button>
+              <Button
+                variant={filterHourlyOnly ? "default" : "outline"}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-sm shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out active:scale-[0.96]",
+                  filterHourlyOnly
+                    ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                    : "text-slate-600",
+                )}
+                onClick={() =>
+                  setFilterHourlyOnly((current) => {
+                    const next = !current;
+                    if (next) setFilterMonthlyOnly(false);
+                    return next;
+                  })
+                }
+              >
+                Theo giờ{" "}
+                <span className="tabular-nums">({hourlyEntriesCount})</span>
+              </Button>
+              <Button
+                variant={filterMonthlyOnly ? "default" : "outline"}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-sm shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out active:scale-[0.96]",
+                  filterMonthlyOnly
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "text-slate-600",
+                )}
+                onClick={() =>
+                  setFilterMonthlyOnly((current) => {
+                    const next = !current;
+                    if (next) setFilterHourlyOnly(false);
+                    return next;
+                  })
+                }
+              >
+                Lương tháng{" "}
+                <span className="tabular-nums">({monthlyEntriesCount})</span>
+              </Button>
+            </div>
+          </header>
+          <div className="divide-y divide-slate-200 md:hidden">
+            {filteredEntries.map((entry) => {
+              const breakdown = getPayrollBreakdown(entry);
+              const isMonthly = breakdown.salaryType === "monthly";
+
+              return (
+                <article key={entry.id} className="space-y-3 px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="truncate text-sm font-semibold text-slate-950">
+                        {entry.employeeName}
+                      </h4>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span>{entry.role || defaultRole}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{isMonthly ? "Lương tháng" : "Theo giờ"}</span>
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-emerald-700">
+                      {formatCurrency(entry.salary || 0)}
+                    </span>
+                  </div>
+
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-md bg-slate-50 px-3 py-2 text-xs">
+                    <div>
+                      <dt className="text-slate-500">Giờ làm</dt>
+                      <dd className="mt-0.5 font-semibold tabular-nums text-slate-900">
+                        {formatHours(entry.totalHours || 0)}h
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Ngày công</dt>
+                      <dd className="mt-0.5 font-semibold tabular-nums text-slate-900">
+                        {breakdown.workingDays}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      className="h-10 flex-1 rounded-md shadow-none transition-[background-color,box-shadow,scale] duration-150 ease-out active:scale-[0.96]"
+                      onClick={() => setSalaryDetailEntryId(entry.id || null)}
+                    >
+                      Rà soát chi tiết
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 rounded-md shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out active:scale-[0.96]"
+                      onClick={() => openPayrollSettings(entry)}
+                      aria-label={"Cấu hình lương của " + entry.employeeName}
+                      title="Cấu hình lương"
+                    >
+                      <Settings2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </article>
+              );
+            })}
+            {filteredEntries.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-slate-500">
+                Không có nhân viên phù hợp với bộ lọc hiện tại.
+              </div>
+            ) : null}
           </div>
 
-          <div className="max-h-[72vh] overflow-auto px-6 pb-5">
-            <table className="w-full min-w-[980px] text-sm border-separate border-spacing-0">
+          <div className="hidden min-h-[360px] max-h-[calc(100vh-18rem)] overflow-auto md:block">
+            <table className="w-full min-w-[1080px] border-separate border-spacing-0 text-sm">
               <thead className="bg-slate-50">
-                <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
+                <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500">
                   {visibleColumns.name ? (
-                    <th className="sticky left-0 top-0 z-30 min-w-[240px] bg-slate-50 px-4 py-3 text-left shadow-[1px_0_0_0_rgba(226,232,240,1)]">
+                    <th className="sticky left-0 top-0 z-30 w-[190px] min-w-[190px] max-w-[190px] bg-slate-50 px-3 py-3 text-left shadow-[1px_0_0_0_rgba(226,232,240,1)]">
                       Tên nhân viên
                     </th>
                   ) : null}
                   {visibleColumns.role ? (
-                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-left">
+                    <th className="sticky top-0 z-20 w-[128px] min-w-[128px] bg-slate-50 px-3 py-3 text-left">
                       Vai trò
                     </th>
                   ) : null}
@@ -2441,7 +2645,7 @@ export default function PayrollDetail({
                   ) : null}
 
                   {visibleColumns.workDays ? (
-                    <th className="sticky top-0 z-20 bg-slate-50 pb-3 pr-4 text-center">
+                    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-3 text-center">
                       Ngày công
                     </th>
                   ) : null}
@@ -2457,7 +2661,7 @@ export default function PayrollDetail({
                     </th>
                   ) : null}
                   {visibleColumns.allowance ? (
-                    <th className="sticky top-0 z-20 bg-slate-50 pb-3 pr-4 text-center">
+                    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-3 text-center">
                       Phụ cấp
                     </th>
                   ) : null}
@@ -2474,7 +2678,7 @@ export default function PayrollDetail({
                   ) : null}
 
                   {visibleColumns.action ? (
-                    <th className="sticky top-0 z-20 w-[152px] bg-slate-50 px-4 py-3 text-center">
+                    <th className="sticky right-0 top-0 z-30 w-[88px] bg-slate-50 px-3 py-3 text-center shadow-[-1px_0_0_0_rgba(226,232,240,1)]">
                       Tác vụ
                     </th>
                   ) : null}
@@ -2503,31 +2707,32 @@ export default function PayrollDetail({
                         : "valid";
                   const rowBackground =
                     rowStatus === "error"
-                      ? "bg-rose-50/80"
+                      ? "bg-rose-50/55"
                       : rowStatus === "warning"
-                        ? "bg-amber-50/80"
+                        ? "bg-amber-50/50"
                         : rowStatus === "manual"
-                          ? "bg-violet-50/70"
-                          : "bg-emerald-50/50";
+                          ? "bg-violet-50/40"
+                          : "bg-white";
                   const stickyCellBackground =
                     rowStatus === "error"
-                      ? "bg-rose-50"
+                      ? "bg-rose-50/95"
                       : rowStatus === "warning"
-                        ? "bg-amber-50"
+                        ? "bg-amber-50/95"
                         : rowStatus === "manual"
-                          ? "bg-violet-50"
-                          : "bg-emerald-50";
+                          ? "bg-violet-50/95"
+                          : "bg-white";
                   const cellClass =
-                    "border-b border-slate-200/90 px-4 py-5 align-middle";
+                    "border-b border-slate-200/90 px-3 py-3 align-middle";
                   const centeredCellClass = `${cellClass} text-center align-middle`;
 
                   return (
                     <tr
                       key={entry.id}
                       className={cn(
-                        "align-top transition-colors",
+                        "align-middle transition-colors duration-150",
                         rowBackground,
-                        rowMeta?.hasPendingSave && "ring-2 ring-inset ring-sky-200",
+                        rowMeta?.hasPendingSave &&
+                          "ring-2 ring-inset ring-sky-200",
                         isRecentlySaved &&
                           !rowMeta?.hasPendingSave &&
                           "ring-2 ring-inset ring-emerald-200",
@@ -2536,7 +2741,7 @@ export default function PayrollDetail({
                       {visibleColumns.name ? (
                         <td
                           className={cn(
-                            "sticky left-0 z-10 border-b border-slate-200 px-4 py-4 align-middle shadow-[1px_0_0_0_rgba(226,232,240,1)]",
+                            "sticky left-0 z-10 w-[190px] min-w-[190px] max-w-[190px] border-b border-slate-200 px-3 py-3 align-middle shadow-[1px_0_0_0_rgba(226,232,240,1)]",
                             stickyCellBackground,
                           )}
                         >
@@ -2555,7 +2760,7 @@ export default function PayrollDetail({
                                 )
                               }
                               onBlur={() => debouncedUpdate.flush()}
-                              className="min-w-0 w-full bg-transparent font-semibold text-slate-900 outline-none"
+                              className="min-w-0 w-full bg-transparent font-semibold text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             />
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-medium">
@@ -2605,7 +2810,7 @@ export default function PayrollDetail({
                       {visibleColumns.role ? (
                         <td className={centeredCellClass}>
                           <RoleSelect
-                            roleGroups={roleGroups}
+                            options={roleOptions}
                             value={entry.role || defaultRole}
                             onChange={(value) =>
                               applyEntryPatch(
@@ -2624,7 +2829,7 @@ export default function PayrollDetail({
                           {scheduledStartTimes &&
                           lateSummary.configuredStartTimes.length > 0 ? (
                             lateSummary.lateShiftCount > 0 ? (
-                              <div className="inline-flex min-w-[156px] flex-col rounded-[20px] border border-amber-200 bg-amber-50 px-3 py-2 text-left shadow-sm">
+                              <div className="inline-flex min-w-[156px] flex-col rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-left">
                                 <span className="text-xs font-semibold text-amber-800">
                                   Trễ {lateSummary.lateShiftCount} ca
                                 </span>
@@ -2635,7 +2840,7 @@ export default function PayrollDetail({
                                 </span>
                               </div>
                             ) : (
-                              <div className="inline-flex min-w-[156px] flex-col rounded-[20px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-left shadow-sm">
+                              <div className="inline-flex min-w-[156px] flex-col rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-left">
                                 <span className="text-xs font-semibold text-emerald-700">
                                   Đúng giờ
                                 </span>
@@ -2647,7 +2852,7 @@ export default function PayrollDetail({
                               </div>
                             )
                           ) : (
-                            <div className="inline-flex min-w-[156px] justify-center rounded-[20px] border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-400">
+                            <div className="inline-flex min-w-[156px] justify-center rounded-md border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-400">
                               Chưa cấu hình
                             </div>
                           )}
@@ -2667,12 +2872,14 @@ export default function PayrollDetail({
                                 })
                               }
                               onBlur={() => debouncedUpdate.flush()}
-                              className="h-10 w-24 rounded-xl border border-slate-200 bg-white px-3 text-center shadow-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              className="h-10 w-24 rounded-md border border-slate-300 bg-white px-3 text-center tabular-nums outline-none transition-[border-color,box-shadow] duration-150 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-9 w-9 rounded-xl border-slate-200 bg-white shadow-sm"
+                              className="h-10 w-10 rounded-md border-slate-300 bg-white shadow-none transition-[background-color,border-color,scale] duration-150 ease-out active:scale-[0.96]"
+                              aria-label={"Sửa ca của " + entry.employeeName}
+                              title="Sửa ca"
                               onClick={() => {
                                 setCurrentShiftEntry(entry);
                                 setShiftModalOpen(true);
@@ -2688,13 +2895,11 @@ export default function PayrollDetail({
                         <td className={centeredCellClass}>
                           <div
                             className={cn(
-                              "mx-auto max-w-[120px] rounded-[20px] border px-4 py-3 text-left shadow-sm",
-                              isMonthly
-                                ? "border-sky-200 bg-white/80 shadow-sm shadow-sky-100"
-                                : "border-slate-200 bg-slate-50",
+                              "mx-auto min-w-[112px] text-center",
+                              isMonthly ? "text-slate-900" : "text-slate-700",
                             )}
                           >
-                            <div className="text-lg font-semibold text-slate-900">
+                            <div className="text-base font-semibold tabular-nums text-slate-900">
                               {breakdown.workingDays}
                               {isMonthly ? (
                                 <span className="text-sm text-slate-500">
@@ -2703,11 +2908,11 @@ export default function PayrollDetail({
                                 </span>
                               ) : null}
                             </div>
-                            <div className="mt-1 text-xs leading-5 text-slate-500">
+                            <div className="mt-0.5 text-[11px] leading-4 text-slate-500">
                               {isMonthly ? (
                                 <>
-                                  Nghỉ {breakdown.absentDays} ngày, vượt
-                                  phép {breakdown.unpaidLeaveDays} ngày.
+                                  Nghỉ {breakdown.absentDays} ngày, vượt phép{" "}
+                                  {breakdown.unpaidLeaveDays} ngày.
                                 </>
                               ) : (
                                 <>Tự tính từ dữ liệu chấm công.</>
@@ -2730,7 +2935,7 @@ export default function PayrollDetail({
                                 )
                               }
                               onBlur={() => debouncedUpdate.flush()}
-                              className="h-10 rounded-xl text-center"
+                              className="h-10 rounded-md text-center"
                             />
                           </div>
                         </td>
@@ -2738,18 +2943,18 @@ export default function PayrollDetail({
 
                       {visibleColumns.weekend ? (
                         <td className={centeredCellClass}>
-                          <div className="mx-auto max-w-[120px] rounded-[20px] border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+                          <div className="mx-auto max-w-[112px]">
                             <input
-                            type="number"
-                            onWheel={preventNumberInputScroll}
-                            value={entry.weekendHours || ""}
-                            onChange={(event) =>
-                              applyEntryPatch(entry.id!, {
-                                weekendHours: Number(event.target.value) || 0,
-                              })
-                            }
-                            onBlur={() => debouncedUpdate.flush()}
-                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center shadow-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              type="number"
+                              onWheel={preventNumberInputScroll}
+                              value={entry.weekendHours || ""}
+                              onChange={(event) =>
+                                applyEntryPatch(entry.id!, {
+                                  weekendHours: Number(event.target.value) || 0,
+                                })
+                              }
+                              onBlur={() => debouncedUpdate.flush()}
+                              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-center tabular-nums outline-none transition-[border-color,box-shadow] duration-150 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                           </div>
                         </td>
@@ -2771,15 +2976,15 @@ export default function PayrollDetail({
                                 entry.attendanceBonusAmount || 0,
                               );
                             }}
-                            className="mx-auto block w-full max-w-[148px] rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+                            className="mx-auto block w-full max-w-[140px] rounded-md px-2 py-2 text-right transition-colors duration-150 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                           >
-                            <div className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                            <div className="text-xs font-medium text-slate-500">
                               {(entry.allowances || []).length} khoản
                               {entry.attendanceBonusEnabled
                                 ? " + chuyên cần"
                                 : ""}
                             </div>
-                            <div className="mt-1 font-semibold text-slate-900">
+                            <div className="mt-1 font-semibold tabular-nums text-slate-900">
                               {formatCurrency(
                                 getAllowanceTotal(entry) +
                                   getAttendanceBonusValue(entry),
@@ -2793,11 +2998,13 @@ export default function PayrollDetail({
                         <td className={centeredCellClass}>
                           <button
                             type="button"
-                            onClick={() => setSalaryDetailEntryId(entry.id || null)}
-                            className="mx-auto block min-w-[132px] rounded-[20px] border border-emerald-100 bg-white px-4 py-3 text-right shadow-sm transition hover:border-emerald-200 hover:opacity-90"
+                            onClick={() =>
+                              setSalaryDetailEntryId(entry.id || null)
+                            }
+                            className="mx-auto block min-w-[132px] rounded-md px-2 py-2 text-right transition-colors duration-150 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             title="Xem chi tiết cách tính lương"
                           >
-                            <div className="font-bold text-emerald-600 hover:underline">
+                            <div className="font-semibold tabular-nums text-emerald-700 hover:underline">
                               {formatCurrency(entry.salary || 0)}
                             </div>
                           </button>
@@ -2814,24 +3021,30 @@ export default function PayrollDetail({
 
                       {visibleColumns.note ? (
                         <td className={cellClass}>
-                          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                          <div className="min-w-[180px] rounded-md border border-slate-300 bg-white px-3 py-2 transition-[border-color,box-shadow] duration-150 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100">
                             <input
-                            value={entry.note || ""}
-                            onChange={(event) =>
-                              applyEntryPatch(entry.id!, {
-                                note: event.target.value,
-                              })
-                            }
-                            onBlur={() => debouncedUpdate.flush()}
-                            placeholder="Ghi chú..."
-                            className="w-full bg-transparent text-sm italic text-slate-500 outline-none placeholder:text-slate-400"
+                              value={entry.note || ""}
+                              onChange={(event) =>
+                                applyEntryPatch(entry.id!, {
+                                  note: event.target.value,
+                                })
+                              }
+                              onBlur={() => debouncedUpdate.flush()}
+                              placeholder="Ghi chú..."
+                              className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-500"
                             />
                           </div>
                         </td>
                       ) : null}
 
                       {visibleColumns.action ? (
-                        <td className={centeredCellClass}>
+                        <td
+                          className={cn(
+                            centeredCellClass,
+                            "sticky right-0 z-10 shadow-[-1px_0_0_0_rgba(226,232,240,1)]",
+                            stickyCellBackground,
+                          )}
+                        >
                           <div
                             className="relative flex items-center justify-center"
                             onClick={(event) => event.stopPropagation()}
@@ -2839,94 +3052,127 @@ export default function PayrollDetail({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-100"
-                              onClick={() =>
+                              className="h-10 w-10 rounded-md border border-slate-300 bg-white text-slate-500 shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out hover:bg-slate-100 active:scale-[0.96]"
+                              onClick={(event) => {
+                                actionMenuTriggerRef.current =
+                                  event.currentTarget;
                                 setOpenActionMenuId((current) =>
-                                  current === entry.id ? null : entry.id || null,
-                                )
-                              }
+                                  current === entry.id
+                                    ? null
+                                    : entry.id || null,
+                                );
+                              }}
+                              aria-expanded={openActionMenuId === entry.id}
+                              aria-label={"Mở tác vụ của " + entry.employeeName}
                               title="Mở danh sách tác vụ"
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
 
-                            {openActionMenuId === entry.id ? (
-                              <div className="absolute right-0 top-11 z-30 w-56 rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-xl">
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
-                                  onClick={() => openPayrollSettings(entry)}
-                                  title="Chỉnh hệ số và cấu hình lương"
-                                >
-                                  <Settings2 className="h-4 w-4 text-slate-500" />
-                                  Chỉnh hệ số
-                                </button>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-sky-50"
-                                  onClick={() => openEmployeeImportDialog(entry)}
-                                  title="Import lại giờ làm cho riêng nhân viên này"
-                                >
-                                  <Upload className="h-4 w-4 text-sky-600" />
-                                  Import giờ làm
-                                </button>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-amber-50"
-                                  onClick={() => {
-                                    setCurrentShiftEntry(entry);
-                                    setShiftModalOpen(true);
-                                    setOpenActionMenuId(null);
-                                  }}
-                                  title="Mở chi tiết ca làm để chỉnh tay"
-                                >
-                                  <CalendarClock className="h-4 w-4 text-amber-600" />
-                                  Sửa ca
-                                </button>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-emerald-50"
-                                  onClick={() => {
-                                    setAllowanceEntryId(entry.id || null);
-                                    setEditAllowances(entry.allowances || []);
-                                    setAttendanceBonusEnabled(
-                                      entry.attendanceBonusEnabled || false,
-                                    );
-                                    setAttendanceBonusDays(
-                                      entry.attendanceBonusDays || 0,
-                                    );
-                                    setAttendanceBonusAmount(
-                                      entry.attendanceBonusAmount || 0,
-                                    );
-                                    setOpenActionMenuId(null);
-                                  }}
-                                  title="Mở popup phụ cấp và chuyên cần"
-                                >
-                                  <Plus className="h-4 w-4 text-emerald-600" />
-                                  Phụ cấp
-                                </button>
-                                {rowMeta?.lastImportSnapshot ? (
-                                  <button
-                                    type="button"
-                                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-violet-700 transition hover:bg-violet-50"
-                                    onClick={() => handleUndoEmployeeImport(entry.id!)}
-                                    title="Hoàn tác lần import giờ làm gần nhất"
+                            {openActionMenuId === entry.id &&
+                            typeof document !== "undefined"
+                              ? createPortal(
+                                  <div
+                                    ref={actionMenuRef}
+                                    className="fixed z-[80] max-h-[calc(100vh-1rem)] w-56 overflow-y-auto rounded-md border border-slate-200 bg-white p-2 text-left shadow-xl animate-in fade-in-0 zoom-in-95 duration-150 motion-reduce:animate-none"
+                                    style={{
+                                      top: actionMenuPosition.top,
+                                      left: actionMenuPosition.left,
+                                      transformOrigin:
+                                        actionMenuPosition.placement === "top"
+                                          ? "bottom right"
+                                          : "top right",
+                                    }}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setOpenActionMenuId(null);
+                                    }}
                                   >
-                                    <RotateCcw className="h-4 w-4" />
-                                    Hoàn tác import
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-50"
-                                  onClick={() => handleDeleteEntry(entry.id!)}
-                                  title="Xóa nhân viên này khỏi bảng lương"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  Xóa dòng
-                                </button>
-                              </div>
-                            ) : null}
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-700 transition-colors duration-150 hover:bg-slate-50"
+                                      onClick={() => openPayrollSettings(entry)}
+                                      title="Chỉnh hệ số và cấu hình lương"
+                                    >
+                                      <Settings2 className="h-4 w-4 text-slate-500" />
+                                      Chỉnh hệ số
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sky-800 transition-colors duration-150 hover:bg-sky-50"
+                                      onClick={() =>
+                                        openEmployeeImportDialog(entry)
+                                      }
+                                      title="Import lại giờ làm cho riêng nhân viên này"
+                                    >
+                                      <Upload className="h-4 w-4 text-sky-600" />
+                                      Import giờ làm
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-amber-800 transition-colors duration-150 hover:bg-amber-50"
+                                      onClick={() => {
+                                        setCurrentShiftEntry(entry);
+                                        setShiftModalOpen(true);
+                                        setOpenActionMenuId(null);
+                                      }}
+                                      title="Mở chi tiết ca làm để chỉnh tay"
+                                    >
+                                      <CalendarClock className="h-4 w-4 text-amber-600" />
+                                      Sửa ca
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-emerald-800 transition-colors duration-150 hover:bg-emerald-50"
+                                      onClick={() => {
+                                        setAllowanceEntryId(entry.id || null);
+                                        setEditAllowances(
+                                          entry.allowances || [],
+                                        );
+                                        setAttendanceBonusEnabled(
+                                          entry.attendanceBonusEnabled || false,
+                                        );
+                                        setAttendanceBonusDays(
+                                          entry.attendanceBonusDays || 0,
+                                        );
+                                        setAttendanceBonusAmount(
+                                          entry.attendanceBonusAmount || 0,
+                                        );
+                                        setOpenActionMenuId(null);
+                                      }}
+                                      title="Mở popup phụ cấp và chuyên cần"
+                                    >
+                                      <Plus className="h-4 w-4 text-emerald-600" />
+                                      Phụ cấp
+                                    </button>
+                                    {rowMeta?.lastImportSnapshot ? (
+                                      <button
+                                        type="button"
+                                        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-violet-700 transition-colors duration-150 hover:bg-violet-50"
+                                        onClick={() =>
+                                          handleUndoEmployeeImport(entry.id!)
+                                        }
+                                        title="Hoàn tác lần import giờ làm gần nhất"
+                                      >
+                                        <RotateCcw className="h-4 w-4" />
+                                        Hoàn tác import
+                                      </button>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-rose-600 transition-colors duration-150 hover:bg-rose-50"
+                                      onClick={() =>
+                                        handleDeleteEntry(entry.id!)
+                                      }
+                                      title="Xóa nhân viên này khỏi bảng lương"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      Xóa dòng
+                                    </button>
+                                  </div>,
+                                  document.body,
+                                )
+                              : null}
                           </div>
                         </td>
                       ) : null}
@@ -2948,7 +3194,7 @@ export default function PayrollDetail({
             </table>
           </div>
 
-          <div className="flex flex-col gap-4 border-t border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <p className="text-sm text-slate-500">
               Có {warnings} dòng cần kiểm tra lại dữ liệu chấm công và{" "}
               {lateEmployees} nhân viên đi trễ ({lateShiftCount} ca).
@@ -2990,7 +3236,7 @@ export default function PayrollDetail({
       />
       {employeeImportDialog ? (
         <div
-          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/45 p-4"
+          className="fixed inset-0 z-[1000] flex items-end justify-center bg-slate-900/45 p-0 sm:items-center sm:p-4"
           onClick={() => {
             if (isImportingEmployeeHours) return;
             setEmployeeImportDialog(null);
@@ -3000,7 +3246,7 @@ export default function PayrollDetail({
           }}
         >
           <div
-            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"
+            className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-lg border border-slate-200 bg-white p-4 shadow-2xl sm:rounded-lg sm:p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -3009,7 +3255,8 @@ export default function PayrollDetail({
                   Import lại ngày làm
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Chỉ cập nhật giờ làm của {employeeImportDialog.employeeName} trong bảng lương này.
+                  Chỉ cập nhật giờ làm của {employeeImportDialog.employeeName}{" "}
+                  trong bảng lương này.
                 </p>
               </div>
               <button
@@ -3021,7 +3268,7 @@ export default function PayrollDetail({
                   setEmployeeImportPreview(null);
                   setEmployeeImportError("");
                 }}
-                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Đóng"
               >
                 <X className="h-4 w-4" />
@@ -3029,9 +3276,10 @@ export default function PayrollDetail({
             </div>
 
             <div className="mt-5 space-y-4">
-              <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-                Hệ thống sẽ thay lại các ca trong khoảng ngày bạn chọn cho đúng nhân viên này,
-                rồi tự tính lại tổng giờ, giờ cuối tuần và lương của riêng dòng này.
+              <div className="rounded-md border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                Hệ thống sẽ thay lại các ca trong khoảng ngày bạn chọn cho đúng
+                nhân viên này, rồi tự tính lại tổng giờ, giờ cuối tuần và lương
+                của riêng dòng này.
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -3071,16 +3319,18 @@ export default function PayrollDetail({
                 <label className="text-sm font-medium leading-none">
                   File chấm công
                 </label>
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 transition hover:border-sky-300 hover:bg-sky-50">
+                <label className="flex cursor-pointer flex-col items-start gap-3 rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-4 transition-colors hover:border-sky-300 hover:bg-sky-50 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">
-                      {employeeImportDialog.fileName || "Chọn file chấm công (.txt, .csv, .xls, .xlsx)"}
+                      {employeeImportDialog.fileName ||
+                        "Chọn file chấm công (.txt, .csv, .xls, .xlsx)"}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      Chỉ dùng cho nhân viên này và chỉ áp dụng cho kỳ lương đang mở.
+                      Chỉ dùng cho nhân viên này và chỉ áp dụng cho kỳ lương
+                      đang mở.
                     </div>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                  <div className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
                     <Upload className="h-4 w-4" />
                     Chọn file
                   </div>
@@ -3108,9 +3358,9 @@ export default function PayrollDetail({
               </div>
 
               {employeeImportPreview ? (
-                <div className="grid gap-3 rounded-2xl border border-violet-200 bg-violet-50/80 p-4 sm:grid-cols-3">
+                <div className="grid gap-3 rounded-md border border-violet-200 bg-violet-50/80 p-4 sm:grid-cols-3">
                   <div>
-                    <div className="text-xs uppercase tracking-[0.14em] text-violet-500">
+                    <div className="text-xs font-medium text-violet-600">
                       Trước / sau
                     </div>
                     <div className="mt-1 text-sm font-semibold text-violet-900">
@@ -3119,7 +3369,7 @@ export default function PayrollDetail({
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.14em] text-violet-500">
+                    <div className="text-xs font-medium text-violet-600">
                       Ca bị thay
                     </div>
                     <div className="mt-1 text-sm font-semibold text-violet-900">
@@ -3127,7 +3377,7 @@ export default function PayrollDetail({
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.14em] text-violet-500">
+                    <div className="text-xs font-medium text-violet-600">
                       Ca mới từ file
                     </div>
                     <div className="mt-1 text-sm font-semibold text-violet-900">
@@ -3138,16 +3388,16 @@ export default function PayrollDetail({
               ) : null}
 
               {employeeImportError ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   {employeeImportError}
                 </div>
               ) : null}
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3">
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
                 variant="outline"
-                className="rounded-2xl"
+                className="rounded-md"
                 disabled={isImportingEmployeeHours}
                 onClick={() => {
                   setEmployeeImportDialog(null);
@@ -3159,7 +3409,7 @@ export default function PayrollDetail({
                 Hủy
               </Button>
               <Button
-                className="gap-2 rounded-2xl bg-sky-600 hover:bg-sky-700"
+                className="gap-2 rounded-md bg-sky-600 hover:bg-sky-700"
                 onClick={() => {
                   void handleImportEmployeeHoursV2();
                 }}
@@ -3178,7 +3428,7 @@ export default function PayrollDetail({
           onClick={() => setSalaryDetailEntryId(null)}
         >
           <div
-            className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl"
+            className="h-full w-full max-w-xl overflow-y-auto bg-white p-4 shadow-2xl sm:p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -3194,7 +3444,7 @@ export default function PayrollDetail({
               <button
                 type="button"
                 onClick={() => setSalaryDetailEntryId(null)}
-                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Đóng"
               >
                 <X className="h-4 w-4" />
@@ -3203,62 +3453,63 @@ export default function PayrollDetail({
 
             <div className="mt-5 space-y-3 text-sm">
               {salaryDetailBreakdown.baseSalary > 0 ? (
-              <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-                <span className="text-slate-600">
-                  {salaryDetailBreakdown.salaryType === "monthly"
-                    ? "Tiền lương cứng"
-                    : "Tiền lương giờ"}
-                </span>
-                <div className="text-right">
-                  <div className="font-semibold text-slate-900">
-                    {formatCurrency(salaryDetailBreakdown.baseSalary)}
+                <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3">
+                  <span className="text-slate-600">
+                    {salaryDetailBreakdown.salaryType === "monthly"
+                      ? "Tiền lương cứng"
+                      : "Tiền lương giờ"}
+                  </span>
+                  <div className="text-right">
+                    <div className="font-semibold text-slate-900">
+                      {formatCurrency(salaryDetailBreakdown.baseSalary)}
+                    </div>
+                    {salaryDetailBreakdown.salaryType === "hourly" ? (
+                      <div className="mt-1 text-xs text-slate-500">
+                        ({formatHours(salaryDetailEntry.totalHours || 0)}h x{" "}
+                        {formatCurrency(salaryDetailEntry.hourlyRate || 0)}
+                        {salaryDetailBreakdown.hourlyMultiplier !== 1
+                          ? ` x ${formatHours(
+                              salaryDetailBreakdown.hourlyMultiplier,
+                            )}`
+                          : ""}
+                        )
+                      </div>
+                    ) : salaryDetailBreakdown.hourlyMultiplier !== 1 ? (
+                      <div className="mt-1 text-xs text-slate-500">
+                        (x {formatHours(salaryDetailBreakdown.hourlyMultiplier)}
+                        )
+                      </div>
+                    ) : null}
                   </div>
-                  {salaryDetailBreakdown.salaryType === "hourly" ? (
-                    <div className="mt-1 text-xs text-slate-500">
-                      ({formatHours(salaryDetailEntry.totalHours || 0)}h x{" "}
-                      {formatCurrency(salaryDetailEntry.hourlyRate || 0)}
-                      {salaryDetailBreakdown.hourlyMultiplier !== 1
-                        ? ` x ${formatHours(
-                            salaryDetailBreakdown.hourlyMultiplier,
-                          )}`
-                        : ""}
-                      )
-                    </div>
-                  ) : salaryDetailBreakdown.hourlyMultiplier !== 1 ? (
-                    <div className="mt-1 text-xs text-slate-500">
-                      (x {formatHours(salaryDetailBreakdown.hourlyMultiplier)})
-                    </div>
-                  ) : null}
                 </div>
-              </div>
               ) : null}
 
               {salaryDetailBreakdown.salaryType === "monthly" ? (
                 salaryDetailBreakdown.overtimePay > 0 ? (
-                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-                  <span className="text-slate-600">
-                    Tiền OT
-                    {salaryDetailBreakdown.overtimeHours > 0
-                      ? ` (${formatHours(
-                          salaryDetailBreakdown.overtimeHours,
-                        )}h x ${formatCurrency(
-                          salaryDetailBreakdown.overtimeRate,
-                        )}${
-                          salaryDetailBreakdown.hourlyMultiplier !== 1
-                            ? ` x ${formatHours(
-                                salaryDetailBreakdown.hourlyMultiplier,
-                              )}`
-                            : ""
-                        })`
-                      : ""}
-                  </span>
-                  <span className="font-semibold text-slate-900">
-                    {formatCurrency(salaryDetailBreakdown.overtimePay)}
-                  </span>
-                </div>
+                  <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3">
+                    <span className="text-slate-600">
+                      Tiền OT
+                      {salaryDetailBreakdown.overtimeHours > 0
+                        ? ` (${formatHours(
+                            salaryDetailBreakdown.overtimeHours,
+                          )}h x ${formatCurrency(
+                            salaryDetailBreakdown.overtimeRate,
+                          )}${
+                            salaryDetailBreakdown.hourlyMultiplier !== 1
+                              ? ` x ${formatHours(
+                                  salaryDetailBreakdown.hourlyMultiplier,
+                                )}`
+                              : ""
+                          })`
+                        : ""}
+                    </span>
+                    <span className="font-semibold text-slate-900">
+                      {formatCurrency(salaryDetailBreakdown.overtimePay)}
+                    </span>
+                  </div>
                 ) : null
               ) : salaryDetailBreakdown.weekendBonus > 0 ? (
-                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3">
                   <span className="text-slate-600">Tiền cuối tuần</span>
                   <div className="text-right">
                     <div className="font-semibold text-slate-900">
@@ -3279,33 +3530,35 @@ export default function PayrollDetail({
               ) : null}
 
               {salaryDetailBreakdown.allowanceTotal > 0 ? (
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Tiền trợ cấp</span>
-                  <span className="font-semibold text-slate-900">
-                    {formatCurrency(salaryDetailBreakdown.allowanceTotal)}
-                  </span>
-                </div>
-                {(salaryDetailEntry.allowances || []).length > 0 ? (
-                  <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 text-slate-500">
-                    {(salaryDetailEntry.allowances || []).map(
-                      (allowance, index) => (
-                        <div
-                          key={`${allowance.name}-${index}`}
-                          className="flex items-center justify-between"
-                        >
-                          <span>+ {allowance.name || `Trợ cấp ${index + 1}`}</span>
-                          <span>{formatCurrency(allowance.amount)}</span>
-                        </div>
-                      ),
-                    )}
+                <div className="rounded-md bg-slate-50 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Tiền trợ cấp</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatCurrency(salaryDetailBreakdown.allowanceTotal)}
+                    </span>
                   </div>
-                ) : null}
-              </div>
+                  {(salaryDetailEntry.allowances || []).length > 0 ? (
+                    <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 text-slate-500">
+                      {(salaryDetailEntry.allowances || []).map(
+                        (allowance, index) => (
+                          <div
+                            key={`${allowance.name}-${index}`}
+                            className="flex items-center justify-between"
+                          >
+                            <span>
+                              + {allowance.name || `Trợ cấp ${index + 1}`}
+                            </span>
+                            <span>{formatCurrency(allowance.amount)}</span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
 
               {salaryDetailBreakdown.attendanceBonus > 0 ? (
-                <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
+                <div className="flex items-center justify-between rounded-md bg-emerald-50 px-4 py-3">
                   <span className="text-emerald-700">Thưởng chuyên cần</span>
                   <div className="text-right">
                     <div className="font-semibold text-emerald-800">
@@ -3322,7 +3575,7 @@ export default function PayrollDetail({
               ) : null}
 
               {salaryDetailBreakdown.deduction > 0 ? (
-                <div className="flex items-center justify-between rounded-2xl bg-rose-50 px-4 py-3">
+                <div className="flex items-center justify-between rounded-md bg-rose-50 px-4 py-3">
                   <span className="text-rose-700">Khấu trừ nghỉ vượt phép</span>
                   <div className="text-right">
                     <div className="font-semibold text-rose-800">
@@ -3336,7 +3589,7 @@ export default function PayrollDetail({
               ) : null}
             </div>
 
-            <div className="mt-5 flex items-center justify-between rounded-2xl bg-sky-50 px-4 py-4">
+            <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-4">
               <span className="text-base font-semibold text-slate-700">
                 Tổng
               </span>
@@ -3346,7 +3599,7 @@ export default function PayrollDetail({
             </div>
 
             {salaryDetailLateSummary?.configuredStartTimes?.length ? (
-              <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-amber-800">
                     Giờ vào chuẩn:{" "}
@@ -3363,7 +3616,8 @@ export default function PayrollDetail({
                 {salaryDetailLateSummary.lateShiftCount > 0 ? (
                   <div className="mt-2 text-xs text-amber-800/80">
                     Tổng trễ {salaryDetailLateSummary.totalLateMinutes} phút,
-                    trễ nhiều nhất {salaryDetailLateSummary.maxLateMinutes} phút.
+                    trễ nhiều nhất {salaryDetailLateSummary.maxLateMinutes}{" "}
+                    phút.
                   </div>
                 ) : null}
               </div>
@@ -3488,14 +3742,14 @@ export default function PayrollDetail({
 
       {showBatchMultiplierDialog ? (
         <div
-          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/45 p-4"
+          className="fixed inset-0 z-[1000] flex items-end justify-center bg-slate-900/45 p-0 sm:items-center sm:p-4"
           onClick={() => {
             if (isApplyingBatchMultiplier) return;
             setShowBatchMultiplierDialog(false);
           }}
         >
           <div
-            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"
+            className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-lg border border-slate-200 bg-white p-4 shadow-2xl sm:rounded-lg sm:p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -3504,8 +3758,8 @@ export default function PayrollDetail({
                   Hệ số lương cho toàn đợt
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Áp dụng một lần cho toàn bộ nhân viên theo giờ của bảng lương này.
-                  Không ảnh hưởng hồ sơ nhân viên hay các đợt lương cũ.
+                  Áp dụng một lần cho toàn bộ nhân viên theo giờ của bảng lương
+                  này. Không ảnh hưởng hồ sơ nhân viên hay các đợt lương cũ.
                 </p>
               </div>
               <button
@@ -3514,7 +3768,7 @@ export default function PayrollDetail({
                   if (isApplyingBatchMultiplier) return;
                   setShowBatchMultiplierDialog(false);
                 }}
-                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Đóng"
               >
                 <X className="h-4 w-4" />
@@ -3522,7 +3776,7 @@ export default function PayrollDetail({
             </div>
 
             <div className="mt-5 space-y-4">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 {hourlyEntries.length === 0
                   ? "Hiện không có nhân viên theo giờ trong đợt này."
                   : uniformHourlyMultiplier === null
@@ -3541,21 +3795,21 @@ export default function PayrollDetail({
                 onChange={(event) =>
                   setBatchHourlyMultiplier(Number(event.target.value) || 0)
                 }
-                className="h-11 rounded-2xl bg-white text-right"
+                className="h-10 rounded-md bg-white text-right"
               />
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3">
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
                 variant="outline"
-                className="rounded-2xl"
+                className="rounded-md"
                 disabled={isApplyingBatchMultiplier}
                 onClick={() => setShowBatchMultiplierDialog(false)}
               >
                 Hủy
               </Button>
               <Button
-                className="rounded-2xl px-5"
+                className="rounded-md px-5"
                 onClick={async () => {
                   await handleApplyBatchHourlyMultiplier();
                   setShowBatchMultiplierDialog(false);

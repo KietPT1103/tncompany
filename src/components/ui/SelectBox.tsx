@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -18,6 +19,8 @@ export type SelectBoxOption<T extends string> = {
   label: string;
   icon?: LucideIcon;
   disabled?: boolean;
+  group?: string;
+  inset?: boolean;
 };
 
 type SelectBoxProps<T extends string> = {
@@ -70,6 +73,9 @@ export function SelectBox<T extends string>({
 
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+  const groupCount = new Set(
+    options.map((option) => option.group).filter(Boolean)
+  ).size;
 
   const updateMenuPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -77,7 +83,10 @@ export function SelectBox<T extends string>({
 
     const rect = trigger.getBoundingClientRect();
     const viewportPadding = 8;
-    const estimatedHeight = Math.min(options.length * 44 + 8, 264);
+    const estimatedHeight = Math.min(
+      options.length * 44 + groupCount * 28 + 8,
+      264
+    );
     const availableBelow = window.innerHeight - rect.bottom - viewportPadding;
     const availableAbove = rect.top - viewportPadding;
     const placement =
@@ -104,7 +113,7 @@ export function SelectBox<T extends string>({
           );
 
     setMenuPosition({ top, left, width, placement });
-  }, [options.length]);
+  }, [groupCount, options.length]);
 
   const findEnabledIndex = useCallback(
     (preference: "selected" | "first" | "last" = "selected") => {
@@ -297,41 +306,54 @@ export function SelectBox<T extends string>({
         const OptionIcon = option.icon;
         const selected = option.value === value;
         const active = index === activeIndex;
+        const showGroup = Boolean(
+          option.group && option.group !== options[index - 1]?.group
+        );
         return (
-          <button
-            key={option.value}
-            id={`${listboxId}-option-${index}`}
-            type="button"
-            role="option"
-            aria-selected={selected}
-            disabled={option.disabled}
-            tabIndex={-1}
-            data-option-index={index}
-            onPointerMove={() => !option.disabled && setActiveIndex(index)}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => selectIndex(index)}
-            className={cn(
-              "flex min-h-11 w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm font-medium transition-[background-color,color] duration-150 ease-out sm:min-h-10 motion-reduce:transition-none",
-              selected
-                ? "bg-primary text-primary-foreground"
-                : active
-                  ? "bg-accent text-accent-foreground"
-                  : "text-popover-foreground",
-              option.disabled && "cursor-not-allowed opacity-50"
-            )}
-          >
-            {OptionIcon ? <OptionIcon aria-hidden="true" className="h-4 w-4 shrink-0" /> : null}
-            <span className="min-w-0 flex-1 truncate">{option.label}</span>
-            <Check
-              aria-hidden="true"
+          <Fragment key={option.value}>
+            {showGroup ? (
+              <div
+                role="presentation"
+                className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase text-muted-foreground"
+              >
+                {option.group}
+              </div>
+            ) : null}
+            <button
+              id={`${listboxId}-option-${index}`}
+              type="button"
+              role="option"
+              aria-selected={selected}
+              disabled={option.disabled}
+              tabIndex={-1}
+              data-option-index={index}
+              onPointerMove={() => !option.disabled && setActiveIndex(index)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectIndex(index)}
               className={cn(
-                "h-4 w-4 shrink-0 transition-[opacity,transform,filter] duration-150 ease-out motion-reduce:transition-none",
+                "flex min-h-11 w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm font-medium transition-[background-color,color] duration-150 ease-out sm:min-h-10 motion-reduce:transition-none",
+                option.inset && "pl-5",
                 selected
-                  ? "scale-100 opacity-100 blur-0"
-                  : "scale-[0.25] opacity-0 blur-[4px]"
+                  ? "bg-primary text-primary-foreground"
+                  : active
+                    ? "bg-accent text-accent-foreground"
+                    : "text-popover-foreground",
+                option.disabled && "cursor-not-allowed opacity-50"
               )}
-            />
-          </button>
+            >
+              {OptionIcon ? <OptionIcon aria-hidden="true" className="h-4 w-4 shrink-0" /> : null}
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              <Check
+                aria-hidden="true"
+                className={cn(
+                  "h-4 w-4 shrink-0 transition-[opacity,transform,filter] duration-150 ease-out motion-reduce:transition-none",
+                  selected
+                    ? "scale-100 opacity-100 blur-0"
+                    : "scale-[0.25] opacity-0 blur-[4px]"
+                )}
+              />
+            </button>
+          </Fragment>
         );
       })}
     </div>

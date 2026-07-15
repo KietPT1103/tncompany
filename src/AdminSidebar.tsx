@@ -23,6 +23,7 @@ import {
   MessageSquareText,
   Package,
   PanelLeftClose,
+  PanelLeftOpen,
   ReceiptText,
   Tags,
   Tractor,
@@ -30,7 +31,6 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/context/AuthContext";
 import { StoreType, useStore } from "@/context/StoreContext";
 import type { AppPermission, UserRole } from "@/types/auth";
@@ -209,6 +209,19 @@ export default function AdminSidebar({
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [showStoreMenu]);
 
+  useEffect(() => {
+    if (!isOpen && !showStoreMenu) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsOpen(false);
+      setShowStoreMenu(false);
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isOpen, showStoreMenu]);
+
   const canViewItem = (item: NavItem) => {
     if (item.roles?.length && (!userRole || !item.roles.includes(userRole))) {
       return false;
@@ -268,68 +281,130 @@ export default function AdminSidebar({
 
   return (
     <>
-      <button
-        className="fixed left-4 top-4 z-50 rounded-lg border border-slate-200 bg-white p-2 shadow-sm lg:hidden"
-        onClick={() => setIsOpen((value) => !value)}
-      >
-        {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-      </button>
+      {!isOpen ? (
+        <button
+          type="button"
+          className="fixed left-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-white text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.14)] transition-[background-color,color,transform] duration-150 ease-out hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none lg:hidden"
+          onClick={() => setIsOpen(true)}
+          aria-label="Mở menu"
+          aria-controls="admin-sidebar"
+          aria-expanded="false"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      ) : null}
 
-      <div
+      <aside
+        id="admin-sidebar"
+        aria-label="Điều hướng quản trị"
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-slate-200 bg-white transition-all duration-200 ease-in-out lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex h-screen w-[280px] flex-col bg-white shadow-[0_8px_24px_rgba(15,23,42,0.16)] transition-[transform,width] duration-200 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none lg:static lg:translate-x-0 lg:border-r lg:border-slate-200/80 lg:shadow-none",
           isOpen ? "translate-x-0" : "-translate-x-full",
-          collapsed
-            ? "w-64 lg:w-0 lg:min-w-0 lg:-translate-x-full lg:overflow-hidden lg:border-r-0"
-            : "w-64"
+          collapsed ? "lg:w-[72px]" : "lg:w-[248px]"
         )}
       >
-        <div className="border-b border-slate-100 px-6 py-5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xl font-bold text-primary">
-              <div className="rounded-lg bg-primary/10 p-1.5">
-                <Calculator className="h-6 w-6" />
+        <div
+          className={cn(
+            "border-b border-slate-100 px-3 py-3",
+            collapsed && "lg:px-2"
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center justify-between gap-2",
+              collapsed && "lg:flex-col lg:justify-center"
+            )}
+          >
+            <div
+              className={cn(
+                "flex min-w-0 items-center gap-2.5",
+                collapsed && "lg:hidden"
+              )}
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Calculator className="h-5 w-5" />
               </div>
-              <span>Cost Ong Quan</span>
+              <span
+                className={cn(
+                  "truncate text-lg font-bold text-primary",
+                  collapsed && "lg:hidden"
+                )}
+              >
+                TN Services
+              </span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-500 transition-[background-color,color,transform] duration-150 ease-out hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none lg:hidden"
+              aria-label="Đóng menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
 
             {onToggleCollapsed ? (
               <button
                 type="button"
-                onClick={onToggleCollapsed}
-                className="hidden rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 lg:inline-flex"
-                aria-label="Ẩn sidebar"
+                onClick={() => {
+                  setShowStoreMenu(false);
+                  onToggleCollapsed();
+                }}
+                className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-500 transition-[background-color,color,transform] duration-150 ease-out hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none lg:inline-flex"
+                aria-label={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
+                title={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
               >
-                <PanelLeftClose className="h-4 w-4" />
+                {collapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
               </button>
             ) : null}
           </div>
 
-          <div ref={storeMenuRef} className="relative mt-4">
+          <div ref={storeMenuRef} className="relative mt-3">
             <button
               type="button"
               onClick={() => setShowStoreMenu((value) => !value)}
-              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition hover:border-emerald-200 hover:bg-white"
+              className={cn(
+                "flex h-12 w-full items-center justify-between rounded-lg bg-slate-50 px-2.5 text-left transition-[background-color,color,transform] duration-150 ease-out hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
+                collapsed && "lg:mx-auto lg:h-10 lg:w-10 lg:justify-center lg:p-0"
+              )}
+              aria-haspopup="listbox"
+              aria-expanded={showStoreMenu}
+              aria-label={"Khu vực hiện tại: " + currentStore.label}
+              title={collapsed ? currentStore.label : undefined}
             >
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-white p-2 text-emerald-600 shadow-sm">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-primary shadow-[0_1px_3px_rgba(15,23,42,0.12)]">
                   <CurrentStoreIcon className="h-4 w-4" />
                 </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    Khu vực hiện tại
-                  </div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">
+                <div className={cn("min-w-0", collapsed && "lg:hidden")}>
+                  <div className="truncate text-sm font-semibold text-slate-900">
                     {currentStore.label}
                   </div>
-                  <div className="text-xs text-slate-500">{storeName}</div>
+                  <div className="truncate text-xs text-slate-500">{storeName}</div>
                 </div>
               </div>
-              <ChevronsUpDown className="h-4 w-4 text-slate-400" />
+              <ChevronsUpDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-slate-400",
+                  collapsed && "lg:hidden"
+                )}
+              />
             </button>
 
             {showStoreMenu ? (
-              <div className="absolute left-0 top-[calc(100%+10px)] z-20 w-full rounded-[24px] border border-slate-200 bg-white p-2 shadow-xl">
+              <div
+                role="listbox"
+                aria-label="Chọn khu vực"
+                className={cn(
+                  "absolute left-0 top-[calc(100%+8px)] z-50 w-full rounded-lg bg-white p-1.5 shadow-[0_4px_8px_rgba(15,23,42,0.16)] ring-1 ring-black/5",
+                  collapsed &&
+                    "lg:left-[calc(100%+12px)] lg:top-0 lg:w-60"
+                )}
+              >
                 {storeOptions.map((option) => {
                   const Icon = option.icon;
                   const active = option.id === storeId;
@@ -338,33 +413,37 @@ export default function AdminSidebar({
                     <button
                       key={option.id}
                       type="button"
+                      role="option"
+                      aria-selected={active}
                       onClick={() => {
                         setStoreId(option.id);
                         setShowStoreMenu(false);
                         setIsOpen(false);
                       }}
                       className={cn(
-                        "flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition",
+                        "flex min-h-12 w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-[background-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none",
                         active
                           ? "bg-emerald-50 text-emerald-900"
                           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                       )}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <div
                           className={cn(
-                            "rounded-2xl p-2",
-                            active ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                            active
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-100 text-slate-500"
                           )}
                         >
                           <Icon className="h-4 w-4" />
                         </div>
-                        <div>
-                          <div className="text-sm font-semibold">{option.label}</div>
-                          <div className="text-xs text-inherit/75">{option.note}</div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold">{option.label}</div>
+                          <div className="truncate text-xs text-inherit/75">{option.note}</div>
                         </div>
                       </div>
-                      {active ? <Check className="h-4 w-4" /> : null}
+                      {active ? <Check className="h-4 w-4 shrink-0" /> : null}
                     </button>
                   );
                 })}
@@ -373,126 +452,175 @@ export default function AdminSidebar({
           </div>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-3 py-6">
-          {visibleStandaloneItems.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+        <nav
+          aria-label="Menu quản trị"
+          className={cn(
+            "flex-1 overflow-x-hidden overflow-y-auto px-3 py-3",
+            collapsed && "lg:px-2"
+          )}
+        >
+          <div className="space-y-1">
+            {visibleStandaloneItems.map((item) => {
+              const isActive =
+                pathname === item.href ||
+                (item.href !== "/" && pathname.startsWith(item.href + "/"));
 
-            return (
-              <Link key={item.href} href={item.href} onClick={() => setIsOpen(false)}>
-                <button
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setIsOpen(false)}
+                  aria-current={isActive ? "page" : undefined}
+                  title={collapsed ? item.label : undefined}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                    "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
+                    collapsed && "lg:justify-center lg:px-0",
                     isActive
-                      ? "bg-primary/10 text-primary shadow-sm"
+                      ? "bg-emerald-50 text-emerald-800"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                   )}
                 >
                   <item.icon
-                    className={cn("h-5 w-5", isActive ? "text-primary" : "text-slate-400")}
-                  />
-                  {item.label}
-                </button>
-              </Link>
-            );
-          })}
-
-          {visibleNavGroups.map((group) => {
-            const isGroupActive = group.items.some(
-              (item) => pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`))
-            );
-            const isGroupOpen = openGroups[group.key] ?? isGroupActive;
-            const GroupIcon = group.icon;
-
-            return (
-              <div
-                key={group.key}
-                className={cn(
-                  "overflow-hidden rounded-2xl border transition",
-                  isGroupActive
-                    ? "border-emerald-100 bg-emerald-50/60"
-                    : "border-slate-200 bg-white"
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenGroups((current) => ({
-                      ...current,
-                      [group.key]: !isGroupOpen,
-                    }))
-                  }
-                  className={cn(
-                    "flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition",
-                    isGroupActive ? "text-emerald-700" : "text-slate-700 hover:bg-slate-50"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <GroupIcon
-                      className={cn("h-5 w-5", isGroupActive ? "text-emerald-600" : "text-slate-400")}
-                    />
-                    <span className="text-sm font-semibold">{group.label}</span>
-                  </div>
-                  <ChevronRight
                     className={cn(
-                      "h-4 w-4 transition-transform",
-                      isGroupOpen ? "rotate-90 text-emerald-600" : "text-slate-400"
+                      "h-5 w-5 shrink-0",
+                      isActive ? "text-emerald-600" : "text-slate-400"
                     )}
                   />
-                </button>
+                  <span className={cn("truncate", collapsed && "lg:sr-only")}>
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
 
-                {isGroupOpen ? (
-                  <div className="space-y-1 px-2 pb-2">
-                    {group.items.map((item) => {
-                      const isActive =
-                        pathname === item.href ||
-                        (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+            {visibleNavGroups.map((group) => {
+              const isGroupActive = group.items.some(
+                (item) =>
+                  pathname === item.href ||
+                  (item.href !== "/" && pathname.startsWith(item.href + "/"))
+              );
+              const isGroupOpen = openGroups[group.key] ?? isGroupActive;
+              const GroupIcon = group.icon;
 
-                      return (
-                        <Link key={item.href} href={item.href} onClick={() => setIsOpen(false)}>
-                          <button
+              return (
+                <div key={group.key} className="space-y-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (collapsed && onToggleCollapsed) {
+                        setOpenGroups((current) => ({
+                          ...current,
+                          [group.key]: true,
+                        }));
+                        onToggleCollapsed();
+                        return;
+                      }
+
+                      setOpenGroups((current) => ({
+                        ...current,
+                        [group.key]: !isGroupOpen,
+                      }));
+                    }}
+                    className={cn(
+                      "flex h-10 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-sm font-semibold transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
+                      collapsed && "lg:justify-center lg:px-0",
+                      isGroupActive
+                        ? "text-emerald-700"
+                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-950",
+                      collapsed && isGroupActive && "lg:bg-emerald-50"
+                    )}
+                    aria-expanded={isGroupOpen}
+                    title={collapsed ? group.label : undefined}
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <GroupIcon
+                        className={cn(
+                          "h-5 w-5 shrink-0",
+                          isGroupActive ? "text-emerald-600" : "text-slate-400"
+                        )}
+                      />
+                      <span className={cn("truncate", collapsed && "lg:sr-only")}>
+                        {group.label}
+                      </span>
+                    </span>
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ease-out motion-reduce:transition-none",
+                        isGroupOpen && "rotate-90 text-emerald-600",
+                        collapsed && "lg:hidden"
+                      )}
+                    />
+                  </button>
+
+                  {isGroupOpen ? (
+                    <div
+                      className={cn(
+                        "space-y-0.5 pl-3",
+                        collapsed && "lg:hidden"
+                      )}
+                    >
+                      {group.items.map((item) => {
+                        const isActive =
+                          pathname === item.href ||
+                          (item.href !== "/" && pathname.startsWith(item.href + "/"));
+
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setIsOpen(false)}
+                            aria-current={isActive ? "page" : undefined}
                             className={cn(
-                              "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                              "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
                               isActive
-                                ? "bg-white text-primary shadow-sm"
+                                ? "bg-emerald-50 text-emerald-800"
                                 : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                             )}
                           >
                             <item.icon
                               className={cn(
-                                "h-5 w-5",
-                                isActive ? "text-primary" : "text-slate-400"
+                                "h-4 w-4 shrink-0",
+                                isActive ? "text-emerald-600" : "text-slate-400"
                               )}
                             />
-                            {item.label}
-                          </button>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+                            <span className="truncate">{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </nav>
 
-        <div className="border-t border-slate-100 p-4">
-          <Button
-            variant="ghost"
+        <div
+          className={cn(
+            "border-t border-slate-100 p-2.5",
+            collapsed && "lg:p-2"
+          )}
+        >
+          <button
+            type="button"
             onClick={logout}
-            className="flex w-full items-center justify-start gap-3 px-3 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+            title={collapsed ? "Đăng xuất" : undefined}
+            className={cn(
+              "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold text-rose-600 transition-[background-color,color,transform] duration-150 ease-out hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 active:scale-[0.96] motion-reduce:transition-none",
+              collapsed && "lg:justify-center lg:px-0"
+            )}
           >
-            <LogOut className="h-5 w-5" />
-            Đăng xuất
-          </Button>
+            <LogOut className="h-5 w-5 shrink-0" />
+            <span className={cn(collapsed && "lg:sr-only")}>Đăng xuất</span>
+          </button>
         </div>
-      </div>
+      </aside>
 
       {isOpen ? (
         <div
-          className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden"
           onClick={() => setIsOpen(false)}
+          aria-hidden="true"
         />
       ) : null}
     </>
