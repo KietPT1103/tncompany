@@ -2,8 +2,19 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Plus, Trash2, Save, GripVertical, ArrowRightLeft } from "lucide-react";
+import {
+  X,
+  Plus,
+  Trash2,
+  Save,
+  GripVertical,
+  ArrowRightLeft,
+  AlertCircle,
+  CheckCircle2,
+  Clock3,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 import type { RoleStartTimeSetting } from "@/services/roleStartTimes";
 import { calculateShiftLateMinutes } from "../payroll/_components/payrollShared";
 
@@ -35,10 +46,12 @@ const TimeSelect = ({
   value,
   onChange,
   className,
+  ariaLabel,
 }: {
   value: string;
   onChange: (val: string) => void;
   className?: string;
+  ariaLabel: string;
 }) => {
   const [hour, setHour] = useState("");
   const [minute, setMinute] = useState("");
@@ -105,25 +118,34 @@ const TimeSelect = ({
   };
 
   return (
-    <div className={`flex items-center justify-center gap-1 ${className}`}>
+    <div
+      className={cn(
+        "flex items-center justify-center gap-1 rounded-md",
+        className,
+      )}
+    >
       <input
         type="text"
+        inputMode="numeric"
         value={hour}
         placeholder="HH"
         maxLength={2}
-        onChange={(e) => handleChange("h", e.target.value)}
+        onChange={(event) => handleChange("h", event.target.value)}
         onBlur={() => handleBlur("h")}
-        className="p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 font-mono bg-white text-center w-[50px]"
+        aria-label={ariaLabel + " - giờ"}
+        className="h-10 w-11 rounded-md border border-slate-300 bg-white text-center font-mono text-sm tabular-nums outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15"
       />
-      <span className="text-gray-400 font-bold">:</span>
+      <span className="font-semibold text-slate-400">:</span>
       <input
         type="text"
+        inputMode="numeric"
         value={minute}
         placeholder="MM"
         maxLength={2}
-        onChange={(e) => handleChange("m", e.target.value)}
+        onChange={(event) => handleChange("m", event.target.value)}
         onBlur={() => handleBlur("m")}
-        className="p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 font-mono bg-white text-center w-[50px]"
+        aria-label={ariaLabel + " - phút"}
+        className="h-10 w-11 rounded-md border border-slate-300 bg-white text-center font-mono text-sm tabular-nums outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15"
       />
     </div>
   );
@@ -143,10 +165,23 @@ export default function ShiftDetailModal({
 
   useEffect(() => {
     if (isOpen) {
-      // Deep copy to avoid mutating props directly
       setShifts(JSON.parse(JSON.stringify(initialShifts)));
     }
   }, [isOpen, initialShifts]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -430,228 +465,468 @@ export default function ShiftDetailModal({
     return `${hh}:${mm}`;
   };
 
+  const computedTotalHours = shifts.reduce(
+    (total, shift) =>
+      total + calculateRawHours(shift.inTime, shift.outTime),
+    0,
+  );
+  const invalidShiftCount = shifts.filter(
+    (shift) =>
+      !shift.inTime ||
+      !shift.outTime ||
+      calculateHours(shift.inTime, shift.outTime) === 0,
+  ).length;
+  const lateShiftCount = shifts.filter(
+    (shift) => getLateMinutes(shift.inTime) > 0,
+  ).length;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex justify-between items-center p-4 border-b">
-          <div>
-            <h3 className="text-lg font-bold text-gray-800">
-              Chi tiết công:{" "}
-              <span className="text-blue-600">{employeeName}</span>
-            </h3>
-            <p className="text-sm text-gray-500">Mã NV: {employeeId}</p>
-            {scheduledStartTimes &&
-            (scheduledStartTimes.shift1Start ||
-              scheduledStartTimes.shift2Start ||
-              scheduledStartTimes.shift3Start ||
-              scheduledStartTimes.weekendShift1Start ||
-              scheduledStartTimes.weekendShift2Start ||
-              scheduledStartTimes.weekendShift3Start) ? (
-              <p className="text-sm text-amber-600">
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shift-detail-title"
+        className="flex h-[96vh] w-full flex-col overflow-hidden rounded-t-lg bg-white shadow-[0_4px_8px_rgba(15,23,42,0.18)] sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h2
+                id="shift-detail-title"
+                className="truncate text-base font-semibold text-slate-950 sm:text-lg"
+              >
+                Chi tiết chấm công
+              </h2>
+              <p className="mt-0.5 truncate text-sm text-slate-600">
+                <span className="font-medium text-slate-900">
+                  {employeeName}
+                </span>
+                <span className="mx-2 text-slate-300">·</span>
+                <span className="font-mono text-xs">{employeeId}</span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-label="Đóng"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {scheduledStartTimes &&
+          (scheduledStartTimes.shift1Start ||
+            scheduledStartTimes.shift2Start ||
+            scheduledStartTimes.shift3Start ||
+            scheduledStartTimes.weekendShift1Start ||
+            scheduledStartTimes.weekendShift2Start ||
+            scheduledStartTimes.weekendShift3Start) ? (
+            <div className="mt-3 flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
                 Giờ vào chuẩn:
                 {scheduledStartTimes.shift1Start
-                  ? ` Ca 1 ${scheduledStartTimes.shift1Start}`
+                  ? " Ca 1 " + scheduledStartTimes.shift1Start
                   : ""}
                 {scheduledStartTimes.shift2Start
-                  ? ` • Ca 2 ${scheduledStartTimes.shift2Start}`
+                  ? " · Ca 2 " + scheduledStartTimes.shift2Start
                   : ""}
                 {scheduledStartTimes.shift3Start
-                  ? ` • Ca 3 ${scheduledStartTimes.shift3Start}`
+                  ? " · Ca 3 " + scheduledStartTimes.shift3Start
                   : ""}
                 {scheduledStartTimes.weekendEnabled &&
                 scheduledStartTimes.weekendShift1Start
-                  ? ` • T7,CN ca 1 ${scheduledStartTimes.weekendShift1Start}`
+                  ? " · T7, CN ca 1 " +
+                    scheduledStartTimes.weekendShift1Start
                   : ""}
                 {scheduledStartTimes.weekendEnabled &&
                 scheduledStartTimes.weekendShift2Start
-                  ? ` • T7,CN ca 2 ${scheduledStartTimes.weekendShift2Start}`
+                  ? " · T7, CN ca 2 " +
+                    scheduledStartTimes.weekendShift2Start
                   : ""}
                 {scheduledStartTimes.weekendEnabled &&
                 scheduledStartTimes.weekendShift3Start
-                  ? ` • T7,CN ca 3 ${scheduledStartTimes.weekendShift3Start}`
+                  ? " · T7, CN ca 3 " +
+                    scheduledStartTimes.weekendShift3Start
                   : ""}
-              </p>
-            ) : null}
+              </span>
+            </div>
+          ) : null}
+        </header>
+
+        <div className="grid shrink-0 grid-cols-3 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
+          <div className="px-4 py-2.5">
+            <div className="text-xs text-slate-500">Số ca</div>
+            <div className="mt-0.5 font-semibold tabular-nums text-slate-900">
+              {shifts.length}
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X size={24} />
-          </button>
+          <div className="px-4 py-2.5">
+            <div className="text-xs text-slate-500">Cần sửa</div>
+            <div
+              className={cn(
+                "mt-0.5 font-semibold tabular-nums",
+                invalidShiftCount > 0 ? "text-rose-700" : "text-emerald-700",
+              )}
+            >
+              {invalidShiftCount}
+            </div>
+          </div>
+          <div className="px-4 py-2.5">
+            <div className="text-xs text-slate-500">Đi trễ</div>
+            <div
+              className={cn(
+                "mt-0.5 font-semibold tabular-nums",
+                lateShiftCount > 0 ? "text-amber-700" : "text-slate-900",
+              )}
+            >
+              {lateShiftCount}
+            </div>
+          </div>
         </div>
 
-        <div className="overflow-y-auto p-4 flex-1">
-          <table className="w-full text-sm text-left border-collapse">
-            <thead className="bg-gray-50 text-gray-700 sticky -top-4 z-10">
-              <tr>
-                <th className="p-3 border-b w-10"></th>
-                <th className="p-3 border-b">Ngày</th>
-                <th className="px-6 py-3 border-b text-center">Giờ Vào (In)</th>
-                <th className="px-6 py-3 border-b text-center">Giờ Ra (Out)</th>
-                <th className="p-3 border-b text-right">Số Giờ</th>
-                <th className="p-3 border-b text-center">Cuối Tuần</th>
-                <th className="p-3 border-b w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {shifts.map((shift, index) => (
-                <React.Fragment key={shift.id}>
-                <tr
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="hidden lg:block">
+            <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-20 bg-slate-50 text-xs font-semibold text-slate-600">
+                <tr className="border-b border-slate-200">
+                  <th className="w-10 px-2 py-3" />
+                  <th className="w-12 px-2 py-3 text-center">TT</th>
+                  <th className="px-3 py-3">Ngày</th>
+                  <th className="px-3 py-3 text-center">Giờ vào</th>
+                  <th className="px-3 py-3 text-center">Giờ ra</th>
+                  <th className="px-3 py-3 text-right">Số giờ</th>
+                  <th className="w-32 px-3 py-3 text-center">Tác vụ</th>
+                </tr>
+              </thead>
+              <tbody>                {shifts.map((shift, index) => {
+                  const hours = calculateHours(
+                    shift.inTime,
+                    shift.outTime,
+                  );
+                  const lateMinutes = getLateMinutes(shift.inTime);
+                  const invalid =
+                    !shift.inTime || !shift.outTime || hours === 0;
+                  const weekend =
+                    shift.inTime &&
+                    [0, 6].includes(new Date(shift.inTime).getDay());
+
+                  return (
+                    <tr
+                      key={shift.id}
+                      className={cn(
+                        "border-b border-slate-200 transition-colors",
+                        invalid
+                          ? "bg-rose-50/60"
+                          : lateMinutes > 0
+                            ? "bg-amber-50/55"
+                            : "bg-white hover:bg-slate-50",
+                        draggedIndex === index && "opacity-40",
+                      )}
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={handleDragOver}
+                      onDrop={() => handleDrop(index)}
+                      onDragEnd={() => setDraggedIndex(null)}
+                    >
+                      <td className="cursor-move px-2 py-3 text-center text-slate-400">
+                        <GripVertical className="h-4 w-4" />
+                      </td>
+                      <td className="px-2 py-3 text-center">
+                        {invalid ? (
+                          <AlertCircle className="mx-auto h-4 w-4 text-rose-600" />
+                        ) : lateMinutes > 0 ? (
+                          <Clock3 className="mx-auto h-4 w-4 text-amber-600" />
+                        ) : (
+                          <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-600" />
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <input
+                          type="date"
+                          className="h-10 w-36 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                          value={shift.date.replace(/\//g, "-")}
+                          onChange={(event) =>
+                            handleDateChange(
+                              shift.id,
+                              event.target.value,
+                            )
+                          }
+                          aria-label={"Ngày của ca " + (index + 1)}
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <TimeSelect
+                          value={toInputFormat(shift.inTime)}
+                          onChange={(value) =>
+                            handleTimeChange(
+                              shift.id,
+                              "inTime",
+                              value,
+                            )
+                          }
+                          ariaLabel={"Giờ vào ca " + (index + 1)}
+                          className={invalid ? "bg-rose-50" : ""}
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <TimeSelect
+                          value={toInputFormat(shift.outTime)}
+                          onChange={(value) =>
+                            handleTimeChange(
+                              shift.id,
+                              "outTime",
+                              value,
+                            )
+                          }
+                          ariaLabel={"Giờ ra ca " + (index + 1)}
+                          className={invalid ? "bg-rose-50" : ""}
+                        />
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="font-semibold tabular-nums text-slate-900">
+                          {hours.toLocaleString("vi-VN", {
+                            maximumFractionDigits: 2,
+                          })}
+                          h
+                        </div>
+                        {lateMinutes > 0 ? (
+                          <div className="mt-1 text-xs font-medium text-amber-700">
+                            Trễ {lateMinutes} phút
+                          </div>
+                        ) : weekend ? (
+                          <div className="mt-1 text-xs font-medium text-sky-700">
+                            Cuối tuần
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSwapTimes(shift.id)}
+                            className="flex h-9 w-9 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                            title="Đổi giờ vào và giờ ra"
+                            aria-label={"Đổi giờ ca " + (index + 1)}
+                          >
+                            <ArrowRightLeft className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddShiftAt(index)}
+                            className="flex h-9 w-9 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            title="Chèn ca phía sau"
+                            aria-label={"Chèn ca sau ca " + (index + 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteShift(shift.id)}
+                            className="flex h-9 w-9 items-center justify-center rounded-md text-rose-600 hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                            title="Xóa ca"
+                            aria-label={"Xóa ca " + (index + 1)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="divide-y divide-slate-200 lg:hidden">
+            {shifts.map((shift, index) => {
+              const hours = calculateHours(shift.inTime, shift.outTime);
+              const lateMinutes = getLateMinutes(shift.inTime);
+              const invalid =
+                !shift.inTime || !shift.outTime || hours === 0;
+              const weekend =
+                shift.inTime &&
+                [0, 6].includes(new Date(shift.inTime).getDay());
+
+              return (
+                <section
                   key={shift.id}
-                  className={`shift-row group peer transition-colors ${
-                    !shift.inTime || !shift.outTime || shift.hours === 0
-                      ? "bg-red-50 border-l-4 border-red-400"
-                      : getLateMinutes(shift.inTime) > 0
-                        ? "bg-amber-50 border-l-4 border-amber-400"
-                      : "hover:bg-gray-50 border-l-4 border-transparent"
-                  } ${draggedIndex === index ? "opacity-40" : ""}`}
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={handleDragOver}
-                  onDrop={() => handleDrop(index)}
-                  onDragEnd={() => setDraggedIndex(null)} // Fix ghost effect
+                  className={cn(
+                    "px-4 py-4",
+                    invalid
+                      ? "bg-rose-50/55"
+                      : lateMinutes > 0
+                        ? "bg-amber-50/50"
+                        : "bg-white",
+                  )}
                 >
-                  <td className="p-2 align-middle text-center cursor-move text-gray-400 hover:text-gray-600">
-                    <GripVertical size={16} />
-                  </td>
-                  <td className="p-2 align-middle">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {invalid ? (
+                        <AlertCircle className="h-4 w-4 text-rose-600" />
+                      ) : lateMinutes > 0 ? (
+                        <Clock3 className="h-4 w-4 text-amber-600" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      )}
+                      <span className="text-sm font-semibold text-slate-900">
+                        Ca {index + 1}
+                      </span>
+                    </div>
                     <input
                       type="date"
-                      className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                      className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                       value={shift.date.replace(/\//g, "-")}
-                      onChange={(e) =>
-                        handleDateChange(shift.id, e.target.value)
+                      onChange={(event) =>
+                        handleDateChange(shift.id, event.target.value)
                       }
+                      aria-label={"Ngày của ca " + (index + 1)}
                     />
-                  </td>
-                  <td className="px-6 py-2 align-middle">
-                    <TimeSelect
-                      value={toInputFormat(shift.inTime)}
-                      onChange={(val) =>
-                        handleTimeChange(shift.id, "inTime", val)
-                      }
-                      className={
-                        !shift.inTime || !shift.outTime
-                          ? "border-red-300 rounded bg-red-50 p-1"
-                          : ""
-                      }
-                    />
-                  </td>
-                  <td className="px-6 py-2 align-middle relative group/time">
-                    <TimeSelect
-                      value={toInputFormat(shift.outTime)}
-                      onChange={(val) =>
-                        handleTimeChange(shift.id, "outTime", val)
-                      }
-                      className={
-                        !shift.inTime || !shift.outTime
-                          ? "border-red-300 rounded bg-red-50 p-1"
-                          : ""
-                      }
-                    />
-                    {/* Swap Button - centered on the timeline border */}
+                  </div>
+
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="block text-xs font-medium text-slate-600">
+                        Giờ vào
+                      </span>
+                      <TimeSelect
+                        value={toInputFormat(shift.inTime)}
+                        onChange={(value) =>
+                          handleTimeChange(
+                            shift.id,
+                            "inTime",
+                            value,
+                          )
+                        }
+                        ariaLabel={"Giờ vào ca " + (index + 1)}
+                        className={invalid ? "bg-rose-50" : ""}
+                      />
+                    </label>
+
                     <button
+                      type="button"
                       onClick={() => handleSwapTimes(shift.id)}
-                      className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white border rounded-full p-1.5 shadow-sm opacity-0 group-hover:opacity-100 hover:bg-blue-50 hover:text-blue-600 transition-all z-50 transform hover:scale-110"
-                      title="Đổi giờ Vào/Ra"
+                      className="mb-0.5 flex h-9 w-9 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50"
+                      aria-label={"Đổi giờ ca " + (index + 1)}
                     >
-                      <ArrowRightLeft size={14} />
+                      <ArrowRightLeft className="h-4 w-4" />
                     </button>
-                  </td>
-                  <td className="p-3 text-right font-mono align-middle">
-                    <div>{calculateHours(shift.inTime, shift.outTime)}</div>
-                    {getLateMinutes(shift.inTime) > 0 ? (
-                      <div className="mt-1 text-xs font-medium text-amber-700">
-                        Trễ {getLateMinutes(shift.inTime)} phút
-                      </div>
-                    ) : null}
-                  </td>
-                  <td className="p-3 text-center align-middle">
-                    {/* We can re-check weekend based on InTime dynamically */}
-                    {new Date(shift.inTime).getDay() === 0 ||
-                    new Date(shift.inTime).getDay() === 6 ? (
-                      <span className="text-indigo-600 font-bold">✓</span>
-                    ) : (
-                      <span className="text-gray-300">-</span>
-                    )}
-                  </td>
-                  <td className="p-2 text-center align-middle">
-                    <button
-                      onClick={() => handleDeleteShift(shift.id)}
-                      className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50"
-                      title="Xóa dòng"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-                {/* Insert Button Overlay Area - Visible on hover of the row or itself */}
-                <tr className="h-0 relative border-none hover:[&_div]:opacity-100 [.shift-row:hover_+_&_div]:opacity-100">
-                  <td colSpan={7} className="p-0 border-none relative h-0">
-                    <div className="absolute top-[-12px] left-0 w-full flex items-center justify-center h-6 opacity-0 transition-opacity z-50 pointer-events-none hover:pointer-events-auto">
-                      {/* Visual line indicator */}
-                      <div className="absolute w-full border-b-2 border-dashed border-blue-300 top-1/2 -translate-y-1/2 left-0 right-0"></div>
+
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="block text-xs font-medium text-slate-600">
+                        Giờ ra
+                      </span>
+                      <TimeSelect
+                        value={toInputFormat(shift.outTime)}
+                        onChange={(value) =>
+                          handleTimeChange(
+                            shift.id,
+                            "outTime",
+                            value,
+                          )
+                        }
+                        ariaLabel={"Giờ ra ca " + (index + 1)}
+                        className={invalid ? "bg-rose-50" : ""}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3">
+                    <div className="text-sm">
+                      <span className="font-semibold tabular-nums text-slate-900">
+                        {hours.toLocaleString("vi-VN", {
+                          maximumFractionDigits: 2,
+                        })}
+                        h
+                      </span>
+                      {lateMinutes > 0 ? (
+                        <span className="ml-2 text-xs font-medium text-amber-700">
+                          Trễ {lateMinutes} phút
+                        </span>
+                      ) : weekend ? (
+                        <span className="ml-2 text-xs font-medium text-sky-700">
+                          Cuối tuần
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="flex items-center gap-1">
                       <button
+                        type="button"
                         onClick={() => handleAddShiftAt(index)}
-                        className="relative bg-green-500 hover:bg-green-600 text-white rounded-full p-1.5 shadow-md transform scale-90 hover:scale-110 transition-transform z-30 pointer-events-auto"
-                        title="Chèn dòng mới"
+                        className="flex h-9 w-9 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-50"
+                        aria-label={"Chèn ca sau ca " + (index + 1)}
                       >
-                        <Plus size={18} />
+                        <Plus className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteShift(shift.id)}
+                        className="flex h-9 w-9 items-center justify-center rounded-md text-rose-600 hover:bg-rose-50"
+                        aria-label={"Xóa ca " + (index + 1)}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                  </td>
-                </tr>
-              </React.Fragment>
-              ))}
-              {shifts.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="p-8 text-center text-gray-500 bg-gray-50 border-dashed border-2 rounded-lg m-4"
-                  >
-                    Chưa có dữ liệu chấm công. Bấm "Thêm dòng" để tạo mới.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
 
-        <div className="p-4 border-t bg-gray-50 flex justify-between items-center rounded-b-lg">
+          {shifts.length === 0 ? (
+            <div className="px-4 py-14 text-center">
+              <Clock3 className="mx-auto h-8 w-8 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-slate-700">
+                Chưa có dữ liệu chấm công
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Thêm một ca để bắt đầu nhập ngày và giờ làm.
+              </p>
+            </div>
+          ) : null}
+        </div>
+        <footer className="flex shrink-0 flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <Button
             variant="outline"
             onClick={handleAddShift}
-            className="border-dashed border-gray-400 text-gray-600 hover:bg-white hover:text-blue-600 hover:border-blue-500"
+            className="h-10 gap-2 border-dashed border-slate-300 bg-white text-slate-700 shadow-none hover:border-primary hover:text-primary"
           >
-            <Plus size={16} className="mr-2" /> Thêm dòng
+            <Plus className="h-4 w-4" />
+            Thêm ca
           </Button>
 
-          <div className="flex gap-3">
-            <div className="text-sm text-gray-600 mr-4 flex flex-col items-end justify-center">
-              <span>
-                Tổng giờ:{" "}
-                <b>
-                  {shifts
-                    .reduce(
-                      (acc, s) => acc + calculateRawHours(s.inTime, s.outTime),
-                      0
-                    )
-                    .toFixed(2)}
-                </b>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="text-sm text-slate-600 sm:mr-2 sm:text-right">
+              Tổng giờ
+              <span className="ml-2 font-semibold tabular-nums text-slate-900">
+                {computedTotalHours.toLocaleString("vi-VN", {
+                  maximumFractionDigits: 2,
+                })}
+                h
               </span>
             </div>
-            <Button variant="outline" onClick={onClose} className="mr-2">
-              Hủy
-            </Button>
-            <Button
-              onClick={handleSave}
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200"
-            >
-              <Save size={16} className="mr-2" /> Lưu Thay Đổi
-            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                onClick={onClose}
+                className="h-10 border-slate-300 bg-white shadow-none"
+              >
+                Hủy
+              </Button>
+              <Button
+                onClick={handleSave}
+                className="h-10 gap-2 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+              >
+                <Save className="h-4 w-4" />
+                Lưu thay đổi
+              </Button>
+            </div>
           </div>
-        </div>
+        </footer>
       </div>
     </div>
   );

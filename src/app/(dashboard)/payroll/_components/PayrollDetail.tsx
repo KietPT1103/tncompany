@@ -41,6 +41,8 @@ import ShiftDetailModal, {
 import InputMoney from "@/components/InputMoney";
 
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Toast, type ToastVariant } from "@/components/ui/Toast";
 
 import { Card, CardContent } from "@/components/ui/Card";
 
@@ -597,6 +599,12 @@ type PayrollSort =
   | "days_desc"
   | "name_asc"
   | "role_asc";
+type PayrollDetailNotice = {
+  variant: ToastVariant;
+  title: string;
+  description: string;
+};
+
 
 type ActionMenuPosition = {
   top: number;
@@ -914,6 +922,10 @@ export default function PayrollDetail({
       left: 0,
       placement: "bottom",
     });
+  const [entryPendingDelete, setEntryPendingDelete] =
+    useState<PayrollEntry | null>(null);
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<PayrollDetailNotice | null>(null);
   const actionMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -963,6 +975,14 @@ export default function PayrollDetail({
   const [roleStartTimes, setRoleStartTimes] = useState<
     Record<string, RoleStartTimeSetting>
   >({});
+
+  function showNotice(
+    variant: ToastVariant,
+    title: string,
+    description: string,
+  ) {
+    setNotice({ variant, title, description });
+  }
 
   const updateEntryUiMeta = useCallback(
     (
@@ -1621,23 +1641,44 @@ export default function PayrollDetail({
     setShowAddDialog(false);
   }
 
-  async function handleDeleteEntry(entryId: string) {
-    if (!confirm("Bạn có chắc muốn xóa nhân viên này khỏi bảng lương?")) return;
+  function requestDeleteEntry(entry: PayrollEntry) {
+    if (!entry.id) return;
+    setEntryPendingDelete(entry);
+    setOpenActionMenuId(null);
+  }
+
+  async function confirmDeleteEntry() {
+    if (!entryPendingDelete?.id) return;
+    const entryToDelete = entryPendingDelete;
+    setDeletingEntryId(entryToDelete.id);
 
     try {
-      await deletePayrollEntry(entryId);
+      await deletePayrollEntry(entryToDelete.id);
 
-      setEntries((current) => current.filter((entry) => entry.id !== entryId));
+      setEntries((current) =>
+        current.filter((entry) => entry.id !== entryToDelete.id),
+      );
       setEntryUiMeta((current) => {
-        if (!current[entryId]) return current;
+        if (!current[entryToDelete.id!]) return current;
         const next = { ...current };
-        delete next[entryId];
+        delete next[entryToDelete.id!];
         return next;
       });
+      setEntryPendingDelete(null);
+      showNotice(
+        "success",
+        "Đã xóa dòng lương",
+        entryToDelete.employeeName + " đã được xóa khỏi kỳ lương.",
+      );
     } catch (error) {
       console.error(error);
-
-      alert("Không thể xóa dòng lương.");
+      showNotice(
+        "error",
+        "Không thể xóa dòng lương",
+        "Đã xảy ra lỗi khi xóa nhân viên khỏi kỳ lương. Vui lòng thử lại.",
+      );
+    } finally {
+      setDeletingEntryId(null);
     }
   }
 
@@ -2162,13 +2203,21 @@ export default function PayrollDetail({
 
   async function handleApplyBatchHourlyMultiplier() {
     if (hourlyEntries.length === 0) {
-      alert("Bảng lương này không có nhân viên theo giờ để áp dụng hệ số.");
+      showNotice(
+        "warning",
+        "Không có nhân viên theo giờ",
+        "Bảng lương này không có nhân viên phù hợp để áp dụng hệ số.",
+      );
       return;
     }
 
     const nextMultiplier = Number(batchHourlyMultiplier);
     if (!Number.isFinite(nextMultiplier) || nextMultiplier < 0) {
-      alert("Hệ số không hợp lệ.");
+      showNotice(
+        "warning",
+        "Hệ số không hợp lệ",
+        "Hệ số lương phải là một số lớn hơn hoặc bằng 0.",
+      );
       return;
     }
 
@@ -2205,7 +2254,11 @@ export default function PayrollDetail({
       );
     } catch (error) {
       console.error(error);
-      alert("Không thể áp dụng hệ số cho toàn bộ đợt lương.");
+      showNotice(
+        "error",
+        "Không thể áp dụng hệ số",
+        "Đã xảy ra lỗi khi cập nhật hệ số cho kỳ lương. Vui lòng thử lại.",
+      );
     } finally {
       setIsApplyingBatchMultiplier(false);
     }
@@ -2305,7 +2358,7 @@ export default function PayrollDetail({
             <dt className="text-xs font-medium text-slate-500">
               Tổng lương đang hiển thị
             </dt>
-            <dd className="mt-1 text-lg font-semibold tabular-nums text-emerald-700">
+            <dd className="mt-1 whitespace-nowrap text-lg font-semibold tabular-nums text-emerald-700">
               {formatCurrency(filteredTotal)}
             </dd>
           </div>
@@ -2438,8 +2491,8 @@ export default function PayrollDetail({
               </div>
             </div>
 
-            <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(280px,1fr)_220px_220px]">
-              <div className="relative">
+            <div className="mt-3 grid min-w-0 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(240px,1.2fr)_minmax(180px,0.9fr)_minmax(200px,0.9fr)]">
+              <div className="relative md:col-span-2 xl:col-span-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   value={searchTerm}
@@ -2455,7 +2508,7 @@ export default function PayrollDetail({
                 options={roleFilterOptions}
                 onValueChange={setFilterRole}
                 ariaLabel="Lọc theo vai trò"
-                className="w-full"
+                className="w-full min-w-0"
                 triggerClassName="border-slate-300 bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-400 hover:bg-white"
               />
 
@@ -2464,13 +2517,13 @@ export default function PayrollDetail({
                 options={PAYROLL_SORT_OPTIONS}
                 onValueChange={setSortBy}
                 ariaLabel="Sắp xếp bảng lương"
-                className="w-full"
+                className="w-full min-w-0"
                 triggerClassName="border-slate-300 bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-400 hover:bg-white"
               />
             </div>
 
             <div
-              className="mt-2 flex items-center gap-2 overflow-x-auto pb-1"
+              className="mt-2 flex flex-wrap items-center gap-2"
               aria-label="Bộ lọc nhanh"
             >
               <span className="shrink-0 pr-1 text-xs font-medium text-slate-500">
@@ -3161,9 +3214,7 @@ export default function PayrollDetail({
                                     <button
                                       type="button"
                                       className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-rose-600 transition-colors duration-150 hover:bg-rose-50"
-                                      onClick={() =>
-                                        handleDeleteEntry(entry.id!)
-                                      }
+                                      onClick={() => requestDeleteEntry(entry)}
                                       title="Xóa nhân viên này khỏi bảng lương"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -3823,6 +3874,36 @@ export default function PayrollDetail({
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(entryPendingDelete)}
+        title="Xóa dòng lương?"
+        description={
+          <>
+            <span className="font-medium text-slate-900">
+              {entryPendingDelete?.employeeName}
+            </span>{" "}
+            sẽ bị xóa khỏi kỳ lương hiện tại. Hồ sơ nhân viên trong hệ thống
+            không bị ảnh hưởng.
+          </>
+        }
+        confirmLabel="Xóa dòng lương"
+        variant="destructive"
+        icon={Trash2}
+        isLoading={Boolean(deletingEntryId)}
+        onCancel={() => {
+          if (!deletingEntryId) setEntryPendingDelete(null);
+        }}
+        onConfirm={confirmDeleteEntry}
+      />
+
+      <Toast
+        open={Boolean(notice)}
+        variant={notice?.variant ?? "info"}
+        title={notice?.title ?? ""}
+        description={notice?.description}
+        onDismiss={() => setNotice(null)}
+      />
 
       <ShiftDetailModal
         isOpen={shiftModalOpen}

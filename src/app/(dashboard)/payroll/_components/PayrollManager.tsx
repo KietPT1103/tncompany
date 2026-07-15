@@ -11,6 +11,8 @@ import {
 } from "@/services/payrolls.firebase";
 import { getEmployees } from "@/services/employees.firebase";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import { Input } from "@/components/ui/Input";
 import {
   ArrowRight,
@@ -25,6 +27,12 @@ import {
   X,
 } from "lucide-react";
 import { formatTimestampDate } from "./payrollShared";
+type PayrollNotice = {
+  variant: ToastVariant;
+  title: string;
+  description: string;
+};
+
 
 export default function PayrollManager({
   storeId,
@@ -40,6 +48,10 @@ export default function PayrollManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const router = useRouter();
+  const [payrollPendingDelete, setPayrollPendingDelete] =
+    useState<Payroll | null>(null);
+  const [deletingPayrollId, setDeletingPayrollId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<PayrollNotice | null>(null);
 
   useEffect(() => {
     loadPayrolls();
@@ -60,10 +72,21 @@ export default function PayrollManager({
       );
     }
   }
+  function showNotice(
+    variant: ToastVariant,
+    title: string,
+    description: string,
+  ) {
+    setNotice({ variant, title, description });
+  }
 
   async function handleCreate() {
     if (!newPayrollName.trim()) {
-      alert("Vui lòng nhập tên bảng lương.");
+      showNotice(
+        "warning",
+        "Chưa nhập tên kỳ lương",
+        "Vui lòng nhập tên bảng lương trước khi tạo.",
+      );
       return;
     }
 
@@ -71,7 +94,11 @@ export default function PayrollManager({
     try {
       const employees = await getEmployees(storeId);
       if (employees.length === 0) {
-        alert("Chưa có nhân viên nào để tạo bảng lương.");
+        showNotice(
+          "warning",
+          "Chưa có nhân viên",
+          "Cần thêm ít nhất một nhân viên trước khi tạo kỳ lương.",
+        );
         return;
       }
 
@@ -86,20 +113,44 @@ export default function PayrollManager({
       onSelectPayroll(payrollId);
     } catch (error) {
       console.error(error);
-      alert("Không thể tạo bảng lương.");
+      showNotice(
+        "error",
+        "Không thể tạo kỳ lương",
+        "Đã xảy ra lỗi khi tạo kỳ lương. Vui lòng thử lại.",
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Bạn có chắc muốn xóa bảng lương này?")) return;
+  function requestDelete(payroll: Payroll) {
+    if (!payroll.id) return;
+    setPayrollPendingDelete(payroll);
+  }
+
+  async function confirmDelete() {
+    if (!payrollPendingDelete?.id) return;
+    const payrollToDelete = payrollPendingDelete;
+    setDeletingPayrollId(payrollToDelete.id);
+
     try {
-      await deletePayroll(id);
+      await deletePayroll(payrollToDelete.id);
       await loadPayrolls();
+      setPayrollPendingDelete(null);
+      showNotice(
+        "success",
+        "Đã xóa kỳ lương",
+        '"' + payrollToDelete.name + '" đã được xóa khỏi danh sách.',
+      );
     } catch (error) {
       console.error(error);
-      alert("Không thể xóa bảng lương.");
+      showNotice(
+        "error",
+        "Không thể xóa kỳ lương",
+        "Đã xảy ra lỗi khi xóa kỳ lương. Vui lòng thử lại.",
+      );
+    } finally {
+      setDeletingPayrollId(null);
     }
   }
 
@@ -111,7 +162,11 @@ export default function PayrollManager({
       await loadPayrolls();
     } catch (error) {
       console.error(error);
-      alert("Không thể cập nhật tên bảng lương.");
+      showNotice(
+        "error",
+        "Không thể đổi tên",
+        "Đã xảy ra lỗi khi cập nhật tên kỳ lương. Vui lòng thử lại.",
+      );
     }
   }
 
@@ -423,7 +478,7 @@ export default function PayrollManager({
                           variant="ghost"
                           size="icon"
                           className="h-9 w-9 rounded-md text-slate-500 hover:bg-rose-50 hover:text-rose-600"
-                          onClick={() => handleDelete(payroll.id!)}
+                          onClick={() => requestDelete(payroll)}
                           aria-label="Xóa kỳ lương"
                           title="Xóa"
                         >
@@ -438,6 +493,36 @@ export default function PayrollManager({
           </div>
         </section>
       )}
+
+      <ConfirmDialog
+        open={Boolean(payrollPendingDelete)}
+        title="Xóa kỳ lương?"
+        description={
+          <>
+            Kỳ lương{" "}
+            <span className="font-medium text-slate-900">
+              {payrollPendingDelete?.name}
+            </span>{" "}
+            sẽ bị xóa khỏi danh sách. Hành động này không thể hoàn tác.
+          </>
+        }
+        confirmLabel="Xóa kỳ lương"
+        variant="destructive"
+        icon={Trash2}
+        isLoading={Boolean(deletingPayrollId)}
+        onCancel={() => {
+          if (!deletingPayrollId) setPayrollPendingDelete(null);
+        }}
+        onConfirm={confirmDelete}
+      />
+
+      <Toast
+        open={Boolean(notice)}
+        variant={notice?.variant ?? "info"}
+        title={notice?.title ?? ""}
+        description={notice?.description}
+        onDismiss={() => setNotice(null)}
+      />
     </div>
   );
 }
