@@ -35,11 +35,7 @@ const WEEKEND_SHIFT_FIELDS = [
   { key: "weekendShift3Start", label: "Cuối tuần ca 3" },
 ] as const;
 
-export default function RoleStartTimeManager({
-  storeId,
-}: {
-  storeId: string;
-}) {
+export default function RoleStartTimeManager({ storeId }: { storeId: string }) {
   const roleGroups = useMemo(() => getRoleGroupsForStore(storeId), [storeId]);
   const [values, setValues] = useState<RoleShiftStartValues>({});
   const [loading, setLoading] = useState(true);
@@ -155,42 +151,56 @@ export default function RoleStartTimeManager({
               <Clock3 className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-950">Cấu hình giờ bắt đầu làm</h2>
+              <h2 className="text-base font-semibold text-slate-950">
+                Cấu hình giờ bắt đầu làm
+              </h2>
               <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-500">
-                Khai báo tối đa 3 mốc giờ theo vai trò. Hệ thống dùng mốc gần nhất để ghép ca và xác định đi trễ.
+                Khai báo tối đa 3 mốc giờ theo vai trò. Hệ thống dùng mốc gần
+                nhất để ghép ca và xác định đi trễ.
               </p>
             </div>
           </div>
           <Button
-            className="h-10 shrink-0 gap-2 rounded-md px-4"
+            className="h-9 shrink-0 gap-1.5 rounded-[3px] bg-emerald-800 px-3 text-sm font-semibold text-white transition-[background-color,transform] duration-200 hover:bg-emerald-900 active:scale-[0.97]"
             onClick={() => void handleSave()}
             isLoading={saving}
             disabled={loading}
           >
-            <Save className="h-4 w-4" />
+            <Save className="h-3.5 w-3.5" />
             Lưu cấu hình
           </Button>
         </div>
       </section>
 
       {error ? (
-        <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">
+        <div
+          className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          role="alert"
+        >
           {error}
         </div>
       ) : null}
 
       {message ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700" role="status">
+        <div
+          className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+          role="status"
+        >
           {message}
         </div>
       ) : null}
 
       <div className="space-y-3">
         {Object.entries(roleGroups).map(([group, roles]) => (
-          <section key={group} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <section
+            key={group}
+            className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+          >
             <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-3">
               <h3 className="text-sm font-semibold text-slate-950">{group}</h3>
-              <p className="mt-0.5 text-xs text-slate-500">{roles.length} vai trò</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {roles.length} vai trò
+              </p>
             </div>
 
             <div className="grid md:grid-cols-2 xl:grid-cols-3">
@@ -210,7 +220,9 @@ export default function RoleStartTimeManager({
                     key={role}
                     className="border-b border-slate-200 p-4 md:border-r xl:[&:nth-child(3n)]:border-r-0"
                   >
-                    <div className="text-sm font-semibold text-slate-950">{role}</div>
+                    <div className="text-sm font-semibold text-slate-950">
+                      {role}
+                    </div>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
                       Để trống mốc không áp dụng cho vai trò này.
                     </p>
@@ -221,7 +233,9 @@ export default function RoleStartTimeManager({
                           key={shift.key}
                           className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-3"
                         >
-                          <span className="text-xs font-medium text-slate-600">{shift.label}</span>
+                          <span className="text-xs font-medium text-slate-600">
+                            {shift.label}
+                          </span>
                           <input
                             type="time"
                             step={60}
@@ -256,8 +270,12 @@ export default function RoleStartTimeManager({
                           className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                         />
                         <div>
-                          <div className="text-sm font-medium text-slate-900">Giờ riêng cuối tuần</div>
-                          <p className="mt-0.5 text-xs text-slate-500">Dùng mốc khác cho thứ 7 và chủ nhật.</p>
+                          <div className="text-sm font-medium text-slate-900">
+                            Giờ riêng cuối tuần
+                          </div>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Dùng mốc khác cho thứ 7 và chủ nhật.
+                          </p>
                         </div>
                       </label>
 
@@ -268,7 +286,9 @@ export default function RoleStartTimeManager({
                               key={shift.key}
                               className="grid grid-cols-[96px_minmax(0,1fr)] items-center gap-3"
                             >
-                              <span className="text-xs font-medium text-amber-800">{shift.label}</span>
+                              <span className="text-xs font-medium text-amber-800">
+                                {shift.label}
+                              </span>
                               <input
                                 type="time"
                                 step={60}

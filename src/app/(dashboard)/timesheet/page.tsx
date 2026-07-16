@@ -1130,14 +1130,14 @@ export default function TimesheetPage() {
                   onChange={handleFileChange}
                   className="sr-only"
                 />
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-primary shadow-sm">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-emerald-800 shadow-sm">
                   {file ? (
                     <FileText className="h-5 w-5" />
                   ) : (
                     <UploadCloud className="h-5 w-5" />
                   )}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-emerald-800">
                   {file ? file.name : "Chọn file TXT hoặc CSV"}
                 </span>
               </label>

@@ -69,7 +69,7 @@ export default function PayrollPage() {
             </div>
 
             <div
-              className="inline-flex w-full overflow-x-auto rounded-lg border border-slate-200 bg-slate-100 p-1 lg:w-auto"
+              className="inline-flex w-full overflow-x-auto rounded border border-white bg-slate-200 p-1 lg:w-auto"
               role="tablist"
               aria-label="Quản lý lương"
             >
@@ -88,9 +88,9 @@ export default function PayrollPage() {
                     role="tab"
                     aria-selected={isActive}
                     className={cn(
-                      "inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1",
+                      "inline-flex h-9 shrink-0 items-center gap-2 rounded px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1",
                       isActive
-                        ? "bg-white text-emerald-700 shadow-sm"
+                        ? "bg-emerald-700 text-white shadow-sm"
                         : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
                     )}
                   >

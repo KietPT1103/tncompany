@@ -51,9 +51,24 @@ type NavGroup = {
 };
 
 const standaloneNavItems: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: Calculator, permission: "dashboard.access" },
-  { href: "/activity-logs", label: "Nhật ký máy", icon: Activity, permission: "activity_logs.access" },
-  { href: "/accounts", label: "Tài khoản", icon: KeyRound, permission: "accounts.access" },
+  {
+    href: "/",
+    label: "Dashboard",
+    icon: Calculator,
+    permission: "dashboard.access",
+  },
+  {
+    href: "/activity-logs",
+    label: "Nhật ký máy",
+    icon: Activity,
+    permission: "activity_logs.access",
+  },
+  {
+    href: "/accounts",
+    label: "Tài khoản",
+    icon: KeyRound,
+    permission: "accounts.access",
+  },
 ];
 
 const navGroups: NavGroup[] = [
@@ -62,9 +77,24 @@ const navGroups: NavGroup[] = [
     label: "Hóa đơn",
     icon: ReceiptText,
     items: [
-      { href: "/pos", label: "Hóa đơn", icon: ReceiptText, permission: "bills.access" },
-      { href: "/reports", label: "Báo cáo", icon: FileText, permission: "reports.access" },
-      { href: "/cash-flow", label: "Dòng tiền", icon: BarChart3, permission: "cash_flow.access" },
+      {
+        href: "/pos",
+        label: "Hóa đơn",
+        icon: ReceiptText,
+        permission: "bills.access",
+      },
+      {
+        href: "/reports",
+        label: "Báo cáo",
+        icon: FileText,
+        permission: "reports.access",
+      },
+      {
+        href: "/cash-flow",
+        label: "Dòng tiền",
+        icon: BarChart3,
+        permission: "cash_flow.access",
+      },
     ],
   },
   {
@@ -107,15 +137,30 @@ const navGroups: NavGroup[] = [
     label: "Sản phẩm",
     icon: Package,
     items: [
-      { href: "/product", label: "Sản phẩm", icon: Package, permission: "product.access" },
-      { href: "/product/checks", label: "Kiểm kho", icon: Package, permission: "inventory_checks.access" },
+      {
+        href: "/product",
+        label: "Sản phẩm",
+        icon: Package,
+        permission: "product.access",
+      },
+      {
+        href: "/product/checks",
+        label: "Kiểm kho",
+        icon: Package,
+        permission: "inventory_checks.access",
+      },
       {
         href: "/product/receipts",
         label: "Nhập hàng",
         icon: Package,
         permission: "inventory_receipts.access",
       },
-      { href: "/categories", label: "Danh mục", icon: Tags, permission: "categories.access" },
+      {
+        href: "/categories",
+        label: "Danh mục",
+        icon: Tags,
+        permission: "categories.access",
+      },
     ],
   },
   {
@@ -123,8 +168,18 @@ const navGroups: NavGroup[] = [
     label: "Tính lương",
     icon: Wallet,
     items: [
-      { href: "/payroll", label: "Tính lương", icon: Wallet, permission: "payroll.access" },
-      { href: "/timesheet", label: "Chấm công", icon: CalendarDays, permission: "timesheet.access" },
+      {
+        href: "/payroll",
+        label: "Tính lương",
+        icon: Wallet,
+        permission: "payroll.access",
+      },
+      {
+        href: "/timesheet",
+        label: "Chấm công",
+        icon: CalendarDays,
+        permission: "timesheet.access",
+      },
       {
         href: "/payroll-estimate",
         label: "Ước lượng lương",
@@ -144,7 +199,12 @@ const navGroups: NavGroup[] = [
         icon: MessageSquareText,
         permission: "social_listening.access",
       },
-      { href: "/seo-articles", label: "Bài viết SEO", icon: FileText, permission: "seo_articles.access" },
+      {
+        href: "/seo-articles",
+        label: "Bài viết SEO",
+        icon: FileText,
+        permission: "seo_articles.access",
+      },
     ],
   },
   {
@@ -158,7 +218,12 @@ const navGroups: NavGroup[] = [
         icon: ReceiptText,
         permission: "internal_invoices.access",
       },
-      { href: "/tax-invoices", label: "Hóa đơn thuế", icon: ReceiptText, permission: "tax_invoices.access" },
+      {
+        href: "/tax-invoices",
+        label: "Hóa đơn thuế",
+        icon: ReceiptText,
+        permission: "tax_invoices.access",
+      },
     ],
   },
 ];
@@ -170,7 +235,12 @@ const storeOptions: {
   note: string;
 }[] = [
   { id: "cafe", icon: Coffee, label: "Cafe", note: "Quầy nước" },
-  { id: "restaurant", icon: UtensilsCrossed, label: "Lẩu / Bếp", note: "Mô hình Bếp" },
+  {
+    id: "restaurant",
+    icon: UtensilsCrossed,
+    label: "Lẩu / Bếp",
+    note: "Mô hình Bếp",
+  },
   { id: "bakery", icon: CakeSlice, label: "Tiệm bánh", note: "Quầy bánh" },
   { id: "farm", icon: Tractor, label: "Farm", note: "Khu trải nghiệm" },
 ];
@@ -246,7 +316,7 @@ export default function AdminSidebar({
             (item.href !== "/" && pathname.startsWith(`${item.href}/`)),
         ),
       )?.key ?? null,
-    [pathname, visibleNavGroups]
+    [pathname, visibleNavGroups],
   );
 
   useEffect(() => {
@@ -270,7 +340,7 @@ export default function AdminSidebar({
       {!isOpen ? (
         <button
           type="button"
-          className="fixed left-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-white text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.14)] transition-[background-color,color,transform] duration-150 ease-out hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none lg:hidden"
+          className="fixed left-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-[0_2px_8px_rgba(0,35,25,0.24)] transition-[background-color,color,transform] duration-150 ease-out hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 active:scale-[0.96] motion-reduce:transition-none lg:hidden"
           onClick={() => setIsOpen(true)}
           aria-label="Mở menu"
           aria-controls="admin-sidebar"
@@ -284,41 +354,43 @@ export default function AdminSidebar({
         id="admin-sidebar"
         aria-label="Điều hướng quản trị"
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex h-screen w-[280px] flex-col bg-white shadow-[0_8px_24px_rgba(15,23,42,0.16)] transition-[transform,width] duration-200 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none lg:static lg:translate-x-0 lg:border-r lg:border-slate-200/80 lg:shadow-none",
+          "admin-sidebar admin-sidebar__ease fixed inset-y-0 left-0 z-40 flex h-screen w-[280px] flex-col shadow-[0_8px_24px_rgba(0,35,25,0.24)] transition-[transform,width] duration-200 motion-reduce:transition-none lg:static lg:translate-x-0 lg:border-r lg:border-[#F6C85F]/20 lg:shadow-none",
           isOpen ? "translate-x-0" : "-translate-x-full",
-          collapsed ? "lg:w-[72px]" : "lg:w-[248px]"
+          collapsed ? "lg:w-[72px]" : "lg:w-[248px]",
         )}
       >
         <div
           className={cn(
-            "border-b border-slate-100 px-3 py-3",
-            collapsed && "lg:px-2"
+            "border-b border-white/10 px-3 py-3",
+            collapsed && "lg:px-2",
           )}
         >
           <div
             className={cn(
               "flex items-center justify-between gap-2",
-              collapsed && "lg:flex-col lg:justify-center"
+              collapsed && "lg:flex-col lg:justify-center",
             )}
           >
             <div
               className={cn(
                 "flex min-w-0 items-center",
-                collapsed && "lg:hidden"
+                collapsed && "lg:hidden",
               )}
             >
-              <img
-                src="/assets/tn_services.png"
-                alt="TN Services"
-                className="h-12 w-[154px] shrink-0 object-contain"
-                draggable={false}
-              />
+              <div className="flex h-14 w-[166px] shrink-0 items-center overflow-hidden">
+                <img
+                  src="/assets/tn_services.png"
+                  alt="TN Services"
+                  className="h-auto w-full max-w-none"
+                  draggable={false}
+                />
+              </div>
             </div>
 
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-500 transition-[background-color,color,transform] duration-150 ease-out hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none lg:hidden"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[#FDE7A3] transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none lg:hidden"
               aria-label="Đóng menu"
             >
               <X className="h-5 w-5" />
@@ -331,7 +403,7 @@ export default function AdminSidebar({
                   setShowStoreMenu(false);
                   onToggleCollapsed();
                 }}
-                className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-500 transition-[background-color,color,transform] duration-150 ease-out hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none lg:inline-flex"
+                className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#F6C85F] transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/10 hover:text-[#FDE7A3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none lg:inline-flex"
                 aria-label={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
                 title={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
               >
@@ -349,8 +421,9 @@ export default function AdminSidebar({
               type="button"
               onClick={() => setShowStoreMenu((value) => !value)}
               className={cn(
-                "flex h-12 w-full items-center justify-between rounded-lg bg-slate-50 px-2.5 text-left transition-[background-color,color,transform] duration-150 ease-out hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
-                collapsed && "lg:mx-auto lg:h-10 lg:w-10 lg:justify-center lg:p-0"
+                "flex h-14 w-full items-center justify-between rounded-lg bg-white/[0.06] px-2.5 text-left ring-1 ring-inset ring-white/15 transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none",
+                collapsed &&
+                  "lg:mx-auto lg:h-10 lg:w-10 lg:justify-center lg:p-0",
               )}
               aria-haspopup="listbox"
               aria-expanded={showStoreMenu}
@@ -358,20 +431,23 @@ export default function AdminSidebar({
               title={collapsed ? currentStore.label : undefined}
             >
               <div className="flex min-w-0 items-center gap-2.5">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-primary shadow-[0_1px_3px_rgba(15,23,42,0.12)]">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F6C85F]/15 text-[#F6C85F] ring-1 ring-inset ring-[#F6C85F]/25">
                   <CurrentStoreIcon className="h-4 w-4" />
                 </div>
                 <div className={cn("min-w-0", collapsed && "lg:hidden")}>
-                  <div className="truncate text-sm font-semibold text-slate-900">
+                  <div className="truncate text-sm font-semibold text-white">
                     {currentStore.label}
                   </div>
-                  <div className="truncate text-xs text-slate-500">{storeName}</div>
+                  <div className="truncate text-xs text-[#B8D8CC]">
+                    {storeName}
+                  </div>
                 </div>
               </div>
               <ChevronsUpDown
                 className={cn(
-                  "h-4 w-4 shrink-0 text-slate-400",
-                  collapsed && "lg:hidden"
+                  "h-4 w-4 shrink-0 text-[#F6C85F] transition-transform duration-200 ease-out motion-reduce:transition-none",
+                  showStoreMenu && "rotate-180",
+                  collapsed && "lg:hidden",
                 )}
               />
             </button>
@@ -381,9 +457,8 @@ export default function AdminSidebar({
                 role="listbox"
                 aria-label="Chọn khu vực"
                 className={cn(
-                  "absolute left-0 top-[calc(100%+8px)] z-50 w-full rounded-lg bg-white p-1.5 shadow-[0_4px_8px_rgba(15,23,42,0.16)] ring-1 ring-black/5",
-                  collapsed &&
-                    "lg:left-[calc(100%+12px)] lg:top-0 lg:w-60"
+                  "absolute left-0 top-[calc(100%+8px)] z-50 w-full animate-in rounded-lg bg-[#073D31] p-1.5 text-white shadow-[0_4px_8px_rgba(0,25,18,0.28)] ring-1 ring-white/15 duration-150 fade-in-0 zoom-in-95 motion-reduce:animate-none",
+                  collapsed && "lg:left-[calc(100%+12px)] lg:top-0 lg:w-60",
                 )}
               >
                 {storeOptions.map((option) => {
@@ -402,10 +477,10 @@ export default function AdminSidebar({
                         setIsOpen(false);
                       }}
                       className={cn(
-                        "flex min-h-12 w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-[background-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none",
+                        "flex min-h-12 w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-[background-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white motion-reduce:transition-none",
                         active
-                          ? "bg-emerald-50 text-emerald-900"
-                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                          ? "bg-[#F6C85F] text-[#063B2E]"
+                          : "text-[#D7EEE6] hover:bg-white/10 hover:text-white",
                       )}
                     >
                       <div className="flex min-w-0 items-center gap-2.5">
@@ -413,15 +488,19 @@ export default function AdminSidebar({
                           className={cn(
                             "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
                             active
-                              ? "bg-emerald-600 text-white"
-                              : "bg-slate-100 text-slate-500"
+                              ? "bg-[#063B2E]/10 text-[#063B2E]"
+                              : "bg-white/10 text-[#F6C85F]",
                           )}
                         >
                           <Icon className="h-4 w-4" />
                         </div>
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold">{option.label}</div>
-                          <div className="truncate text-xs text-inherit/75">{option.note}</div>
+                          <div className="truncate text-sm font-semibold">
+                            {option.label}
+                          </div>
+                          <div className="truncate text-xs text-inherit/75">
+                            {option.note}
+                          </div>
                         </div>
                       </div>
                       {active ? <Check className="h-4 w-4 shrink-0" /> : null}
@@ -437,7 +516,7 @@ export default function AdminSidebar({
           aria-label="Menu quản trị"
           className={cn(
             "flex-1 overflow-x-hidden overflow-y-auto px-3 py-3",
-            collapsed && "lg:px-2"
+            collapsed && "lg:px-2",
           )}
         >
           <div className="space-y-1">
@@ -454,17 +533,17 @@ export default function AdminSidebar({
                   aria-current={isActive ? "page" : undefined}
                   title={collapsed ? item.label : undefined}
                   className={cn(
-                    "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
+                    "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-[background-color,color,transform] duration-150 ease-out hover:translate-x-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none",
                     collapsed && "lg:justify-center lg:px-0",
                     isActive
-                      ? "bg-emerald-50 text-emerald-800"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      ? "bg-[#F6C85F] text-[#063B2E] shadow-[0_2px_6px_rgba(0,35,25,0.2)]"
+                      : "text-[#D7EEE6] hover:bg-white/[0.08] hover:text-white",
                   )}
                 >
                   <item.icon
                     className={cn(
                       "h-5 w-5 shrink-0",
-                      isActive ? "text-emerald-600" : "text-slate-400"
+                      isActive ? "text-[#063B2E]" : "text-white/80",
                     )}
                   />
                   <span className={cn("truncate", collapsed && "lg:sr-only")}>
@@ -478,13 +557,13 @@ export default function AdminSidebar({
               const isGroupActive = group.items.some(
                 (item) =>
                   pathname === item.href ||
-                  (item.href !== "/" && pathname.startsWith(item.href + "/"))
+                  (item.href !== "/" && pathname.startsWith(item.href + "/")),
               );
               const isGroupOpen = openGroupKey === group.key;
               const GroupIcon = group.icon;
 
               return (
-                <div key={group.key} className="space-y-0.5">
+                <div key={group.key} className="space-y-0.5 py-0.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -499,73 +578,99 @@ export default function AdminSidebar({
                       );
                     }}
                     className={cn(
-                      "flex h-10 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-sm font-semibold transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
+                      ` admin-sidebar__ease
+                        flex h-10 w-full items-center justify-between gap-3
+                        rounded-md px-3
+                        text-left text-sm font-semibold
+                        text-[#F6C85F]
+
+                        bg-white/[0.08]
+                        ring-1 ring-inset ring-[#F6C85F]/35
+
+                        transition-[background-color,color,transform,box-shadow]
+                        duration-200
+
+                        hover:translate-x-0.5
+                        hover:bg-white/[0.12]
+                        hover:text-[#FDE7A3]
+                        hover:ring-[#F6C85F]/55
+
+                        focus-visible:outline-none
+                        focus-visible:ring-2
+                        focus-visible:ring-[#F6C85F]
+
+                        active:scale-[0.96]
+                        motion-reduce:transition-none
+                      `,
                       collapsed && "lg:justify-center lg:px-0",
-                      isGroupActive
-                        ? "text-emerald-700"
-                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-950",
-                      collapsed && isGroupActive && "lg:bg-emerald-50"
+                      isGroupActive &&
+                        "bg-white/[0.1] text-[#FDE7A3] shadow-[inset_0_0_0_1px_rgba(246,200,95,0.35)]",
                     )}
                     aria-expanded={isGroupOpen}
                     title={collapsed ? group.label : undefined}
                   >
                     <span className="flex min-w-0 items-center gap-3">
-                      <GroupIcon
-                        className={cn(
-                          "h-5 w-5 shrink-0",
-                          isGroupActive ? "text-emerald-600" : "text-slate-400"
-                        )}
-                      />
-                      <span className={cn("truncate", collapsed && "lg:sr-only")}>
+                      <GroupIcon className="h-5 w-5 shrink-0 text-[#F6C85F]" />
+                      <span
+                        className={cn("truncate", collapsed && "lg:sr-only")}
+                      >
                         {group.label}
                       </span>
                     </span>
                     <ChevronRight
                       className={cn(
-                        "h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ease-out motion-reduce:transition-none",
-                        isGroupOpen && "rotate-90 text-emerald-600",
-                        collapsed && "lg:hidden"
+                        "admin-sidebar__ease h-4 w-4 shrink-0 text-[#F6C85F] transition-transform duration-200",
+                        isGroupOpen && "rotate-90",
+                        collapsed && "lg:hidden",
                       )}
                     />
                   </button>
 
-                  {isGroupOpen ? (
-                    <div
-                      className={cn(
-                        "space-y-0.5 pl-3",
-                        collapsed && "lg:hidden"
-                      )}
-                    >
-                      {group.items.map((item) => {
-                        const isActive =
-                          pathname === item.href ||
-                          (item.href !== "/" && pathname.startsWith(item.href + "/"));
+                  <div
+                    aria-hidden={!isGroupOpen}
+                    className={cn(
+                      "admin-sidebar__ease grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none",
+                      isGroupOpen
+                        ? "grid-rows-[1fr] opacity-100"
+                        : "pointer-events-none grid-rows-[0fr] opacity-0",
+                      collapsed && "lg:hidden",
+                    )}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="space-y-0.5 pb-0.5 pl-3 pt-1">
+                        {group.items.map((item) => {
+                          const isActive =
+                            pathname === item.href ||
+                            (item.href !== "/" &&
+                              pathname.startsWith(item.href + "/"));
 
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => setIsOpen(false)}
-                            aria-current={isActive ? "page" : undefined}
-                            className={cn(
-                              "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
-                              isActive
-                                ? "bg-emerald-50 text-emerald-800"
-                                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                            )}
-                          >
-                            <item.icon
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => setIsOpen(false)}
+                              aria-current={isActive ? "page" : undefined}
+                              tabIndex={isGroupOpen ? undefined : -1}
                               className={cn(
-                                "h-4 w-4 shrink-0",
-                                isActive ? "text-emerald-600" : "text-slate-400"
+                                "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-[background-color,color,transform] duration-150 ease-out hover:translate-x-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none",
+                                isActive
+                                  ? "bg-white/[0.1] text-[#FDE7A3] shadow-[inset_0_0_0_1px_rgba(246,200,95,0.22)]"
+                                  : "text-[#D7EEE6] hover:bg-white/[0.07] hover:text-white",
                               )}
-                            />
-                            <span className="truncate">{item.label}</span>
-                          </Link>
-                        );
-                      })}
+                            >
+                              <item.icon
+                                className={cn(
+                                  "h-4 w-4 shrink-0",
+                                  isActive ? "text-[#F6C85F]" : "text-white/75",
+                                )}
+                              />
+                              <span className="truncate">{item.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               );
             })}
@@ -574,8 +679,8 @@ export default function AdminSidebar({
 
         <div
           className={cn(
-            "border-t border-slate-100 p-2.5",
-            collapsed && "lg:p-2"
+            "border-t border-white/10 p-2.5",
+            collapsed && "lg:p-2",
           )}
         >
           <button
@@ -583,8 +688,8 @@ export default function AdminSidebar({
             onClick={logout}
             title={collapsed ? "Đăng xuất" : undefined}
             className={cn(
-              "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold text-rose-600 transition-[background-color,color,transform] duration-150 ease-out hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 active:scale-[0.96] motion-reduce:transition-none",
-              collapsed && "lg:justify-center lg:px-0"
+              "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold text-[#F6C85F] transition-[background-color,color,transform] duration-150 ease-out hover:bg-[#F6C85F] hover:text-[#063B2E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064E3B] active:scale-[0.96] motion-reduce:transition-none",
+              collapsed && "lg:justify-center lg:px-0",
             )}
           >
             <LogOut className="h-5 w-5 shrink-0" />
@@ -595,7 +700,7 @@ export default function AdminSidebar({
 
       {isOpen ? (
         <div
-          className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden"
+          className="fixed inset-0 z-30 bg-[#032B22]/60 lg:hidden"
           onClick={() => setIsOpen(false)}
           aria-hidden="true"
         />

@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Ban,
   CalendarCheck2,
@@ -31,14 +25,8 @@ import RoleGuard from "@/components/RoleGuard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Pagination } from "@/components/ui/Pagination";
-import {
-  SelectBox,
-  type SelectBoxOption,
-} from "@/components/ui/SelectBox";
-import {
-  paginateItems,
-  sortByCreatedAtDesc,
-} from "@/lib/listPagination";
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
+import { paginateItems, sortByCreatedAtDesc } from "@/lib/listPagination";
 import {
   parseSampleBillProductWorkbook,
   type ParsedSampleBillProductRow,
@@ -122,7 +110,7 @@ const farmScheduleOptions: readonly SelectBoxOption<FarmPriceSchedule>[] = [
 ];
 
 const activeFarmScheduleOptions = farmScheduleOptions.filter(
-  (option) => option.value !== "none"
+  (option) => option.value !== "none",
 );
 
 const noticeClasses: Record<Notice["tone"], string> = {
@@ -152,10 +140,7 @@ const normalizeText = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("vi");
 
-const inferQuantityRange = (
-  name: string,
-  billType: SampleBillType
-) => {
+const inferQuantityRange = (name: string, billType: SampleBillType) => {
   if (billType !== "farm") {
     return { minQuantity: 4, maxQuantity: 10 };
   }
@@ -229,7 +214,9 @@ export default function SampleBillProductsPage() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | SampleBillType>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "inactive"
+  >("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SampleBillProduct | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm);
@@ -264,9 +251,9 @@ export default function SampleBillProductsPage() {
         products.map((product) => [
           product.productCode.toLocaleLowerCase("vi"),
           product,
-        ])
+        ]),
       ),
-    [products]
+    [products],
   );
 
   const filteredProducts = useMemo(() => {
@@ -278,9 +265,7 @@ export default function SampleBillProductsPage() {
           product.productCode
             .toLocaleLowerCase("vi")
             .includes(normalizedQuery) ||
-          product.productName
-            .toLocaleLowerCase("vi")
-            .includes(normalizedQuery);
+          product.productName.toLocaleLowerCase("vi").includes(normalizedQuery);
         const matchesType =
           typeFilter === "all" || product.billType === typeFilter;
         const matchesStatus =
@@ -306,11 +291,13 @@ export default function SampleBillProductsPage() {
   const stats = useMemo(
     () => ({
       total: products.length,
-      coffee: products.filter((product) => product.billType === "coffee").length,
-      hotpot: products.filter((product) => product.billType === "hotpot").length,
+      coffee: products.filter((product) => product.billType === "coffee")
+        .length,
+      hotpot: products.filter((product) => product.billType === "hotpot")
+        .length,
       farm: products.filter((product) => product.billType === "farm").length,
     }),
-    [products]
+    [products],
   );
 
   const openCreate = () => {
@@ -368,8 +355,7 @@ export default function SampleBillProductsPage() {
         productCode: form.productCode.trim(),
         productName: form.productName.trim(),
         unit: form.unit.trim(),
-        farmSchedule:
-          form.billType === "farm" ? form.farmSchedule : "none",
+        farmSchedule: form.billType === "farm" ? form.farmSchedule : "none",
       };
       if (editing) {
         await updateSampleBillProduct(editing.id, payload);
@@ -395,7 +381,9 @@ export default function SampleBillProductsPage() {
   };
 
   const removeProduct = async (product: SampleBillProduct) => {
-    if (!window.confirm(`Xóa ${product.productName} khỏi DS sản phẩm bill mẫu?`)) {
+    if (
+      !window.confirm(`Xóa ${product.productName} khỏi DS sản phẩm bill mẫu?`)
+    ) {
       return;
     }
 
@@ -434,10 +422,7 @@ export default function SampleBillProductsPage() {
         ...product,
         billType: inferredType,
         farmSchedule: inferredSchedule,
-        ...inferQuantityRange(
-          product.productName,
-          inferredType || "coffee"
-        ),
+        ...inferQuantityRange(product.productName, inferredType || "coffee"),
       }));
       setSourceFileName(parsed.fileName);
       setDuplicateCodes(parsed.duplicateCodes);
@@ -447,26 +432,21 @@ export default function SampleBillProductsPage() {
       setNotice({
         tone: "error",
         title: "Không đọc được file Excel",
-        detail: error instanceof Error ? error.message : "Vui lòng kiểm tra file.",
+        detail:
+          error instanceof Error ? error.message : "Vui lòng kiểm tra file.",
       });
     }
   };
 
-  const updateStage = (
-    index: number,
-    changes: Partial<StagedProduct>
-  ) => {
+  const updateStage = (index: number, changes: Partial<StagedProduct>) => {
     setStaging((current) =>
       current.map((product, productIndex) =>
-        productIndex === index ? { ...product, ...changes } : product
-      )
+        productIndex === index ? { ...product, ...changes } : product,
+      ),
     );
   };
 
-  const updateStageType = (
-    index: number,
-    billType: SampleBillType
-  ) => {
+  const updateStageType = (index: number, billType: SampleBillType) => {
     const product = staging[index];
     updateStage(index, {
       billType,
@@ -482,23 +462,21 @@ export default function SampleBillProductsPage() {
         billType,
         farmSchedule: billType === "farm" ? "weekday" : "none",
         ...inferQuantityRange(product.productName, billType),
-      }))
+      })),
     );
   };
 
   const applyBulkSchedule = (farmSchedule: FarmPriceSchedule) => {
     setStaging((current) =>
       current.map((product) =>
-        product.billType === "farm"
-          ? { ...product, farmSchedule }
-          : product
-      )
+        product.billType === "farm" ? { ...product, farmSchedule } : product,
+      ),
     );
   };
 
   const getStageState = (product: StagedProduct) => {
     const existing = existingByCode.get(
-      product.productCode.toLocaleLowerCase("vi")
+      product.productCode.toLocaleLowerCase("vi"),
     );
     const conflict =
       existing &&
@@ -521,9 +499,8 @@ export default function SampleBillProductsPage() {
         !product.billType ||
         product.minQuantity < 1 ||
         product.maxQuantity < product.minQuantity ||
-        (product.billType === "farm" &&
-          product.farmSchedule === "none") ||
-        getStageState(product) === "conflict"
+        (product.billType === "farm" && product.farmSchedule === "none") ||
+        getStageState(product) === "conflict",
     );
 
   const confirmImport = async () => {
@@ -540,13 +517,11 @@ export default function SampleBillProductsPage() {
           price: product.price,
           billType: product.billType as SampleBillType,
           farmSchedule:
-            product.billType === "farm"
-              ? product.farmSchedule
-              : "none",
+            product.billType === "farm" ? product.farmSchedule : "none",
           minQuantity: product.minQuantity,
           maxQuantity: product.maxQuantity,
           isActive: true,
-        }))
+        })),
       );
       setImportError("");
       setImportOpen(false);
@@ -578,7 +553,7 @@ export default function SampleBillProductsPage() {
           <header className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-balance text-2xl font-bold">
-                DS sản phẩm tạo bill
+                Danh sách sản phẩm tạo bill
               </h1>
               <p className="mt-1 text-pretty text-sm text-slate-600">
                 Kho dữ liệu riêng cho bill mẫu
@@ -598,17 +573,32 @@ export default function SampleBillProductsPage() {
               />
               <Button
                 variant="outline"
-                className="h-11 gap-2 border-slate-300 bg-white transition-[transform,background-color] active:scale-[0.96]"
+                className="
+                  h-9 gap-1.5 rounded-[3px]
+                  border-slate-300 bg-white
+                  px-3 text-sm font-medium
+                  transition-[transform,background-color]
+                  hover:bg-slate-50
+                  active:scale-[0.96]
+                "
                 onClick={() => fileInputRef.current?.click()}
               >
-                <FileUp className="h-4 w-4" />
+                <FileUp className="h-3.5 w-3.5" />
                 Upload Excel
               </Button>
+
               <Button
-                className="h-11 gap-2 bg-emerald-600 text-white transition-[transform,background-color] hover:bg-emerald-700 active:scale-[0.96]"
+                className="
+                  h-9 gap-1.5 rounded-[3px]
+                  bg-emerald-700 px-3
+                  text-sm font-semibold text-white
+                  transition-[transform,background-color]
+                  hover:bg-emerald-600
+                  active:scale-[0.96]
+                "
                 onClick={openCreate}
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
                 Thêm sản phẩm
               </Button>
             </div>
@@ -677,7 +667,9 @@ export default function SampleBillProductsPage() {
               >
                 <p className="text-sm font-semibold">{notice.title}</p>
                 {notice.detail ? (
-                  <p className="mt-1 text-xs leading-5 opacity-80">{notice.detail}</p>
+                  <p className="mt-1 text-xs leading-5 opacity-80">
+                    {notice.detail}
+                  </p>
                 ) : null}
               </div>
             ) : null}
@@ -699,7 +691,10 @@ export default function SampleBillProductsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-14 text-center text-slate-600">
+                      <td
+                        colSpan={8}
+                        className="px-4 py-14 text-center text-slate-600"
+                      >
                         Đang tải dữ liệu...
                       </td>
                     </tr>
@@ -707,13 +702,20 @@ export default function SampleBillProductsPage() {
                     <tr>
                       <td colSpan={8} className="px-4 py-14 text-center">
                         <CircleAlert className="mx-auto h-6 w-6 text-slate-400" />
-                        <p className="mt-2 font-medium">Chưa có sản phẩm phù hợp</p>
+                        <p className="mt-2 font-medium">
+                          Chưa có sản phẩm phù hợp
+                        </p>
                       </td>
                     </tr>
                   ) : (
                     productPage.items.map((product) => (
-                      <tr key={product.id} className="bg-white hover:bg-slate-50">
-                        <td className="px-4 py-3 font-semibold">{product.productCode}</td>
+                      <tr
+                        key={product.id}
+                        className="bg-white hover:bg-slate-50"
+                      >
+                        <td className="px-4 py-3 font-semibold">
+                          {product.productCode}
+                        </td>
                         <td className="px-4 py-3">
                           <p className="font-medium">{product.productName}</p>
                           <p className="mt-0.5 text-xs text-slate-500">
@@ -721,7 +723,9 @@ export default function SampleBillProductsPage() {
                           </p>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${typeBadgeClasses[product.billType]}`}>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-bold ${typeBadgeClasses[product.billType]}`}
+                          >
                             {billTypeLabels[product.billType]}
                           </span>
                         </td>
@@ -735,7 +739,9 @@ export default function SampleBillProductsPage() {
                           {product.minQuantity}–{product.maxQuantity}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${product.isActive ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-bold ${product.isActive ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}
+                          >
                             {product.isActive ? "Đang dùng" : "Tạm ẩn"}
                           </span>
                         </td>
@@ -782,7 +788,11 @@ export default function SampleBillProductsPage() {
         onClose={() => setFormOpen(false)}
         footer={
           <>
-            <Button variant="outline" className="h-10" onClick={() => setFormOpen(false)}>
+            <Button
+              variant="outline"
+              className="h-10"
+              onClick={() => setFormOpen(false)}
+            >
               Hủy
             </Button>
             <Button
@@ -790,7 +800,9 @@ export default function SampleBillProductsPage() {
               disabled={saving}
               onClick={() => void saveProduct()}
             >
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {saving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Lưu sản phẩm
             </Button>
           </>
@@ -801,14 +813,20 @@ export default function SampleBillProductsPage() {
             label="Mã sản phẩm"
             value={form.productCode}
             onChange={(event) =>
-              setForm((current) => ({ ...current, productCode: event.target.value }))
+              setForm((current) => ({
+                ...current,
+                productCode: event.target.value,
+              }))
             }
           />
           <Input
             label="Tên sản phẩm"
             value={form.productName}
             onChange={(event) =>
-              setForm((current) => ({ ...current, productName: event.target.value }))
+              setForm((current) => ({
+                ...current,
+                productName: event.target.value,
+              }))
             }
           />
           <Input
@@ -825,7 +843,10 @@ export default function SampleBillProductsPage() {
             value={form.price}
             className="tabular-nums"
             onChange={(event) =>
-              setForm((current) => ({ ...current, price: Number(event.target.value) || 0 }))
+              setForm((current) => ({
+                ...current,
+                price: Number(event.target.value) || 0,
+              }))
             }
           />
           <div className="space-y-1">
@@ -886,7 +907,10 @@ export default function SampleBillProductsPage() {
             type="checkbox"
             checked={form.isActive}
             onChange={(event) =>
-              setForm((current) => ({ ...current, isActive: event.target.checked }))
+              setForm((current) => ({
+                ...current,
+                isActive: event.target.checked,
+              }))
             }
             className="h-4 w-4 accent-emerald-600"
           />
@@ -921,7 +945,9 @@ export default function SampleBillProductsPage() {
               disabled={importing || importInvalid}
               onClick={() => void confirmImport()}
             >
-              {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {importing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Xác nhận nhập {staging.length} sản phẩm
             </Button>
           </>
@@ -936,7 +962,12 @@ export default function SampleBillProductsPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {(["coffee", "hotpot", "farm"] as SampleBillType[]).map((type) => {
-              const Icon = type === "coffee" ? Coffee : type === "hotpot" ? CookingPot : Tractor;
+              const Icon =
+                type === "coffee"
+                  ? Coffee
+                  : type === "hotpot"
+                    ? CookingPot
+                    : Tractor;
               return (
                 <Button
                   key={type}
@@ -998,7 +1029,9 @@ export default function SampleBillProductsPage() {
                   <tr key={`${product.productCode}-${product.sourceRowNumber}`}>
                     <td className="px-3 py-3">
                       <p className="font-semibold">{product.productCode}</p>
-                      <p className="mt-0.5 text-xs text-slate-600">{product.productName}</p>
+                      <p className="mt-0.5 text-xs text-slate-600">
+                        {product.productName}
+                      </p>
                     </td>
                     <td className="px-3 py-3 text-right font-semibold tabular-nums">
                       {formatCurrency(product.price)}
@@ -1035,7 +1068,10 @@ export default function SampleBillProductsPage() {
                         value={product.minQuantity}
                         onChange={(event) =>
                           updateStage(index, {
-                            minQuantity: Math.max(1, Number(event.target.value) || 1),
+                            minQuantity: Math.max(
+                              1,
+                              Number(event.target.value) || 1,
+                            ),
                           })
                         }
                         className="h-10 w-20 rounded-md border border-slate-300 px-2 text-center tabular-nums"
@@ -1048,7 +1084,10 @@ export default function SampleBillProductsPage() {
                         value={product.maxQuantity}
                         onChange={(event) =>
                           updateStage(index, {
-                            maxQuantity: Math.max(1, Number(event.target.value) || 1),
+                            maxQuantity: Math.max(
+                              1,
+                              Number(event.target.value) || 1,
+                            ),
                           })
                         }
                         className="h-10 w-20 rounded-md border border-slate-300 px-2 text-center tabular-nums"

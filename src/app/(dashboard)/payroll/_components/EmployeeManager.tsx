@@ -11,7 +11,15 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Pencil, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
+import {
+  ChevronRight,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  UserPlus,
+  X,
+} from "lucide-react";
 import {
   formatCurrency,
   getDefaultRoleForStore,
@@ -27,9 +35,12 @@ import EmployeeSalaryFields, {
 } from "./EmployeeSalaryFields";
 
 function getRoleBadge(role: string) {
-  if (ROLE_GROUPS.Chung.includes(role)) return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
-  if (ROLE_GROUPS.Bep.includes(role)) return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
-  if (ROLE_GROUPS.Farm.includes(role)) return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
+  if (ROLE_GROUPS.Chung.includes(role))
+    return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+  if (ROLE_GROUPS.Bep.includes(role))
+    return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+  if (ROLE_GROUPS.Farm.includes(role))
+    return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
   return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
 }
 
@@ -62,7 +73,10 @@ export default function EmployeeManager({
 }) {
   const roleGroups = useMemo(() => getRoleGroupsForStore(storeId), [storeId]);
   const defaultRole = useMemo(() => getDefaultRoleForStore(storeId), [storeId]);
-  const availableRoles = useMemo(() => Object.values(roleGroups).flat(), [roleGroups]);
+  const availableRoles = useMemo(
+    () => Object.values(roleGroups).flat(),
+    [roleGroups],
+  );
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,7 +88,7 @@ export default function EmployeeManager({
   const [dialogError, setDialogError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formValues, setFormValues] = useState<EmployeeSalaryFormValues>(() =>
-    createEmployeeSalaryFormValues(defaultRole)
+    createEmployeeSalaryFormValues(defaultRole),
   );
 
   useEffect(() => {
@@ -83,7 +97,8 @@ export default function EmployeeManager({
 
   useEffect(() => {
     setFormValues((current) => {
-      if (!availableRoles.includes(current.role)) return { ...current, role: defaultRole };
+      if (!availableRoles.includes(current.role))
+        return { ...current, role: defaultRole };
       return current;
     });
   }, [availableRoles, defaultRole]);
@@ -97,7 +112,11 @@ export default function EmployeeManager({
     } catch (error) {
       console.error(error);
       setEmployees([]);
-      setLoadError(error instanceof Error ? error.message : "Không tải được danh sách nhân viên.");
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Không tải được danh sách nhân viên.",
+      );
     } finally {
       setLoading(false);
     }
@@ -106,7 +125,9 @@ export default function EmployeeManager({
   function hasDuplicateCode(code: string, excludeId?: string) {
     const normalized = code.trim().toLowerCase();
     return employees.some(
-      (employee) => employee.id !== excludeId && (employee.employeeCode || "").trim().toLowerCase() === normalized
+      (employee) =>
+        employee.id !== excludeId &&
+        (employee.employeeCode || "").trim().toLowerCase() === normalized,
     );
   }
 
@@ -153,8 +174,8 @@ export default function EmployeeManager({
         if (updatedEmployee?.id) {
           setEmployees((current) =>
             current.map((employee) =>
-              employee?.id === updatedEmployee.id ? updatedEmployee : employee
-            )
+              employee?.id === updatedEmployee.id ? updatedEmployee : employee,
+            ),
           );
         } else {
           await loadEmployees();
@@ -202,9 +223,12 @@ export default function EmployeeManager({
               <UserPlus className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-slate-950">Danh sách nhân sự</h2>
+              <h2 className="text-base font-semibold text-slate-950">
+                Danh sách nhân sự
+              </h2>
               <p className="mt-0.5 text-sm text-slate-500">
-                {employees.length} nhân viên. Cấu hình lương được dùng lại cho các kỳ lương sau.
+                {employees.length} nhân viên. Cấu hình lương được dùng lại cho
+                các kỳ lương sau.
               </p>
             </div>
           </div>
@@ -217,18 +241,24 @@ export default function EmployeeManager({
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Tìm theo mã, tên hoặc vai trò"
                 aria-label="Tìm nhân viên"
-                className="h-10 rounded-md border-slate-300 bg-slate-50 pl-10"
+                className="h-9 rounded border-slate-300 bg-slate-50 pl-10"
               />
             </div>
-            <Button className="h-10 gap-2 rounded-md px-4" onClick={openCreateDialog}>
-              <Plus className="h-4 w-4" />
+            <Button
+              className="h-9 gap-1.5 rounded border border-emerald-800 bg-white px-3 text-sm font-semibold text-emerald-800 transition-[background-color,border-color,color,transform] duration-200 hover:bg-emerald-800 hover:text-white active:scale-[0.97]"
+              onClick={openCreateDialog}
+            >
+              <Plus className="h-3.5 w-3.5" />
               Thêm nhân viên
             </Button>
           </div>
         </div>
 
         {loadError ? (
-          <div className="m-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">
+          <div
+            className="m-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+            role="alert"
+          >
             {loadError}
           </div>
         ) : null}
@@ -241,35 +271,56 @@ export default function EmployeeManager({
                 <th className="px-4 py-3 font-semibold">Nhân viên</th>
                 <th className="px-4 py-3 font-semibold">Vai trò</th>
                 <th className="px-4 py-3 font-semibold">Cấu hình lương</th>
-                <th className="sticky right-0 bg-slate-50/95 px-4 py-3 text-right font-semibold">Thao tác</th>
+                <th className="sticky right-0 bg-slate-50/95 px-4 py-3 text-right font-semibold">
+                  Thao tác
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {filteredEmployees.map((employee) => {
                 const compensation = getCompensationSummary(employee);
                 return (
-                  <tr key={employee.id} className="group align-middle hover:bg-slate-50/70">
+                  <tr
+                    key={employee.id}
+                    className="group align-middle hover:bg-slate-50/70"
+                  >
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="font-mono text-xs font-semibold text-slate-700">
                         {employee.employeeCode || "--"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-950">{employee.name}</div>
+                      <div className="font-semibold text-slate-950">
+                        {employee.name}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold", getRoleBadge(employee.role))}>
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+                          getRoleBadge(employee.role),
+                        )}
+                      >
                         {employee.role}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold", compensation.badgeClass)}>
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+                            compensation.badgeClass,
+                          )}
+                        >
                           {compensation.badgeLabel}
                         </span>
-                        <span className="font-semibold tabular-nums text-slate-950">{compensation.primary}</span>
+                        <span className="font-semibold tabular-nums text-slate-950">
+                          {compensation.primary}
+                        </span>
                       </div>
-                      <div className="mt-1 max-w-xl text-xs leading-5 text-slate-500">{compensation.secondary}</div>
+                      <div className="mt-1 max-w-xl text-xs leading-5 text-slate-500">
+                        {compensation.secondary}
+                      </div>
                     </td>
                     <td className="sticky right-0 bg-white px-4 py-3 text-right group-hover:bg-slate-50">
                       <div className="flex items-center justify-end gap-1">
@@ -278,7 +329,7 @@ export default function EmployeeManager({
                           size="icon"
                           className="h-9 w-9 rounded-md text-slate-500 hover:bg-slate-100"
                           onClick={() => openEditDialog(employee)}
-                          aria-label={'Sửa ' + employee.name}
+                          aria-label={"Sửa " + employee.name}
                           title="Sửa"
                         >
                           <Pencil className="h-4 w-4" />
@@ -288,7 +339,7 @@ export default function EmployeeManager({
                           size="icon"
                           className="h-9 w-9 rounded-md text-slate-500 hover:bg-rose-50 hover:text-rose-600"
                           onClick={() => handleDelete(employee.id!)}
-                          aria-label={'Xóa ' + employee.name}
+                          aria-label={"Xóa " + employee.name}
                           title="Xóa"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -301,8 +352,12 @@ export default function EmployeeManager({
               {!loading && filteredEmployees.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center">
-                    <div className="text-sm font-semibold text-slate-900">Không có nhân viên phù hợp</div>
-                    <p className="mt-1 text-sm text-slate-500">Thử từ khóa khác hoặc thêm hồ sơ nhân sự mới.</p>
+                    <div className="text-sm font-semibold text-slate-900">
+                      Không có nhân viên phù hợp
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Thử từ khóa khác hoặc thêm hồ sơ nhân sự mới.
+                    </p>
                   </td>
                 </tr>
               ) : null}
@@ -322,15 +377,26 @@ export default function EmployeeManager({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-slate-950">{employee.name}</span>
-                    <span className={cn("inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", getRoleBadge(employee.role))}>
+                    <span className="truncate text-sm font-semibold text-slate-950">
+                      {employee.name}
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                        getRoleBadge(employee.role),
+                      )}
+                    >
                       {employee.role}
                     </span>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                    <span className="font-mono">{employee.employeeCode || "--"}</span>
+                    <span className="font-mono">
+                      {employee.employeeCode || "--"}
+                    </span>
                     <span aria-hidden="true">·</span>
-                    <span className="font-medium tabular-nums text-slate-700">{compensation.primary}</span>
+                    <span className="font-medium tabular-nums text-slate-700">
+                      {compensation.primary}
+                    </span>
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
@@ -339,8 +405,12 @@ export default function EmployeeManager({
           })}
           {!loading && filteredEmployees.length === 0 ? (
             <div className="px-4 py-10 text-center">
-              <div className="text-sm font-semibold text-slate-900">Không có nhân viên phù hợp</div>
-              <p className="mt-1 text-sm text-slate-500">Thử từ khóa khác hoặc thêm hồ sơ mới.</p>
+              <div className="text-sm font-semibold text-slate-900">
+                Không có nhân viên phù hợp
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                Thử từ khóa khác hoặc thêm hồ sơ mới.
+              </p>
             </div>
           ) : null}
         </div>
@@ -360,8 +430,12 @@ export default function EmployeeManager({
           >
             <div className="sticky top-0 flex items-start justify-between border-b border-slate-200 bg-white px-4 py-4">
               <div>
-                <h3 className="text-base font-semibold text-slate-950">{viewingEmployee.name}</h3>
-                <p className="mt-0.5 font-mono text-xs text-slate-500">{viewingEmployee.employeeCode || "--"}</p>
+                <h3 className="text-base font-semibold text-slate-950">
+                  {viewingEmployee.name}
+                </h3>
+                <p className="mt-0.5 font-mono text-xs text-slate-500">
+                  {viewingEmployee.employeeCode || "--"}
+                </p>
               </div>
               <Button
                 variant="ghost"
@@ -380,16 +454,26 @@ export default function EmployeeManager({
                   <dl className="divide-y divide-slate-200 rounded-lg border border-slate-200">
                     <div className="flex items-center justify-between gap-4 px-3 py-3">
                       <dt className="text-sm text-slate-500">Vai trò</dt>
-                      <dd className="text-sm font-semibold text-slate-900">{viewingEmployee.role}</dd>
+                      <dd className="text-sm font-semibold text-slate-900">
+                        {viewingEmployee.role}
+                      </dd>
                     </div>
                     <div className="flex items-center justify-between gap-4 px-3 py-3">
-                      <dt className="text-sm text-slate-500">Hình thức lương</dt>
-                      <dd className="text-sm font-semibold text-slate-900">{compensation.badgeLabel}</dd>
+                      <dt className="text-sm text-slate-500">
+                        Hình thức lương
+                      </dt>
+                      <dd className="text-sm font-semibold text-slate-900">
+                        {compensation.badgeLabel}
+                      </dd>
                     </div>
                     <div className="px-3 py-3">
                       <dt className="text-sm text-slate-500">Mức lương</dt>
-                      <dd className="mt-1 text-base font-semibold tabular-nums text-slate-950">{compensation.primary}</dd>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">{compensation.secondary}</p>
+                      <dd className="mt-1 text-base font-semibold tabular-nums text-slate-950">
+                        {compensation.primary}
+                      </dd>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        {compensation.secondary}
+                      </p>
                     </div>
                   </dl>
                   <Button
@@ -438,20 +522,34 @@ export default function EmployeeManager({
                 <EmployeeSalaryFields
                   roleGroups={roleGroups}
                   values={formValues}
-                  onChange={(changes) => setFormValues((current) => ({ ...current, ...changes }))}
+                  onChange={(changes) =>
+                    setFormValues((current) => ({ ...current, ...changes }))
+                  }
                 />
                 {dialogError ? (
-                  <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">
+                  <div
+                    className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+                    role="alert"
+                  >
                     {dialogError}
                   </div>
                 ) : null}
               </div>
             </div>
             <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-5">
-              <Button variant="outline" className="h-10 rounded-md" onClick={closeDialog} disabled={submitting}>
+              <Button
+                variant="outline"
+                className="h-10 rounded-md"
+                onClick={closeDialog}
+                disabled={submitting}
+              >
                 Hủy
               </Button>
-              <Button className="h-10 rounded-md" isLoading={submitting} onClick={() => void handleSaveEmployee()}>
+              <Button
+                className="h-10 rounded-md"
+                isLoading={submitting}
+                onClick={() => void handleSaveEmployee()}
+              >
                 {editingId ? "Lưu cập nhật" : "Lưu nhân viên"}
               </Button>
             </div>

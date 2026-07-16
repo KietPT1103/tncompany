@@ -20,10 +20,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SingleDatePicker } from "@/components/ui/SingleDatePicker";
-import {
-  SelectBox,
-  type SelectBoxOption,
-} from "@/components/ui/SelectBox";
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import RoleGuard from "@/components/RoleGuard";
 import {
   CheckCircle2,
@@ -58,7 +55,6 @@ type BillRow = {
   unitPrice: number;
   lineTotal: number;
 };
-
 
 type NoticeState = {
   tone: "success" | "warning" | "error" | "info";
@@ -131,7 +127,6 @@ const formatDateInput = (date: Date) => {
   return local.toISOString().split("T")[0];
 };
 
-
 const buildBillRows = (bills: VirtualBill[]): BillRow[] =>
   bills.flatMap((bill) =>
     bill.items.map((item) => ({
@@ -142,9 +137,8 @@ const buildBillRows = (bills: VirtualBill[]): BillRow[] =>
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       lineTotal: item.lineTotal,
-    }))
+    })),
   );
-
 
 const noticeClasses: Record<NoticeState["tone"], string> = {
   success: "border-emerald-200 bg-emerald-50 text-emerald-950",
@@ -171,9 +165,9 @@ export default function SampleBillGeneratorPage({
 
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
-  const [rules, setRules] = useState<
-    Record<string, VirtualBillProductRule>
-  >({});
+  const [rules, setRules] = useState<Record<string, VirtualBillProductRule>>(
+    {},
+  );
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [holidayOverride, setHolidayOverride] = useState(false);
   const [form, setForm] = useState<FormState>({
@@ -222,13 +216,13 @@ export default function SampleBillGeneratorPage({
                 minQuantity: product.minQuantity,
                 maxQuantity: product.maxQuantity,
               },
-            ])
-          )
+            ]),
+          ),
         );
         setSelectedCodes(
           mapped
             .filter((product) => product.isSelling !== false)
-            .map((product) => product.product_code)
+            .map((product) => product.product_code),
         );
       } catch (error) {
         console.error(error);
@@ -263,9 +257,9 @@ export default function SampleBillGeneratorPage({
           product.isSelling !== false &&
           (billType !== "farm" ||
             product.farmSchedule === activeFarmSchedule ||
-            product.farmSchedule === "both")
+            product.farmSchedule === "both"),
       ),
-    [activeFarmSchedule, billType, catalog]
+    [activeFarmSchedule, billType, catalog],
   );
   const eligibleKey = eligibleCatalog
     .map((product) => product.product_code)
@@ -273,34 +267,26 @@ export default function SampleBillGeneratorPage({
 
   useEffect(() => {
     const eligibleCodes = eligibleCatalog.map(
-      (product) => product.product_code
+      (product) => product.product_code,
     );
     setSelectedCodes((current) => {
-      const kept = current.filter((code) =>
-        eligibleCodes.includes(code)
-      );
+      const kept = current.filter((code) => eligibleCodes.includes(code));
       return kept.length > 0 ? kept : eligibleCodes;
     });
     setBills([]);
     setActiveBill("all");
   }, [eligibleKey]);
 
-  const selectedSet = useMemo(
-    () => new Set(selectedCodes),
-    [selectedCodes]
-  );
+  const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes]);
   const selectedProducts = useMemo(
     () =>
       eligibleCatalog.filter((product) =>
-        selectedSet.has(product.product_code)
+        selectedSet.has(product.product_code),
       ),
-    [eligibleCatalog, selectedSet]
+    [eligibleCatalog, selectedSet],
   );
   const minQuantity = Math.max(1, Number(form.minQuantity) || 4);
-  const maxQuantity = Math.max(
-    minQuantity,
-    Number(form.maxQuantity) || 10
-  );
+  const maxQuantity = Math.max(minQuantity, Number(form.maxQuantity) || 10);
   const targetRevenue = parseMoney(form.totalRevenue);
   const selectedRules = useMemo(
     () =>
@@ -311,9 +297,9 @@ export default function SampleBillGeneratorPage({
             minQuantity,
             maxQuantity,
           },
-        ])
+        ]),
       ),
-    [maxQuantity, minQuantity, rules, selectedProducts]
+    [maxQuantity, minQuantity, rules, selectedProducts],
   );
   const feasibility = useMemo(
     () =>
@@ -325,18 +311,12 @@ export default function SampleBillGeneratorPage({
         productRules: selectedRules,
         maxBillTotal: DEFAULT_MAX_BILL_TOTAL,
       }),
-    [
-      maxQuantity,
-      minQuantity,
-      selectedProducts,
-      selectedRules,
-      targetRevenue,
-    ]
+    [maxQuantity, minQuantity, selectedProducts, selectedRules, targetRevenue],
   );
   const rows = useMemo(() => buildBillRows(bills), [bills]);
   const generatedTotal = useMemo(
     () => bills.reduce((sum, bill) => sum + bill.total, 0),
-    [bills]
+    [bills],
   );
   const reconciliation = useMemo(() => {
     if (bills.length === 0) {
@@ -370,12 +350,8 @@ export default function SampleBillGeneratorPage({
         filter === "all" || selectedSet.has(product.product_code);
       const matchesSearch =
         !query ||
-        product.product_code
-          .toLocaleLowerCase("vi")
-          .includes(query) ||
-        product.product_name
-          .toLocaleLowerCase("vi")
-          .includes(query);
+        product.product_code.toLocaleLowerCase("vi").includes(query) ||
+        product.product_name.toLocaleLowerCase("vi").includes(query);
       return matchesFilter && matchesSearch;
     });
   }, [eligibleCatalog, filter, search, selectedSet]);
@@ -385,7 +361,7 @@ export default function SampleBillGeneratorPage({
       activeBill === "all"
         ? rows
         : rows.filter((row) => row.billCode === activeBill),
-    [activeBill, rows]
+    [activeBill, rows],
   );
 
   const getRule = (productCode: string) =>
@@ -394,13 +370,10 @@ export default function SampleBillGeneratorPage({
   const updateRule = (
     productCode: string,
     field: keyof VirtualBillProductRule,
-    value: number
+    value: number,
   ) => {
     const current = getRule(productCode);
-    const normalized = Math.max(
-      1,
-      Math.min(99, Math.round(value || 1))
-    );
+    const normalized = Math.max(1, Math.min(99, Math.round(value || 1)));
     const next =
       field === "minQuantity"
         ? {
@@ -419,7 +392,7 @@ export default function SampleBillGeneratorPage({
     setSelectedCodes((current) =>
       current.includes(productCode)
         ? current.filter((code) => code !== productCode)
-        : [...current, productCode]
+        : [...current, productCode],
     );
     clearResults();
   };
@@ -428,7 +401,7 @@ export default function SampleBillGeneratorPage({
     setSelectedCodes(
       selectedCodes.length === eligibleCatalog.length
         ? []
-        : eligibleCatalog.map((product) => product.product_code)
+        : eligibleCatalog.map((product) => product.product_code),
     );
     clearResults();
   };
@@ -495,9 +468,9 @@ export default function SampleBillGeneratorPage({
         title: "Không thể khớp tuyệt đối",
         detail: feasibility.nearestTotal
           ? `Phương án gần nhất là ${formatCurrency(
-              feasibility.nearestTotal
+              feasibility.nearestTotal,
             )} VND, chênh ${formatCurrency(
-              Math.abs(feasibility.delta)
+              Math.abs(feasibility.delta),
             )} VND. Phương án này chỉ để tham khảo.`
           : feasibility.reason,
       });
@@ -537,8 +510,7 @@ export default function SampleBillGeneratorPage({
       setNotice({
         tone: "error",
         title: "Không xuất được file Excel",
-        detail:
-          error instanceof Error ? error.message : "Vui lòng thử lại.",
+        detail: error instanceof Error ? error.message : "Vui lòng thử lại.",
       });
     } finally {
       setExporting(false);
@@ -559,22 +531,17 @@ export default function SampleBillGeneratorPage({
             minQuantity: product.minQuantity,
             maxQuantity: product.maxQuantity,
           },
-        ])
-      )
+        ]),
+      ),
     );
-    setSelectedCodes(
-      eligibleCatalog.map((product) => product.product_code)
-    );
+    setSelectedCodes(eligibleCatalog.map((product) => product.product_code));
     setTab("products");
     setNotice(null);
     clearResults();
   };
 
   return (
-    <RoleGuard
-      allowedRoles={["admin"]}
-      permission="sample_bills.access"
-    >
+    <RoleGuard allowedRoles={["admin"]} permission="sample_bills.access">
       <main className="min-h-screen bg-slate-50 text-slate-950 antialiased">
         <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
           <header className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
@@ -592,15 +559,14 @@ export default function SampleBillGeneratorPage({
                   </span>
                 </div>
                 <p className="max-w-2xl text-pretty text-sm leading-6 text-slate-600">
-                  {config.description}. Kết quả không được lưu vào
-                  database.
+                  {config.description}. Kết quả không được lưu vào database.
                 </p>
               </div>
             </div>
 
             <Button
               variant="outline"
-              className="h-11 gap-2 self-start border-slate-300 bg-white transition-[transform,background-color,border-color,color] active:scale-[0.96] sm:self-auto"
+              className="h-9 gap-1.5 self-start rounded-[3px] border border-emerald-600 bg-white px-3 text-sm font-medium text-emerald-800 shadow-sm transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out hover:border-emerald-700 hover:bg-emerald-700 hover:text-white hover:shadow-[0_2px_6px_rgba(15,23,42,0.08)] active:scale-[0.97] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none disabled:opacity-100 sm:self-auto"
               disabled={
                 exporting ||
                 rows.length === 0 ||
@@ -609,9 +575,9 @@ export default function SampleBillGeneratorPage({
               onClick={() => void handleExport()}
             >
               {exporting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
               ) : (
-                <Download className="h-4 w-4" />
+                <Download className="h-3.5 w-3.5 shrink-0" />
               )}
               Xuất Excel
             </Button>
@@ -726,7 +692,7 @@ export default function SampleBillGeneratorPage({
                             ...current,
                             totalRevenue: event.target.value.replace(
                               /[^\d]/g,
-                              ""
+                              "",
                             ),
                           }));
                           clearResults();
@@ -761,7 +727,7 @@ export default function SampleBillGeneratorPage({
                             ...current,
                             minQuantity: event.target.value.replace(
                               /[^\d]/g,
-                              ""
+                              "",
                             ),
                           }));
                           clearResults();
@@ -780,7 +746,7 @@ export default function SampleBillGeneratorPage({
                             ...current,
                             maxQuantity: event.target.value.replace(
                               /[^\d]/g,
-                              ""
+                              "",
                             ),
                           }));
                           clearResults();
@@ -791,13 +757,13 @@ export default function SampleBillGeneratorPage({
                 </section>
 
                 <div
-                  className={`rounded-lg border px-3.5 py-3 ${(
+                  className={`rounded-lg border px-3.5 py-3 ${
                     targetRevenue <= 0
                       ? "border-slate-200 bg-slate-50"
                       : feasibility.exact
                         ? "border-emerald-200 bg-emerald-50"
                         : "border-amber-200 bg-amber-50"
-                  )}`}
+                  }`}
                 >
                   <div className="flex items-start gap-2.5">
                     {targetRevenue <= 0 ? (
@@ -829,9 +795,7 @@ export default function SampleBillGeneratorPage({
                     aria-live="polite"
                     className={`rounded-lg border px-3.5 py-3 ${noticeClasses[notice.tone]}`}
                   >
-                    <p className="text-sm font-semibold">
-                      {notice.title}
-                    </p>
+                    <p className="text-sm font-semibold">{notice.title}</p>
                     {notice.detail ? (
                       <p className="mt-1 text-xs leading-5 opacity-80">
                         {notice.detail}
@@ -840,23 +804,22 @@ export default function SampleBillGeneratorPage({
                   </div>
                 ) : null}
 
-                <div className="space-y-2">
+                <div className="flex gap-2">
                   <Button
-                    className="h-11 w-full gap-2 bg-emerald-600 text-white transition-[transform,background-color] hover:bg-emerald-700 active:scale-[0.96]"
+                    className="h-9 flex-1 gap-1.5 rounded-[3px] border border-emerald-700 bg-emerald-700 px-3 text-sm font-semibold text-white shadow-[0_2px_5px_rgba(4,120,87,0.18)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:border-emerald-800 hover:bg-emerald-800 hover:text-white hover:shadow-[0_3px_8px_rgba(4,120,87,0.24)] active:scale-[0.97] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:opacity-100"
                     onClick={handleGenerate}
                     isLoading={generating}
                   >
-                    <Sparkles className="h-4 w-4" />
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
                     Tạo bill mẫu
                   </Button>
 
-
                   <Button
-                    variant="ghost"
-                    className="h-10 w-full gap-2 text-slate-600 transition-[transform,background-color,color] active:scale-[0.96]"
+                    variant="outline"
+                    className="group h-9 flex-1 gap-1.5 rounded-[3px] border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 shadow-none transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 active:scale-[0.97]"
                     onClick={reset}
                   >
-                    <RotateCcw className="h-4 w-4" />
+                    <RotateCcw className="h-3.5 w-3.5 shrink-0 transition-transform duration-500 ease-out group-hover:rotate-[-180deg]" />
                     Đặt lại
                   </Button>
                 </div>
@@ -866,32 +829,22 @@ export default function SampleBillGeneratorPage({
             <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
               <div className="grid grid-cols-2 border-b border-slate-200 lg:grid-cols-4">
                 {[
-                  [
-                    "Mục tiêu",
-                    `${formatCurrency(targetRevenue)} VND`,
-                  ],
-                  [
-                    "Đã tạo",
-                    `${formatCurrency(generatedTotal)} VND`,
-                  ],
+                  ["Mục tiêu", `${formatCurrency(targetRevenue)} VND`],
+                  ["Đã tạo", `${formatCurrency(generatedTotal)} VND`],
                   [
                     "Số bill",
-                    String(
-                      bills.length ||
-                        feasibility.estimatedBillCount ||
-                        0
-                    ),
+                    String(bills.length || feasibility.estimatedBillCount || 0),
                   ],
                 ].map(([label, value], index) => (
                   <div
                     key={label}
-                    className={`px-4 py-4 lg:px-5 ${(
+                    className={`px-4 py-4 lg:px-5 ${
                       index > 0 ? "border-l border-slate-200" : ""
-                    )} ${(
+                    } ${
                       index === 2
                         ? "border-t border-slate-200 lg:border-t-0"
                         : ""
-                    )}`}
+                    }`}
                   >
                     <p className="text-xs font-medium text-slate-500">
                       {label}
@@ -902,9 +855,7 @@ export default function SampleBillGeneratorPage({
                   </div>
                 ))}
                 <div className="border-l border-t border-slate-200 px-4 py-4 lg:border-t-0 lg:px-5">
-                  <p className="text-xs font-medium text-slate-500">
-                    Đối soát
-                  </p>
+                  <p className="text-xs font-medium text-slate-500">Đối soát</p>
                   <div className="mt-1 flex items-center gap-2">
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClasses[reconciliation.status]}`}
@@ -914,9 +865,7 @@ export default function SampleBillGeneratorPage({
                     {reconciliation.delta !== 0 ? (
                       <span className="text-xs font-semibold tabular-nums text-slate-600">
                         {reconciliation.delta > 0 ? "+" : "-"}
-                        {formatCurrency(
-                          Math.abs(reconciliation.delta)
-                        )}
+                        {formatCurrency(Math.abs(reconciliation.delta))}
                       </span>
                     ) : null}
                   </div>
@@ -924,30 +873,28 @@ export default function SampleBillGeneratorPage({
               </div>
 
               <div className="flex items-center gap-1 border-b border-slate-200 px-4 pt-2 sm:px-5">
-                {(["products", "bills"] as WorkspaceTab[]).map(
-                  (item) => {
-                    const active = tab === item;
-                    return (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => setTab(item)}
-                        className={`relative min-h-11 px-3 text-sm font-semibold transition-colors ${(
-                          active
-                            ? "text-emerald-700"
-                            : "text-slate-500 hover:text-slate-900"
-                        )}`}
-                      >
-                        {item === "products"
-                          ? `Sản phẩm (${selectedCodes.length})`
-                          : `Bill xem trước (${bills.length})`}
-                        {active ? (
-                          <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-emerald-600" />
-                        ) : null}
-                      </button>
-                    );
-                  }
-                )}
+                {(["products", "bills"] as WorkspaceTab[]).map((item) => {
+                  const active = tab === item;
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setTab(item)}
+                      className={`relative min-h-11 px-3 text-sm font-semibold transition-colors ${
+                        active
+                          ? "text-emerald-700"
+                          : "text-slate-500 hover:text-slate-900"
+                      }`}
+                    >
+                      {item === "products"
+                        ? `Sản phẩm (${selectedCodes.length})`
+                        : `Bill xem trước (${bills.length})`}
+                      {active ? (
+                        <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-emerald-600" />
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
 
               {tab === "products" ? (
@@ -957,9 +904,7 @@ export default function SampleBillGeneratorPage({
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <input
                         value={search}
-                        onChange={(event) =>
-                          setSearch(event.target.value)
-                        }
+                        onChange={(event) => setSearch(event.target.value)}
                         placeholder="Tìm theo mã hoặc tên sản phẩm"
                         className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow] placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                       />
@@ -987,9 +932,7 @@ export default function SampleBillGeneratorPage({
                     <span className="text-center">Chọn</span>
                     <span>Sản phẩm</span>
                     <span className="text-right">Đơn giá</span>
-                    <span className="text-center">
-                      Số lượng mỗi bill
-                    </span>
+                    <span className="text-center">Số lượng mỗi bill</span>
                   </div>
 
                   {catalogLoading ? (
@@ -1014,19 +957,17 @@ export default function SampleBillGeneratorPage({
                   ) : (
                     <div className="max-h-[620px] divide-y divide-slate-100 overflow-auto">
                       {filteredProducts.map((product) => {
-                        const selected = selectedSet.has(
-                          product.product_code
-                        );
+                        const selected = selectedSet.has(product.product_code);
                         const rule = getRule(product.product_code);
 
                         return (
                           <div
                             key={product.product_code}
-                            className={`grid grid-cols-[44px_minmax(0,1fr)] gap-y-3 px-4 py-3 transition-colors sm:grid-cols-[44px_minmax(220px,1fr)_120px_184px] sm:items-center ${(
+                            className={`grid grid-cols-[44px_minmax(0,1fr)] gap-y-3 px-4 py-3 transition-colors sm:grid-cols-[44px_minmax(220px,1fr)_120px_184px] sm:items-center ${
                               selected
                                 ? "bg-white hover:bg-emerald-50/40"
                                 : "bg-slate-50/60"
-                            )}`}
+                            }`}
                           >
                             <div className="flex justify-center">
                               <input
@@ -1034,9 +975,7 @@ export default function SampleBillGeneratorPage({
                                 checked={selected}
                                 aria-label={`Chọn ${product.product_name}`}
                                 onChange={() =>
-                                  toggleProduct(
-                                    product.product_code
-                                  )
+                                  toggleProduct(product.product_code)
                                 }
                                 className="h-5 w-5 rounded border-slate-300 accent-emerald-600"
                               />
@@ -1050,10 +989,7 @@ export default function SampleBillGeneratorPage({
                               </p>
                             </div>
                             <p className="col-start-2 text-sm font-semibold tabular-nums text-slate-700 sm:col-start-auto sm:text-right">
-                              {formatCurrency(
-                                Number(product.price || 0)
-                              )}{" "}
-                              VND
+                              {formatCurrency(Number(product.price || 0))} VND
                             </p>
                             <div className="col-start-2 flex items-center gap-2 sm:col-start-auto sm:justify-center">
                               <input
@@ -1067,7 +1003,7 @@ export default function SampleBillGeneratorPage({
                                   updateRule(
                                     product.product_code,
                                     "minQuantity",
-                                    Number(event.target.value)
+                                    Number(event.target.value),
                                   )
                                 }
                                 className="h-10 w-16 rounded-md border border-slate-300 bg-white text-center text-sm tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
@@ -1084,7 +1020,7 @@ export default function SampleBillGeneratorPage({
                                   updateRule(
                                     product.product_code,
                                     "maxQuantity",
-                                    Number(event.target.value)
+                                    Number(event.target.value),
                                   )
                                 }
                                 className="h-10 w-16 rounded-md border border-slate-300 bg-white text-center text-sm tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
@@ -1101,12 +1037,10 @@ export default function SampleBillGeneratorPage({
                   <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
                     <ReceiptText className="h-6 w-6" />
                   </span>
-                  <h3 className="mt-4 font-semibold">
-                    Chưa có bill xem trước
-                  </h3>
+                  <h3 className="mt-4 font-semibold">Chưa có bill xem trước</h3>
                   <p className="mx-auto mt-1 max-w-md text-pretty text-sm leading-6 text-slate-600">
-                    Chọn sản phẩm, nhập doanh thu và tạo bill để
-                    kiểm tra trước khi xuất Excel.
+                    Chọn sản phẩm, nhập doanh thu và tạo bill để kiểm tra trước
+                    khi xuất Excel.
                   </p>
                   <Button
                     variant="outline"
@@ -1122,11 +1056,11 @@ export default function SampleBillGeneratorPage({
                     <button
                       type="button"
                       onClick={() => setActiveBill("all")}
-                      className={`min-h-10 shrink-0 rounded-md px-3 text-sm font-semibold transition-[transform,background-color,color] active:scale-[0.96] ${(
+                      className={`min-h-10 shrink-0 rounded px-3 text-xs font-semibold transition-[transform,background-color,color] active:scale-[0.96] ${
                         activeBill === "all"
                           ? "bg-slate-900 text-white"
                           : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                      )}`}
+                      }`}
                     >
                       Tất cả ({rows.length})
                     </button>
@@ -1134,17 +1068,14 @@ export default function SampleBillGeneratorPage({
                       <button
                         key={bill.billCode}
                         type="button"
-                        onClick={() =>
-                          setActiveBill(bill.billCode)
-                        }
-                        className={`min-h-10 shrink-0 rounded-md px-3 text-sm font-semibold tabular-nums transition-[transform,background-color,color] active:scale-[0.96] ${(
+                        onClick={() => setActiveBill(bill.billCode)}
+                        className={`min-h-8 shrink-0 rounded px-2 text-xs font-semibold tabular-nums transition-[transform,background-color,color] active:scale-[0.96] ${
                           activeBill === bill.billCode
                             ? "bg-emerald-600 text-white"
-                            : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                        )}`}
+                            : "bg-emerald-100 text-emerald-800 hover:bg-emerald-700 hover:text-white"
+                        }`}
                       >
-                        Bill {bill.billCode} ·{" "}
-                        {formatCurrency(bill.total)}
+                        Bill {bill.billCode} · {formatCurrency(bill.total)}
                       </button>
                     ))}
                   </div>
@@ -1164,11 +1095,9 @@ export default function SampleBillGeneratorPage({
                           ].map((label, index) => (
                             <th
                               key={label}
-                              className={`px-3 py-3 font-semibold ${(
-                                index >= 4
-                                  ? "text-right"
-                                  : "text-left"
-                              )}`}
+                              className={`px-3 py-3 font-semibold ${
+                                index >= 4 ? "text-right" : "text-left"
+                              }`}
                             >
                               {label}
                             </th>

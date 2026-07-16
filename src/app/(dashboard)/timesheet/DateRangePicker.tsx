@@ -475,11 +475,11 @@ export default function DateRangePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         className={cn(
-          "flex h-11 w-full min-w-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-left text-sm font-medium text-slate-800 shadow-sm transition-[border-color,box-shadow,background-color] duration-150 hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:h-10",
+          "flex h-11 w-full min-w-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-left text-sm font-medium text-emerald-800 shadow-sm transition-[border-color,box-shadow,background-color] duration-150 hover:border-emerald-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:h-10",
           open && "border-primary ring-2 ring-primary/15",
         )}
       >
-        <CalendarDays className="h-4 w-4 shrink-0 text-primary" />
+        <CalendarDays className="h-4 w-4 shrink-0 text-emerald-700" />
         <span className="min-w-0 flex-1 truncate">{triggerLabel}</span>
         <ChevronDown
           className={cn(

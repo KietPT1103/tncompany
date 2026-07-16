@@ -72,7 +72,7 @@ export default function SeoArticlesPage() {
       <main className="mx-auto max-w-7xl space-y-6 p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Bài viết SEO</h1>
+            <h1 className="text-3xl font-bold text-slate-900">Danh sách bài viết SEO</h1>
             <p className="mt-1 text-sm text-slate-500">
               Quản lý danh sách bài viết, tạo bài mới và chỉnh sửa nội dung cho website public.
             </p>

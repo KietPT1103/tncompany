@@ -15,10 +15,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import { Input } from "@/components/ui/Input";
 import { Pagination } from "@/components/ui/Pagination";
-import {
-  paginateItems,
-  sortByCreatedAtDesc,
-} from "@/lib/listPagination";
+import { paginateItems, sortByCreatedAtDesc } from "@/lib/listPagination";
 import {
   ArrowRight,
   CalendarRange,
@@ -38,7 +35,6 @@ type PayrollNotice = {
   description: string;
 };
 
-
 export default function PayrollManager({
   storeId,
   onSelectPayroll,
@@ -55,7 +51,9 @@ export default function PayrollManager({
   const router = useRouter();
   const [payrollPendingDelete, setPayrollPendingDelete] =
     useState<Payroll | null>(null);
-  const [deletingPayrollId, setDeletingPayrollId] = useState<string | null>(null);
+  const [deletingPayrollId, setDeletingPayrollId] = useState<string | null>(
+    null,
+  );
   const [notice, setNotice] = useState<PayrollNotice | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -195,7 +193,7 @@ export default function PayrollManager({
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <section className="overflow-hidden rounded-[2px] border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-4 py-3">
           <h2 className="text-base font-semibold text-slate-950">
             Tạo kỳ lương
@@ -333,7 +331,7 @@ export default function PayrollManager({
           </p>
         </div>
       ) : (
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <section className="overflow-hidden rounded-[2px] border border-slate-200 bg-white">
           <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
             <h2 className="text-sm font-semibold text-slate-900">
               Các kỳ lương
