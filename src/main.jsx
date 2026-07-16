@@ -6,6 +6,8 @@ import "./App.css";
 import "./admin.css";
 import { AuthProvider } from "./context/AuthContext";
 import { StoreProvider } from "./context/StoreContext";
+import "@fontsource-variable/nunito-sans";
+import "@fontsource-variable/smooch-sans";
 
 const rootElement = document.getElementById("root");
 const pathname = typeof window !== "undefined" ? window.location.pathname : "";

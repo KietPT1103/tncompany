@@ -18,7 +18,7 @@ type PayrollTab = "employee" | "payroll" | "roleStartTime";
 const tabs = [
   { id: "payroll" as const, label: "Bảng lương", icon: FileSpreadsheet },
   { id: "employee" as const, label: "Nhân sự", icon: Users },
-  { id: "roleStartTime" as const, label: "Gi\u1edd vào theo vị trí", icon: Clock3 },
+  { id: "roleStartTime" as const, label: "Giờ vào ca", icon: Clock3 },
 ];
 
 export default function PayrollPage() {

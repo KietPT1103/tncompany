@@ -340,7 +340,7 @@ export default function AdminSidebar({
       {!isOpen ? (
         <button
           type="button"
-          className="fixed left-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-[0_2px_8px_rgba(0,35,25,0.24)] transition-[background-color,color,transform] duration-150 ease-out hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 active:scale-[0.96] motion-reduce:transition-none lg:hidden"
+          className="fixed left-4 top-3 z-50 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-[0_2px_8px_rgba(0,35,25,0.24)] transition-[background-color,color,transform] duration-150 ease-out hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 active:scale-[0.96] motion-reduce:transition-none lg:hidden"
           onClick={() => setIsOpen(true)}
           aria-label="Mở menu"
           aria-controls="admin-sidebar"
