@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Toast } from "@/components/ui/Toast";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn, preventNumberInputScroll } from "@/lib/utils";
 import * as XLSX from "xlsx";
 import {
@@ -24,6 +25,9 @@ import {
   RefreshCw,
   CheckCircle2,
   ChevronRight,
+  CalendarClock,
+  UserCheck,
+  UserPlus,
 } from "lucide-react";
 import { getEmployees, Employee } from "@/services/employees.firebase";
 import {
@@ -1083,7 +1087,7 @@ export default function TimesheetPage() {
               Chấm công
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-600">
-              Import dữ liệu máy chấm công, rà soát giờ làm và tạo kỳ lương.
+              Import dữ liệu máy chấm công.
             </p>
           </div>
         </div>
@@ -1091,7 +1095,7 @@ export default function TimesheetPage() {
 
       {showImportSetup || summaryData.length === 0 ? (
         <section
-          className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+          className="overflow-hidden rounded-[2px] border border-slate-200 bg-white"
           aria-labelledby="timesheet-import-title"
         >
           <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
@@ -1106,7 +1110,15 @@ export default function TimesheetPage() {
             </p>
           </div>
 
-          <div className="grid gap-3 p-4 sm:p-5 lg:grid-cols-[minmax(260px,0.85fr)_minmax(340px,1.15fr)_auto] lg:items-start">
+          <div
+            className="
+              grid grid-cols-1 gap-3 p-4
+              sm:p-5
+              md:grid-cols-2
+              xl:grid-cols-[minmax(240px,0.85fr)_minmax(320px,1.15fr)_auto]
+              xl:items-start
+            "
+          >
             <div className="space-y-1.5">
               <span className="block text-sm font-medium text-slate-700">
                 File chấm công
@@ -1154,7 +1166,9 @@ export default function TimesheetPage() {
               onClick={processData}
               disabled={loading || !file || !startDate || !endDate}
               className="
-                h-11 w-full min-w-40 gap-2
+                h-10 w-full gap-2
+                text-xs
+                whitespace-nowrap
                 bg-emerald-700 px-5
                 font-semibold text-white
                 shadow-[0_2px_6px_rgba(4,120,87,0.22)]
@@ -1165,7 +1179,7 @@ export default function TimesheetPage() {
                 hover:text-white
                 hover:shadow-[0_4px_10px_rgba(4,120,87,0.28)]
 
-                active:scale-[0.96]
+                active:scale-[0.98]
 
                 disabled:cursor-not-allowed
                 disabled:border-slate-200
@@ -1174,26 +1188,33 @@ export default function TimesheetPage() {
                 disabled:shadow-none
                 disabled:opacity-100
 
-                sm:h-10
-                lg:mt-[25px]
-                lg:w-auto
+                md:col-span-2
+                xl:col-span-1
+                xl:mt-[25px]
+                xl:w-auto
+                xl:min-w-[150px]
               "
             >
               {loading ? (
-                "Đang xử lý..."
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Đang xử lý...</span>
+                </>
               ) : (
                 <>
-                  <Calculator className="h-4 w-4" />
-                  {summaryData.length > 0 ? "Tính lại" : "Tính giờ làm"}
+                  <Calculator className="h-4 w-4 shrink-0" />
+                  <span>
+                    {summaryData.length > 0 ? "Tính lại" : "Tính giờ làm"}
+                  </span>
                 </>
               )}
             </Button>
           </div>
         </section>
       ) : (
-        <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <section className="flex flex-col gap-3 rounded-[2px] border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-700 text-white">
               <FileText className="h-5 w-5" />
             </span>
             <div className="min-w-0">
@@ -1215,10 +1236,30 @@ export default function TimesheetPage() {
           <Button
             type="button"
             variant="outline"
-            className="h-9 gap-2 rounded-[2px] border-slate-300 bg-white shadow-none"
+            className="
+              group h-9 gap-2 rounded-[2px]
+              border-emerald-700
+              bg-emerald-700 px-3
+              font-semibold text-white
+              shadow-none
+              transition-[background-color,border-color,color,transform]
+              duration-200
+
+              hover:border-emerald-800
+              hover:bg-emerald-800
+              hover:text-white
+
+              active:scale-[0.96]
+            "
             onClick={() => setShowImportSetup(true)}
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw
+              className="
+                h-4 w-4
+                transition-transform duration-500 ease-in-out
+                group-hover:rotate-180
+              "
+            />
             Đổi file
           </Button>
         </section>
@@ -1235,11 +1276,11 @@ export default function TimesheetPage() {
       ) : null}
       {importConflicts.length > 0 ? (
         <section
-          className="overflow-hidden rounded-lg border border-amber-200 bg-amber-50"
+          className="overflow-hidden rounded-[2px] border border-amber-500 bg-white"
           aria-labelledby="timesheet-conflicts-title"
         >
-          <div className="flex flex-col gap-2 border-b border-amber-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3 border-b border-amber-500 bg-amber-50 px-3 py-3 sm:items-center sm:px-4">
+            <div className="min-w-0">
               <h2
                 id="timesheet-conflicts-title"
                 className="text-base font-semibold text-amber-950"
@@ -1250,49 +1291,66 @@ export default function TimesheetPage() {
                 Tên trong file khác tên đang lưu. Cần xác nhận trước khi lưu DB.
               </p>
             </div>
-            <span className="self-start rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
-              {unresolvedImportConflicts.length} chưa xử lý
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
+                unresolvedImportConflicts.length > 0
+                  ? "bg-amber-100 text-amber-900"
+                  : "bg-emerald-100 text-emerald-800",
+              )}
+            >
+              {unresolvedImportConflicts.length > 0
+                ? `${unresolvedImportConflicts.length} chưa xử lý`
+                : "Đã xử lý"}
             </span>
           </div>
 
-          <div className="divide-y divide-amber-200 bg-white">
+          <div className="divide-y divide-slate-200">
             {importConflicts.map((conflict) => (
               <div
                 key={conflict.employeeCode}
-                className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className={cn(
+                  "grid gap-3 px-3 py-4 sm:px-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-center",
+                  conflict.resolution && "bg-emerald-50/35",
+                )}
               >
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">
-                    Mã {conflict.employeeCode}
+                <div className="grid min-w-0 gap-3 sm:grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)] sm:items-center">
+                  <div>
+                    <span className="inline-flex rounded-md bg-slate-100 px-2 py-1 font-mono text-xs font-semibold text-slate-800">
+                      Mã {conflict.employeeCode}
+                    </span>
                   </div>
-                  <div className="mt-1 grid gap-1 text-sm text-slate-600 sm:grid-cols-2 sm:gap-x-6">
-                    <span>
-                      Hệ thống:{" "}
-                      <b className="font-medium text-slate-900">
-                        {conflict.existingEmployee.name}
-                      </b>
-                    </span>
-                    <span>
-                      File import:{" "}
-                      <b className="font-medium text-slate-900">
-                        {conflict.importedName}
-                      </b>
-                    </span>
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-medium text-slate-500">
+                      Hệ thống
+                    </div>
+                    <div className="mt-0.5 break-words text-sm font-semibold text-slate-900">
+                      {conflict.existingEmployee.name}
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-medium text-slate-500">
+                      File import
+                    </div>
+                    <div className="mt-0.5 break-words text-sm font-semibold text-slate-900">
+                      {conflict.importedName}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant={
-                      conflict.resolution === "same_employee"
-                        ? "default"
-                        : "outline"
-                    }
+                <div
+                  role="group"
+                  aria-label={`Xác nhận nhân viên mã ${conflict.employeeCode}`}
+                  className="grid grid-cols-2 gap-1 rounded-[3px] bg-slate-100 p-1"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={conflict.resolution === "same_employee"}
                     className={cn(
-                      "h-9 shadow-none",
+                      "inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-[3px] text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1",
                       conflict.resolution === "same_employee"
-                        ? "bg-sky-600 text-white hover:bg-sky-700"
-                        : "border-sky-200 bg-white text-sky-700 hover:bg-sky-50",
+                        ? "bg-emerald-700 text-white shadow-sm hover:bg-emerald-800"
+                        : "text-slate-700 hover:bg-white hover:text-slate-950",
                     )}
                     onClick={() =>
                       handleConflictResolutionChange(
@@ -1300,20 +1358,19 @@ export default function TimesheetPage() {
                         "same_employee",
                       )
                     }
+                    aria-label="Xác nhận đây là cùng một nhân viên"
                   >
+                    <UserCheck className="h-4 w-4 shrink-0" />
                     Cùng người
-                  </Button>
-                  <Button
-                    variant={
-                      conflict.resolution === "new_employee"
-                        ? "default"
-                        : "outline"
-                    }
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={conflict.resolution === "new_employee"}
                     className={cn(
-                      "h-9 shadow-none",
+                      "inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-[3px] text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1",
                       conflict.resolution === "new_employee"
-                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                        : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50",
+                        ? "bg-emerald-700 text-white shadow-sm hover:bg-emerald-800"
+                        : "text-slate-700 hover:bg-[#ffb800] hover:text-slate-950",
                     )}
                     onClick={() =>
                       handleConflictResolutionChange(
@@ -1321,9 +1378,11 @@ export default function TimesheetPage() {
                         "new_employee",
                       )
                     }
+                    aria-label="Tạo nhân viên mới và dùng lại mã này"
                   >
-                    Người mới dùng lại mã
-                  </Button>
+                    <UserPlus className="h-4 w-4 shrink-0" />
+                    Người mới
+                  </button>
                 </div>
               </div>
             ))}
@@ -1333,7 +1392,7 @@ export default function TimesheetPage() {
 
       {summaryData.length > 0 ? (
         <section
-          className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+          className="overflow-hidden rounded-[2px] border border-slate-200 bg-white"
           aria-labelledby="timesheet-results-title"
         >
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
@@ -1505,7 +1564,7 @@ export default function TimesheetPage() {
             </div>
           </div>
           <div className="hidden max-h-[620px] overflow-auto md:block">
-            <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1030px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-20 bg-slate-50 text-xs font-semibold text-slate-600">
                 <tr className="border-b border-slate-200">
                   <th className="sticky left-0 z-30 w-[220px] min-w-[220px] bg-slate-50 px-4 py-3 shadow-[1px_0_0_0_rgba(226,232,240,1)]">
@@ -1518,7 +1577,7 @@ export default function TimesheetPage() {
                   <th className="px-4 py-3 text-right text-emerald-700">
                     Tổng lương
                   </th>
-                  <th className="w-16 px-3 py-3 text-center">Xóa</th>
+                  <th className="w-[112px] px-3 py-3 text-center">Tác vụ</th>
                 </tr>
               </thead>
               <tbody>
@@ -1639,15 +1698,32 @@ export default function TimesheetPage() {
                       </td>
 
                       <td className="px-3 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveEmployee(employee.EnNo)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-                          title="Xóa nhân viên này"
-                          aria-label={"Xóa " + employee.Name}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Tooltip content={`Sửa ca ${employee.Name}`}>
+                            <button
+                              type="button"
+                              onClick={() => openShiftModal(index)}
+                              className={cn(
+                                "inline-flex h-10 w-10 items-center justify-center rounded-md border transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                                hasError
+                                  ? "border-rose-300 bg-rose-100 text-rose-700 hover:border-rose-400 hover:bg-rose-200 focus-visible:ring-rose-500"
+                                  : "border-slate-300 bg-white text-slate-700 hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:ring-emerald-500",
+                              )}
+                              aria-label={`Sửa ca ${employee.Name}`}
+                            >
+                              <CalendarClock className="h-4 w-4" />
+                            </button>
+                          </Tooltip>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEmployee(employee.EnNo)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                            title="Xóa nhân viên này"
+                            aria-label={"Xóa " + employee.Name}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1735,15 +1811,21 @@ export default function TimesheetPage() {
                     <button
                       type="button"
                       onClick={() => openShiftModal(index)}
-                      className="mb-4 flex w-full items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className={cn(
+                        "mb-4 flex h-11 w-full items-center justify-between rounded-md border px-3 text-left text-sm font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                        hasError
+                          ? "border-rose-300 bg-rose-100 text-rose-700 hover:bg-rose-200 focus-visible:ring-rose-500"
+                          : "border-slate-300 bg-white text-slate-800 hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:ring-emerald-500",
+                      )}
                     >
-                      <span>
-                        {employee.Name}
-                        <span className="ml-2 font-mono text-xs font-normal text-slate-500">
-                          {employee.EnNo}
-                        </span>
+                      <span className="inline-flex items-center gap-2">
+                        <CalendarClock className="h-4 w-4" />
+                        Sửa ca
                       </span>
-                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                      <span className="inline-flex items-center gap-1 text-xs font-medium opacity-75">
+                        {employee.Shifts.length} ca
+                        <ChevronRight className="h-4 w-4" />
+                      </span>
                     </button>
 
                     <div className="grid grid-cols-2 gap-3">

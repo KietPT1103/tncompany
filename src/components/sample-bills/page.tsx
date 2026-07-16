@@ -19,6 +19,7 @@ import {
 } from "@/services/virtualBillGenerator";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { SingleDatePicker } from "@/components/ui/SingleDatePicker";
 import {
   SelectBox,
   type SelectBoxOption,
@@ -647,14 +648,13 @@ export default function SampleBillGeneratorPage({
                 </Link>
 
                 <section className="space-y-4">
-                  <Input
+                  <SingleDatePicker
                     label="Ngày tạo bill"
-                    type="date"
                     value={form.date}
-                    onChange={(event) => {
+                    onChange={(date) => {
                       setForm((current) => ({
                         ...current,
-                        date: event.target.value,
+                        date,
                       }));
                       clearResults();
                       setHolidayOverride(false);

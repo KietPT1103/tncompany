@@ -373,12 +373,12 @@ export default function PayrollManager({
                       ? `
                         cursor-pointer
                         hover:bg-emerald-50/70
-                        hover:shadow-[inset_3px_0_0_0_#10b981]
+                        hover:shadow-[inset_3px_0_0_0_#047857]
                         focus-visible:bg-emerald-50/70
                         focus-visible:outline-none
                         focus-visible:ring-2
                         focus-visible:ring-inset
-                        focus-visible:ring-emerald-500
+                        focus-visible:ring-emerald-800
                       `
                       : "bg-white",
                   ].join(" ")}
@@ -390,8 +390,8 @@ export default function PayrollManager({
                           flex h-9 w-9 shrink-0 items-center justify-center
                           rounded-md bg-emerald-50 text-emerald-700
                           transition-colors duration-200
-                          group-hover:bg-emerald-100
-                          group-hover:text-emerald-800
+                          group-hover:bg-emerald-600
+                          group-hover:text-white
                         "
                       >
                         <FileSpreadsheet className="h-4 w-4" />
@@ -410,7 +410,7 @@ export default function PayrollManager({
                                   void handleUpdateName(payroll.id!);
                                 if (event.key === "Escape") setEditingId(null);
                               }}
-                              className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm outline-none transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                              className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm outline-none transition-colors focus:border-emerald-800 focus:ring-2 focus:ring-emerald-500"
                               aria-label="Tên kỳ lương"
                               autoFocus
                             />
@@ -438,7 +438,6 @@ export default function PayrollManager({
                               {payroll.name}
                             </h3>
                             <span className="mt-1 inline-flex items-center gap-1.5 text-xs text-slate-500">
-                              <CalendarDays className="h-3.5 w-3.5" />
                               Tạo ngày {formatTimestampDate(payroll.createdAt)}
                             </span>
                           </>

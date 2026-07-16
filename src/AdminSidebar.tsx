@@ -124,13 +124,13 @@ const navGroups: NavGroup[] = [
     icon: Wallet,
     items: [
       { href: "/payroll", label: "Tính lương", icon: Wallet, permission: "payroll.access" },
+      { href: "/timesheet", label: "Chấm công", icon: CalendarDays, permission: "timesheet.access" },
       {
         href: "/payroll-estimate",
         label: "Ước lượng lương",
         icon: CalendarDays,
         permission: "payroll_estimate.access",
       },
-      { href: "/timesheet", label: "Chấm công", icon: CalendarDays, permission: "timesheet.access" },
     ],
   },
   {
@@ -188,7 +188,7 @@ export default function AdminSidebar({
   const { setStoreId, storeId, storeName } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [showStoreMenu, setShowStoreMenu] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const storeMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -237,35 +237,21 @@ export default function AdminSidebar({
     }))
     .filter((group) => group.items.length > 0);
 
-  const activeGroupKeys = useMemo(
+  const activeGroupKey = useMemo(
     () =>
-      visibleNavGroups
-        .filter((group) =>
-          group.items.some(
-            (item) => pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`))
-          )
-        )
-        .map((group) => group.key),
+      visibleNavGroups.find((group) =>
+        group.items.some(
+          (item) =>
+            pathname === item.href ||
+            (item.href !== "/" && pathname.startsWith(`${item.href}/`)),
+        ),
+      )?.key ?? null,
     [pathname, visibleNavGroups]
   );
 
   useEffect(() => {
-    if (activeGroupKeys.length === 0) return;
-
-    setOpenGroups((current) => {
-      const next = { ...current };
-      let changed = false;
-
-      activeGroupKeys.forEach((groupKey) => {
-        if (!next[groupKey]) {
-          next[groupKey] = true;
-          changed = true;
-        }
-      });
-
-      return changed ? next : current;
-    });
-  }, [activeGroupKeys]);
+    setOpenGroupKey(activeGroupKey);
+  }, [activeGroupKey]);
 
   if (loading || !user) {
     return null;
@@ -317,21 +303,16 @@ export default function AdminSidebar({
           >
             <div
               className={cn(
-                "flex min-w-0 items-center gap-2.5",
+                "flex min-w-0 items-center",
                 collapsed && "lg:hidden"
               )}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Calculator className="h-5 w-5" />
-              </div>
-              <span
-                className={cn(
-                  "truncate text-lg font-bold text-primary",
-                  collapsed && "lg:hidden"
-                )}
-              >
-                TN Services
-              </span>
+              <img
+                src="/assets/tn_services.png"
+                alt="TN Services"
+                className="h-12 w-[154px] shrink-0 object-contain"
+                draggable={false}
+              />
             </div>
 
             <button
@@ -499,7 +480,7 @@ export default function AdminSidebar({
                   pathname === item.href ||
                   (item.href !== "/" && pathname.startsWith(item.href + "/"))
               );
-              const isGroupOpen = openGroups[group.key] ?? isGroupActive;
+              const isGroupOpen = openGroupKey === group.key;
               const GroupIcon = group.icon;
 
               return (
@@ -508,18 +489,14 @@ export default function AdminSidebar({
                     type="button"
                     onClick={() => {
                       if (collapsed && onToggleCollapsed) {
-                        setOpenGroups((current) => ({
-                          ...current,
-                          [group.key]: true,
-                        }));
+                        setOpenGroupKey(group.key);
                         onToggleCollapsed();
                         return;
                       }
 
-                      setOpenGroups((current) => ({
-                        ...current,
-                        [group.key]: !isGroupOpen,
-                      }));
+                      setOpenGroupKey((current) =>
+                        current === group.key ? null : group.key,
+                      );
                     }}
                     className={cn(
                       "flex h-10 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-sm font-semibold transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transition-none",
