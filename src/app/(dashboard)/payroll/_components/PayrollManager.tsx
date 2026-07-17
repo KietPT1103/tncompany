@@ -386,10 +386,10 @@ export default function PayrollManager({
                       <div
                         className="
                           flex h-9 w-9 shrink-0 items-center justify-center
-                          rounded-md bg-emerald-50 text-emerald-700
+                          rounded-md bg-emerald-50 text-emerald-800
                           transition-colors duration-200
-                          group-hover:bg-emerald-600
-                          group-hover:text-white
+                          group-hover:bg-emerald-700
+                          group-hover:text-[#F2C94C]
                         "
                       >
                         <FileSpreadsheet className="h-4 w-4" />

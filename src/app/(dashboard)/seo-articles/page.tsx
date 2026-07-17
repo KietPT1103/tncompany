@@ -7,6 +7,7 @@ import {
   // ChevronDown,
   ChevronLeft,
   ChevronRight,
+  EyeOff,
   FileSearch2,
   FileText,
   FolderOpen,
@@ -24,23 +25,32 @@ import { Input } from "@/components/ui/Input";
 import {
   deleteSeoArticle,
   getSeoArticles,
+  updateSeoArticle,
   type SeoArticle,
   type SeoArticleTargetStore,
 } from "@/services/seoArticleService";
 import {
   ArticleActions,
+  ArticlePublishSwitch,
   ArticleSlug,
-  ArticleStatus,
   ArticleThumbnail,
   ListSkeleton,
   MetricCard,
 } from "./_components/SeoArticleListParts";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
+import {
+  resolvePublishedAt,
+  toApiDateTime,
+} from "@/components/seo/seoArticlePublish";
 
 const ARTICLES_PER_PAGE = 5;
 
 type StatusFilter = "all" | "published" | "draft";
 type StoreFilter = "all" | SeoArticleTargetStore;
+type PendingPublishChange = {
+  article: SeoArticle;
+  nextPublished: boolean;
+};
 
 const statusFilterOptions: readonly SelectBoxOption<StatusFilter>[] = [
   {
@@ -158,6 +168,11 @@ export default function SeoArticlesPage() {
   );
   const [deleting, setDeleting] = useState(false);
   const [copiedArticleId, setCopiedArticleId] = useState<string | null>(null);
+  const [pendingPublishChange, setPendingPublishChange] =
+    useState<PendingPublishChange | null>(null);
+  const [updatingPublishId, setUpdatingPublishId] = useState<string | null>(
+    null,
+  );
 
   async function loadArticles() {
     setLoading(true);
@@ -276,42 +291,67 @@ export default function SeoArticlesPage() {
     }
   }
 
+  async function handleConfirmPublishChange() {
+    if (!pendingPublishChange) return;
+
+    const { article, nextPublished } = pendingPublishChange;
+    const nextPublishedAt = toApiDateTime(
+      resolvePublishedAt(nextPublished, null),
+    );
+
+    setUpdatingPublishId(article.id);
+    setErrorMessage("");
+
+    try {
+      await updateSeoArticle(article.id, {
+        slug: article.slug,
+        title: article.title,
+        excerpt: article.excerpt,
+        contentHtml: article.contentHtml,
+        contentJson: article.contentJson,
+        coverImageUrl: article.coverImageUrl,
+        metaTitle: article.metaTitle,
+        metaDescription: article.metaDescription,
+        targetStore: article.targetStore,
+        isPublished: nextPublished,
+        publishedAt: nextPublishedAt,
+      });
+
+      setArticles((current) =>
+        current.map((item) =>
+          item.id === article.id
+            ? {
+                ...item,
+                isPublished: nextPublished,
+                publishedAt: nextPublishedAt,
+              }
+            : item,
+        ),
+      );
+      setPendingPublishChange(null);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(
+        nextPublished
+          ? "Không thể publish bài viết. Vui lòng thử lại."
+          : "Không thể chuyển bài viết về Draft. Vui lòng thử lại.",
+      );
+    } finally {
+      setUpdatingPublishId(null);
+    }
+  }
+
   return (
     <RoleGuard allowedRoles={["admin"]}>
-      <header
-        aria-label="Thanh công cụ bài viết SEO"
-        className="fixed inset-x-0 top-0 z-20 flex h-16 items-center justify-center border-b border-[#F6C85F]/20 bg-[linear-gradient(135deg,#064E3B,#033C2F)] px-16 shadow-[0_2px_6px_rgba(0,35,25,0.2)] lg:hidden"
-      >
-        <div className="flex h-10 w-[140px] items-center overflow-hidden">
-          <img
-            src="/assets/tn_services.png"
-            alt="TN Services"
-            className="h-auto w-full max-w-none"
-            draggable={false}
-          />
-        </div>
-
-        <Link
-          href="/seo-articles/new"
-          aria-label="Tạo bài viết mới"
-          className="absolute top-3 right-4 inline-flex h-11 w-11 items-center justify-center rounded-md bg-emerald-700 text-white shadow-[0_2px_6px_rgba(0,25,18,0.22)] transition-[background-color,transform] duration-150 ease-out hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064E3B] active:scale-[0.96] motion-reduce:transition-none"
-        >
-          <Plus className="h-5 w-5" />
-        </Link>
-      </header>
-
-      <main className="mx-auto w-full max-w-[1600px] space-y-5 p-4 pt-20 sm:p-6 sm:pt-20 lg:p-6 lg:pt-6 xl:p-8">
+      <main className="mx-auto w-full max-w-[1600px] space-y-5 p-4 sm:p-6 lg:p-6 xl:p-8">
         <header className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-              {/* <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100 sm:h-14 sm:w-14">
-                <FileSearch2 className="h-6 w-6" />
-              </span> */}
               <div className="min-w-0">
-                <h1 className="font-smooch text-balance text-xl font-semibold text-[#D4A017] sm:text-5xl">
+                <h1 className="font-smooch text-balance text-3xl font-semibold text-[#D4A017] sm:text-5xl">
                   Danh Sách Bài Viết SEO
                 </h1>
-                <p className="mt-1 max-w-2xl text-pretty text-sm leading-6 text-slate-600">
+                <p className="font-firasans mt-1 max-w-2xl text-pretty text-sm leading-6 text-emerald-800 font-bold">
                   Quản lý danh sách, điều chỉnh nội dung bài viết
                 </p>
               </div>
@@ -350,8 +390,8 @@ export default function SeoArticlesPage() {
           aria-label="Bộ lọc bài viết"
           className="rounded-lg bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.07)] ring-1 ring-slate-200/80 sm:p-5"
         >
-          <div className="grid gap-3 lg:grid-cols-[minmax(240px,1.35fr)_minmax(180px,0.8fr)_minmax(180px,0.8fr)_auto] lg:items-end">
-            <div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(280px,1.4fr)_minmax(190px,0.85fr)_minmax(190px,0.85fr)_auto] xl:items-end">
+            <div className="min-w-0 md:col-span-2 xl:col-span-1">
               <span className="mb-1.5 block text-xs font-medium text-slate-600">
                 Tìm kiếm
               </span>
@@ -363,42 +403,40 @@ export default function SeoArticlesPage() {
                   value={search}
                   onChange={(event) => handleSearchChange(event.target.value)}
                   aria-label="Tìm kiếm bài viết"
-                  className="h-10 rounded-[3px] border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 transition-[border-color,box-shadow] placeholder:text-slate-400 focus-visible:border-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-800"
+                  className="h-10 w-full rounded-[3px] border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 transition-[border-color,box-shadow] placeholder:text-slate-400 focus-visible:border-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-800/20"
                   placeholder="Tìm theo tiêu đề, slug hoặc mô tả..."
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:contents">
-              <div className="min-w-0">
-                <span className="mb-1.5 block text-xs font-semibold text-slate-600">
-                  Trạng thái
-                </span>
+            <div className="min-w-0">
+              <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+                Trạng thái
+              </span>
 
-                <SelectBox
-                  value={statusFilter}
-                  options={statusFilterOptions}
-                  onValueChange={handleStatusChange}
-                  ariaLabel="Lọc bài viết theo trạng thái"
-                  className="w-full"
-                  triggerClassName="h-10 rounded-[3px] border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[background-color,border-color,box-shadow,color] hover:border-emerald-600 hover:bg-emerald-50/40 focus-visible:border-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-700/20"
-                />
-              </div>
+              <SelectBox
+                value={statusFilter}
+                options={statusFilterOptions}
+                onValueChange={handleStatusChange}
+                ariaLabel="Lọc bài viết theo trạng thái"
+                className="w-full"
+                triggerClassName="h-10 w-full rounded-[3px] border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[background-color,border-color,box-shadow,color] hover:border-emerald-600 hover:bg-emerald-50/40 focus-visible:border-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-700/20"
+              />
+            </div>
 
-              <div className="min-w-0">
-                <span className="mb-1.5 block text-xs font-semibold text-slate-600">
-                  Nhóm SEO
-                </span>
+            <div className="min-w-0">
+              <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+                Nhóm SEO
+              </span>
 
-                <SelectBox
-                  value={storeFilter}
-                  options={storeFilterOptions}
-                  onValueChange={handleStoreChange}
-                  ariaLabel="Lọc bài viết theo nhóm SEO"
-                  className="w-full"
-                  triggerClassName="h-10 rounded-[3px] border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[background-color,border-color,box-shadow,color] hover:border-emerald-600 hover:bg-emerald-50/40 focus-visible:border-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-700/20"
-                />
-              </div>
+              <SelectBox
+                value={storeFilter}
+                options={storeFilterOptions}
+                onValueChange={handleStoreChange}
+                ariaLabel="Lọc bài viết theo nhóm SEO"
+                className="w-full"
+                triggerClassName="h-10 w-full rounded-[3px] border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[background-color,border-color,box-shadow,color] hover:border-emerald-600 hover:bg-emerald-50/40 focus-visible:border-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-700/20"
+              />
             </div>
 
             <Button
@@ -406,7 +444,7 @@ export default function SeoArticlesPage() {
               variant="outline"
               onClick={() => void loadArticles()}
               disabled={loading}
-              className="group h-10 gap-1.5 rounded-[3px] item-center border border-emerald-600 bg-white px-3 text-sm font-semibold text-emerald-800 shadow-[0_1px_3px_rgba(15,23,42,0.08)] transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out hover:border-emerald-800 hover:bg-emerald-800 hover:text-white hover:shadow-[0_4px_10px_rgba(4,120,87,0.24)] active:scale-[0.97] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none disabled:opacity-100"
+              className="group h-10 w-full gap-1.5 whitespace-nowrap rounded-[3px] border border-emerald-700 bg-white px-4 text-sm font-semibold text-emerald-800 shadow-[0_1px_3px_rgba(15,23,42,0.08)] transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out hover:border-emerald-800 hover:bg-emerald-800 hover:text-white hover:shadow-[0_4px_10px_rgba(4,120,87,0.24)] active:scale-[0.97] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none disabled:opacity-100 md:col-span-2 xl:col-span-1 xl:w-auto xl:min-w-[118px]"
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 shrink-0 transition-transform duration-500 ${
@@ -455,15 +493,15 @@ export default function SeoArticlesPage() {
                   <col className="w-[12%]" />
                   <col className="w-[10%]" />
                   <col className="w-[9%]" />
-                  <col className="w-[16%]" />
+                  <col className="w-[14%]" />
                 </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-600">
                   <tr>
                     <th className="px-5 py-4">Bài viết</th>
                     <th className="px-4 py-4">Slug</th>
                     <th className="px-4 py-4">Nhóm SEO</th>
-                    <th className="px-4 py-4">Trạng thái</th>
-                    <th className="px-4 py-4">Ngày tạo</th>
+                    <th className="px-4 py-4 text-right">Trạng thái</th>
+                    <th className="px-4 py-4 text-right">Ngày tạo</th>
                     <th className="px-5 py-4 text-center">Tác vụ</th>
                   </tr>
                 </thead>
@@ -506,9 +544,18 @@ export default function SeoArticlesPage() {
                           </span>
                         </td>
                         <td className="px-4 py-4">
-                          <ArticleStatus isPublished={article.isPublished} />
+                          <ArticlePublishSwitch
+                            isPublished={article.isPublished}
+                            disabled={updatingPublishId === article.id}
+                            onToggle={() =>
+                              setPendingPublishChange({
+                                article,
+                                nextPublished: !article.isPublished,
+                              })
+                            }
+                          />
                         </td>
-                        <td className="px-4 py-4 text-sm leading-5 text-slate-700 tabular-nums">
+                        <td className="text-right px-4 py-4 text-sm leading-5 text-slate-700 tabular-nums">
                           <span className="block">{publishDate.time}</span>
                           {publishDate.date ? (
                             <span className="mt-0.5 block text-xs text-slate-500">
@@ -573,7 +620,16 @@ export default function SeoArticlesPage() {
                             targetStoreLabels.company}
                         </span>
                       </span>
-                      <ArticleStatus isPublished={article.isPublished} />
+                      <ArticlePublishSwitch
+                        isPublished={article.isPublished}
+                        disabled={updatingPublishId === article.id}
+                        onToggle={() =>
+                          setPendingPublishChange({
+                            article,
+                            nextPublished: !article.isPublished,
+                          })
+                        }
+                      />
                       <span className="ml-auto text-right text-xs leading-5 text-slate-600 tabular-nums">
                         <span className="block">{publishDate.time}</span>
                         {publishDate.date ? (
@@ -659,6 +715,39 @@ export default function SeoArticlesPage() {
           </>
         )}
       </main>
+
+      <ConfirmDialog
+        open={Boolean(pendingPublishChange)}
+        title={
+          pendingPublishChange?.nextPublished
+            ? "Publish bài viết?"
+            : "Chuyển bài viết về Draft?"
+        }
+        description={
+          <>
+            Bài viết{" "}
+            <strong className="font-semibold text-slate-900">
+              {pendingPublishChange?.article.title}
+            </strong>{" "}
+            {pendingPublishChange?.nextPublished
+              ? "sẽ được hiển thị công khai ngay với thời gian hiện tại."
+              : "sẽ ngừng hiển thị công khai và xóa lịch publish hiện tại."}
+          </>
+        }
+        confirmLabel={
+          pendingPublishChange?.nextPublished ? "Publish ngay" : "Về Draft"
+        }
+        cancelLabel="Hủy"
+        variant={
+          pendingPublishChange?.nextPublished ? "default" : "destructive"
+        }
+        icon={pendingPublishChange?.nextPublished ? CheckCircle2 : EyeOff}
+        isLoading={Boolean(updatingPublishId)}
+        onConfirm={() => void handleConfirmPublishChange()}
+        onCancel={() => {
+          if (!updatingPublishId) setPendingPublishChange(null);
+        }}
+      />
 
       <ConfirmDialog
         open={Boolean(articleToDelete)}

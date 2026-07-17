@@ -61,10 +61,10 @@ export default function PayrollPage() {
         <header className="border-b border-slate-200 pb-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-slate-950 sm:text-2xl">Tính lương</h1>
-              <p className="mt-1 text-sm text-slate-500">
+              <h1 className="text-4xl font-smooch text-emerald-800 font-bold sm:text-5xl">Tính lương</h1>
+              <p className="mt-1 text-sm font-firasans font-bold text-[#d6ba5d]">
                 Quản lý kỳ lương và nhân sự tại{" "}
-                <span className="font-medium text-slate-700">{storeName}</span>
+                <span className="font-bold text-emerald-800">{storeName}</span>
               </p>
             </div>
 

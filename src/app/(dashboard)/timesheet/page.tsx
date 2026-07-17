@@ -1083,10 +1083,10 @@ export default function TimesheetPage() {
       <header className="border-b border-slate-200 pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-slate-950 sm:text-2xl">
+            <h1 className="font-smooch text-4xl font-bold text-emerald-800 sm:text-5xl">
               Chấm công
             </h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-600">
+            <p className="mt-1 max-w-2xl text-sm font-firasans text-[#d6ba5d] font-bold">
               Import dữ liệu máy chấm công.
             </p>
           </div>
@@ -1123,7 +1123,7 @@ export default function TimesheetPage() {
               <span className="block text-sm font-medium text-slate-700">
                 File chấm công
               </span>
-              <label className="group flex h-11 cursor-pointer items-center gap-2.5 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 transition-[border-color,background-color] duration-150 hover:border-primary hover:bg-primary/5 focus-within:ring-2 focus-within:ring-primary sm:h-10">
+              <label className="group flex h-11 cursor-pointer items-center gap-2.5 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 transition-[border-color,background-color] duration-150 hover:border-primary hover:bg-primary/5 sm:h-10">
                 <input
                   type="file"
                   accept=".txt,.csv"

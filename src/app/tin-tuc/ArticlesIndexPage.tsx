@@ -5,6 +5,7 @@ import AppHeader from "../../components/AppHeader";
 import { navPages } from "../../data/siteData";
 import { getSeoArticles, SeoArticle } from "../../services/seoArticleService";
 import defaultImage from "../../optimized-media/cafe/cafe-hero.jpg";
+import { resolveSeoArticleImageUrl } from "../../components/seo/seoArticleAssets";
 
 function getStoreLabel(targetStore: string) {
   if (targetStore === "cafe") return "Cà phê";
@@ -142,7 +143,7 @@ export default function ArticlesIndexPage() {
                 <Link to={`/tin-tuc/${featuredArticle.slug}`} className="news-featured-card" style={{ textDecoration: 'none' }}>
                   <div className="news-featured-media font-inter">
                     <img 
-                      src={featuredArticle.coverImageUrl || defaultImage} 
+                      src={resolveSeoArticleImageUrl(featuredArticle.coverImageUrl) || defaultImage}
                       alt={featuredArticle.title} 
                       onError={(e) => { (e.target as HTMLImageElement).src = defaultImage; }}
                     />
@@ -166,7 +167,7 @@ export default function ArticlesIndexPage() {
                     <Link to={`/tin-tuc/${article.slug}`} key={article.id} className="news-card" style={{ textDecoration: 'none' }}>
                       <div className="news-card-media">
                         <img 
-                          src={article.coverImageUrl || defaultImage} 
+                          src={resolveSeoArticleImageUrl(article.coverImageUrl) || defaultImage}
                           alt={article.title} 
                           onError={(e) => { (e.target as HTMLImageElement).src = defaultImage; }}
                         />

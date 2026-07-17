@@ -5,6 +5,7 @@ import AppHeader from "../../components/AppHeader";
 import { navPages } from "../../data/siteData";
 import { getSeoArticles, SeoArticle } from "../../services/seoArticleService";
 import defaultImage from "../../optimized-media/cafe/cafe-hero.jpg";
+import { resolveSeoArticleImageUrl } from "../../components/seo/seoArticleAssets";
 
 function upsertMetaByName(name: string, content: string) {
   let meta = document.head.querySelector(`meta[name="${name}"]`);
@@ -166,15 +167,30 @@ async function copyText(value: string) {
   }
 }
 
-export default function ArticleDetailPage() {
+type ArticleDetailPageProps = {
+  previewArticle?: SeoArticle | null;
+  previewMode?: boolean;
+};
+
+export default function ArticleDetailPage({
+  previewArticle = null,
+  previewMode = false,
+}: ArticleDetailPageProps = {}) {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const [article, setArticle] = useState<SeoArticle | null>(null);
+  const [article, setArticle] = useState<SeoArticle | null>(previewArticle);
   const [relatedArticles, setRelatedArticles] = useState<SeoArticle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!previewArticle);
   const [shareNotice, setShareNotice] = useState("");
 
   useEffect(() => {
+    if (previewArticle) {
+      setArticle(previewArticle);
+      setRelatedArticles([]);
+      setLoading(false);
+      return;
+    }
+
     window.scrollTo(0, 0);
     getSeoArticles("", "published")
       .then((data) => {
@@ -190,7 +206,7 @@ export default function ArticleDetailPage() {
       .finally(() => {
         setLoading(false);
       });
-  }, [slug]);
+  }, [previewArticle, slug]);
 
   useEffect(() => {
     if (!shareNotice || typeof window === "undefined") {
@@ -207,7 +223,12 @@ export default function ArticleDetailPage() {
   }, [shareNotice]);
 
   useEffect(() => {
-    if (typeof document === "undefined" || typeof window === "undefined" || !article) {
+    if (
+      previewMode ||
+      typeof document === "undefined" ||
+      typeof window === "undefined" ||
+      !article
+    ) {
       return;
     }
 
@@ -215,7 +236,8 @@ export default function ArticleDetailPage() {
     const title = `${article.metaTitle || article.title} | T&N Company`;
     const description =
       article.metaDescription || article.excerpt || stripHtml(article.contentHtml).slice(0, 180);
-    const image = article.coverImageUrl || defaultImage;
+    const image =
+      resolveSeoArticleImageUrl(article.coverImageUrl) || defaultImage;
 
     document.documentElement.lang = "vi";
     document.title = title;
@@ -258,7 +280,7 @@ export default function ArticleDetailPage() {
         },
       },
     });
-  }, [article]);
+  }, [article, previewMode]);
 
   if (loading) {
     return (
@@ -315,7 +337,25 @@ export default function ArticleDetailPage() {
   };
 
   return (
-    <div className="overflow-x-hidden">
+    <div
+      className={
+        previewMode
+          ? "min-h-full overflow-x-hidden bg-white"
+          : "overflow-x-hidden"
+      }
+      data-preview-mode={previewMode ? "true" : undefined}
+      onClickCapture={
+        previewMode
+          ? (event) => {
+              const target = event.target as HTMLElement;
+              if (target.closest("a, button")) {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            }
+          : undefined
+      }
+    >
       <AppHeader
         activePageId="news"
         onNavigate={(id) => {
@@ -407,7 +447,7 @@ export default function ArticleDetailPage() {
 
           <div className="editorial-media editorial-hero-media w-[90%] mx-auto my-10">
             <img
-              src={article.coverImageUrl || defaultImage}
+              src={resolveSeoArticleImageUrl(article.coverImageUrl) || defaultImage}
               alt={article.title}
               onError={(e) => { (e.target as HTMLImageElement).src = defaultImage; }}
             />
@@ -445,7 +485,7 @@ export default function ArticleDetailPage() {
 
             <div className="editorial-media editorial-secondary-media">
               <img
-                src={secondaryImage}
+                src={resolveSeoArticleImageUrl(secondaryImage) || defaultImage}
                 alt="Trải nghiệm"
                 onError={(e) => { (e.target as HTMLImageElement).src = defaultImage; }}
               />
@@ -464,7 +504,7 @@ export default function ArticleDetailPage() {
                   <Link to={`/tin-tuc/${item.slug}`} className="editorial-related-card" key={item.id} style={{ textDecoration: 'none' }}>
                     <div className="editorial-media editorial-related-media">
                       <img
-                        src={item.coverImageUrl || defaultImage}
+                        src={resolveSeoArticleImageUrl(item.coverImageUrl) || defaultImage}
                         alt={item.title}
                         onError={(e) => { (e.target as HTMLImageElement).src = defaultImage; }}
                       />

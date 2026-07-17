@@ -2,10 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import {
-  CircleAlert,
-  type LucideIcon,
-} from "lucide-react";
+import { CircleAlert, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -137,7 +134,7 @@ export function ConfirmDialog({
               "flex h-10 w-10 items-center justify-center rounded-md",
               destructive
                 ? "bg-rose-50 text-rose-700"
-                : "bg-primary/10 text-primary",
+                : "bg-emerald-700 text-white",
             )}
           >
             <Icon className="h-5 w-5" />
@@ -146,7 +143,10 @@ export function ConfirmDialog({
 
         <h2
           id={titleId}
-          className={cn("text-base font-semibold text-slate-950", Icon && "mt-4")}
+          className={cn(
+            "text-base font-semibold text-slate-950",
+            Icon && "mt-4",
+          )}
         >
           {title}
         </h2>
@@ -173,7 +173,11 @@ export function ConfirmDialog({
             variant={destructive ? "destructive" : "default"}
             onClick={onConfirm}
             isLoading={isLoading}
-            className="h-auto min-h-10 min-w-0 whitespace-normal py-2 shadow-none"
+            className={cn(
+              "h-auto min-h-10 min-w-0 whitespace-normal py-2 shadow-none transition-[background-color,color,transform] duration-150 active:scale-[0.97]",
+              !destructive &&
+                "bg-emerald-800 text-white hover:bg-[#F6C85F] hover:text-[#064E3B]",
+            )}
           >
             {confirmLabel}
           </Button>

@@ -546,19 +546,19 @@ export default function SampleBillGeneratorPage({
         <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
           <header className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-700 text-[#d6ba5d]">
                 <PageIcon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
                 <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <h1 className="text-balance text-2xl font-bold">
+                  <h1 className="text-balance font-smooch text-4xl text-emerald-800 font-bold">
                     {config.title}
                   </h1>
-                  <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                  <span className="font-firasans rounded-full bg-slate-200 px-2.5 py-1 text-sm font-bold text-slate-700">
                     Dữ liệu tạm
                   </span>
                 </div>
-                <p className="max-w-2xl text-pretty text-sm leading-6 text-slate-600">
+                <p className="font-firasans max-w-2xl text-pretty text-sm leading-6 text-[#d6ba5d] font-bold">
                   {config.description}. Kết quả không được lưu vào database.
                 </p>
               </div>

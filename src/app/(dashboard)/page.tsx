@@ -296,7 +296,7 @@ export default function HomePage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
-            <h1 className="font-smooch text-6xl font-bold tracking-tight text-emerald-800">
+            <h1 className="font-smooch text-6xl text-emerald-800 font-bold tracking-tight">
               Dashboard
             </h1>
             <p className="mt-1 font-firasans text-slate-500">
@@ -306,7 +306,7 @@ export default function HomePage() {
               </span>
             </p>
           </div>
-          <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white p-2 pr-4 shadow-sm shadow-[6px_8px_14px_rgba(6,78,59,0.22)]">
+          <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white p-2 pr-4 shadow-[6px_8px_14px_rgba(6,78,59,0.22)]">
             <div className="rounded-full bg-emerald-700 p-2">
               <Activity className="h-5 w-5 text-[#F6C85F]" />
             </div>

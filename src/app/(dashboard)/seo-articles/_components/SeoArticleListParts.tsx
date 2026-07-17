@@ -5,6 +5,7 @@ import {
   Clipboard,
   ClipboardCheck,
   Eye,
+  Loader2,
   Pencil,
   Trash2,
   type LucideIcon,
@@ -13,27 +14,54 @@ import {
 import { Tooltip } from "@/components/ui/Tooltip";
 import defaultImage from "@/optimized-media/cafe/cafe-hero.jpg";
 import type { SeoArticle } from "@/services/seoArticleService";
+import { cn } from "@/lib/utils";
+import { resolveSeoArticleImageUrl } from "@/components/seo/seoArticleAssets";
 
-export function ArticleStatus({ isPublished }: { isPublished: boolean }) {
+export function ArticlePublishSwitch({
+  isPublished,
+  disabled = false,
+  onToggle,
+}: {
+  isPublished: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <span
-      className={
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isPublished}
+      aria-label={isPublished ? "Chuyển bài viết về Draft" : "Publish bài viết"}
+      disabled={disabled}
+      onClick={onToggle}
+      className={cn(
+        "group inline-flex h-9 min-w-[112px] items-center gap-2 rounded-md border px-2 text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none",
         isPublished
-          ? "inline-flex h-7 w-[92px] items-center justify-center gap-1.5 rounded-full bg-emerald-700 px-2.5 text-xs font-semibold text-white"
-          : "inline-flex h-7 w-[92px] items-center justify-center gap-1.5 rounded-full bg-amber-100 px-2.5 text-xs font-semibold text-amber-800"
-      }
+          ? "border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800"
+          : "border-slate-300 bg-white text-slate-700 hover:border-emerald-500 hover:bg-emerald-50",
+      )}
     >
       <span
         aria-hidden="true"
-        className={
-          isPublished
-            ? "h-2 w-2 shrink-0 rounded-full bg-white"
-            : "h-2 w-2 shrink-0 rounded-full bg-amber-500"
-        }
-      />
+        className={cn(
+          "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-150",
+          isPublished ? "bg-white/30" : "bg-slate-200",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-150 ease-out motion-reduce:transition-none",
+            isPublished ? "translate-x-[18px]" : "translate-x-0.5",
+          )}
+        />
+      </span>
 
-      {isPublished ? "Published" : "Draft"}
-    </span>
+      {disabled ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+      ) : (
+        <span>{isPublished ? "Published" : "Draft"}</span>
+      )}
+    </button>
   );
 }
 
@@ -46,7 +74,7 @@ export function ArticleThumbnail({
 }) {
   return (
     <img
-      src={article.coverImageUrl || defaultImage}
+      src={resolveSeoArticleImageUrl(article.coverImageUrl) || defaultImage}
       alt=""
       loading="lazy"
       className={className}
@@ -170,20 +198,30 @@ export function MetricCard({
   icon: Icon,
   label,
   value,
+  className,
 }: {
   icon: LucideIcon;
   label: string;
   value: number;
+  className?: string;
 }) {
   return (
-    <div className="flex h-16 min-w-[190px] items-center gap-3 rounded bg-white px-4 shadow-[0_1px_4px_rgba(15,23,42,0.07)] ring-1 ring-slate-200">
+    <div
+      className={cn(
+        "font-firasans flex h-16 min-w-[190px] items-center gap-3 rounded bg-white px-4",
+        "shadow-[6px_8px_14px_rgba(15,23,42,0.14)]",
+        "transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-[8px_10px_18px_rgba(15,23,42,0.18)]",
+        className,
+      )}
+    >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F6C85F] text-[#063B2E]">
         <Icon className="h-4 w-4" />
       </span>
 
-      <div>
-        <p className="text-sm text-slate-600">{label}</p>
-        <p className="text-xl font-semibold leading-none text-[#B8860B]">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-slate-600">{label}</p>
+
+        <p className="mt-0.5 text-xl font-semibold leading-none text-[#B8860B]">
           {value}
         </p>
       </div>

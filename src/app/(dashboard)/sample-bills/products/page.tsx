@@ -552,10 +552,10 @@ export default function SampleBillProductsPage() {
         <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
           <header className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-balance text-2xl font-bold">
+              <h1 className="font-smooch text-5xl text-emerald-800 font-bold">
                 Danh sách sản phẩm tạo bill
               </h1>
-              <p className="mt-1 text-pretty text-sm text-slate-600">
+              <p className="font-firasans text-[#d6ba5d] font-bold mt-1 text-pretty text-sm">
                 Kho dữ liệu riêng cho bill mẫu
               </p>
             </div>
@@ -573,32 +573,18 @@ export default function SampleBillProductsPage() {
               />
               <Button
                 variant="outline"
-                className="
-                  h-9 gap-1.5 rounded-[3px]
-                  border-slate-300 bg-white
-                  px-3 text-sm font-medium
-                  transition-[transform,background-color]
-                  hover:bg-slate-50
-                  active:scale-[0.96]
-                "
+                className="h-10 gap-1.5 rounded-[2px] border-2 border-slate-900 bg-white px-3 text-sm font-semibold text-slate-900 shadow-[4px_4px_0_#0f172a] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900 hover:shadow-[6px_6px_0_#0f172a] active:translate-x-[2px] active:translate-y-[2px] active:scale-100 active:shadow-[2px_2px_0_#0f172a]"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <FileUp className="h-3.5 w-3.5" />
+                <FileUp className="h-3.5 w-3.5 shrink-0" />
                 Upload Excel
               </Button>
 
               <Button
-                className="
-                  h-9 gap-1.5 rounded-[3px]
-                  bg-emerald-700 px-3
-                  text-sm font-semibold text-white
-                  transition-[transform,background-color]
-                  hover:bg-emerald-600
-                  active:scale-[0.96]
-                "
+                className="h-10 gap-1.5 rounded-[2px] border-2 border-slate-900 bg-emerald-700 px-3 text-sm font-semibold text-white shadow-[4px_4px_0_#0f172a] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:bg-emerald-800 hover:text-white hover:shadow-[6px_6px_0_#0f172a] active:translate-x-[2px] active:translate-y-[2px] active:scale-100 active:shadow-[2px_2px_0_#0f172a]"
                 onClick={openCreate}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-3.5 w-3.5 shrink-0" />
                 Thêm sản phẩm
               </Button>
             </div>

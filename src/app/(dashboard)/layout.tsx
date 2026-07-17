@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminSidebar from "@/AdminSidebar";
+import { AdminMobileHeader } from "@/components/admin/AdminMobileHeader";
 
 const SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
 
@@ -33,7 +34,8 @@ export default function DashboardLayout({
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC]">
+        <AdminMobileHeader />
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC] pt-16 lg:pt-0">
           {children}
         </main>
       </div>

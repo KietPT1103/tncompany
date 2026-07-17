@@ -605,7 +605,6 @@ type PayrollDetailNotice = {
   description: string;
 };
 
-
 type ActionMenuPosition = {
   top: number;
   left: number;
@@ -2930,7 +2929,7 @@ export default function PayrollDetail({
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-10 w-10 rounded-md border-slate-300 bg-white shadow-none transition-[background-color,border-color,scale] duration-150 ease-out active:scale-[0.96]"
+                              className="h-10 w-10 rounded-md border border-emerald-700 bg-emerald-700 text-[#F2C94C] shadow-none transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-[#F2C94C] hover:bg-[#F2C94C] hover:text-emerald-900 active:scale-[0.96]"
                               aria-label={"Sửa ca của " + entry.employeeName}
                               title="Sửa ca"
                               onClick={() => {
@@ -3105,7 +3104,7 @@ export default function PayrollDetail({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-10 w-10 rounded-md border border-slate-300 bg-white text-slate-500 shadow-none transition-[background-color,color,border-color,scale] duration-150 ease-out hover:bg-slate-100 active:scale-[0.96]"
+                              className="h-10 w-10 rounded-md border border-emerald-700 bg-emerald-700 text-[#F2C94C] shadow-none transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-[#F2C94C] hover:bg-[#F2C94C] hover:text-emerald-900 active:scale-[0.96]"
                               onClick={(event) => {
                                 actionMenuTriggerRef.current =
                                   event.currentTarget;

@@ -716,12 +716,11 @@ export default function TikTokSearchPage() {
                   <MessageSquareText className="h-4 w-4" />
                   TikTok Social Listening
                 </div>
-                <h1 className="mt-3 max-w-[20ch] text-balance text-2xl font-semibold leading-tight tracking-normal md:text-[1.8rem]">
-                  Tìm comment TikTok thật theo keyword và khoảng ngày
+                <h1 className="font-smooch mt-3 max-w-[50ch] text-balance text-2xl font-bold leading-tight tracking-normal md:text-5xl">
+                  Tìm kiếm bình luận TikTok theo từ khóa và thời gian
                 </h1>
-                <p className="mt-2 max-w-[60ch] text-pretty text-sm leading-6 text-teal-50/90">
-                  Module này chỉ đọc dữ liệu thật từ TikTok thông qua provider được cấu hình. Nếu
-                  không lấy được dữ liệu, hệ thống trả về rỗng và không sinh comment giả.
+                <p className="font-firasans mt-2 max-w-[50ch] text-pretty text-sm leading-6 text-teal-50/90">
+                  Dữ liệu được lấy trực tiếp từ TikTok.
                 </p>
               </div>
 
