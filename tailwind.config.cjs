@@ -36,6 +36,7 @@ module.exports = {
         inter: ['"Inter"', "sans-serif"],
         nunito: ['"Nunito Sans Variable"', "sans-serif"],
         smooch: ['"Smooch Sans Variable"', "sans-serif"],
+        firasans: ["Fira Sans", "sans-serif"],
       },
     },
   },

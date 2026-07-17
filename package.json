@@ -17,6 +17,7 @@
   "dependencies": {
     "@fontsource-variable/nunito-sans": "^5.2.7",
     "@fontsource-variable/smooch-sans": "^5.2.8",
+    "@fontsource/fira-sans": "^5.2.7",
     "clsx": "^2.1.1",
     "firebase": "^12.7.0",
     "lodash": "^4.17.21",

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
-  ChevronDown,
+  // ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileSearch2,
@@ -35,11 +35,27 @@ import {
   ListSkeleton,
   MetricCard,
 } from "./_components/SeoArticleListParts";
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 
 const ARTICLES_PER_PAGE = 5;
 
 type StatusFilter = "all" | "published" | "draft";
 type StoreFilter = "all" | SeoArticleTargetStore;
+
+const statusFilterOptions: readonly SelectBoxOption<StatusFilter>[] = [
+  {
+    value: "all",
+    label: "Tất cả trạng thái",
+  },
+  {
+    value: "published",
+    label: "Published",
+  },
+  {
+    value: "draft",
+    label: "Draft",
+  },
+];
 
 const targetStoreLabels: Record<SeoArticleTargetStore, string> = {
   company: "Toàn hệ sinh thái",
@@ -48,15 +64,27 @@ const targetStoreLabels: Record<SeoArticleTargetStore, string> = {
   farm: "Ông Quan Farm",
 };
 
-const storeFilterOptions: Array<{
-  value: StoreFilter;
-  label: string;
-}> = [
-  { value: "all", label: "Tất cả nhóm SEO" },
-  { value: "company", label: targetStoreLabels.company },
-  { value: "cafe", label: targetStoreLabels.cafe },
-  { value: "hotpot", label: targetStoreLabels.hotpot },
-  { value: "farm", label: targetStoreLabels.farm },
+const storeFilterOptions: readonly SelectBoxOption<StoreFilter>[] = [
+  {
+    value: "all",
+    label: "Tất cả nhóm SEO",
+  },
+  {
+    value: "company",
+    label: targetStoreLabels.company,
+  },
+  {
+    value: "cafe",
+    label: targetStoreLabels.cafe,
+  },
+  {
+    value: "hotpot",
+    label: targetStoreLabels.hotpot,
+  },
+  {
+    value: "farm",
+    label: targetStoreLabels.farm,
+  },
 ];
 
 function normalizeSearchValue(value: string) {
@@ -341,48 +369,36 @@ export default function SeoArticlesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 lg:contents">
-              <label className="min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-slate-600">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:contents">
+              <div className="min-w-0">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-600">
                   Trạng thái
                 </span>
-                <span className="relative block">
-                  <select
-                    value={statusFilter}
-                    onChange={(event) =>
-                      handleStatusChange(event.target.value as StatusFilter)
-                    }
-                    className="h-10 w-full appearance-none rounded border border-slate-200 bg-white px-2 pr-7 text-xs text-slate-900 transition-[border-color,box-shadow] duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-emerald-600 sm:px-3 sm:pr-9 sm:text-sm"
-                  >
-                    <option value="all">Tất cả trạng thái</option>
-                    <option value="published">Published</option>
-                    <option value="draft">Draft</option>
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 sm:right-3" />
-                </span>
-              </label>
 
-              <label className="min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                <SelectBox
+                  value={statusFilter}
+                  options={statusFilterOptions}
+                  onValueChange={handleStatusChange}
+                  ariaLabel="Lọc bài viết theo trạng thái"
+                  className="w-full"
+                  triggerClassName="h-10 rounded-[3px] border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[background-color,border-color,box-shadow,color] hover:border-emerald-600 hover:bg-emerald-50/40 focus-visible:border-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-700/20"
+                />
+              </div>
+
+              <div className="min-w-0">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-600">
                   Nhóm SEO
                 </span>
-                <span className="relative block">
-                  <select
-                    value={storeFilter}
-                    onChange={(event) =>
-                      handleStoreChange(event.target.value as StoreFilter)
-                    }
-                    className="h-10 w-full appearance-none rounded border border-slate-200 bg-white px-2 pr-7 text-xs text-slate-900 transition-[border-color,box-shadow] duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-emerald-600 sm:px-3 sm:pr-9 sm:text-sm"
-                  >
-                    {storeFilterOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 sm:right-3" />
-                </span>
-              </label>
+
+                <SelectBox
+                  value={storeFilter}
+                  options={storeFilterOptions}
+                  onValueChange={handleStoreChange}
+                  ariaLabel="Lọc bài viết theo nhóm SEO"
+                  className="w-full"
+                  triggerClassName="h-10 rounded-[3px] border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[background-color,border-color,box-shadow,color] hover:border-emerald-600 hover:bg-emerald-50/40 focus-visible:border-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-700/20"
+                />
+              </div>
             </div>
 
             <Button
@@ -434,7 +450,7 @@ export default function SeoArticlesPage() {
               <table className="w-full table-fixed text-sm">
                 <caption className="sr-only">Danh sách bài viết SEO</caption>
                 <colgroup>
-                  <col className="w-[36%]" />
+                  <col className="w-[35%]" />
                   <col className="w-[17%]" />
                   <col className="w-[12%]" />
                   <col className="w-[10%]" />
@@ -447,8 +463,8 @@ export default function SeoArticlesPage() {
                     <th className="px-4 py-4">Slug</th>
                     <th className="px-4 py-4">Nhóm SEO</th>
                     <th className="px-4 py-4">Trạng thái</th>
-                    <th className="px-4 py-4">Publish</th>
-                    <th className="px-5 py-4 text-center">Hành động</th>
+                    <th className="px-4 py-4">Ngày tạo</th>
+                    <th className="px-5 py-4 text-center">Tác vụ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

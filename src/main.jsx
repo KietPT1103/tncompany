@@ -8,7 +8,10 @@ import { AuthProvider } from "./context/AuthContext";
 import { StoreProvider } from "./context/StoreContext";
 import "@fontsource-variable/nunito-sans";
 import "@fontsource-variable/smooch-sans";
-
+import "@fontsource/fira-sans/400.css";
+import "@fontsource/fira-sans/500.css";
+import "@fontsource/fira-sans/600.css";
+import "@fontsource/fira-sans/700.css";
 const rootElement = document.getElementById("root");
 const pathname = typeof window !== "undefined" ? window.location.pathname : "";
 const isNewsRoute = pathname === "/tin-tuc" || pathname.startsWith("/tin-tuc/");

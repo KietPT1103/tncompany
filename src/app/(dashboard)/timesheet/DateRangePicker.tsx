@@ -52,10 +52,7 @@ const formatDateValue = (date: Date) =>
   ].join("-");
 
 const formatMonthValue = (date: Date) =>
-  [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-  ].join("-");
+  [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0")].join("-");
 
 const formatDisplayDate = (value: string) => {
   const date = parseDate(value);
@@ -77,9 +74,9 @@ const addDays = (date: Date, amount: number) => {
 const isSameDay = (left: Date, right: Date | null) =>
   Boolean(
     right &&
-      left.getFullYear() === right.getFullYear() &&
-      left.getMonth() === right.getMonth() &&
-      left.getDate() === right.getDate(),
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate(),
   );
 
 const buildCalendarDays = (month: Date) => {
@@ -414,15 +411,15 @@ export default function DateRangePicker({
                   onClick={() => handleDayClick(day)}
                   className={cn(
                     "relative flex h-10 items-center justify-center text-sm font-medium transition-colors duration-150 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                    insideRange && "bg-primary/10 text-slate-900",
+                    insideRange && "bg-emerald-800/15 text-emerald-950",
                     selectedStart &&
                       end &&
                       !selectedEnd &&
-                      "rounded-l-md bg-primary/10",
+                      "rounded-l-md bg-emerald-800/15",
                     selectedEnd &&
                       start &&
                       !selectedStart &&
-                      "rounded-r-md bg-primary/10",
+                      "rounded-r-md bg-emerald-800/15",
                     outsideMonth && "text-slate-300",
                     !insideRange &&
                       !selectedStart &&
@@ -435,7 +432,7 @@ export default function DateRangePicker({
                     className={cn(
                       "flex h-8 w-8 items-center justify-center rounded-full",
                       (selectedStart || selectedEnd) &&
-                        "bg-primary text-primary-foreground shadow-sm",
+                        "bg-emerald-800 text-white shadow-sm",
                     )}
                   >
                     {day.getDate()}

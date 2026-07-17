@@ -19,18 +19,19 @@ export function ArticleStatus({ isPublished }: { isPublished: boolean }) {
     <span
       className={
         isPublished
-          ? "inline-flex min-h-7 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
-          : "inline-flex min-h-7 items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"
+          ? "inline-flex h-7 w-[92px] items-center justify-center gap-1.5 rounded-full bg-emerald-700 px-2.5 text-xs font-semibold text-white"
+          : "inline-flex h-7 w-[92px] items-center justify-center gap-1.5 rounded-full bg-amber-100 px-2.5 text-xs font-semibold text-amber-800"
       }
     >
       <span
         aria-hidden="true"
         className={
           isPublished
-            ? "h-2 w-2 rounded-full bg-emerald-500"
-            : "h-2 w-2 rounded-full bg-amber-500"
+            ? "h-2 w-2 shrink-0 rounded-full bg-white"
+            : "h-2 w-2 shrink-0 rounded-full bg-amber-500"
         }
       />
+
       {isPublished ? "Published" : "Draft"}
     </span>
   );
@@ -101,7 +102,7 @@ export function ArticleActions({
   compact?: boolean;
 }) {
   const actionClassName = compact
-    ? "inline-flex h-10 w-10 items-center justify-center rounded-md transition-[background-color,border-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 active:scale-[0.96] motion-reduce:transition-none"
+    ? "inline-flex h-10 w-10 items-center justify-center rounded transition-[background-color,border-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 active:scale-[0.96] motion-reduce:transition-none"
     : "inline-flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium transition-[background-color,border-color,color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 active:scale-[0.96] motion-reduce:transition-none sm:gap-1.5 sm:px-2 sm:text-xs";
 
   const viewAction = (
@@ -110,7 +111,7 @@ export function ArticleActions({
       target="_blank"
       rel="noreferrer"
       aria-label={compact ? "Xem bài viết" : undefined}
-      className={`${actionClassName} border border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800`}
+      className={`${actionClassName} border border-emerald-600 bg-white text-emerald-700 hover:border-emerald-600 hover:bg-emerald-700 hover:text-[#F6C85F]`}
     >
       <Eye className="h-4 w-4 shrink-0" />
       <span className={compact ? "sr-only" : undefined}>Xem</span>
@@ -121,7 +122,7 @@ export function ArticleActions({
     <Link
       href={`/seo-articles/${article.id}`}
       aria-label={compact ? "Chỉnh sửa bài viết" : undefined}
-      className={`${actionClassName} border border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800`}
+      className={`${actionClassName} border border-emerald-600 bg-white text-emerald-700 hover:border-emerald-200 hover:bg-emerald-700 hover:text-[#F6C85F]`}
     >
       <Pencil className="h-4 w-4 shrink-0" />
       <span className={compact ? "sr-only" : undefined}>Chỉnh sửa</span>
@@ -133,7 +134,7 @@ export function ArticleActions({
       type="button"
       onClick={() => onDelete(article)}
       aria-label={compact ? "Xóa bài viết" : undefined}
-      className={`${actionClassName} border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:text-rose-800`}
+      className={`${actionClassName} border border-rose-500 bg-white text-rose-700 hover:bg-rose-700 hover:text-white`}
     >
       <Trash2 className="h-4 w-4 shrink-0" />
       <span className={compact ? "sr-only" : undefined}>Xóa</span>

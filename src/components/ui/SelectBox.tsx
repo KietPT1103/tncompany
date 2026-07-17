@@ -334,7 +334,7 @@ export function SelectBox<T extends string>({
                 "flex min-h-11 w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm font-medium transition-[background-color,color] duration-150 ease-out sm:min-h-10 motion-reduce:transition-none",
                 option.inset && "pl-5",
                 selected
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-emerald-800 text-white"
                   : active
                     ? "bg-accent text-accent-foreground"
                     : "text-popover-foreground",
