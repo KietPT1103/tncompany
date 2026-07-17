@@ -1236,30 +1236,10 @@ export default function TimesheetPage() {
           <Button
             type="button"
             variant="outline"
-            className="
-              group h-9 gap-2 rounded-[2px]
-              border-emerald-700
-              bg-emerald-700 px-3
-              font-semibold text-white
-              shadow-none
-              transition-[background-color,border-color,color,transform]
-              duration-200
-
-              hover:border-emerald-800
-              hover:bg-emerald-800
-              hover:text-white
-
-              active:scale-[0.96]
-            "
+            className="group h-9 gap-1.5 rounded-[2px] border-emerald-700 bg-emerald-700 px-3 text-xs font-semibold text-white shadow-none transition-[background-color,border-color,color,transform] duration-200 hover:border-emerald-800 hover:bg-emerald-800 hover:text-white active:scale-[0.96]"
             onClick={() => setShowImportSetup(true)}
           >
-            <RefreshCw
-              className="
-                h-4 w-4
-                transition-transform duration-500 ease-in-out
-                group-hover:rotate-180
-              "
-            />
+            <RefreshCw className="h-3.5 w-3.5 transition-transform duration-500 ease-in-out group-hover:rotate-180" />
             Đổi file
           </Button>
         </section>
@@ -1367,10 +1347,9 @@ export default function TimesheetPage() {
                     type="button"
                     aria-pressed={conflict.resolution === "new_employee"}
                     className={cn(
-                      "inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-[3px] text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1",
-                      conflict.resolution === "new_employee"
-                        ? "bg-emerald-700 text-white shadow-sm hover:bg-emerald-800"
-                        : "text-slate-700 hover:bg-[#ffb800] hover:text-slate-950",
+                      "inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-[3px] border border-emerald-700 bg-emerald-700 px-3 text-xs font-semibold text-[#F6C85F] transition-[background-color,border-color,color,box-shadow,transform] duration-150 hover:border-[#F6C85F] hover:bg-[#F6C85F] hover:text-emerald-900 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-1",
+                      conflict.resolution === "new_employee" &&
+                        "ring-2 ring-[#F6C85F]/40",
                     )}
                     onClick={() =>
                       handleConflictResolutionChange(
