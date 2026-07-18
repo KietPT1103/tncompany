@@ -8,7 +8,6 @@ import {
   ArrowDown,
   ArrowUp,
   Eye,
-  ImagePlus,
   Loader2,
   Plus,
   Save,
@@ -20,9 +19,9 @@ import RoleGuard from "@/components/RoleGuard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import RichTextEditor from "@/components/seo/RichTextEditor";
+import { SeoArticleImageField } from "@/components/seo/SeoArticleImageField";
 import SeoArticlePreview from "@/components/seo/SeoArticlePreview";
 import { SeoArticlePublishPanel } from "@/components/seo/SeoArticlePublishPanel";
-import { resolveSeoArticleImageUrl } from "@/components/seo/seoArticleAssets";
 import {
   combinePublishDateTime,
   formatLocalDateTime,
@@ -30,6 +29,7 @@ import {
   toApiDateTime,
 } from "@/components/seo/seoArticlePublish";
 import {
+  clearSeoArticleBlockImage,
   createEmptySeoArticleBlock,
   normalizeSeoArticleBlocks,
   renderSeoArticleBlocksToHtml,
@@ -490,7 +490,7 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
     <RoleGuard allowedRoles={["admin"]}>
       <main className="min-h-screen bg-slate-50 px-3 py-4 pb-24 sm:px-6 sm:py-5 sm:pb-8 lg:px-8">
         <div className="mx-auto max-w-[1440px]">
-          <div className="sticky top-0 z-20 -mx-3 mb-5 border-b border-slate-200 bg-slate-50/95 px-3 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <div className="sticky top-0 z-20 -mx-3 mb-5 border-b border-slate-200 bg-slate-50/95 px-3 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 ">
             <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <Link
@@ -549,7 +549,7 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
           ) : (
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0">
-                <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+                <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[6px_8px_14px_rgba(6,78,59,0.1)]">
                   <div className="px-5 py-5 sm:p-6 lg:p-8">
                     <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
                       <span
@@ -604,43 +604,20 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
                       placeholder="Viết phần mô tả mở đầu ngắn để hiển thị trên Google và ở đầu bài viết."
                     />
 
-                    <div className="mt-5 grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-                      <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition-[background-color,border-color,color] hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 focus-within:ring-2 focus-within:ring-emerald-600">
-                        <ImagePlus className="h-4 w-4" />
-                        {uploadingCover
-                          ? "Đang upload ảnh cover..."
-                          : "Chọn ảnh cover"}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) {
-                              void uploadCoverImage(file);
-                            }
-                            event.currentTarget.value = "";
-                          }}
-                        />
-                      </label>
-
-                      <input
+                    <div className="mt-6">
+                      <SeoArticleImageField
+                        label="Ảnh bìa bài viết"
                         value={form.coverImageUrl}
-                        onChange={(event) =>
-                          updateField("coverImageUrl", event.target.value)
+                        alt={form.title.trim() || "Ảnh bìa bài viết"}
+                        uploading={uploadingCover}
+                        variant="cover"
+                        onUpload={(file) => void uploadCoverImage(file)}
+                        onChange={(value) =>
+                          updateField("coverImageUrl", value)
                         }
-                        className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-600/15"
-                        placeholder="Hoặc dán URL ảnh cover"
+                        onRemove={() => updateField("coverImageUrl", "")}
                       />
                     </div>
-
-                    {form.coverImageUrl ? (
-                      <img
-                        src={resolveSeoArticleImageUrl(form.coverImageUrl)}
-                        alt="Ảnh cover"
-                        className="mt-6 max-h-[520px] w-full rounded-lg object-cover outline outline-1 -outline-offset-1 outline-black/10"
-                      />
-                    ) : null}
                   </div>
 
                   <div className="border-t border-slate-200 px-4 py-5 sm:p-6 lg:p-8">
@@ -725,70 +702,44 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
                           </div>
 
                           <div className="mt-6 border-t border-slate-100 pt-5">
-                            <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-                              <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition-[background-color,border-color,color] hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 focus-within:ring-2 focus-within:ring-emerald-600">
-                                <ImagePlus className="h-4 w-4" />
-                                {uploadingBlockId === block.id
-                                  ? "Đang upload ảnh..."
-                                  : "Thêm ảnh minh họa"}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={(event) => {
-                                    const file = event.target.files?.[0];
-                                    if (file) {
-                                      void uploadBlockImage(block.id, file);
-                                    }
-                                    event.currentTarget.value = "";
-                                  }}
-                                />
-                              </label>
-
-                              <input
-                                value={block.imageUrl}
-                                onChange={(event) =>
-                                  updateBlock(block.id, (current) => ({
-                                    ...current,
-                                    imageUrl: event.target.value,
-                                  }))
-                                }
-                                className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-600/15"
-                                placeholder="Hoặc dán URL ảnh cho phần này"
-                              />
-                            </div>
-
-                            <input
-                              value={block.imageAlt}
-                              onChange={(event) =>
+                            <SeoArticleImageField
+                              label="Ảnh minh họa"
+                              value={block.imageUrl}
+                              alt={
+                                block.imageAlt ||
+                                block.heading ||
+                                "Ảnh minh họa"
+                              }
+                              uploading={uploadingBlockId === block.id}
+                              onUpload={(file) =>
+                                void uploadBlockImage(block.id, file)
+                              }
+                              onChange={(value) =>
                                 updateBlock(block.id, (current) => ({
                                   ...current,
-                                  imageAlt: event.target.value,
+                                  imageUrl: value,
                                 }))
                               }
-                              className="mt-3 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-600/15"
-                              placeholder="Mô tả ảnh để hỗ trợ SEO và trợ năng"
+                              onRemove={() =>
+                                updateBlock(
+                                  block.id,
+                                  clearSeoArticleBlockImage,
+                                )
+                              }
                             />
 
                             {block.imageUrl ? (
-                              <figure className="mt-6">
-                                <img
-                                  src={resolveSeoArticleImageUrl(
-                                    block.imageUrl,
-                                  )}
-                                  alt={
-                                    block.imageAlt ||
-                                    block.heading ||
-                                    "Ảnh minh họa"
-                                  }
-                                  className="max-h-[520px] w-full rounded-lg object-cover outline outline-1 -outline-offset-1 outline-black/10"
-                                />
-                                {block.imageAlt ? (
-                                  <figcaption className="mt-3 text-sm text-slate-500">
-                                    {block.imageAlt}
-                                  </figcaption>
-                                ) : null}
-                              </figure>
+                              <input
+                                value={block.imageAlt}
+                                onChange={(event) =>
+                                  updateBlock(block.id, (current) => ({
+                                    ...current,
+                                    imageAlt: event.target.value,
+                                  }))
+                                }
+                                className="mt-3 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-600/15"
+                                placeholder="Mô tả ảnh để hỗ trợ SEO và trợ năng"
+                              />
                             ) : null}
                           </div>
                         </section>
@@ -807,8 +758,8 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
                 </article>
               </div>
 
-              <aside className="flex flex-col gap-4 xl:sticky xl:top-24">
-                <section className="order-3 rounded-lg border border-slate-200 bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.05)] sm:p-5">
+              <aside className="flex flex-col gap-4 xl:sticky xl:top-24 ">
+                <section className="order-3 rounded-lg border border-slate-200 bg-white p-4 shadow-[6px_8px_14px_rgba(6,78,59,0.1)] sm:p-5">
                   <div className="flex items-center gap-2 text-slate-900">
                     <Sparkles className="h-5 w-5 text-emerald-700" />
                     <h2 className="text-base font-semibold">AI viết bài SEO</h2>
@@ -918,7 +869,7 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
                   }
                 />
 
-                <section className="order-2 rounded-lg border border-slate-200 bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.05)] sm:p-5">
+                <section className="order-2 rounded-lg border border-slate-200 bg-white p-4 shadow-[6px_8px_14px_rgba(6,78,59,0.1)] sm:p-5">
                   <div className="flex items-center gap-2 text-slate-900">
                     <Settings2 className="h-5 w-5 text-emerald-700" />
                     <h2 className="text-base font-semibold">SEO</h2>

@@ -846,7 +846,7 @@ a {
   width: 100%;
   margin-top: clamp(2.5rem, 5vw, 4rem);
   padding: 2rem 0 0;
-  background: #a17a5d;
+  background: #795200;
   color: #f8eee4;
 }
 
@@ -1485,6 +1485,119 @@ button.editorial-media {
   line-height: 1.82;
 }
 
+.seo-article-blocks {
+  display: grid;
+  gap: clamp(3rem, 6vw, 5rem);
+}
+
+.seo-article-content-block {
+  min-width: 0;
+}
+
+.seo-article-content-block > h2 {
+  max-width: 24ch;
+  margin: 0 0 1.25rem;
+  color: #191613;
+  font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+  font-size: clamp(1.65rem, 3vw, 2.45rem);
+  font-weight: 700;
+  line-height: 1.16;
+  text-wrap: balance;
+}
+
+.seo-article-block-copy {
+  max-width: 70ch;
+  color: #403832;
+  font-size: clamp(1rem, 1.2vw, 1.08rem);
+  line-height: 1.82;
+  text-wrap: pretty;
+}
+
+.seo-article-block-copy p {
+  margin: 0 0 1.25rem;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.seo-article-block-copy p:last-child {
+  margin-bottom: 0;
+}
+
+.seo-article-block-copy h2,
+.seo-article-block-copy h3 {
+  margin: 2rem 0 0.85rem;
+  color: #191613;
+  font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+.seo-article-block-copy h2 {
+  font-size: clamp(1.45rem, 2.5vw, 2rem);
+}
+
+.seo-article-block-copy h3 {
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+}
+
+.seo-article-block-copy ul,
+.seo-article-block-copy ol {
+  margin: 1rem 0 1.5rem;
+  padding-left: 1.4rem;
+}
+
+.seo-article-block-copy li {
+  margin-bottom: 0.55rem;
+  padding-left: 0.2rem;
+}
+
+.seo-article-block-copy blockquote {
+  margin: 1.75rem 0;
+  border-radius: 8px;
+  background: #f5f3f0;
+  padding: 1.25rem 1.4rem;
+  color: #2c251f;
+  font-size: 1.08em;
+  font-weight: 600;
+}
+
+.seo-article-block-copy blockquote p {
+  margin: 0;
+}
+
+.seo-article-block-copy a {
+  color: #205b38;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.seo-article-block-media {
+  margin: 1.75rem 0 0;
+}
+
+.seo-article-block-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 760px;
+  border-radius: 12px;
+  object-fit: contain;
+  outline: 1px solid rgba(0, 0, 0, 0.1);
+  outline-offset: -1px;
+}
+
+.seo-article-block-media figcaption {
+  margin-top: 0.7rem;
+  color: #75695f;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  text-align: center;
+  text-wrap: pretty;
+}
+
 .editorial-quote {
   margin: 1rem 0 1.2rem;
   padding-left: 0.95rem;
@@ -1551,7 +1664,7 @@ button.editorial-media {
   position: sticky;
   top: calc(94px + 7.1rem);
   padding-top: 0.85rem;
-  background: linear-gradient(180deg, rgba(245, 243, 240, 0) 0%, #f5f3f0 24%);
+  background: linear-gradient(180deg, rgba(245, 243, 240, 0) 0%);
 }
 
 .editorial-side-card-button {

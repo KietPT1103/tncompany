@@ -41,6 +41,7 @@ type NavItem = {
   icon: typeof Calculator;
   permission?: AppPermission;
   roles?: UserRole[];
+  exact?: boolean;
 };
 
 type NavGroup = {
@@ -49,6 +50,10 @@ type NavGroup = {
   icon: typeof Calculator;
   items: NavItem[];
 };
+
+const isNavItemActive = (pathname: string, item: NavItem) =>
+  pathname === item.href ||
+  (!item.exact && item.href !== "/" && pathname.startsWith(`${item.href}/`));
 
 const standaloneNavItems: NavItem[] = [
   {
@@ -310,11 +315,7 @@ export default function AdminSidebar({
   const activeGroupKey = useMemo(
     () =>
       visibleNavGroups.find((group) =>
-        group.items.some(
-          (item) =>
-            pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(`${item.href}/`)),
-        ),
+        group.items.some((item) => isNavItemActive(pathname, item)),
       )?.key ?? null,
     [pathname, visibleNavGroups],
   );
@@ -521,9 +522,7 @@ export default function AdminSidebar({
         >
           <div className="space-y-1">
             {visibleStandaloneItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/" && pathname.startsWith(item.href + "/"));
+              const isActive = isNavItemActive(pathname, item);
 
               return (
                 <Link
@@ -554,10 +553,8 @@ export default function AdminSidebar({
             })}
 
             {visibleNavGroups.map((group) => {
-              const isGroupActive = group.items.some(
-                (item) =>
-                  pathname === item.href ||
-                  (item.href !== "/" && pathname.startsWith(item.href + "/")),
+              const isGroupActive = group.items.some((item) =>
+                isNavItemActive(pathname, item),
               );
               const isGroupOpen = openGroupKey === group.key;
               const GroupIcon = group.icon;

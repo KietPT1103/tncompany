@@ -653,20 +653,18 @@ export default function SampleBillGeneratorPage({
                             setHolidayOverride((current) => !current);
                             clearResults();
                           }}
-                          className={
-                            "relative h-7 w-12 shrink-0 rounded-full transition-[background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 " +
-                            (holidayOverride || weekend
-                              ? "bg-emerald-600"
-                              : "bg-slate-300")
-                          }
+                          className={`group relative h-7 w-12 shrink-0 rounded-full border transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-100 ${
+                            holidayOverride || weekend
+                              ? "border-emerald-800 bg-emerald-700 shadow-[0_2px_6px_rgba(4,120,87,0.28)] hover:bg-emerald-800"
+                              : "border-slate-300 bg-slate-300 shadow-inner hover:border-slate-400 hover:bg-slate-400"
+                          } ${weekend ? "cursor-not-allowed border-emerald-700 bg-emerald-700" : ""}`}
                         >
                           <span
-                            className={
-                              "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform " +
-                              (holidayOverride || weekend
-                                ? "translate-x-6"
-                                : "translate-x-1")
-                            }
+                            className={`pointer-events-none absolute top-[3px] flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_1px_4px_rgba(15,23,42,0.3)] transition-[transform,box-shadow] duration-200 ease-out group-hover:shadow-[0_2px_6px_rgba(15,23,42,0.35)] ${
+                              holidayOverride || weekend
+                                ? "translate-x-[25px]"
+                                : "translate-x-[3px]"
+                            }`}
                           />
                         </button>
                       </div>

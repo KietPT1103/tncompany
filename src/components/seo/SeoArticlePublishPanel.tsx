@@ -34,7 +34,7 @@ export function SeoArticlePublishPanel({
   onTargetStoreChange,
 }: SeoArticlePublishPanelProps) {
   return (
-    <section className="order-1 rounded-lg border border-slate-200 bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.05)] sm:p-5">
+    <section className="order-1 rounded-lg border border-slate-200 bg-white p-4 shadow-[6px_8px_14px_rgba(6,78,59,0.15)] sm:p-5">
       <div className="flex items-center gap-2 text-slate-900">
         <LayoutPanelTop className="h-5 w-5 text-emerald-700" />
         <h2 className="text-base font-semibold">Xuất bản</h2>

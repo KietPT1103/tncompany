@@ -348,10 +348,10 @@ export default function SeoArticlesPage() {
           <div className="flex min-w-0 items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3 sm:gap-4">
               <div className="min-w-0">
-                <h1 className="font-smooch text-balance text-3xl font-semibold text-[#D4A017] sm:text-5xl">
+                <h1 className="font-smooch text-balance text-3xl font-bold text-emerald-800 sm:text-5xl">
                   Danh Sách Bài Viết SEO
                 </h1>
-                <p className="font-firasans mt-1 max-w-2xl text-pretty text-sm leading-6 text-emerald-800 font-bold">
+                <p className="font-firasans mt-1 max-w-2xl text-[#D4A017] text-pretty text-sm leading-6 font-bold">
                   Quản lý danh sách, điều chỉnh nội dung bài viết
                 </p>
               </div>
@@ -388,7 +388,7 @@ export default function SeoArticlesPage() {
 
         <section
           aria-label="Bộ lọc bài viết"
-          className="rounded-lg bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.07)] ring-1 ring-slate-200/80 sm:p-5"
+          className="rounded bg-white p-4 shadow-[6px_8px_14px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 sm:p-5"
         >
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(280px,1.4fr)_minmax(190px,0.85fr)_minmax(190px,0.85fr)_auto] xl:items-end">
             <div className="min-w-0 md:col-span-2 xl:col-span-1">
@@ -484,15 +484,15 @@ export default function SeoArticlesPage() {
           </section>
         ) : (
           <>
-            <section className="hidden overflow-hidden rounded-lg bg-white shadow-[0_2px_6px_rgba(15,23,42,0.07)] ring-1 ring-slate-200/80 xl:block">
+            <section className="hidden overflow-hidden rounded bg-white shadow-[6px_8px_14px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 xl:block">
               <table className="w-full table-fixed text-sm">
                 <caption className="sr-only">Danh sách bài viết SEO</caption>
                 <colgroup>
-                  <col className="w-[35%]" />
-                  <col className="w-[17%]" />
+                  <col className="w-[30%]" />
+                  <col className="w-[15%]" />
                   <col className="w-[12%]" />
                   <col className="w-[10%]" />
-                  <col className="w-[9%]" />
+                  <col className="w-[10%]" />
                   <col className="w-[14%]" />
                 </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-600">

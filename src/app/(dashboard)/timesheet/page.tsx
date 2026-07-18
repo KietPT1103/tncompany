@@ -1095,7 +1095,7 @@ export default function TimesheetPage() {
 
       {showImportSetup || summaryData.length === 0 ? (
         <section
-          className="overflow-hidden rounded-[2px] border border-slate-200 bg-white"
+          className="overflow-hidden rounded-[2px] border border-slate-200 bg-white shadow-[6px_8px_14px_rgba(15,23,42,0.14)]"
           aria-labelledby="timesheet-import-title"
         >
           <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
@@ -1212,7 +1212,7 @@ export default function TimesheetPage() {
           </div>
         </section>
       ) : (
-        <section className="flex flex-col gap-3 rounded-[2px] border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <section className="flex flex-col gap-3 rounded-[2px] border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between shadow-[6px_8px_14px_rgba(15,23,42,0.14)]">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-700 text-white">
               <FileText className="h-5 w-5" />
@@ -1257,7 +1257,7 @@ export default function TimesheetPage() {
       {importConflicts.length > 0 ? (
         <section
           className="overflow-hidden rounded-[2px] border border-amber-500 bg-white"
-          aria-labelledby="timesheet-conflicts-title"
+          aria-labelledby="timesheet-conflicts-title shadow-[6px_8px_14px_rgba(15,23,42,0.14)]"
         >
           <div className="flex items-start justify-between gap-3 border-b border-amber-500 bg-amber-50 px-3 py-3 sm:items-center sm:px-4">
             <div className="min-w-0">

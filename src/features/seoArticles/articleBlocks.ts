@@ -1,10 +1,20 @@
-import { SeoArticleBlock } from "@/services/seoArticleService";
+import type { SeoArticleBlock } from "@/services/seoArticleService";
 
 export function createEmptySeoArticleBlock(): SeoArticleBlock {
   return {
     id: crypto.randomUUID(),
     heading: "",
     html: "",
+    imageUrl: "",
+    imageAlt: "",
+  };
+}
+
+export function clearSeoArticleBlockImage(
+  block: SeoArticleBlock,
+): SeoArticleBlock {
+  return {
+    ...block,
     imageUrl: "",
     imageAlt: "",
   };

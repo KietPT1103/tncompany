@@ -69,7 +69,7 @@ function AdminIndexPage() {
   return nextPath === "/" ? <DashboardPage /> : <Navigate to={normalizeAdminHref(nextPath)} replace />;
 }
 
-export default function App() {
+export function App() {
   const landingHashes = pages.filter((page) => page.hash !== "/" && page.hash !== "/tin-tuc").map((page) => page.hash);
 
   return (
@@ -132,3 +132,5 @@ export default function App() {
     </>
   );
 }
+
+export default App;

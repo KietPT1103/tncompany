@@ -6,6 +6,8 @@ import { navPages } from "../../data/siteData";
 import { getSeoArticles, SeoArticle } from "../../services/seoArticleService";
 import defaultImage from "../../optimized-media/cafe/cafe-hero.jpg";
 import { resolveSeoArticleImageUrl } from "../../components/seo/seoArticleAssets";
+import { getSeoArticleDisplayBlocks } from "../../features/seoArticles/articleDisplayBlocks";
+import { ShimmerButton } from "@/components/ui/shimmer-button";
 
 function upsertMetaByName(name: string, content: string) {
   let meta = document.head.querySelector(`meta[name="${name}"]`);
@@ -307,22 +309,11 @@ export default function ArticleDetailPage({
     );
   }
 
-  // Parse HTML content to paragraphs
-  const contentText = stripHtml(article.contentHtml);
-  // Split into paragraphs roughly based on line breaks or just use excerpt if content is too simple
-  let paragraphs = contentText.split('\n').filter(p => p.trim().length > 0);
-  if (paragraphs.length === 0) {
-    paragraphs = [article.excerpt || "Đang cập nhật nội dung..."];
-  }
-
-  // Split paragraphs to create a quote somewhere in the middle
-  const middleIndex = Math.max(1, Math.floor(paragraphs.length / 2));
-  const leadParagraphs = paragraphs.slice(0, middleIndex);
-  const quote = article.metaDescription || "Không gian tại đây mang lại cảm giác bình yên đến lạ, một sự kết hợp hoàn hảo giữa kiến trúc hiện đại và hơi thở thiên nhiên.";
-  const trailingParagraphs = paragraphs.slice(middleIndex);
-
-  // Extract a secondary image from content blocks if available
-  const secondaryImage = article.contentJson?.find(b => b.imageUrl)?.imageUrl || defaultImage;
+  const contentBlocks = getSeoArticleDisplayBlocks(
+    article.contentJson,
+    article.contentHtml,
+    article.excerpt || "Đang cập nhật nội dung...",
+  );
   const shareUrl = buildArticleShareUrl(article.slug);
   const facebookShareUrl = buildFacebookShareUrl(shareUrl);
   const zaloShareUrl = buildZaloShareUrl(shareUrl);
@@ -379,7 +370,7 @@ export default function ArticleDetailPage({
           <header className="editorial-header">
             <p className="editorial-category-pill font-inter">{getStoreLabel(article.targetStore)}</p>
             <h1 className="font-inter">{article.title}</h1>
-            <div className="editorial-meta font-inter mt-10">
+            <div className="editorial-meta font-cormorant text-xl font-bold mt-10">
               <span>By Đội ngũ Ông Quan</span>
               <span aria-hidden="true">•</span>
               <span>{formatDateLong(article.publishedAt || article.createdAt)}</span>
@@ -387,7 +378,7 @@ export default function ArticleDetailPage({
               <span>{getReadTime(article)}</span>
             </div>
             <div className="editorial-share-bar font-inter" aria-label="Chia sẻ bài viết">
-              <span className="editorial-share-label">Chia sẻ:</span>
+              <span className="editorial-share-label font-cormorant text-2xl font-semibold">Chia sẻ:</span>
               <div className="editorial-share-actions">
                 <button
                   type="button"
@@ -439,7 +430,7 @@ export default function ArticleDetailPage({
                   </svg>
                 </button>
               </div>
-              <span className="editorial-share-hint" role="status" aria-live="polite">
+              <span className="editorial-share-hint font-cormorant text-xl font-bold" role="status" aria-live="polite">
                 {shareNotice || "Mở trực tiếp hộp chia sẻ bằng link public của bài viết."}
               </span>
             </div>
@@ -453,44 +444,59 @@ export default function ArticleDetailPage({
             />
           </div>
 
-          <div className="editorial-content-rail px-2">
-            <section className="editorial-body-grid">
-              <div className="editorial-story-copy font-inter">
-                {leadParagraphs.map((p, i) => (
-                  <p key={i}>{p}</p>
-                ))}
+          <div className="editorial-content-rail px-4 sm:px-6">
+            <div className="editorial-story-copy seo-article-blocks font-inter">
+              {contentBlocks.map((block) => (
+                <section className="seo-article-content-block" key={block.id}>
+                  {block.heading ? <h2>{block.heading}</h2> : null}
 
-                <blockquote className="editorial-quote">
-                  <p>"{quote}"</p>
-                </blockquote>
+                  {block.html ? (
+                    <div
+                      className="seo-article-block-copy"
+                      dangerouslySetInnerHTML={{ __html: block.html }}
+                    />
+                  ) : null}
 
-                {trailingParagraphs.map((p, i) => (
-                  <p key={i}>{p}</p>
-                ))}
-              </div>
-
-              <aside className="editorial-side-card font-inter bg-[#EAE4DE]  ">
-                <p className="editorial-side-card-title font-inter font-bold">Trải nghiệm ngay</p>
-                <p className="py-1">Khám phá không gian yên bình và thưởng thức những ly cà phê tuyệt hảo tại {getStoreLabel(article.targetStore)} Ông Quan.</p>
-                <div className="editorial-side-card-cta">
-                  <a
-                    href="tel:0772770789"
-                    className="editorial-side-card-button"
-                  >
-                    Đặt bàn ngay
-                  </a>
-                </div>
-              </aside>
-            </section>
-
-            <div className="editorial-media editorial-secondary-media">
-              <img
-                src={resolveSeoArticleImageUrl(secondaryImage) || defaultImage}
-                alt="Trải nghiệm"
-                onError={(e) => { (e.target as HTMLImageElement).src = defaultImage; }}
-              />
-              <span className="editorial-media-play" aria-hidden="true">▶</span>
+                  {block.imageUrl ? (
+                    <figure className="seo-article-block-media">
+                      <img
+                        src={
+                          resolveSeoArticleImageUrl(block.imageUrl) ||
+                          defaultImage
+                        }
+                        alt={
+                          block.imageAlt ||
+                          block.heading ||
+                          "Ảnh minh họa bài viết"
+                        }
+                        loading="lazy"
+                        decoding="async"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = defaultImage;
+                        }}
+                      />
+                      {block.imageAlt ? (
+                        <figcaption>{block.imageAlt}</figcaption>
+                      ) : null}
+                    </figure>
+                  ) : null}
+                </section>
+              ))}
             </div>
+
+            <aside className="editorial-side-card font-inter bg-[#EAE4DE]">
+              <p className="editorial-side-card-title font-inter font-bold">Trải nghiệm ngay</p>
+              <p className="py-1">Khám phá không gian yên bình và thưởng thức những ly cà phê tuyệt hảo tại {getStoreLabel(article.targetStore)} Ông Quan.</p>
+              <div className="editorial-side-card-cta">
+                <a
+                  href="tel:0772770789"
+                  className="editorial-side-card-button"
+                >
+                  Đặt bàn ngay
+                </a>
+              </div>
+            </aside>
           </div>
 
           {relatedArticles.length > 0 && (

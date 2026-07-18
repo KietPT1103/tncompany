@@ -37,6 +37,8 @@ module.exports = {
         nunito: ['"Nunito Sans Variable"', "sans-serif"],
         smooch: ['"Smooch Sans Variable"', "sans-serif"],
         firasans: ["Fira Sans", "sans-serif"],
+        hurricane: ['"Hurricane"', "cursive"],
+        cormorant: ['"Cormorant Garamond Variable"', "serif"],
       },
     },
   },
