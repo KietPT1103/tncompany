@@ -5,6 +5,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/_seo_runtime.php';
 
 header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-cache, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 function tn_news_store_options(): array
 {

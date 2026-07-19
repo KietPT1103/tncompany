@@ -7,7 +7,6 @@ import { getSeoArticles, SeoArticle } from "../../services/seoArticleService";
 import defaultImage from "../../optimized-media/cafe/cafe-hero.jpg";
 import { resolveSeoArticleImageUrl } from "../../components/seo/seoArticleAssets";
 import { getSeoArticleDisplayBlocks } from "../../features/seoArticles/articleDisplayBlocks";
-import { ShimmerButton } from "@/components/ui/shimmer-button";
 
 function upsertMetaByName(name: string, content: string) {
   let meta = document.head.querySelector(`meta[name="${name}"]`);
