@@ -583,7 +583,7 @@ export default function SampleBillGeneratorPage({
             </Button>
           </header>
 
-          <div className="grid items-start gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-stretch">
             <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white">
               <div className="border-b border-slate-200 px-5 py-4">
                 <div className="flex items-center gap-2">
@@ -824,7 +824,7 @@ export default function SampleBillGeneratorPage({
               </div>
             </aside>
 
-            <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white xl:h-0 xl:min-h-full">
               <div className="grid grid-cols-2 border-b border-slate-200 lg:grid-cols-4">
                 {[
                   ["Mục tiêu", `${formatCurrency(targetRevenue)} VND`],
@@ -896,7 +896,7 @@ export default function SampleBillGeneratorPage({
               </div>
 
               {tab === "products" ? (
-                <div>
+                <div className="flex min-h-0 flex-1 flex-col">
                   <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:px-5">
                     <div className="relative min-w-0 flex-1">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -953,7 +953,8 @@ export default function SampleBillGeneratorPage({
                       </p>
                     </div>
                   ) : (
-                    <div className="max-h-[620px] divide-y divide-slate-100 overflow-auto">
+                    //max:620px
+                    <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
                       {filteredProducts.map((product) => {
                         const selected = selectedSet.has(product.product_code);
                         const rule = getRule(product.product_code);

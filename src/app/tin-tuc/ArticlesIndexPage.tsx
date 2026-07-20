@@ -31,7 +31,8 @@ function formatDateLong(dateString: string | null) {
 }
 
 function getReadTime(article: SeoArticle) {
-  const textLength = (article.contentHtml || "").length + (article.excerpt || "").length;
+  const textLength =
+    (article.contentHtml || "").length + (article.excerpt || "").length;
   const minutes = Math.max(1, Math.ceil(textLength / 1500));
   return `${minutes} phút đọc`;
 }
@@ -63,12 +64,21 @@ export default function ArticlesIndexPage() {
   };
 
   const filteredArticles =
-    filter === "all" ? articles : articles.filter((a) => a.targetStore === filter);
+    filter === "all"
+      ? articles
+      : articles.filter((a) => a.targetStore === filter);
 
-  const featuredArticle = filteredArticles.length > 0 ? filteredArticles[0] : null;
+  const featuredArticle =
+    filteredArticles.length > 0 ? filteredArticles[0] : null;
   const allGridArticles = filteredArticles.slice(1);
-  const totalPages = Math.max(1, Math.ceil(allGridArticles.length / GRID_ITEMS_PER_PAGE));
-  const gridArticles = allGridArticles.slice((currentPage - 1) * GRID_ITEMS_PER_PAGE, currentPage * GRID_ITEMS_PER_PAGE);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(allGridArticles.length / GRID_ITEMS_PER_PAGE),
+  );
+  const gridArticles = allGridArticles.slice(
+    (currentPage - 1) * GRID_ITEMS_PER_PAGE,
+    currentPage * GRID_ITEMS_PER_PAGE,
+  );
 
   function getPaginationItems(current: number, total: number) {
     const items: (number | string)[] = [];
@@ -76,11 +86,11 @@ export default function ArticlesIndexPage() {
       for (let i = 1; i <= total; i++) items.push(i);
     } else {
       if (current <= 3) {
-        items.push(1, 2, 3, 4, '...', total);
+        items.push(1, 2, 3, 4, "...", total);
       } else if (current >= total - 2) {
-        items.push(1, '...', total - 3, total - 2, total - 1, total);
+        items.push(1, "...", total - 3, total - 2, total - 1, total);
       } else {
-        items.push(1, '...', current - 1, current, current + 1, '...', total);
+        items.push(1, "...", current - 1, current, current + 1, "...", total);
       }
     }
     return items;
@@ -98,11 +108,16 @@ export default function ArticlesIndexPage() {
       />
 
       <main className="page-content">
-        <div className="news-page" style={{ paddingTop: "2rem", paddingBottom: "4rem" }}>
+        <div
+          className="news-page"
+          style={{ paddingTop: "2rem", paddingBottom: "4rem" }}
+        >
           <div className="news-page-intro">
             <h1>Tin tức &amp; bài viết mới nhất</h1>
             <p className="news-page-summary my-5 max-w-[100%]">
-              Khám phá những câu chuyện về hành trình phát triển bền vững, tinh hoa ẩm thực từ nông trại đến bàn ăn, và những góc nhìn sâu sắc về phong cách sống cân bằng.
+              Khám phá những câu chuyện về hành trình phát triển bền vững, tinh
+              hoa ẩm thực từ nông trại đến bàn ăn, và những góc nhìn sâu sắc về
+              phong cách sống cân bằng.
             </p>
           </div>
 
@@ -134,26 +149,59 @@ export default function ArticlesIndexPage() {
           </div>
 
           {loading ? (
-            <div style={{ textAlign: "center", padding: "4rem 0", color: "var(--news-muted)" }}>
+            <div
+              style={{
+                textAlign: "center",
+                padding: "4rem 0",
+                color: "var(--news-muted)",
+              }}
+            >
               Đang tải bài viết...
             </div>
           ) : filteredArticles.length > 0 ? (
             <>
               {featuredArticle && currentPage === 1 && (
-                <Link to={`/tin-tuc/${featuredArticle.slug}`} className="news-featured-card" style={{ textDecoration: 'none' }}>
-                  <div className="news-featured-media font-inter">
-                    <img 
-                      src={resolveSeoArticleImageUrl(featuredArticle.coverImageUrl) || defaultImage}
-                      alt={featuredArticle.title} 
-                      onError={(e) => { (e.target as HTMLImageElement).src = defaultImage; }}
+                <Link
+                  to={`/tin-tuc/${featuredArticle.slug}`}
+                  className="news-featured-card group transform-gpu overflow-hidden transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-[0_20px_45px_rgba(50,35,25,0.16)] focus-visible:-translate-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9B6A43]/40"
+                  style={{ textDecoration: "none" }}
+                >
+                  <div className="news-featured-media overflow-hidden font-inter">
+                    <img
+                      src={
+                        resolveSeoArticleImageUrl(
+                          featuredArticle.coverImageUrl,
+                        ) || defaultImage
+                      }
+                      alt={featuredArticle.title}
+                      className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.035] group-focus-visible:scale-[1.035]"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = defaultImage;
+                      }}
                     />
                   </div>
+
                   <div className="news-featured-copy">
-                    <div className="news-featured-badge font-inter">Tin nổi bật</div>
-                    <h2 className="font-inter">{featuredArticle.title}</h2>
-                    <p className="font-inter">{featuredArticle.excerpt || featuredArticle.metaDescription}</p>
+                    <div className="news-featured-badge font-inter">
+                      Tin nổi bật
+                    </div>
+
+                    <h2 className="font-inter transition-colors duration-300 group-hover:text-[#9B6A43]">
+                      {featuredArticle.title}
+                    </h2>
+
+                    <p className="font-inter">
+                      {featuredArticle.excerpt ||
+                        featuredArticle.metaDescription}
+                    </p>
+
                     <div className="news-meta">
-                      <span>{formatDateLong(featuredArticle.publishedAt || featuredArticle.createdAt)}</span>
+                      <span>
+                        {formatDateLong(
+                          featuredArticle.publishedAt ||
+                            featuredArticle.createdAt,
+                        )}
+                      </span>
                       <span>•</span>
                       <span>{getReadTime(featuredArticle)}</span>
                     </div>
@@ -164,20 +212,40 @@ export default function ArticlesIndexPage() {
               {gridArticles.length > 0 && (
                 <div className="news-grid">
                   {gridArticles.map((article) => (
-                    <Link to={`/tin-tuc/${article.slug}`} key={article.id} className="news-card" style={{ textDecoration: 'none' }}>
-                      <div className="news-card-media">
-                        <img 
-                          src={resolveSeoArticleImageUrl(article.coverImageUrl) || defaultImage}
-                          alt={article.title} 
-                          onError={(e) => { (e.target as HTMLImageElement).src = defaultImage; }}
+                    <Link
+                      to={`/tin-tuc/${article.slug}`}
+                      key={article.id}
+                      className="news-card group transform-gpu overflow-hidden transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-[0_16px_35px_rgba(50,35,25,0.14)] focus-visible:-translate-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9B6A43]/40"
+                      style={{ textDecoration: "none" }}
+                    >
+                      <div className="news-card-media overflow-hidden">
+                        <img
+                          src={
+                            resolveSeoArticleImageUrl(article.coverImageUrl) ||
+                            defaultImage
+                          }
+                          alt={article.title}
+                          className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 group-focus-visible:scale-105"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = defaultImage;
+                          }}
                         />
                       </div>
+
                       <div className="news-card-copy">
                         <div className="news-card-meta">
                           <span>{getStoreLabel(article.targetStore)}</span>
-                          <span>{formatDateShort(article.publishedAt || article.createdAt)}</span>
+                          <span>
+                            {formatDateShort(
+                              article.publishedAt || article.createdAt,
+                            )}
+                          </span>
                         </div>
-                        <h3>{article.title}</h3>
+
+                        <h3 className="transition-colors duration-300 group-hover:text-[#9B6A43]">
+                          {article.title}
+                        </h3>
+
                         <p>{article.excerpt || article.metaDescription}</p>
                       </div>
                     </Link>
@@ -187,27 +255,39 @@ export default function ArticlesIndexPage() {
 
               {totalPages > 0 && (
                 <div className="news-pagination" style={{ marginTop: "1rem" }}>
-                  {getPaginationItems(currentPage, totalPages).map((item, index) => (
-                    item === '...' ? (
-                      <span key={`ellipsis-${index}`} className="news-page-ellipsis">...</span>
-                    ) : (
-                      <button 
-                        key={`page-${item}`} 
-                        className={`news-page-button ${currentPage === item ? "is-active" : ""}`}
-                        onClick={() => {
-                          setCurrentPage(item as number);
-                          window.scrollTo(0, 0);
-                        }}
-                      >
-                        {item}
-                      </button>
-                    )
-                  ))}
+                  {getPaginationItems(currentPage, totalPages).map(
+                    (item, index) =>
+                      item === "..." ? (
+                        <span
+                          key={`ellipsis-${index}`}
+                          className="news-page-ellipsis"
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={`page-${item}`}
+                          className={`news-page-button ${currentPage === item ? "is-active" : ""}`}
+                          onClick={() => {
+                            setCurrentPage(item as number);
+                            window.scrollTo(0, 0);
+                          }}
+                        >
+                          {item}
+                        </button>
+                      ),
+                  )}
                 </div>
               )}
             </>
           ) : (
-            <div style={{ textAlign: "center", padding: "4rem 0", color: "var(--news-muted)" }}>
+            <div
+              style={{
+                textAlign: "center",
+                padding: "4rem 0",
+                color: "var(--news-muted)",
+              }}
+            >
               Chưa có bài viết nào.
             </div>
           )}

@@ -185,8 +185,8 @@ export default function HomePage({ onOpenPage }) {
           </div>
         </section>
 
-        <section className="homepage-style-grid">
-          <article className="homepage-style-card homepage-style-card-highlight">
+        <section className="mx-auto grid w-full max-w-[1040px] grid-cols-1 items-stretch gap-[clamp(2rem,4vw,3.6rem)] md:grid-cols-2">
+          <article className="homepage-style-card-highlight relative grid h-full grid-rows-[auto_1fr] justify-items-center">
             <div className="homepage-style-media">
               <img
                 src={styleImageOne}
@@ -194,14 +194,15 @@ export default function HomePage({ onOpenPage }) {
                 loading="lazy"
               />
             </div>
-            <div className="homepage-style-note">
+
+            <div className="font-nunito -mt-[2.35rem] flex h-full min-h-[170px] w-full max-w-[452px] items-start rounded-[18px] bg-[#dec3ac] px-[1.2rem] pb-4 pt-16 text-lg font-semibold leading-[1.15] tracking-[-0.01em] text-[#383533]">
               Tiệm Cà Phê Ông Quan có vô vàn góc check-in xinh xắn, được chăm
               chút để phù hợp với nhiều phong cách khác nhau, từ nhẹ nhàng,
               trong trẻo đến cá tính hay sang xịn.
             </div>
           </article>
 
-          <article className="homepage-style-card">
+          <article className="relative grid h-full grid-rows-[auto_1fr] justify-items-center">
             <div className="homepage-style-media">
               <img
                 src={styleImageTwo}
@@ -209,7 +210,8 @@ export default function HomePage({ onOpenPage }) {
                 loading="lazy"
               />
             </div>
-            <div className="homepage-style-note">
+
+            <div className="font-nunito -mt-[2.35rem] flex h-full min-h-[170px] w-full max-w-[452px] items-start rounded-[18px] bg-[#dec3ac] px-[1.2rem] pb-4 pt-16 text-lg font-semibold leading-[1.15] tracking-[-0.01em] text-[#383533]">
               Dù bạn thích vibe Đà Lạt lãng mạn, nét mộc mạc Bắc - Trung - Nam,
               hay không gian cổ tích mở mang, nơi đây đều có thể mang đến cho
               bạn những khung hình thật đẹp và đầy cảm xúc.
@@ -257,20 +259,35 @@ export default function HomePage({ onOpenPage }) {
           </div>
         </section>
 
-        <section className="homepage-drinks">
-          <h2>CÁC THỨC UỐNG NỔI BẬT TẠI ÔNG QUAN</h2>
+        <section className="mx-auto w-full max-w-[1040px]">
+          <h2 className="m-0 text-center font-['Bricolage_Grotesque','Be_Vietnam_Pro',sans-serif] text-[clamp(1.35rem,2.2vw,1.7rem)] tracking-[0.04em] text-[#4e3425]">
+            CÁC THỨC UỐNG NỔI BẬT TẠI ÔNG QUAN
+          </h2>
 
-          <div className="homepage-drink-grid">
+          <div className="mt-6 grid grid-cols-1 gap-x-5 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
             {featuredDrinks.map((item) => (
-              <article className="homepage-drink-card" key={item.name}>
-                <img src={item.image} alt={item.name} loading="lazy" />
-                <p>{item.name}</p>
+              <article
+                className="group cursor-pointer overflow-hidden rounded bg-white shadow-[0_18px_40px_rgba(63,40,22,0.10)] transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-[0_24px_50px_rgba(63,40,22,0.18)]"
+                key={item.name}
+              >
+                <div className="overflow-hidden">
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    loading="lazy"
+                    className="aspect-square w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                  />
+                </div>
+
+                <p className="m-0 px-4 py-4 text-center text-[0.95rem] font-semibold text-[#655040] transition-colors duration-300 group-hover:text-[#9b6a33]">
+                  {item.name}
+                </p>
               </article>
             ))}
           </div>
         </section>
 
-        <section className="homepage-story">
+        <section className="homepage-story font-['Bricolage_Grotesque','Be_Vietnam_Pro',sans-serif]">
           <h2>CÂU CHUYỆN ÔNG QUAN</h2>
 
           <div className="homepage-story-hero">

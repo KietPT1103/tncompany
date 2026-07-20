@@ -646,7 +646,7 @@ export default function SeoArticleEditorScreen({ mode }: { mode: EditorMode }) {
                         >
                           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
                             <div className="flex items-center gap-3">
-                              <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                              <span className="rounded-md bg-emerald-800 px-2.5 py-1 text-xs font-semibold text-[#F6C85F]">
                                 Phần {index + 1}
                               </span>
                             </div>
