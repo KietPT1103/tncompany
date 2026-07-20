@@ -162,6 +162,8 @@ const inferQuantityRange = (name: string, billType: SampleBillType) => {
 function Modal({
   open,
   title,
+  subtitle,
+  mode = "default",
   onClose,
   children,
   footer,
@@ -169,6 +171,8 @@ function Modal({
 }: {
   open: boolean;
   title: string;
+  subtitle?: string;
+  mode?: "default" | "create" | "edit" | "import";
   onClose: () => void;
   children: ReactNode;
   footer: ReactNode;
@@ -177,28 +181,68 @@ function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-5">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-[2px] sm:items-center sm:p-5">
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-lg bg-white shadow-2xl sm:rounded-lg ${widthClass}`}
+        className={`flex max-h-[94vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_24px_80px_rgba(15,23,42,0.35)] sm:rounded-xl ${widthClass}`}
       >
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h2 className="text-balance text-lg font-bold">{title}</h2>
+        <header className="flex items-start justify-between bg-[linear-gradient(135deg,#064E3B,#033C2F)] px-5 py-5 text-white sm:px-6">
+          <div className="min-w-0">
+            {mode !== "default" ? (
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-[#F6C85F] ring-1 ring-white/15">
+                {mode === "create" ? (
+                  <>
+                    <Plus className="h-3.5 w-3.5" />
+                    Tạo mới
+                  </>
+                ) : mode === "edit" ? (
+                  <>
+                    <Pencil className="h-3.5 w-3.5" />
+                    Chỉnh sửa
+                  </>
+                ) : (
+                  <>
+                    <FileUp className="h-3.5 w-3.5" />
+                    Nhập dữ liệu
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            <h2 className="truncate text-xl font-bold sm:text-2xl">{title}</h2>
+
+            {subtitle ? (
+              <p className="mt-1 text-sm leading-5 text-emerald-100">
+                {subtitle}
+              </p>
+            ) : null}
+          </div>
+
           <button
             type="button"
             onClick={onClose}
             aria-label="Đóng"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-500 transition-[background-color,color,transform] hover:bg-slate-100 hover:text-slate-950 active:scale-[0.96]"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-emerald-100 transition-[background-color,color,transform] duration-200 hover:bg-white/15 hover:text-[#F6C85F] active:scale-[0.96]"
           >
             <X className="h-5 w-5" />
           </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 sm:p-6">
+          {children}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
-        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
-          {footer}
-        </div>
+
+        <footer className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p className="hidden text-xs text-slate-500 sm:block">
+            Kiểm tra kỹ thông tin trước khi lưu.
+          </p>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            {footer}
+          </div>
+        </footer>
       </div>
     </div>
   );
@@ -225,6 +269,8 @@ export default function SampleBillProductsPage() {
   const [duplicateCodes, setDuplicateCodes] = useState<string[]>([]);
   const [staging, setStaging] = useState<StagedProduct[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [formError, setFormError] = useState("");
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   const loadProducts = async () => {
     setLoading(true);
@@ -333,20 +379,34 @@ export default function SampleBillProductsPage() {
   };
 
   const saveProduct = async () => {
-    if (
-      !form.productCode.trim() ||
-      !form.productName.trim() ||
-      form.price < 0 ||
-      form.minQuantity < 1 ||
-      form.maxQuantity < form.minQuantity ||
-      (form.billType === "farm" && form.farmSchedule === "none")
-    ) {
-      setNotice({
-        tone: "error",
-        title: "Thông tin sản phẩm chưa hợp lệ",
-      });
+    if (!form.productCode.trim()) {
+      setFormError("Vui lòng nhập mã sản phẩm.");
       return;
     }
+
+    if (!form.productName.trim()) {
+      setFormError("Vui lòng nhập tên sản phẩm.");
+      return;
+    }
+
+    if (form.price < 0) {
+      setFormError("Đơn giá không được nhỏ hơn 0.");
+      return;
+    }
+
+    if (form.maxQuantity < form.minQuantity) {
+      setFormError(
+        "Số lượng tối đa phải lớn hơn hoặc bằng số lượng tối thiểu.",
+      );
+      return;
+    }
+
+    if (form.billType === "farm" && form.farmSchedule === "none") {
+      setFormError("Vui lòng chọn lịch giá cho sản phẩm Farm.");
+      return;
+    }
+
+    setFormError("");
 
     setSaving(true);
     try {
@@ -397,6 +457,43 @@ export default function SampleBillProductsPage() {
         title: "Không xóa được sản phẩm",
         detail: error instanceof Error ? error.message : "Vui lòng thử lại.",
       });
+    }
+  };
+
+  const toggleProductStatus = async (product: SampleBillProduct) => {
+    setUpdatingStatusId(product.id);
+
+    try {
+      await updateSampleBillProduct(product.id, {
+        productCode: product.productCode,
+        productName: product.productName,
+        unit: product.unit,
+        price: product.price,
+        billType: product.billType,
+        farmSchedule: product.farmSchedule,
+        minQuantity: product.minQuantity,
+        maxQuantity: product.maxQuantity,
+        isActive: !product.isActive,
+      });
+
+      setProducts((current) =>
+        current.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                isActive: !item.isActive,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        title: "Không cập nhật được trạng thái",
+        detail: error instanceof Error ? error.message : "Vui lòng thử lại.",
+      });
+    } finally {
+      setUpdatingStatusId(null);
     }
   };
 
@@ -671,7 +768,7 @@ export default function SampleBillProductsPage() {
                     <th className="px-4 py-3 text-right">Đơn giá</th>
                     <th className="px-4 py-3 text-center">Số lượng</th>
                     <th className="px-4 py-3">Trạng thái</th>
-                    <th className="w-28 px-4 py-3 text-right">Thao tác</th>
+                    <th className="w-28 px-4 py-3 text-center">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -725,11 +822,40 @@ export default function SampleBillProductsPage() {
                           {product.minQuantity}–{product.maxQuantity}
                         </td>
                         <td className="px-4 py-3">
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-xs font-bold ${product.isActive ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}
+                          <button
+                            type="button"
+                            disabled={updatingStatusId === product.id}
+                            onClick={() => void toggleProductStatus(product)}
+                            aria-label={
+                              product.isActive
+                                ? `Tạm ẩn ${product.productName}`
+                                : `Bật sử dụng ${product.productName}`
+                            }
+                            title={
+                              product.isActive
+                                ? "Click để tạm ẩn"
+                                : "Click để bật sử dụng"
+                            }
+                            className={`group inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-bold transition-[background-color,color,transform] duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
+                              product.isActive
+                                ? "bg-emerald-800 text-[#F6C85F] hover:bg-[#F6C85F] hover:text-emerald-900 active:scale-[0.96]"
+                                : "bg-slate-200 text-slate-700 hover:bg-slate-700 hover:text-white active:scale-[0.96]"
+                            }`}
                           >
-                            {product.isActive ? "Đang dùng" : "Tạm ẩn"}
-                          </span>
+                            <span
+                              className={`h-2 w-2 rounded-full transition-colors duration-200 ${
+                                product.isActive
+                                  ? "bg-[#F6C85F] group-hover:bg-emerald-900"
+                                  : "bg-slate-500 group-hover:bg-white"
+                              }`}
+                            />
+
+                            {updatingStatusId === product.id
+                              ? "Đang cập nhật"
+                              : product.isActive
+                                ? "Đang dùng"
+                                : "Tạm ẩn"}
+                          </button>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1">
@@ -737,7 +863,7 @@ export default function SampleBillProductsPage() {
                               type="button"
                               onClick={() => openEdit(product)}
                               aria-label={`Sửa ${product.productName}`}
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 transition-[background-color,color,transform] hover:bg-slate-100 hover:text-slate-950 active:scale-[0.96]"
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-md text-emerald-700 transition-[background-color,color,transform,box-shadow] duration-200 hover:bg-emerald-800 hover:text-[#F6C85F] hover:shadow-sm active:scale-[0.96]"
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
@@ -745,7 +871,7 @@ export default function SampleBillProductsPage() {
                               type="button"
                               onClick={() => void removeProduct(product)}
                               aria-label={`Xóa ${product.productName}`}
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-md text-rose-600 transition-[background-color,color,transform] hover:bg-rose-50 active:scale-[0.96]"
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-md text-rose-600 transition-[background-color,color,transform] hover:bg-rose-600 hover:text-white active:scale-[0.96]"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -770,138 +896,290 @@ export default function SampleBillProductsPage() {
 
       <Modal
         open={formOpen}
-        title={editing ? "Sửa sản phẩm" : "Thêm sản phẩm"}
-        onClose={() => setFormOpen(false)}
+        title={editing ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm"}
+        subtitle={
+          editing
+            ? `${form.productName || "Sản phẩm"} · ${form.productCode}`
+            : "Khai báo thông tin và quy tắc sử dụng trong bill mẫu."
+        }
+        mode={editing ? "edit" : "create"}
+        onClose={() => {
+          if (saving) return;
+          setFormOpen(false);
+        }}
+        widthClass="max-w-3xl"
         footer={
           <>
             <Button
+              type="button"
               variant="outline"
-              className="h-10"
+              disabled={saving}
               onClick={() => setFormOpen(false)}
+              className="h-10 min-w-[96px] rounded-md border-slate-300 bg-white px-5 font-semibold text-slate-800 shadow-none hover:bg-slate-100"
             >
               Hủy
             </Button>
+
             <Button
-              className="h-10 bg-emerald-600 text-white hover:bg-emerald-700"
+              type="button"
               disabled={saving}
               onClick={() => void saveProduct()}
+              className="h-10 min-w-[160px] gap-2 whitespace-nowrap rounded-md bg-emerald-800 px-5 font-semibold text-[#F6C85F] shadow-none transition-[background-color,color,transform] hover:bg-[#F6C85F] hover:text-emerald-900 active:scale-[0.97]"
             >
               {saving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Lưu sản phẩm
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+
+              {editing ? "Lưu thay đổi" : "Thêm sản phẩm"}
             </Button>
           </>
         }
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Mã sản phẩm"
-            value={form.productCode}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                productCode: event.target.value,
-              }))
-            }
-          />
-          <Input
-            label="Tên sản phẩm"
-            value={form.productName}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                productName: event.target.value,
-              }))
-            }
-          />
-          <Input
-            label="Đơn vị"
-            value={form.unit}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, unit: event.target.value }))
-            }
-          />
-          <Input
-            label="Đơn giá"
-            type="number"
-            min={0}
-            value={form.price}
-            className="tabular-nums"
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                price: Number(event.target.value) || 0,
-              }))
-            }
-          />
-          <div className="space-y-1">
-            <span className="text-sm font-medium">Loại bill</span>
-            <SelectBox
-              ariaLabel="Loại bill"
-              value={form.billType}
-              options={billTypeOptions}
-              onValueChange={updateFormType}
-              className="w-full"
-            />
-          </div>
-          <div className="space-y-1">
-            <span className="text-sm font-medium">Lịch giá Farm</span>
-            <SelectBox
-              ariaLabel="Lịch giá Farm"
-              value={form.farmSchedule}
-              options={farmScheduleOptions}
-              disabled={form.billType !== "farm"}
-              onValueChange={(nextValue) =>
-                setForm((current) => ({
-                  ...current,
-                  farmSchedule: nextValue,
-                }))
-              }
-              className="w-full"
-            />
-          </div>
-          <Input
-            label="Số lượng tối thiểu"
-            type="number"
-            min={1}
-            value={form.minQuantity}
-            className="tabular-nums"
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                minQuantity: Math.max(1, Number(event.target.value) || 1),
-              }))
-            }
-          />
-          <Input
-            label="Số lượng tối đa"
-            type="number"
-            min={1}
-            value={form.maxQuantity}
-            className="tabular-nums"
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                maxQuantity: Math.max(1, Number(event.target.value) || 1),
-              }))
-            }
-          />
+        <div className="space-y-5">
+          {formError ? (
+            <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{formError}</p>
+            </div>
+          ) : null}
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[5px_7px_14px_rgba(15,23,42,0.10)] sm:p-5">
+            <div className="mb-4">
+              <h3 className="text-sm font-bold text-slate-900">
+                Thông tin cơ bản
+              </h3>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Mã, tên và đơn vị dùng để nhận diện sản phẩm.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label="Mã sản phẩm"
+                value={form.productCode}
+                disabled={Boolean(editing)}
+                placeholder="VD: SP000001"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    productCode: event.target.value,
+                  }))
+                }
+              />
+
+              <Input
+                label="Tên sản phẩm"
+                value={form.productName}
+                placeholder="VD: Cà phê sữa"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    productName: event.target.value,
+                  }))
+                }
+              />
+
+              <Input
+                label="Đơn vị"
+                value={form.unit}
+                placeholder="VD: Ly, phần, vé"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    unit: event.target.value,
+                  }))
+                }
+              />
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-900">
+                  Đơn giá
+                </label>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.price}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        price: Number(event.target.value) || 0,
+                      }))
+                    }
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 pr-10 text-sm font-semibold tabular-nums text-slate-900 outline-none transition-[border-color,box-shadow] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
+                    đ
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[5px_7px_14px_rgba(15,23,42,0.10)] sm:p-5">
+            <div className="mb-4">
+              <h3 className="text-sm font-bold text-slate-900">
+                Phân loại bill
+              </h3>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Chọn khu vực áp dụng và lịch giá tương ứng.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-900">
+                  Loại bill
+                </span>
+
+                <SelectBox<SampleBillType>
+                  ariaLabel="Loại bill"
+                  value={form.billType}
+                  options={billTypeOptions}
+                  onValueChange={updateFormType}
+                  className="w-full"
+                  triggerClassName="h-10 rounded-md border-slate-300 bg-white font-medium text-slate-800 shadow-none hover:bg-emerald-50/50 focus-visible:ring-2 focus-visible:ring-emerald-100"
+                />
+              </div>
+
+              <div
+                className={`space-y-1.5 transition-opacity ${
+                  form.billType === "farm" ? "opacity-100" : "opacity-55"
+                }`}
+              >
+                <span className="text-sm font-medium text-slate-900">
+                  Lịch giá Farm
+                </span>
+
+                <SelectBox<FarmPriceSchedule>
+                  ariaLabel="Lịch giá Farm"
+                  value={form.farmSchedule}
+                  options={farmScheduleOptions}
+                  disabled={form.billType !== "farm"}
+                  onValueChange={(nextValue) =>
+                    setForm((current) => ({
+                      ...current,
+                      farmSchedule: nextValue,
+                    }))
+                  }
+                  className="w-full"
+                  triggerClassName="h-10 rounded-md border-slate-300 bg-white font-medium text-slate-800 shadow-none hover:bg-emerald-50/50 focus-visible:ring-2 focus-visible:ring-emerald-100"
+                />
+
+                {form.billType !== "farm" ? (
+                  <p className="text-xs text-slate-500">
+                    Chỉ áp dụng cho sản phẩm Farm.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[5px_7px_14px_rgba(15,23,42,0.10)] sm:p-5">
+            <div className="mb-4">
+              <h3 className="text-sm font-bold text-slate-900">
+                Quy tắc số lượng
+              </h3>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Khoảng số lượng được phép sử dụng khi hệ thống tạo bill mẫu.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label="Số lượng tối thiểu"
+                type="number"
+                min={1}
+                value={form.minQuantity}
+                className="tabular-nums"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    minQuantity: Math.max(1, Number(event.target.value) || 1),
+                  }))
+                }
+              />
+
+              <Input
+                label="Số lượng tối đa"
+                type="number"
+                min={1}
+                value={form.maxQuantity}
+                className="tabular-nums"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    maxQuantity: Math.max(1, Number(event.target.value) || 1),
+                  }))
+                }
+              />
+            </div>
+
+            <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800">
+              Hệ thống sẽ tạo số lượng ngẫu nhiên từ{" "}
+              <strong>{form.minQuantity}</strong> đến{" "}
+              <strong>{form.maxQuantity}</strong>.
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[5px_7px_14px_rgba(15,23,42,0.10)] sm:p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Trạng thái sử dụng
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Sản phẩm tạm ẩn sẽ không được dùng khi tạo bill.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.isActive}
+                onClick={() =>
+                  setForm((current) => ({
+                    ...current,
+                    isActive: !current.isActive,
+                  }))
+                }
+                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                  form.isActive ? "bg-emerald-700" : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    form.isActive ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div
+              className={`mt-3 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-bold ${
+                form.isActive
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-slate-200 text-slate-700"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  form.isActive ? "bg-emerald-600" : "bg-slate-500"
+                }`}
+              />
+
+              {form.isActive ? "Đang sử dụng" : "Tạm ẩn"}
+            </div>
+          </section>
         </div>
-        <label className="mt-5 flex min-h-11 items-center gap-3 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={form.isActive}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                isActive: event.target.checked,
-              }))
-            }
-            className="h-4 w-4 accent-emerald-600"
-          />
-          Đang sử dụng
-        </label>
       </Modal>
 
       <Modal

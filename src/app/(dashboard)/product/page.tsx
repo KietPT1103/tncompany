@@ -1413,7 +1413,7 @@ export default function ProductsPage() {
             </div>
           </header>
 
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <section className="overflow-hidden rounded border border-slate-200 bg-white">
             <div className="grid grid-cols-2 border-b border-slate-200 lg:grid-cols-4">
               {[
                 ["Tổng hàng hóa", productStats.total],
@@ -1423,15 +1423,19 @@ export default function ProductsPage() {
               ].map(([label, value], index) => (
                 <div
                   key={label}
-                  className={`px-4 py-4 lg:px-5 ${
+                  className={`group relative bg-white px-4 py-4 transition-[transform,box-shadow,background-color] duration-300 ease-out hover:z-10 hover:-translate-y-1 hover:bg-emerald-50/40 hover:shadow-[0_14px_30px_rgba(15,23,42,0.14)] lg:px-5 ${
                     index > 0 ? "border-l border-slate-200" : ""
                   } ${
                     index > 1 ? "border-t border-slate-200 lg:border-t-0" : ""
                   }`}
                 >
-                  <p className="text-xs font-medium text-slate-600">{label}</p>
+                  <p className="text-xs font-medium text-slate-600 transition-colors duration-300 group-hover:text-emerald-700">
+                    {label}
+                  </p>
 
-                  <p className="mt-1 text-xl font-bold tabular-nums">{value}</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-slate-950 transition-colors duration-300 group-hover:text-emerald-800">
+                    {value}
+                  </p>
                 </div>
               ))}
             </div>
@@ -1617,7 +1621,7 @@ export default function ProductsPage() {
                                 }}
                                 aria-label={`Sửa ${product.product_name}`}
                                 title="Sửa"
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 transition-[background-color,color,transform,box-shadow] duration-200 hover:bg-emerald-800 hover:text-[#ffb800] hover:shadow-sm active:scale-[0.96]"
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-emerald-700 transition-[background-color,color,transform,box-shadow] duration-200 hover:bg-emerald-800 hover:text-[#ffb800] hover:shadow-sm active:scale-[0.96]"
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>

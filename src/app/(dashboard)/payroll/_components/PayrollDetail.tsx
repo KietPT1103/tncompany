@@ -2353,45 +2353,58 @@ export default function PayrollDetail({
         </div>
 
         <dl className="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="border-b border-slate-200 px-4 py-3 sm:col-span-2 lg:col-span-1 lg:border-b-0 lg:border-r">
+          <div className="group relative border-b border-slate-200 bg-amber-50/70 px-4 py-3 transition-[transform,box-shadow,background-color] duration-300 ease-out hover:z-10 hover:-translate-y-1 hover:bg-amber-50 hover:shadow-[0_14px_30px_rgba(15,23,42,0.14)] sm:col-span-2 lg:col-span-1 lg:border-b-0 lg:border-r">
             <dt className="text-xs font-medium text-slate-500">
               Tổng lương đang hiển thị
             </dt>
-            <dd className="mt-1 whitespace-nowrap text-lg font-semibold tabular-nums text-emerald-700">
+
+            <dd className="mt-1 whitespace-nowrap text-lg font-semibold tabular-nums text-emerald-700 transition-colors duration-300 group-hover:text-emerald-800">
               {formatCurrency(filteredTotal)}
             </dd>
           </div>
-          <div className="border-b border-slate-200 px-4 py-3 sm:border-r lg:border-b-0">
+
+          <div className="group relative border-b border-slate-200 bg-white px-4 py-3 transition-[transform,box-shadow,background-color] duration-300 ease-out hover:z-10 hover:-translate-y-1 hover:bg-emerald-50/40 hover:shadow-[0_14px_30px_rgba(15,23,42,0.14)] sm:border-r lg:border-b-0">
             <dt className="text-xs font-medium text-slate-500">Nhân viên</dt>
-            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+
+            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950 transition-colors duration-300 group-hover:text-emerald-800">
               {filteredEntries.length}
             </dd>
+
             <p className="mt-0.5 text-xs text-slate-500">
               {monthlyEntries} lương tháng
             </p>
           </div>
-          <div className="border-b border-slate-200 px-4 py-3 lg:border-b-0 lg:border-r">
+
+          <div className="group relative border-b border-slate-200 bg-white px-4 py-3 transition-[transform,box-shadow,background-color] duration-300 ease-out hover:z-10 hover:-translate-y-1 hover:bg-emerald-50/40 hover:shadow-[0_14px_30px_rgba(15,23,42,0.14)] lg:border-b-0 lg:border-r">
             <dt className="text-xs font-medium text-slate-500">Tổng giờ</dt>
-            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+
+            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950 transition-colors duration-300 group-hover:text-emerald-800">
               {formatHours(filteredHours)}h
             </dd>
           </div>
-          <div className="border-b border-slate-200 px-4 py-3 sm:border-r lg:border-b-0">
+
+          <div className="group relative border-b border-slate-200 bg-white px-4 py-3 transition-[transform,box-shadow,background-color] duration-300 ease-out hover:z-10 hover:-translate-y-1 hover:bg-emerald-50/40 hover:shadow-[0_14px_30px_rgba(15,23,42,0.14)] sm:border-r lg:border-b-0">
             <dt className="text-xs font-medium text-slate-500">Ngày công</dt>
-            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+
+            <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950 transition-colors duration-300 group-hover:text-emerald-800">
               {filteredWorkDays}
             </dd>
           </div>
-          <div className="px-4 py-3">
+
+          <div className="group relative bg-white px-4 py-3 transition-[transform,box-shadow,background-color] duration-300 ease-out hover:z-10 hover:-translate-y-1 hover:bg-rose-50/50 hover:shadow-[0_14px_30px_rgba(15,23,42,0.14)]">
             <dt className="text-xs font-medium text-slate-500">Lỗi dữ liệu</dt>
+
             <dd
               className={cn(
-                "mt-1 text-lg font-semibold tabular-nums",
-                warnings > 0 ? "text-rose-700" : "text-slate-950",
+                "mt-1 text-lg font-semibold tabular-nums transition-colors duration-300",
+                warnings > 0
+                  ? "text-rose-700 group-hover:text-rose-800"
+                  : "text-slate-950 group-hover:text-emerald-800",
               )}
             >
               {warnings}
             </dd>
+
             <p className="mt-0.5 text-xs text-slate-500">
               {lateEmployees} nhân viên đi trễ
             </p>

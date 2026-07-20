@@ -7,6 +7,7 @@ import { getSeoArticles, SeoArticle } from "../../services/seoArticleService";
 import defaultImage from "../../optimized-media/cafe/cafe-hero.jpg";
 import { resolveSeoArticleImageUrl } from "../../components/seo/seoArticleAssets";
 import { getSeoArticleDisplayBlocks } from "../../features/seoArticles/articleDisplayBlocks";
+import RevealOnScroll from "@/components/ui/RevealOnScroll";
 
 function upsertMetaByName(name: string, content: string) {
   let meta = document.head.querySelector(`meta[name="${name}"]`);
@@ -420,7 +421,7 @@ export default function ArticleDetailPage({
             <p className="editorial-category-pill font-inter">
               {getStoreLabel(article.targetStore)}
             </p>
-            <h1 className="font-inter">{article.title}</h1>
+            <h1 className="font-inter !leading-[1.2]">{article.title}</h1>
             <div className="editorial-meta text-lg font-nunito font-semibold mt-10">
               <span>By Đội ngũ Ông Quan</span>
               <span aria-hidden="true">•</span>
@@ -637,44 +638,62 @@ export default function ArticleDetailPage({
           </div>
 
           {relatedArticles.length > 0 && (
-            <section className="editorial-related font-inter mt-6 mx-2 md:m-20">
-              <div className="editorial-related-head">
-                <h2 className="font-inter">Có thể bạn quan tâm</h2>
-              </div>
+            <RevealOnScroll direction="up" duration={1200}>
+              <section className="editorial-related mx-2 mt-6 font-inter md:m-20">
+                <RevealOnScroll direction="up" duration={1200}>
+                  <div className="editorial-related-head">
+                    <h2 className="font-inter">Có thể bạn quan tâm</h2>
+                  </div>
+                </RevealOnScroll>
 
-              <div className="editorial-related-grid">
-                {relatedArticles.map((item) => (
-                  <Link
-                    to={`/tin-tuc/${item.slug}`}
-                    className="editorial-related-card"
-                    key={item.id}
-                    style={{ textDecoration: "none" }}
-                  >
-                    <div className="editorial-media editorial-related-media">
-                      <img
-                        src={
-                          resolveSeoArticleImageUrl(item.coverImageUrl) ||
-                          defaultImage
-                        }
-                        alt={item.title}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = defaultImage;
-                        }}
-                      />
-                    </div>
-                    <div className="editorial-related-copy font-inter">
-                      <p className="font-inter">
-                        {getStoreLabel(item.targetStore)}
-                      </p>
-                      <h3 className="font-inter">{item.title}</h3>
-                      <span className="font-inter">
-                        {item.excerpt || item.metaDescription}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
+                <div className="editorial-related-grid">
+                  {relatedArticles.map((item, index) => (
+                    <RevealOnScroll
+                      key={item.id}
+                      direction="up"
+                      delay={120 + index * 120}
+                      duration={750}
+                      className="h-full"
+                    >
+                      <Link
+                        to={`/tin-tuc/${item.slug}`}
+                        style={{ textDecoration: "none" }}
+                        className="editorial-related-card group block h-full cursor-pointer transition-[transform,box-shadow] duration-300 ease-out hover:-translate-y-2 hover:shadow-[0_20px_45px_rgba(15,23,42,0.16)]"
+                      >
+                        <div className="editorial-media editorial-related-media overflow-hidden">
+                          <img
+                            src={
+                              resolveSeoArticleImageUrl(item.coverImageUrl) ||
+                              defaultImage
+                            }
+                            alt={item.title}
+                            loading="lazy"
+                            onError={(event) => {
+                              event.currentTarget.src = defaultImage;
+                            }}
+                            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                          />
+                        </div>
+
+                        <div className="editorial-related-copy font-inter">
+                          <p className="font-inter transition-colors duration-300 group-hover:text-[#8B5E3C]">
+                            {getStoreLabel(item.targetStore)}
+                          </p>
+
+                          <h3 className="font-inter transition-colors duration-300 group-hover:text-[#8B5E3C]">
+                            {item.title}
+                          </h3>
+
+                          <span className="font-nunito transition-colors duration-300">
+                            {item.excerpt || item.metaDescription}
+                          </span>
+                        </div>
+                      </Link>
+                    </RevealOnScroll>
+                  ))}
+                </div>
+              </section>
+            </RevealOnScroll>
           )}
         </article>
       </main>
