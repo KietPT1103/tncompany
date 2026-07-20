@@ -836,7 +836,7 @@ export default function SampleBillGeneratorPage({
                 ].map(([label, value], index) => (
                   <div
                     key={label}
-                    className={`px-4 py-4 lg:px-5 ${
+                    className={`group relative bg-white px-4 py-4 transition-[transform,box-shadow,background-color] duration-300 ease-out hover:z-10 hover:-translate-y-1 hover:bg-emerald-50/40 hover:shadow-[0_14px_30px_rgba(15,23,42,0.14)] lg:px-5 ${
                       index > 0 ? "border-l border-slate-200" : ""
                     } ${
                       index === 2
@@ -844,24 +844,30 @@ export default function SampleBillGeneratorPage({
                         : ""
                     }`}
                   >
-                    <p className="text-xs font-medium text-slate-500">
+                    <p className="text-xs font-medium text-slate-500 transition-colors duration-300 group-hover:text-emerald-700">
                       {label}
                     </p>
-                    <p className="mt-1 truncate text-base font-bold tabular-nums">
+
+                    <p className="mt-1 truncate text-base font-bold tabular-nums text-slate-950 transition-colors duration-300 group-hover:text-emerald-800">
                       {value}
                     </p>
                   </div>
                 ))}
-                <div className="border-l border-t border-slate-200 px-4 py-4 lg:border-t-0 lg:px-5">
-                  <p className="text-xs font-medium text-slate-500">Đối soát</p>
+
+                <div className="group relative border-l border-t border-slate-200 bg-white px-4 py-4 transition-[transform,box-shadow,background-color] duration-300 ease-out hover:z-10 hover:-translate-y-1 hover:bg-emerald-50/40 hover:shadow-[0_14px_30px_rgba(15,23,42,0.14)] lg:border-t-0 lg:px-5">
+                  <p className="text-xs font-medium text-slate-500 transition-colors duration-300 group-hover:text-emerald-700">
+                    Đối soát
+                  </p>
+
                   <div className="mt-1 flex items-center gap-2">
                     <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClasses[reconciliation.status]}`}
+                      className={`rounded-full px-2.5 py-1 text-xs font-bold transition-[transform,box-shadow] duration-300 group-hover:scale-[1.03] group-hover:shadow-sm ${statusClasses[reconciliation.status]}`}
                     >
                       {reconciliation.label}
                     </span>
+
                     {reconciliation.delta !== 0 ? (
-                      <span className="text-xs font-semibold tabular-nums text-slate-600">
+                      <span className="text-xs font-semibold tabular-nums text-slate-600 transition-colors duration-300 group-hover:text-emerald-800">
                         {reconciliation.delta > 0 ? "+" : "-"}
                         {formatCurrency(Math.abs(reconciliation.delta))}
                       </span>
