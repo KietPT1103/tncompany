@@ -15,6 +15,8 @@ import SalaryEstimatePage from "./app/(dashboard)/payroll-estimate-page";
 import ProductsPage from "./app/(dashboard)/product/page";
 import InventoryChecksPage from "./app/(dashboard)/product/checks/page";
 import InventoryReceiptsPage from "./app/(dashboard)/product/receipts/page";
+import FieldInventoryReceiptsPage from "./app/(dashboard)/inventory-receipts/page";
+import FieldInventoryReceiptDetailPage from "./app/(dashboard)/inventory-receipts/[id]/page";
 import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
 import SocialListeningPage from "./app/(dashboard)/social-listening/page";
@@ -101,6 +103,8 @@ export default function App() {
               <Route path="product" element={<ProductsPage />} />
               <Route path="product/checks" element={<InventoryChecksPage />} />
               <Route path="product/receipts" element={<InventoryReceiptsPage />} />
+              <Route path="inventory-receipts" element={<FieldInventoryReceiptsPage />} />
+              <Route path="inventory-receipts/:id" element={<FieldInventoryReceiptDetailPage />} />
               <Route path="categories" element={<CategoryManagementPage />} />
               <Route path="accounts" element={<AccountManagementPage />} />
               <Route path="activity-logs" element={<ActivityLogsPage />} />

@@ -1,0 +1,33 @@
+# EAS uploads from the Git repository root for this nested mobile app.
+# Keep local dependencies, generated output, private configuration, and
+# unrelated web/desktop/AI assets out of the Android build archive.
+
+/node_modules/
+/dist/
+/dist-ssr/
+/tmp-opt/
+/.git/
+/.agents/
+/.github/
+
+/src/
+/public/
+/database/
+/scripts/
+/agent/
+
+/.env
+/.env.local
+/.env.*.local
+/.env.development
+/.env.production
+/.env.test
+
+/mobile/node_modules/
+/mobile/.expo/
+/mobile/dist/
+/mobile/.env
+/mobile/.eas-archive-inspect/
+
+*.log
+

@@ -62,11 +62,57 @@ function products_row_to_payload(array $row): array
     ];
 }
 
+function products_normalized_name(string $value): string
+{
+    $normalized = trim(preg_replace('/\s+/u', ' ', mb_strtolower($value, 'UTF-8')) ?? '');
+    if (class_exists('Transliterator')) {
+        $transliterator = Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC; Latin-ASCII');
+        if ($transliterator) {
+            $normalized = (string) $transliterator->transliterate($normalized);
+        }
+    } elseif (function_exists('iconv')) {
+        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', str_replace(['đ', 'Đ'], ['d', 'D'], $normalized));
+        if ($ascii !== false) $normalized = $ascii;
+    }
+    return $normalized;
+}
+
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 products_inventory_ensure_schema();
 
 if ($method === 'GET') {
-    auth_require_permission(['product.access', 'dashboard.access']);
+    $user = auth_require_permission(['product.access', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update']);
+
+    $fieldSearch = trim((string) ($_GET['search'] ?? ''));
+    $fieldAreaId = trim((string) ($_GET['areaId'] ?? ''));
+    if ($fieldSearch !== '' || $fieldAreaId !== '') {
+        require_once __DIR__ . '/_lib/field_inventory.php';
+        field_inventory_require_store($user, $fieldAreaId);
+        $needle = '%' . $fieldSearch . '%';
+        $normalizedNeedle = '%' . products_normalized_name($fieldSearch) . '%';
+        $statement = db()->prepare(
+            'SELECT p.*, c.name AS category_name, s.name AS area_name,
+                    CASE WHEN p.store_id=:area_id THEN 0 ELSE 1 END AS area_rank
+             FROM products p
+             LEFT JOIN categories c ON c.id=p.category_id
+             INNER JOIN stores s ON s.id=p.store_id
+             WHERE p.product_name LIKE :needle OR p.product_code LIKE :needle OR p.normalized_name LIKE :normalized
+             ORDER BY area_rank, p.product_name LIMIT 30'
+        );
+        $statement->execute(['area_id' => $fieldAreaId, 'needle' => $needle, 'normalized' => $normalizedNeedle]);
+        $items = array_map(static fn(array $row): array => [
+            'id' => (string) $row['id'],
+            'productCode' => (string) $row['product_code'],
+            'productName' => (string) $row['product_name'],
+            'unit' => $row['unit'] ?: '',
+            'categoryId' => $row['category_id'] ?: null,
+            'areaId' => (string) $row['store_id'],
+            'areaName' => (string) $row['area_name'],
+            'attachedToCurrentArea' => (string) $row['store_id'] === $fieldAreaId,
+            'similar' => (string) $row['store_id'] !== $fieldAreaId,
+        ], $statement->fetchAll());
+        respond_ok(['items' => $items, 'canCreate' => field_inventory_has_permission($user, 'products.create')]);
+    }
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
@@ -118,11 +164,11 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    auth_require_permission(['product.access', 'dashboard.access']);
+    $user = auth_require_permission(['product.access', 'dashboard.access', 'products.create']);
 
     $body = read_json_body();
     $action = strtolower((string) ($body['action'] ?? 'create'));
-    $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
+    $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? 'cafe'));
 
     if ($action === 'import') {
         $items = is_array($body['items'] ?? null) ? $body['items'] : [];
@@ -204,12 +250,24 @@ if ($method === 'POST') {
         ]);
     }
 
-    $productCode = trim((string) ($body['product_code'] ?? ''));
-    $productName = trim((string) ($body['product_name'] ?? ''));
+    $productCode = trim((string) ($body['product_code'] ?? $body['productCode'] ?? ''));
+    $productName = trim((string) ($body['product_name'] ?? $body['productName'] ?? ''));
     if ($productCode === '' || $productName === '') {
         respond_error('Missing product code or name', 422);
     }
 
+    require_once __DIR__ . '/_lib/field_inventory.php';
+    field_inventory_require_store($user, $storeId);
+    $normalizedName = products_normalized_name($productName);
+    $duplicate = db()->prepare(
+        'SELECT id,store_id,product_code,product_name,unit FROM products
+         WHERE LOWER(product_code)=LOWER(:code) OR normalized_name=:normalized
+            OR LOWER(TRIM(product_name))=LOWER(TRIM(:name)) LIMIT 1'
+    );
+    $duplicate->execute(['code' => $productCode, 'normalized' => $normalizedName, 'name' => $productName]);
+    if ($similar = $duplicate->fetch()) {
+        respond_error('Sản phẩm tương tự đã tồn tại.', 409, ['similarProduct' => $similar]);
+    }
     $components = is_array($body['components'] ?? null) ? $body['components'] : [];
     $categoryId = products_find_category_id($storeId, (string) ($body['category'] ?? ''));
     $productId = uuidv4();
@@ -218,9 +276,9 @@ if ($method === 'POST') {
     try {
         $statement = db()->prepare(
             'INSERT INTO products (
-                id, store_id, product_code, product_name, category_id, cost, price, has_cost, is_selling, stock_quantity
+                id, store_id, product_code, product_name, normalized_name, category_id, cost, price, has_cost, is_selling, stock_quantity, unit, description
              ) VALUES (
-                :id, :store_id, :product_code, :product_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity
+                :id, :store_id, :product_code, :product_name, :normalized_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity, :unit, :description
              )'
         );
         $statement->execute([
@@ -228,12 +286,15 @@ if ($method === 'POST') {
             'store_id' => $storeId,
             'product_code' => $productCode,
             'product_name' => $productName,
+            'normalized_name' => $normalizedName,
             'category_id' => $categoryId,
             'cost' => is_numeric($body['cost'] ?? null) ? (float) $body['cost'] : null,
             'price' => is_numeric($body['price'] ?? null) ? (float) $body['price'] : null,
             'has_cost' => !empty($body['has_cost']) || is_numeric($body['cost'] ?? null) ? 1 : 0,
             'is_selling' => array_key_exists('isSelling', $body) ? (!empty($body['isSelling']) ? 1 : 0) : 1,
             'stock_quantity' => products_inventory_parse_decimal($body['stockQuantity'] ?? 0),
+            'unit' => trim((string) ($body['unit'] ?? '')) ?: null,
+            'description' => trim((string) ($body['description'] ?? '')) ?: null,
         ]);
 
         products_inventory_replace_components($storeId, $productId, $productCode, $components);
@@ -246,9 +307,10 @@ if ($method === 'POST') {
         throw $exception;
     }
 
-    respond_ok([
-        'created' => true,
-    ], 201);
+    respond_ok(['created' => true, 'item' => [
+        'id' => $productId, 'productCode' => $productCode, 'productName' => $productName,
+        'unit' => trim((string) ($body['unit'] ?? '')), 'areaId' => $storeId,
+    ]], 201);
 }
 
 if ($method === 'PATCH') {

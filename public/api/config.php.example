@@ -7,6 +7,8 @@ return [
     'db_password' => 'replace_me',
     'cors_origin' => '*',
     'timezone' => 'Asia/Ho_Chi_Minh',
+    // Keep receipt evidence outside the public web root.
+    'private_storage_path' => dirname(__DIR__, 2) . '/storage/private',
     'gesture_edit_provider' => 'local_flux',
     'gesture_edit_model' => 'gpt-image-1',
     'gesture_edit_size' => '1024x1024',

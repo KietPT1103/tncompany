@@ -3,402 +3,312 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
-require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 
-function inventory_receipts_normalize_date(?string $rawValue): string
+products_inventory_ensure_schema();
+
+final class ReceiptValidationException extends RuntimeException
 {
-    $value = trim((string) $rawValue);
-    if ($value === '') {
-        return (new DateTimeImmutable('today'))->format('Y-m-d');
+    public int $status;
+    public function __construct(string $message, int $status = 422)
+    {
+        parent::__construct($message);
+        $this->status = $status;
     }
-
-    $date = DateTimeImmutable::createFromFormat('Y-m-d', $value);
-    if ($date === false) {
-        respond_error('Ngày nhập không hợp lệ.', 422);
-    }
-
-    return $date->format('Y-m-d');
 }
 
-function inventory_receipts_normalize_status(?string $rawValue): string
+function receipts_store(array $body = []): string
 {
-    $value = strtolower(trim((string) $rawValue));
-    return $value === 'completed' ? 'completed' : 'draft';
+    return trim((string) ($body['areaId'] ?? $body['storeId'] ?? $_GET['areaId'] ?? $_GET['storeId'] ?? ''));
 }
 
-function inventory_receipts_actor_name(array $user): string
+function receipts_full(array $user, string $id): array
 {
-    return trim((string) ($user['displayName'] ?? $user['username'] ?? $user['email'] ?? '')) ?: 'admin';
+    $row = field_inventory_require_receipt($user, $id);
+    return field_inventory_receipt_payload($row, field_inventory_load_items($id), field_inventory_load_images($id));
 }
 
-function inventory_receipts_normalize_items(string $storeId, array $items): array
-{
-    $normalized = [];
-
-    foreach ($items as $item) {
-        $productCode = trim((string) ($item['productCode'] ?? ''));
-        $quantity = products_inventory_parse_decimal($item['quantity'] ?? null);
-        $unitCost = products_inventory_parse_decimal($item['unitCost'] ?? null, 2);
-        $note = trim((string) ($item['note'] ?? ''));
-
-        if ($productCode === '' || $quantity <= 0 || $unitCost <= 0) {
-            continue;
-        }
-
-        $product = products_inventory_find_product($storeId, $productCode);
-        if (!$product) {
-            respond_error(sprintf('Không tìm thấy hàng hoá %s.', $productCode), 422);
-        }
-
-        $normalized[] = [
-            'productId' => (string) $product['id'],
-            'productCode' => (string) $product['product_code'],
-            'productName' => (string) $product['product_name'],
-            'quantity' => $quantity,
-            'unitCost' => $unitCost,
-            'lineTotal' => round($quantity * $unitCost, 2),
-            'note' => $note,
-        ];
-    }
-
-    if ($normalized === []) {
-        respond_error('Phiếu nhập phải có ít nhất 1 hàng hoá hợp lệ.', 422);
-    }
-
-    return $normalized;
-}
-
-function inventory_receipts_insert_items(string $receiptId, array $items): void
+function receipts_recalculate(string $id): void
 {
     $statement = db()->prepare(
-        'INSERT INTO inventory_receipt_items (
-            receipt_id, product_id, product_code, product_name, quantity, unit_cost, line_total, note
-         ) VALUES (
-            :receipt_id, :product_id, :product_code, :product_name, :quantity, :unit_cost, :line_total, :note
-         )'
+        'UPDATE inventory_receipts r
+         SET total_quantity = (SELECT COALESCE(SUM(i.quantity),0) FROM inventory_receipt_items i WHERE i.receipt_id=r.id),
+             total_amount = (SELECT COALESCE(SUM(i.quantity*i.unit_cost),0) FROM inventory_receipt_items i WHERE i.receipt_id=r.id),
+             updated_at = NOW()
+         WHERE r.id = :id'
     );
-
-    foreach ($items as $item) {
-        $statement->execute([
-            'receipt_id' => $receiptId,
-            'product_id' => $item['productId'],
-            'product_code' => $item['productCode'],
-            'product_name' => $item['productName'],
-            'quantity' => $item['quantity'],
-            'unit_cost' => $item['unitCost'],
-            'line_total' => $item['lineTotal'],
-            'note' => $item['note'],
-        ]);
-    }
+    $statement->execute(['id' => $id]);
 }
 
-function inventory_receipts_load_one(string $receiptId): ?array
+function receipts_list(): void
 {
-    $receiptStatement = db()->prepare(
-        'SELECT *
-         FROM inventory_receipts
-         WHERE id = :id
-         LIMIT 1'
-    );
-    $receiptStatement->execute(['id' => $receiptId]);
-    $receipt = $receiptStatement->fetch();
-
-    if (!$receipt) {
-        return null;
+    $user = field_inventory_require_permission('inventory_receipts.view');
+    $id = trim((string) ($_GET['id'] ?? ''));
+    if ($id !== '') {
+        respond_ok(['item' => receipts_full($user, $id)]);
     }
 
-    $itemsStatement = db()->prepare(
-        'SELECT id, product_id, product_code, product_name, quantity, unit_cost, line_total, note
-         FROM inventory_receipt_items
-         WHERE receipt_id = :receipt_id
-         ORDER BY id ASC'
-    );
-    $itemsStatement->execute(['receipt_id' => $receiptId]);
-    $items = array_map(
-        static function (array $row): array {
-            return [
-                'id' => (int) $row['id'],
-                'productId' => (string) $row['product_id'],
-                'productCode' => (string) $row['product_code'],
-                'productName' => (string) $row['product_name'],
-                'quantity' => (float) $row['quantity'],
-                'unitCost' => (float) $row['unit_cost'],
-                'lineTotal' => (float) $row['line_total'],
-                'note' => $row['note'] !== null ? (string) $row['note'] : '',
-            ];
-        },
-        $itemsStatement->fetchAll()
-    );
+    $allowed = array_column(field_inventory_allowed_stores($user), 'id');
+    if ($allowed === []) {
+        respond_ok(['items' => [], 'pagination' => ['page' => 1, 'limit' => 20, 'total' => 0, 'pages' => 0], 'counts' => []]);
+    }
+    $where = [];
+    $params = [];
+    $allowedSql = [];
+    foreach ($allowed as $index => $value) {
+        $key = 'area_' . $index;
+        $allowedSql[] = ':' . $key;
+        $params[$key] = $value;
+    }
+    $where[] = 'r.store_id IN (' . implode(',', $allowedSql) . ')';
 
-    return [
-        'id' => (string) $receipt['id'],
-        'storeId' => (string) $receipt['store_id'],
-        'receiptCode' => (string) $receipt['receipt_code'],
-        'receiptDate' => (string) $receipt['receipt_date'],
-        'status' => (string) $receipt['status'],
-        'note' => $receipt['note'] !== null ? (string) $receipt['note'] : '',
-        'totalAmount' => (float) $receipt['total_amount'],
-        'createdBy' => $receipt['created_by'] !== null ? (string) $receipt['created_by'] : '',
-        'completedBy' => $receipt['completed_by'] !== null ? (string) $receipt['completed_by'] : '',
-        'completedAt' => $receipt['completed_at'] !== null ? (string) $receipt['completed_at'] : null,
-        'createdAt' => (string) $receipt['created_at'],
-        'updatedAt' => (string) $receipt['updated_at'],
-        'items' => $items,
-    ];
-}
-
-products_inventory_ensure_schema();
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-
-if ($method === 'GET') {
-    auth_require_permission('inventory_receipts.access');
-
-    $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
+    $storeId = receipts_store();
+    if ($storeId !== '') {
+        field_inventory_require_store($user, $storeId);
+        $where[] = 'r.store_id = :store_id';
+        $params['store_id'] = $storeId;
+    }
     $status = strtolower(trim((string) ($_GET['status'] ?? '')));
-    $search = trim((string) ($_GET['search'] ?? ''));
-    $limit = max(1, min(200, (int) ($_GET['limit'] ?? 50)));
-
-    $where = ['r.store_id = :store_id'];
-    $params = [
-        'store_id' => $storeId,
-        'limit' => $limit,
-    ];
-
-    if (in_array($status, ['draft', 'completed'], true)) {
+    if (in_array($status, FIELD_RECEIPT_STATUSES, true)) {
         $where[] = 'r.status = :status';
         $params['status'] = $status;
     }
-
-    if ($search !== '') {
-        $where[] = '(r.receipt_code LIKE :search OR r.note LIKE :search OR EXISTS (
-            SELECT 1
-            FROM inventory_receipt_items iri
-            WHERE iri.receipt_id = r.id
-              AND (iri.product_code LIKE :search OR iri.product_name LIKE :search)
-        ))';
-        $params['search'] = '%' . $search . '%';
+    foreach (['dateFrom' => ['r.created_at >= :date_from', 'date_from', ' 00:00:00'],
+              'dateTo' => ['r.created_at <= :date_to', 'date_to', ' 23:59:59']] as $queryKey => $definition) {
+        $value = trim((string) ($_GET[$queryKey] ?? ''));
+        if ($value !== '') {
+            $where[] = $definition[0];
+            $params[$definition[1]] = $value . $definition[2];
+        }
     }
+    $employee = trim((string) ($_GET['employeeId'] ?? ''));
+    if ($employee !== '') {
+        $where[] = 'r.created_by = :employee';
+        $params['employee'] = $employee;
+    }
+    $keyword = trim((string) ($_GET['keyword'] ?? $_GET['search'] ?? ''));
+    if ($keyword !== '') {
+        $where[] = '(r.receipt_code LIKE :keyword OR r.note LIKE :keyword OR r.location_address LIKE :keyword)';
+        $params['keyword'] = '%' . $keyword . '%';
+    }
+    $productKeyword = trim((string) ($_GET['productKeyword'] ?? ''));
+    if ($productKeyword !== '') {
+        $where[] = 'EXISTS (SELECT 1 FROM inventory_receipt_items si WHERE si.receipt_id=r.id AND (si.product_code LIKE :pk OR si.product_name LIKE :pk))';
+        $params['pk'] = '%' . $productKeyword . '%';
+    }
+    $whereSql = implode(' AND ', $where);
+    $page = max(1, (int) ($_GET['page'] ?? 1));
+    $limit = max(1, min(100, (int) ($_GET['limit'] ?? 20)));
 
+    $count = db()->prepare('SELECT COUNT(*) FROM inventory_receipts r WHERE ' . $whereSql);
+    $count->execute($params);
+    $total = (int) $count->fetchColumn();
+    $sorts = ['oldest' => 'r.created_at ASC', 'amount_desc' => 'r.total_amount DESC', 'newest' => 'r.created_at DESC'];
+    $sort = $sorts[strtolower((string) ($_GET['sort'] ?? 'newest'))] ?? $sorts['newest'];
     $statement = db()->prepare(
-        sprintf(
-            'SELECT r.*
-             FROM inventory_receipts r
-             WHERE %s
-             ORDER BY r.receipt_date DESC, r.created_at DESC
-             LIMIT :limit',
-            implode(' AND ', $where)
-        )
+        'SELECT r.*, s.name area_name, COALESCE(u.display_name,u.username,u.email,r.created_by) creator_name,
+                (SELECT COUNT(*) FROM inventory_receipt_items i WHERE i.receipt_id=r.id) item_count,
+                (SELECT COUNT(*) FROM inventory_receipt_images im WHERE im.receipt_id=r.id) image_count,
+                (SELECT im.id FROM inventory_receipt_images im WHERE im.receipt_id=r.id ORDER BY im.created_at LIMIT 1) thumbnail_id
+         FROM inventory_receipts r INNER JOIN stores s ON s.id=r.store_id
+         LEFT JOIN users u ON u.id=r.created_by WHERE ' . $whereSql . '
+         ORDER BY ' . $sort . ' LIMIT :limit OFFSET :offset'
     );
     foreach ($params as $key => $value) {
-        $type = $key === 'limit' ? PDO::PARAM_INT : PDO::PARAM_STR;
-        $statement->bindValue(':' . $key, $value, $type);
+        $statement->bindValue(':' . $key, $value);
     }
+    $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $statement->bindValue(':offset', ($page - 1) * $limit, PDO::PARAM_INT);
     $statement->execute();
+    $items = array_map(static function (array $row): array {
+        $item = field_inventory_receipt_payload($row);
+        $item['itemCount'] = (int) $row['item_count'];
+        $item['imageCount'] = (int) $row['image_count'];
+        $item['thumbnailUrl'] = $row['thumbnail_id'] ? '/api/inventory-receipt-images.php?id=' . rawurlencode($row['thumbnail_id']) . '&size=thumbnail' : null;
+        return $item;
+    }, $statement->fetchAll());
 
-    $receiptRows = $statement->fetchAll();
-    $receiptIds = array_values(
-        array_map(
-            static function (array $row): string {
-                return (string) $row['id'];
-            },
-            $receiptRows
-        )
-    );
-
-    $itemsByReceipt = [];
-    if ($receiptIds !== []) {
-        $placeholders = implode(', ', array_fill(0, count($receiptIds), '?'));
-        $itemsStatement = db()->prepare(
-            sprintf(
-                'SELECT id, receipt_id, product_id, product_code, product_name, quantity, unit_cost, line_total, note
-                 FROM inventory_receipt_items
-                 WHERE receipt_id IN (%s)
-                 ORDER BY id ASC',
-                $placeholders
-            )
-        );
-        $itemsStatement->execute($receiptIds);
-
-        foreach ($itemsStatement->fetchAll() as $row) {
-            $receiptId = (string) $row['receipt_id'];
-            $itemsByReceipt[$receiptId][] = [
-                'id' => (int) $row['id'],
-                'productId' => (string) $row['product_id'],
-                'productCode' => (string) $row['product_code'],
-                'productName' => (string) $row['product_name'],
-                'quantity' => (float) $row['quantity'],
-                'unitCost' => (float) $row['unit_cost'],
-                'lineTotal' => (float) $row['line_total'],
-                'note' => $row['note'] !== null ? (string) $row['note'] : '',
-            ];
-        }
+    $counts = array_fill_keys(FIELD_RECEIPT_STATUSES, 0);
+    $countSql = db()->prepare('SELECT status,COUNT(*) total FROM inventory_receipts r WHERE r.store_id IN (' . implode(',', $allowedSql) . ') GROUP BY status');
+    $allowedParams = array_filter($params, static fn(string $key): bool => strpos($key, 'area_') === 0, ARRAY_FILTER_USE_KEY);
+    $countSql->execute($allowedParams);
+    foreach ($countSql->fetchAll() as $row) {
+        $counts[$row['status']] = (int) $row['total'];
     }
-
-    $items = array_map(
-        static function (array $row) use ($itemsByReceipt): array {
-            $receiptId = (string) $row['id'];
-
-            return [
-                'id' => $receiptId,
-                'storeId' => (string) $row['store_id'],
-                'receiptCode' => (string) $row['receipt_code'],
-                'receiptDate' => (string) $row['receipt_date'],
-                'status' => (string) $row['status'],
-                'note' => $row['note'] !== null ? (string) $row['note'] : '',
-                'totalAmount' => (float) $row['total_amount'],
-                'createdBy' => $row['created_by'] !== null ? (string) $row['created_by'] : '',
-                'completedBy' => $row['completed_by'] !== null ? (string) $row['completed_by'] : '',
-                'completedAt' => $row['completed_at'] !== null ? (string) $row['completed_at'] : null,
-                'createdAt' => (string) $row['created_at'],
-                'updatedAt' => (string) $row['updated_at'],
-                'items' => $itemsByReceipt[$receiptId] ?? [],
-            ];
-        },
-        $receiptRows
-    );
-
-    respond_ok(['items' => $items]);
+    $counts['all'] = array_sum($counts);
+    respond_ok(['items' => $items, 'counts' => $counts, 'pagination' => [
+        'page' => $page, 'limit' => $limit, 'total' => $total, 'pages' => (int) ceil($total / $limit),
+    ]]);
 }
 
-if ($method === 'POST') {
-    $user = auth_require_permission('inventory_receipts.access');
-    $body = read_json_body();
-    $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
-    $status = inventory_receipts_normalize_status((string) ($body['status'] ?? 'draft'));
-    $receiptDate = inventory_receipts_normalize_date((string) ($body['receiptDate'] ?? ''));
-    $note = trim((string) ($body['note'] ?? ''));
-    $items = inventory_receipts_normalize_items(
-        $storeId,
-        is_array($body['items'] ?? null) ? $body['items'] : []
+function receipts_create(array $body): void
+{
+    $user = field_inventory_require_permission('inventory_receipts.create');
+    $storeId = field_inventory_require_store($user, receipts_store($body));
+    $clientId = trim((string) ($body['clientRequestId'] ?? ''));
+    if ($clientId !== '') {
+        $find = db()->prepare('SELECT id FROM inventory_receipts WHERE store_id=:store_id AND client_request_id=:client_id LIMIT 1');
+        $find->execute(['store_id' => $storeId, 'client_id' => $clientId]);
+        if ($existingId = $find->fetchColumn()) {
+            respond_ok(['item' => receipts_full($user, (string) $existingId), 'idempotent' => true]);
+        }
+    }
+    $location = is_array($body['location'] ?? null) ? $body['location'] : [];
+    $id = uuidv4();
+    $statement = db()->prepare(
+        'INSERT INTO inventory_receipts (
+          id,store_id,receipt_code,client_request_id,receipt_date,status,note,received_at,captured_at,
+          latitude,longitude,location_accuracy,location_address,total_quantity,total_amount,created_by
+         ) VALUES (
+          :id,:store_id,:code,:client_id,CURDATE(),"draft",:note,:received_at,:captured_at,
+          :latitude,:longitude,:accuracy,:address,0,0,:created_by)'
     );
-    $totalAmount = round(
-        array_reduce(
-            $items,
-            static function (float $sum, array $item): float {
-                return $sum + (float) $item['lineTotal'];
-            },
-            0.0
-        ),
-        2
-    );
-    $actor = inventory_receipts_actor_name($user);
-    $receiptId = trim((string) ($body['id'] ?? ''));
+    $statement->execute([
+        'id' => $id, 'store_id' => $storeId, 'code' => products_inventory_generate_receipt_code($storeId),
+        'client_id' => $clientId ?: null, 'note' => trim((string) ($body['note'] ?? '')),
+        'received_at' => field_inventory_datetime($body['receivedAt'] ?? null),
+        'captured_at' => field_inventory_datetime($body['capturedAt'] ?? null),
+        'latitude' => field_inventory_nullable_decimal($location['latitude'] ?? null),
+        'longitude' => field_inventory_nullable_decimal($location['longitude'] ?? null),
+        'accuracy' => field_inventory_nullable_decimal($location['accuracy'] ?? null),
+        'address' => trim((string) ($location['address'] ?? '')) ?: null, 'created_by' => $user['id'],
+    ]);
+    respond_ok(['item' => receipts_full($user, $id), 'requiresImageToBecomePending' => (($body['status'] ?? '') === 'pending_explanation')], 201);
+}
 
+function receipts_update(array $body): void
+{
+    $user = field_inventory_require_permission('inventory_receipts.update');
+    $id = trim((string) ($_GET['id'] ?? $body['id'] ?? ''));
+    $receipt = field_inventory_require_receipt($user, $id);
+    if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
+        respond_error('Phiếu đã khóa, không thể chỉnh sửa.', 409);
+    }
+    $status = strtolower(trim((string) ($body['status'] ?? $receipt['status'])));
+    if (!in_array($status, ['pending_explanation', 'draft'], true)) {
+        respond_error('Chuyển trạng thái không hợp lệ.', 422);
+    }
+    if ($status === 'pending_explanation') {
+        $check = db()->prepare('SELECT COUNT(*) FROM inventory_receipt_images WHERE receipt_id=:id');
+        $check->execute(['id' => $id]);
+        if ((int) $check->fetchColumn() < 1) {
+            respond_error('Phiếu chưa giải trình phải có ít nhất một ảnh watermark.', 422);
+        }
+    }
+    $statement = db()->prepare('UPDATE inventory_receipts SET status=:status,note=:note,updated_at=NOW() WHERE id=:id');
+    $statement->execute(['id' => $id, 'status' => $status, 'note' => trim((string) ($body['note'] ?? $receipt['note']))]);
+    respond_ok(['item' => receipts_full($user, $id)]);
+}
+
+function receipts_complete(array $body): void
+{
+    $user = field_inventory_require_permission('inventory_receipts.complete');
+    $id = trim((string) ($body['id'] ?? $_GET['id'] ?? ''));
+    if ($id === '') respond_error('Thiếu mã phiếu.', 422);
+    field_inventory_require_receipt($user, $id);
     db()->beginTransaction();
-
     try {
-        if ($receiptId !== '') {
-            $findStatement = db()->prepare(
-                'SELECT id, status
-                 FROM inventory_receipts
-                 WHERE id = :id
-                   AND store_id = :store_id
-                 LIMIT 1
-                 FOR UPDATE'
-            );
-            $findStatement->execute([
-                'id' => $receiptId,
-                'store_id' => $storeId,
-            ]);
-            $existingReceipt = $findStatement->fetch();
-
-            if (!$existingReceipt) {
-                respond_error('Không tìm thấy phiếu nhập.', 404);
-            }
-
-            if ((string) $existingReceipt['status'] === 'completed') {
-                respond_error('Phiếu đã hoàn thành không thể chỉnh sửa.', 422);
-            }
-
-            $updateReceipt = db()->prepare(
-                'UPDATE inventory_receipts
-                 SET receipt_date = :receipt_date,
-                     status = :status,
-                     note = :note,
-                     total_amount = :total_amount,
-                     completed_at = :completed_at,
-                     completed_by = :completed_by,
-                     updated_at = NOW()
-                 WHERE id = :id'
-            );
-            $updateReceipt->execute([
-                'id' => $receiptId,
-                'receipt_date' => $receiptDate,
-                'status' => $status,
-                'note' => $note,
-                'total_amount' => $totalAmount,
-                'completed_at' => $status === 'completed' ? (new DateTimeImmutable())->format('Y-m-d H:i:s') : null,
-                'completed_by' => $status === 'completed' ? $actor : null,
-            ]);
-
-            $deleteItems = db()->prepare('DELETE FROM inventory_receipt_items WHERE receipt_id = :receipt_id');
-            $deleteItems->execute(['receipt_id' => $receiptId]);
-            inventory_receipts_insert_items($receiptId, $items);
-        } else {
-            $receiptId = uuidv4();
-            $insertReceipt = db()->prepare(
-                'INSERT INTO inventory_receipts (
-                    id, store_id, receipt_code, receipt_date, status, note, total_amount,
-                    completed_at, completed_by, created_by
-                 ) VALUES (
-                    :id, :store_id, :receipt_code, :receipt_date, :status, :note, :total_amount,
-                    :completed_at, :completed_by, :created_by
-                 )'
-            );
-            $insertReceipt->execute([
-                'id' => $receiptId,
-                'store_id' => $storeId,
-                'receipt_code' => products_inventory_generate_receipt_code($storeId),
-                'receipt_date' => $receiptDate,
-                'status' => $status,
-                'note' => $note,
-                'total_amount' => $totalAmount,
-                'completed_at' => $status === 'completed' ? (new DateTimeImmutable())->format('Y-m-d H:i:s') : null,
-                'completed_by' => $status === 'completed' ? $actor : null,
-                'created_by' => $actor,
-            ]);
-            inventory_receipts_insert_items($receiptId, $items);
+        $receipt = field_inventory_load_receipt($id, true);
+        if (!$receipt) throw new ReceiptValidationException('Không tìm thấy phiếu nhập.', 404);
+        if ($receipt['status'] === 'completed') {
+            db()->commit();
+            respond_ok(['item' => receipts_full($user, $id), 'idempotent' => true]);
         }
-
-        if ($status === 'completed') {
-            products_inventory_apply_receipt($receiptId);
+        if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
+            throw new ReceiptValidationException('Không thể hoàn thành phiếu ở trạng thái hiện tại.', 409);
         }
-
+        $imageCheck = db()->prepare('SELECT COUNT(*) FROM inventory_receipt_images WHERE receipt_id=:id');
+        $imageCheck->execute(['id' => $id]);
+        if ((int) $imageCheck->fetchColumn() < 1) {
+            throw new ReceiptValidationException('Cần ít nhất một ảnh watermark.');
+        }
+        $query = db()->prepare(
+            'SELECT i.id,i.product_id,i.quantity,i.unit_cost,p.stock_quantity,p.store_id
+             FROM inventory_receipt_items i INNER JOIN products p ON p.id=i.product_id
+             WHERE i.receipt_id=:id ORDER BY i.id FOR UPDATE'
+        );
+        $query->execute(['id' => $id]);
+        $items = $query->fetchAll();
+        if ($items === []) {
+            throw new ReceiptValidationException('Cần ít nhất một dòng hàng.');
+        }
+        $updateLine = db()->prepare('UPDATE inventory_receipt_items SET line_total=:total,updated_at=NOW() WHERE id=:id');
+        $updateStock = db()->prepare('UPDATE products SET stock_quantity=:stock,cost=:cost,has_cost=1 WHERE id=:id');
+        $movement = db()->prepare(
+            'INSERT INTO inventory_stock_movements
+             (id,receipt_id,receipt_item_id,store_id,product_id,quantity,stock_before,stock_after,created_by)
+             VALUES (:id,:receipt,:item,:store,:product,:quantity,:before,:after,:actor)'
+        );
+        $totalQuantity = 0.0;
+        $totalAmount = 0.0;
+        foreach ($items as $item) {
+            $quantity = (float) $item['quantity'];
+            $price = (float) $item['unit_cost'];
+            if ($quantity <= 0 || $price < 0 || $item['store_id'] !== $receipt['store_id']) {
+                throw new ReceiptValidationException('Dòng hàng không hợp lệ hoặc sản phẩm không thuộc khu vực.');
+            }
+            $lineTotal = round($quantity * $price, 2);
+            $after = round((float) $item['stock_quantity'] + $quantity, 3);
+            $updateLine->execute(['id' => $item['id'], 'total' => $lineTotal]);
+            $updateStock->execute(['id' => $item['product_id'], 'stock' => $after, 'cost' => $price]);
+            $movement->execute([
+                'id' => uuidv4(), 'receipt' => $id, 'item' => $item['id'], 'store' => $receipt['store_id'],
+                'product' => $item['product_id'], 'quantity' => $quantity, 'before' => $item['stock_quantity'],
+                'after' => $after, 'actor' => $user['id'],
+            ]);
+            $totalQuantity += $quantity;
+            $totalAmount += $lineTotal;
+        }
+        $complete = db()->prepare(
+            'UPDATE inventory_receipts SET status="completed",total_quantity=:quantity,total_amount=:amount,
+             completed_by=:name,completed_by_user_id=:actor,completed_at=NOW(),updated_at=NOW() WHERE id=:id'
+        );
+        $complete->execute([
+            'id' => $id, 'quantity' => round($totalQuantity, 3), 'amount' => round($totalAmount, 2),
+            'name' => $user['displayName'] ?? $user['email'], 'actor' => $user['id'],
+        ]);
         db()->commit();
+    } catch (ReceiptValidationException $exception) {
+        if (db()->inTransaction()) db()->rollBack();
+        respond_error($exception->getMessage(), $exception->status);
     } catch (Throwable $exception) {
-        if (db()->inTransaction()) {
-            db()->rollBack();
-        }
-
+        if (db()->inTransaction()) db()->rollBack();
         throw $exception;
     }
-
-    $item = inventory_receipts_load_one($receiptId);
-    respond_ok(['item' => $item], $body['id'] ? 200 : 201);
+    respond_ok(['item' => receipts_full($user, $id)]);
 }
 
-if ($method === 'DELETE') {
-    auth_require_permission('inventory_receipts.access');
-    $body = read_json_body();
-    $receiptId = trim((string) ($body['id'] ?? ''));
-
-    if ($receiptId === '') {
-        respond_error('Thiếu mã phiếu nhập.', 422);
-    }
-
+function receipts_cancel(array $body): void
+{
+    $user = field_inventory_require_permission('inventory_receipts.cancel');
+    $id = trim((string) ($body['id'] ?? $_GET['id'] ?? ''));
+    $receipt = field_inventory_require_receipt($user, $id);
+    if ($receipt['status'] === 'completed') respond_error('Không thể hủy phiếu đã hoàn thành.', 409);
+    if ($receipt['status'] === 'cancelled') respond_ok(['item' => receipts_full($user, $id), 'idempotent' => true]);
     $statement = db()->prepare(
-        'DELETE FROM inventory_receipts
-         WHERE id = :id
-           AND status = "draft"'
+        'UPDATE inventory_receipts SET status="cancelled",cancelled_by=:actor,cancelled_at=NOW(),
+         cancel_reason=:reason,updated_at=NOW() WHERE id=:id'
     );
-    $statement->execute(['id' => $receiptId]);
+    $statement->execute(['id' => $id, 'actor' => $user['id'], 'reason' => trim((string) ($body['reason'] ?? '')) ?: null]);
+    respond_ok(['item' => receipts_full($user, $id)]);
+}
 
-    if ($statement->rowCount() === 0) {
-        respond_error('Chỉ có thể xoá phiếu tạm.', 422);
-    }
-
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$action = strtolower(trim((string) ($_GET['action'] ?? '')));
+if ($method === 'GET') receipts_list();
+$body = read_json_body();
+if ($method === 'POST' && $action === 'complete') receipts_complete($body);
+if ($method === 'POST' && $action === 'cancel') receipts_cancel($body);
+if ($method === 'POST') receipts_create($body);
+if (in_array($method, ['PUT', 'PATCH'], true)) receipts_update($body);
+if ($method === 'DELETE') {
+    $user = field_inventory_require_permission('inventory_receipts.cancel');
+    $id = trim((string) ($_GET['id'] ?? $body['id'] ?? ''));
+    $receipt = field_inventory_require_receipt($user, $id);
+    if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) respond_error('Chỉ có thể xóa phiếu chưa hoàn thành.', 409);
+    $delete = db()->prepare('DELETE FROM inventory_receipts WHERE id=:id');
+    $delete->execute(['id' => $id]);
     respond_ok(['deleted' => true]);
 }
-
-respond_error('Not found', 404);
+respond_error('Method not allowed', 405);

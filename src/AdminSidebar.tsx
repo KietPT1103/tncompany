@@ -81,10 +81,10 @@ const navGroups: NavGroup[] = [
       { href: "/product", label: "Sản phẩm", icon: Package, permission: "product.access" },
       { href: "/product/checks", label: "Kiểm kho", icon: Package, permission: "inventory_checks.access" },
       {
-        href: "/product/receipts",
+        href: "/inventory-receipts",
         label: "Nhập hàng",
         icon: Package,
-        permission: "inventory_receipts.access",
+        permission: "inventory_receipts.view",
       },
       { href: "/categories", label: "Danh mục", icon: Tags, permission: "categories.access" },
     ],
