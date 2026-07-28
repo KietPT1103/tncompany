@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api";
+import { prepareSeoArticleImageForUpload } from "@/components/seo/seoArticleImageUpload";
 
 export type SeoArticleTargetStore = "company" | "cafe" | "hotpot" | "farm";
 
@@ -114,14 +115,16 @@ export async function deleteSeoArticle(id: string) {
 }
 
 export async function uploadSeoArticleImage(file: File) {
+  const preparedFile = await prepareSeoArticleImageForUpload(file);
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", preparedFile, preparedFile.name);
 
   const { url } = await apiRequest<{ url: string }>(
     "/seo-article-upload.php",
     {
       method: "POST",
       body: formData,
+      timeoutMs: 60000,
     }
   );
 

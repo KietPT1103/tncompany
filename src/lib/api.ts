@@ -270,6 +270,100 @@ export async function apiRequest<T>(
   throw lastError || new Error("API request failed unexpectedly.");
 }
 
+export async function apiDownload(
+  path: string,
+  options: ApiRequestOptions = {}
+) {
+  const { timeoutMs, ...fetchOptions } = options;
+  const headers = new Headers(fetchOptions.headers || {});
+  headers.set(
+    "Accept",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  headers.set("Content-Type", "application/json");
+
+  const token = getApiToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const requestTimeoutMs =
+    typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
+      ? timeoutMs
+      : API_TIMEOUT_MS;
+  const requestUrls = buildRequestUrls(path, options);
+  let lastError: Error | null = null;
+
+  for (let index = 0; index < requestUrls.length; index += 1) {
+    const requestUrl = requestUrls[index];
+    const controller =
+      typeof AbortController !== "undefined" && !fetchOptions.signal
+        ? new AbortController()
+        : null;
+    const timeoutId =
+      controller && requestTimeoutMs > 0
+        ? globalThis.setTimeout(() => controller.abort(), requestTimeoutMs)
+        : null;
+
+    try {
+      const response = await fetch(requestUrl, {
+        ...fetchOptions,
+        method: fetchOptions.method || "POST",
+        cache: fetchOptions.cache ?? "no-store",
+        headers,
+        signal: fetchOptions.signal ?? controller?.signal,
+      });
+
+      if (response.status === 401) {
+        clearApiToken();
+      }
+      if (!response.ok) {
+        await parseResponse<never>(response);
+      }
+
+      const disposition = response.headers.get("content-disposition") || "";
+      const encodedMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const plainMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const fileName = encodedMatch
+        ? decodeURIComponent(encodedMatch[1])
+        : plainMatch?.[1] || "download.xlsx";
+
+      return {
+        blob: await response.blob(),
+        fileName,
+      };
+    } catch (error) {
+      lastError =
+        error instanceof Error && error.name === "AbortError"
+          ? buildTimeoutError(requestUrl)
+          : error instanceof TypeError
+          ? buildNetworkError(requestUrl)
+          : error instanceof Error
+          ? error
+          : new Error("Không tải được file.");
+
+      const canRetry =
+        index < requestUrls.length - 1 &&
+        (error instanceof Error && error.name === "AbortError"
+          ? true
+          : error instanceof TypeError
+          ? true
+          : error instanceof ApiTransportError
+          ? error.retryable
+          : false);
+
+      if (!canRetry) {
+        throw lastError;
+      }
+    } finally {
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+    }
+  }
+
+  throw lastError || new Error("Không tải được file.");
+}
 export async function loginApi(login: string, password: string) {
   return apiRequest<{ token: string; user: AppUser }>(
     "/auth.php?action=login",

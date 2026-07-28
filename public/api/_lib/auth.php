@@ -149,6 +149,7 @@ function auth_all_permissions(): array
     return [
         'dashboard.access',
         'bills.access',
+        'sample_bills.access',
         'payroll_estimate.access',
         'payroll.access',
         'timesheet.access',

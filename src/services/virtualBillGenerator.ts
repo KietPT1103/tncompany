@@ -1,4 +1,10 @@
-import type { Product } from "@/services/products.firebase";
+export type VirtualBillProduct = {
+  product_code: string;
+  product_name: string;
+  price: number | null;
+  isSelling?: boolean;
+  [key: string]: unknown;
+};
 
 export type VirtualBillItem = {
   productCode: string;
@@ -15,17 +21,48 @@ export type VirtualBill = {
   items: VirtualBillItem[];
 };
 
+export type VirtualBillProductRule = {
+  minQuantity: number;
+  maxQuantity: number;
+};
+
 type ProductPriceBucket = {
   price: number;
-  products: Product[];
+  products: VirtualBillProduct[];
 };
 
 export type GenerateVirtualBillsInput = {
   date: string;
   totalRevenue: number;
-  billCount: number;
-  products: Product[];
+  maxBillTotal?: number;
+  products: VirtualBillProduct[];
+  billCount?: number;
+  minQuantity?: number;
+  maxQuantity?: number;
+  productRules?: Record<string, VirtualBillProductRule>;
 };
+
+export type VirtualBillFeasibility = {
+  exact: boolean;
+  nearestTotal: number | null;
+  delta: number;
+  estimatedBillCount: number;
+  selectedProductCount: number;
+  priceStep: number;
+  reason: string;
+};
+
+type LineOption = {
+  product: VirtualBillProduct;
+  quantity: number;
+  total: number;
+  scaledTotal: number;
+};
+export const DEFAULT_MAX_BILL_TOTAL = 7_000_000;
+
+const DEFAULT_MIN_QUANTITY = 4;
+const DEFAULT_MAX_QUANTITY = 10;
+const TARGET_LINES_PER_BILL = 16;
 
 const randomInt = (min: number, max: number) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
@@ -70,8 +107,8 @@ const buildReachableMap = (maxAmount: number, prices: number[]) => {
   return reachable;
 };
 
-const createPriceBuckets = (products: Product[]) => {
-  const map = new Map<number, Product[]>();
+const createPriceBuckets = (products: VirtualBillProduct[]) => {
+  const map = new Map<number, VirtualBillProduct[]>();
 
   products.forEach((product) => {
     const price = Math.round(product.price || 0);
@@ -259,10 +296,319 @@ const composeBillItems = (
   return Array.from(merged.values());
 };
 
+type BillDraft = {
+  total: number;
+  productCodes: Set<string>;
+  items: VirtualBillItem[];
+};
+
+const normalizeQuantityRange = (minQuantity: number, maxQuantity: number) => {
+  const normalizedMin = clamp(Math.round(minQuantity), 1, 99);
+  const normalizedMax = clamp(Math.round(maxQuantity), normalizedMin, 99);
+  return { minQuantity: normalizedMin, maxQuantity: normalizedMax };
+};
+
+const createLineOptions = ({
+  products,
+  minQuantity = DEFAULT_MIN_QUANTITY,
+  maxQuantity = DEFAULT_MAX_QUANTITY,
+  productRules = {},
+  maxBillTotal = DEFAULT_MAX_BILL_TOTAL,
+}: Pick<
+  GenerateVirtualBillsInput,
+  "products" | "minQuantity" | "maxQuantity" | "productRules" | "maxBillTotal"
+>) => {
+  const fallbackRange = normalizeQuantityRange(minQuantity, maxQuantity);
+  const normalizedMaxBillTotal = Math.max(1, Math.round(maxBillTotal));
+  const seen = new Set<string>();
+  const options: LineOption[] = [];
+
+  products.forEach((product) => {
+    const code = product.product_code?.trim();
+    const name = product.product_name?.trim();
+    const price = Math.round(product.price || 0);
+
+    if (!code || !name || price <= 0 || product.isSelling === false || seen.has(code)) {
+      return;
+    }
+
+    seen.add(code);
+    const configured = productRules[code] || fallbackRange;
+    const range = normalizeQuantityRange(
+      configured.minQuantity,
+      configured.maxQuantity
+    );
+
+    for (let quantity = range.minQuantity; quantity <= range.maxQuantity; quantity += 1) {
+      const total = price * quantity;
+      if (total > normalizedMaxBillTotal) continue;
+      options.push({
+        product: {
+          ...product,
+          product_code: code,
+          product_name: name,
+          price,
+        },
+        quantity,
+        total,
+        scaledTotal: 0,
+      });
+    }
+  });
+
+  if (options.length === 0) {
+    return { options, step: 1 };
+  }
+
+  const step = options.map((option) => option.total).reduce(gcd);
+  options.forEach((option) => {
+    option.scaledTotal = Math.round(option.total / step);
+  });
+
+  return { options, step };
+};
+
+const buildScaledReachableMap = (
+  maxAmount: number,
+  step: number,
+  options: LineOption[]
+) => {
+  const maxScaled = Math.max(0, Math.floor(maxAmount / step));
+  const reachable = new Uint8Array(maxScaled + 1);
+  reachable[0] = 1;
+  const values = Array.from(
+    new Set(options.map((option) => option.scaledTotal))
+  ).sort((left, right) => left - right);
+
+  for (let amount = 1; amount <= maxScaled; amount += 1) {
+    for (const value of values) {
+      if (value > amount) break;
+      if (reachable[amount - value]) {
+        reachable[amount] = 1;
+        break;
+      }
+    }
+  }
+
+  return reachable;
+};
+
+const estimateBillCountFromOptions = (
+  totalRevenue: number,
+  options: LineOption[],
+  maxBillTotal = DEFAULT_MAX_BILL_TOTAL
+) => {
+  if (totalRevenue <= 0 || options.length === 0) return 0;
+
+  const byProduct = new Map<string, LineOption[]>();
+  options.forEach((option) => {
+    const list = byProduct.get(option.product.product_code) || [];
+    list.push(option);
+    byProduct.set(option.product.product_code, list);
+  });
+
+  const averageLineTotal =
+    Array.from(byProduct.values()).reduce((sum, productOptions) => {
+      const productAverage =
+        productOptions.reduce((subtotal, option) => subtotal + option.total, 0) /
+        productOptions.length;
+      return sum + productAverage;
+    }, 0) / byProduct.size;
+  const estimatedLines = Math.max(
+    1,
+    totalRevenue / Math.max(averageLineTotal, 1)
+  );
+
+  return Math.max(
+    1,
+    Math.ceil(totalRevenue / Math.max(1, maxBillTotal)),
+    Math.round(estimatedLines / TARGET_LINES_PER_BILL)
+  );
+};
+
+export function analyzeVirtualBillFeasibility(
+  input: Omit<GenerateVirtualBillsInput, "date">
+): VirtualBillFeasibility {
+  const normalizedRevenue = Math.round(input.totalRevenue);
+  const { options, step } = createLineOptions(input);
+  const selectedProductCount = new Set(
+    options.map((option) => option.product.product_code)
+  ).size;
+  const estimatedBillCount = estimateBillCountFromOptions(
+    normalizedRevenue,
+    options,
+    input.maxBillTotal
+  );
+
+  if (normalizedRevenue <= 0) {
+    return {
+      exact: false,
+      nearestTotal: null,
+      delta: 0,
+      estimatedBillCount,
+      selectedProductCount,
+      priceStep: step,
+      reason: "Doanh thu mục tiêu phải lớn hơn 0.",
+    };
+  }
+
+  if (options.length === 0) {
+    return {
+      exact: false,
+      nearestTotal: null,
+      delta: 0,
+      estimatedBillCount: 0,
+      selectedProductCount: 0,
+      priceStep: step,
+      reason:
+        "Chưa có sản phẩm được chọn với đơn giá và giới hạn số lượng hợp lệ.",
+    };
+  }
+
+  const maxOptionTotal = Math.max(...options.map((option) => option.total));
+  const searchWindow = Math.max(
+    maxOptionTotal * 2,
+    Math.min(normalizedRevenue * 0.05, 5_000_000)
+  );
+  const reachable = buildScaledReachableMap(
+    normalizedRevenue + searchWindow,
+    step,
+    options
+  );
+  const exactIndex =
+    normalizedRevenue % step === 0 ? normalizedRevenue / step : -1;
+  const exact = exactIndex >= 0 && Boolean(reachable[exactIndex]);
+
+  if (exact) {
+    return {
+      exact: true,
+      nearestTotal: normalizedRevenue,
+      delta: 0,
+      estimatedBillCount,
+      selectedProductCount,
+      priceStep: step,
+      reason:
+        "Có thể ghép chính xác doanh thu mục tiêu với danh sách sản phẩm đã chọn.",
+    };
+  }
+
+  const lowerStart = Math.floor(normalizedRevenue / step);
+  const upperStart = Math.ceil(normalizedRevenue / step);
+  const maxOffset = Math.ceil(searchWindow / step);
+  let nearestTotal: number | null = null;
+
+  for (let offset = 0; offset <= maxOffset; offset += 1) {
+    const lowerIndex = lowerStart - offset;
+    const upperIndex = upperStart + offset;
+    const candidates = [
+      lowerIndex > 0 && reachable[lowerIndex] ? lowerIndex * step : null,
+      upperIndex < reachable.length && reachable[upperIndex]
+        ? upperIndex * step
+        : null,
+    ].filter((value): value is number => value !== null);
+
+    if (candidates.length > 0) {
+      nearestTotal = candidates.sort(
+        (left, right) =>
+          Math.abs(left - normalizedRevenue) -
+            Math.abs(right - normalizedRevenue) || left - right
+      )[0];
+      break;
+    }
+  }
+
+  return {
+    exact: false,
+    nearestTotal,
+    delta: nearestTotal === null ? 0 : nearestTotal - normalizedRevenue,
+    estimatedBillCount: estimateBillCountFromOptions(
+      nearestTotal || normalizedRevenue,
+      options,
+      input.maxBillTotal
+    ),
+    selectedProductCount,
+    priceStep: step,
+    reason:
+      nearestTotal === null
+        ? "Không tìm được phương án phù hợp trong khoảng doanh thu lân cận."
+        : "Không thể khớp tuyệt đối doanh thu mục tiêu với giá và giới hạn số lượng hiện tại.",
+  };
+}
+
+const reconstructLineOptions = ({
+  totalRevenue,
+  step,
+  options,
+  reachable,
+  estimatedBillCount,
+  maxUsagePerProduct,
+}: {
+  totalRevenue: number;
+  step: number;
+  options: LineOption[];
+  reachable: Uint8Array;
+  estimatedBillCount: number;
+  maxUsagePerProduct: number;
+}) => {
+  const lines: LineOption[] = [];
+  const usage = new Map<string, number>();
+  const preferredLineTotal =
+    totalRevenue /
+    Math.max(estimatedBillCount * TARGET_LINES_PER_BILL, 1);
+  let remaining = totalRevenue / step;
+
+  while (remaining > 0) {
+    const candidates = options
+      .filter((option) => {
+        const next = remaining - option.scaledTotal;
+        if (next < 0 || !reachable[next]) return false;
+        return (
+          (usage.get(option.product.product_code) || 0) <
+          maxUsagePerProduct
+        );
+      })
+      .map((option) => ({
+        option,
+        score:
+          (usage.get(option.product.product_code) || 0) *
+            preferredLineTotal *
+            0.7 +
+          Math.abs(option.total - preferredLineTotal) +
+          Math.random() * preferredLineTotal * 0.35,
+      }))
+      .sort((left, right) => left.score - right.score);
+
+    if (candidates.length === 0) return null;
+
+    const shortlist = candidates.slice(0, Math.min(8, candidates.length));
+    const selected =
+      shortlist[randomInt(0, shortlist.length - 1)].option;
+    lines.push(selected);
+    usage.set(
+      selected.product.product_code,
+      (usage.get(selected.product.product_code) || 0) + 1
+    );
+    remaining -= selected.scaledTotal;
+  }
+
+  return { lines, usage };
+};
+
+export class VirtualBillGenerationError extends Error {
+  nearestTotal: number | null;
+
+  constructor(message: string, nearestTotal: number | null = null) {
+    super(message);
+    this.name = "VirtualBillGenerationError";
+    this.nearestTotal = nearestTotal;
+  }
+}
+
+
 export function generateVirtualBills({
   date,
   totalRevenue,
-  billCount,
+  billCount = 1,
   products,
 }: GenerateVirtualBillsInput): VirtualBill[] {
   const normalizedRevenue = Math.round(totalRevenue);
@@ -360,3 +706,233 @@ export function generateVirtualBills({
 
   return bills.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
+
+const distributeLineOptions = (
+  lines: LineOption[],
+  initialBillCount: number,
+  maxBillTotal: number
+): BillDraft[] | null => {
+  const sortedLines = [...lines].sort((left, right) => right.total - left.total);
+
+  for (
+    let billCount = Math.max(1, initialBillCount);
+    billCount <= sortedLines.length;
+    billCount += 1
+  ) {
+    const drafts: BillDraft[] = Array.from({ length: billCount }, () => ({
+      total: 0,
+      productCodes: new Set<string>(),
+      items: [],
+    }));
+    let failed = false;
+
+    for (const line of sortedLines) {
+      const draft = drafts
+        .filter(
+          (candidate) =>
+            !candidate.productCodes.has(line.product.product_code) &&
+            candidate.total + line.total <= maxBillTotal
+        )
+        .sort(
+          (left, right) =>
+            left.total - right.total ||
+            left.items.length - right.items.length
+        )[0];
+
+      if (!draft) {
+        failed = true;
+        break;
+      }
+
+      draft.productCodes.add(line.product.product_code);
+      draft.total += line.total;
+      draft.items.push({
+        productCode: line.product.product_code,
+        productName: line.product.product_name,
+        quantity: line.quantity,
+        unitPrice: Math.round(line.product.price || 0),
+        lineTotal: line.total,
+      });
+    }
+
+    if (!failed && drafts.every((draft) => draft.items.length > 0)) {
+      return drafts;
+    }
+  }
+
+  return null;
+};
+
+const attachZeroPriceItems = (
+  bills: VirtualBill[],
+  input: GenerateVirtualBillsInput
+) => {
+  const fallbackRange = normalizeQuantityRange(
+    input.minQuantity ?? DEFAULT_MIN_QUANTITY,
+    input.maxQuantity ?? DEFAULT_MAX_QUANTITY
+  );
+  const freeProducts = input.products.filter(
+    (product) =>
+      product.isSelling !== false &&
+      product.product_code?.trim() &&
+      product.product_name?.trim() &&
+      Math.round(product.price || 0) === 0
+  );
+
+  freeProducts.forEach((product, productIndex) => {
+    const code = product.product_code.trim();
+    const rule = input.productRules?.[code] || fallbackRange;
+    const range = normalizeQuantityRange(rule.minQuantity, rule.maxQuantity);
+    const occurrenceCount = Math.min(
+      bills.length,
+      Math.max(1, Math.ceil(bills.length / 4))
+    );
+
+    for (let occurrence = 0; occurrence < occurrenceCount; occurrence += 1) {
+      const bill = bills[
+        (productIndex + occurrence * Math.max(1, Math.floor(bills.length / occurrenceCount))) %
+          bills.length
+      ];
+      if (bill.items.some((item) => item.productCode === code)) continue;
+
+      bill.items.push({
+        productCode: code,
+        productName: product.product_name.trim(),
+        quantity: range.minQuantity,
+        unitPrice: 0,
+        lineTotal: 0,
+      });
+    }
+  });
+};
+
+export function generateSampleBills(
+  input: GenerateVirtualBillsInput
+): VirtualBill[] {
+  const normalizedRevenue = Math.round(input.totalRevenue);
+  const maxBillTotal = Math.max(
+    1,
+    Math.round(input.maxBillTotal ?? DEFAULT_MAX_BILL_TOTAL)
+  );
+
+  if (!input.date) {
+    throw new VirtualBillGenerationError("Vui lòng chọn ngày tạo bill mẫu.");
+  }
+
+  const feasibility = analyzeVirtualBillFeasibility({
+    ...input,
+    maxBillTotal,
+  });
+  if (!feasibility.exact) {
+    throw new VirtualBillGenerationError(
+      feasibility.reason,
+      feasibility.nearestTotal
+    );
+  }
+
+  const { options, step } = createLineOptions({
+    ...input,
+    maxBillTotal,
+  });
+  const reachable = buildScaledReachableMap(
+    normalizedRevenue,
+    step,
+    options
+  );
+  let reconstructed: {
+    lines: LineOption[];
+    usage: Map<string, number>;
+  } | null = null;
+  const reconstructionHint = Math.max(1, feasibility.estimatedBillCount);
+
+  for (
+    let cap = reconstructionHint;
+    cap <= reconstructionHint + 6 && !reconstructed;
+    cap += 1
+  ) {
+    for (let attempt = 0; attempt < 36 && !reconstructed; attempt += 1) {
+      reconstructed = reconstructLineOptions({
+        totalRevenue: normalizedRevenue,
+        step,
+        options,
+        reachable,
+        estimatedBillCount: reconstructionHint,
+        maxUsagePerProduct: cap,
+      });
+    }
+  }
+
+  if (!reconstructed) {
+    reconstructed = reconstructLineOptions({
+      totalRevenue: normalizedRevenue,
+      step,
+      options,
+      reachable,
+      estimatedBillCount: reconstructionHint,
+      maxUsagePerProduct: Number.MAX_SAFE_INTEGER,
+    });
+  }
+
+  if (!reconstructed) {
+    throw new VirtualBillGenerationError(
+      "Không thể dựng danh sách món dù tổng doanh thu có thể đối soát. Hãy chọn thêm sản phẩm."
+    );
+  }
+
+  const maxProductUsage = Math.max(
+    ...Array.from(reconstructed.usage.values())
+  );
+  const minimumBillCount = Math.max(
+    reconstructionHint,
+    maxProductUsage,
+    Math.ceil(normalizedRevenue / maxBillTotal)
+  );
+  const drafts = distributeLineOptions(
+    reconstructed.lines,
+    minimumBillCount,
+    maxBillTotal
+  );
+
+  if (!drafts) {
+    throw new VirtualBillGenerationError(
+      "Không thể phân bổ sản phẩm mà vẫn giữ mỗi bill dưới 7.000.000 VND."
+    );
+  }
+
+  const bills = drafts.map((draft, billIndex) => ({
+    billCode: String(billIndex + 1),
+    createdAt: buildBillTime(input.date, billIndex, drafts.length),
+    total: draft.total,
+    items: draft.items,
+  }));
+  attachZeroPriceItems(bills, input);
+
+  bills.forEach((bill) => {
+    bill.items.sort((left, right) =>
+      left.productName.localeCompare(right.productName, "vi")
+    );
+  });
+
+  const generatedTotal = bills.reduce(
+    (sum, bill) => sum + bill.total,
+    0
+  );
+
+  if (generatedTotal !== normalizedRevenue) {
+    throw new VirtualBillGenerationError(
+      "Tổng bill tạo ra không khớp doanh thu đã chọn."
+    );
+  }
+  if (bills.some((bill) => bill.total > maxBillTotal)) {
+    throw new VirtualBillGenerationError(
+      "Có bill vượt giới hạn 7.000.000 VND."
+    );
+  }
+
+  return bills.sort(
+    (left, right) =>
+      left.createdAt.getTime() - right.createdAt.getTime()
+  );
+}
+
+export const generateWaterBills = generateSampleBills;

@@ -130,7 +130,7 @@ export default function EmployeeSalaryFields({
             value={values.employeeCode}
             onChange={(event) => onChange({ employeeCode: event.target.value })}
             placeholder="Ví dụ: 00125"
-            className="h-11 rounded-2xl"
+            className="h-10 rounded-md"
           />
         </div>
 
@@ -142,7 +142,7 @@ export default function EmployeeSalaryFields({
             value={values.name}
             onChange={(event) => onChange({ name: event.target.value })}
             placeholder="Ví dụ: Nguyễn Văn A"
-            className="h-11 rounded-2xl"
+            className="h-10 rounded-md"
           />
         </div>
 
@@ -153,7 +153,7 @@ export default function EmployeeSalaryFields({
           <select
             value={values.role}
             onChange={(event) => onChange({ role: event.target.value })}
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
           >
             {Object.entries(roleGroups).map(([group, roles]) => (
               <optgroup key={group} label={group}>
@@ -167,7 +167,7 @@ export default function EmployeeSalaryFields({
           </select>
         </div>
 
-        <label className="flex items-center gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 md:self-end">
+        <label className="flex min-h-10 items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 md:self-end">
           <input
             type="checkbox"
             checked={isMonthly}
@@ -195,7 +195,7 @@ export default function EmployeeSalaryFields({
             label="Lương tháng"
             value={values.monthlySalary}
             set={(value) => onChange({ monthlySalary: value })}
-            className="h-11 rounded-2xl bg-slate-50"
+            className="h-10 rounded-md bg-slate-50"
           />
           <Input
             type="number"
@@ -204,7 +204,7 @@ export default function EmployeeSalaryFields({
             onChange={(event) =>
               onChange({ expectedWorkDays: Number(event.target.value) || 0 })
             }
-            className="h-11 rounded-2xl bg-slate-50 text-right"
+            className="h-10 rounded-md bg-slate-50 text-right"
           />
           <Input
             type="number"
@@ -213,7 +213,7 @@ export default function EmployeeSalaryFields({
             onChange={(event) =>
               onChange({ paidLeaveDays: Number(event.target.value) || 0 })
             }
-            className="h-11 rounded-2xl bg-slate-50 text-right"
+            className="h-10 rounded-md bg-slate-50 text-right"
           />
           <Input
             type="number"
@@ -222,15 +222,15 @@ export default function EmployeeSalaryFields({
             onChange={(event) =>
               onChange({ standardHours: Number(event.target.value) || 0 })
             }
-            className="h-11 rounded-2xl bg-slate-50 text-right"
+            className="h-10 rounded-md bg-slate-50 text-right"
           />
           <InputMoney
             label="Lương OT / giờ"
             value={values.hourlyRate}
             set={(value) => onChange({ hourlyRate: value })}
-            className="h-11 rounded-2xl bg-slate-50"
+            className="h-10 rounded-md bg-slate-50"
           />
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
             Nếu tổng giờ làm vượt mốc giờ cần làm thì phần vượt được cộng theo lương OT / giờ.
           </div>
         </div>
@@ -240,13 +240,13 @@ export default function EmployeeSalaryFields({
             label="Lương theo giờ"
             value={values.hourlyRate}
             set={(value) => onChange({ hourlyRate: value })}
-            className="h-11 rounded-2xl"
+            className="h-10 rounded-md"
           />
         </div>
       )}
 
-      <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-        <label className="flex items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+      <div className="border-t border-slate-200 pt-4">
+        <label className="flex items-center justify-between gap-4">
           <div>
             <div className="font-semibold text-slate-900">Chuyên cần hồ sơ</div>
             <p className="mt-1 text-sm text-slate-500">
@@ -272,7 +272,7 @@ export default function EmployeeSalaryFields({
         </label>
 
         {values.attendanceBonusEnabled ? (
-          <div className="mt-4 grid gap-4 rounded-[20px] border border-emerald-200 bg-emerald-50/60 p-4 md:grid-cols-[1fr_1fr]">
+          <div className="mt-4 grid gap-3 rounded-md border border-emerald-200 bg-emerald-50/60 p-3 md:grid-cols-[1fr_1fr]">
             <Input
               type="number"
               label="Mốc trừ chuyên cần (ngày nghỉ)"
@@ -282,19 +282,19 @@ export default function EmployeeSalaryFields({
                   attendanceBonusDays: Number(event.target.value) || 0,
                 })
               }
-              className="h-11 rounded-2xl bg-white text-right"
+              className="h-10 rounded-md bg-white text-right"
             />
             <InputMoney
               label="Thưởng chuyên cần"
               value={values.attendanceBonusAmount}
               set={(value) => onChange({ attendanceBonusAmount: value })}
-              className="h-11 rounded-2xl bg-white"
+              className="h-10 rounded-md bg-white"
             />
           </div>
         ) : null}
       </div>
 
-      <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+      <div className="border-t border-slate-200 pt-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900">Phụ cấp hồ sơ</div>
@@ -304,7 +304,7 @@ export default function EmployeeSalaryFields({
           </div>
           <Button
             variant="outline"
-            className="inline-flex items-center gap-2 rounded-2xl border-dashed"
+            className="inline-flex items-center gap-2 rounded-md border-dashed"
             onClick={() =>
               onChange({
                 allowances: [
@@ -319,7 +319,7 @@ export default function EmployeeSalaryFields({
         </div>
 
         {(!values.allowances || values.allowances.length === 0) ? (
-          <div className="mt-4 rounded-[20px] border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+          <div className="mt-3 border-l-2 border-slate-200 px-3 py-2 text-sm text-slate-500">
             Chưa có phụ cấp nào.
           </div>
         ) : (
@@ -327,7 +327,7 @@ export default function EmployeeSalaryFields({
             {values.allowances.map((allowance, index) => (
               <div
                 key={index}
-                className="grid gap-3 rounded-[24px] border border-slate-200 bg-white p-4 md:grid-cols-[1.5fr,140px,130px,44px]"
+                className="grid gap-3 border-b border-slate-200 py-3 md:grid-cols-[1.5fr,140px,130px,44px]"
               >
                 <Input
                   value={allowance.name}
@@ -341,7 +341,7 @@ export default function EmployeeSalaryFields({
                     })
                   }
                   placeholder="Tên phụ cấp"
-                  className="h-11 rounded-2xl"
+                  className="h-10 rounded-md"
                 />
                 <InputMoney
                   label="Số tiền"
@@ -355,7 +355,7 @@ export default function EmployeeSalaryFields({
                       ),
                     })
                   }
-                  className="h-11 rounded-2xl"
+                  className="h-10 rounded-md"
                 />
                 <select
                   value={allowance.period || "all"}
@@ -371,7 +371,7 @@ export default function EmployeeSalaryFields({
                       ),
                     })
                   }
-                  className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
                 >
                   <option value="all">Tất cả</option>
                   <option value="1">Kỳ 1</option>
@@ -380,7 +380,7 @@ export default function EmployeeSalaryFields({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-11 w-11 rounded-2xl text-rose-500 hover:bg-rose-50"
+                  className="h-10 w-11 rounded-md text-rose-500 hover:bg-rose-50"
                   onClick={() =>
                     onChange({
                       allowances: values.allowances.filter(

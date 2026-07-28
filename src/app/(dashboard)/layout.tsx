@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PanelLeftOpen } from "lucide-react";
 import AdminSidebar from "@/AdminSidebar";
-import { useAuth } from "@/context/AuthContext";
+import { AdminMobileHeader } from "@/components/admin/AdminMobileHeader";
 
 const SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
 
@@ -17,7 +16,6 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
 
   useEffect(() => {
@@ -36,18 +34,8 @@ export default function DashboardLayout({
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        {sidebarCollapsed && user ? (
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed(false)}
-            className="absolute left-4 top-4 z-20 hidden rounded-2xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 lg:inline-flex"
-            aria-label="Hiện sidebar"
-          >
-            <PanelLeftOpen className="h-5 w-5" />
-          </button>
-        ) : null}
-
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC]">
+        <AdminMobileHeader />
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC] pt-16 lg:pt-0">
           {children}
         </main>
       </div>

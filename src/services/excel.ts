@@ -45,6 +45,24 @@ export type ParsedSalesReportWorkbook = {
   totalNetRevenue: number;
 };
 
+export type ParsedProductCatalogRow = {
+  product_code: string;
+  product_name: string;
+  unit: string;
+  cost: null;
+  price: number;
+  category: string;
+  has_cost: false;
+  isSelling: true;
+};
+
+export type ParsedProductCatalogWorkbook = {
+  fileName: string;
+  products: ParsedProductCatalogRow[];
+  totalRows: number;
+  skippedRows: number;
+};
+
 const trimCell = (value: unknown) =>
   typeof value === "string" ? value.trim() : String(value ?? "").trim();
 
@@ -234,6 +252,106 @@ export function parseExcel(file: File): Promise<any[]> {
     reader.readAsArrayBuffer(file);
   });
 }
+
+export function parseProductCatalogWorkbook(
+  file: File
+): Promise<ParsedProductCatalogWorkbook> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () =>
+      reject(reader.error || new Error("Không đọc được file danh sách sản phẩm."));
+
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          defval: "",
+          raw: true,
+        }) as unknown[][];
+        const compactHeader = (value: unknown) =>
+          normalizeHeader(value).replace(/[^a-z0-9]/g, "");
+        const headerRowIndex = rows.findIndex((row) => {
+          const headers = row.map(compactHeader);
+          return (
+            headers.some((header) =>
+              ["masanpham", "mahanghoa", "mahang"].includes(header)
+            ) &&
+            headers.some((header) =>
+              ["tensanpham", "tenhanghoa", "tenhang"].includes(header)
+            )
+          );
+        });
+
+        if (headerRowIndex === -1) {
+          throw new Error(
+            "Không tìm thấy cột MaSanPham và TenSanPham trong file Excel."
+          );
+        }
+
+        const headers = (rows[headerRowIndex] || []).map(compactHeader);
+        const findIndex = (candidates: string[]) =>
+          headers.findIndex((header) => candidates.includes(header));
+        const codeIndex = findIndex(["masanpham", "mahanghoa", "mahang"]);
+        const nameIndex = findIndex(["tensanpham", "tenhanghoa", "tenhang"]);
+        const unitIndex = findIndex(["donvitinh", "dvt"]);
+        const priceIndex = findIndex(["dongia", "giaban"]);
+        const categoryIndex = findIndex(["manhomvthh", "nhomhang", "danhmuc"]);
+        const sourceRows = rows
+          .slice(headerRowIndex + 1)
+          .filter((row) => !isRowEmpty(row));
+        const products = sourceRows
+          .map((row) => {
+            const productCode = trimCell(row[codeIndex]);
+            const productName = trimCell(row[nameIndex]);
+            const unit = unitIndex >= 0 ? trimCell(row[unitIndex]) : "";
+            const price = priceIndex >= 0 ? Math.round(parseMoneyValue(row[priceIndex])) : 0;
+            const category =
+              categoryIndex >= 0 ? trimCell(row[categoryIndex]) : "";
+
+            return {
+              product_code: productCode,
+              product_name: productName,
+              unit,
+              cost: null,
+              price,
+              category,
+              has_cost: false as const,
+              isSelling: true as const,
+            };
+          })
+          .filter(
+            (product) =>
+              product.product_code &&
+              product.product_name &&
+              product.price > 0 &&
+              (!product.unit || normalizeHeader(product.unit) === "ly")
+          );
+
+        if (products.length === 0) {
+          throw new Error(
+            "File không có sản phẩm đơn vị ly với mã, tên và đơn giá hợp lệ."
+          );
+        }
+
+        resolve({
+          fileName: file.name,
+          products,
+          totalRows: sourceRows.length,
+          skippedRows: sourceRows.length - products.length,
+        });
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 
 export function parseSalesReportWorkbook(file: File): Promise<ParsedSalesReportWorkbook> {
   return new Promise((resolve, reject) => {
@@ -483,6 +601,139 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
           entries,
           sheets,
           skippedRows,
+        });
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+export type ParsedSampleBillProductRow = {
+  productCode: string;
+  productName: string;
+  unit: string;
+  price: number;
+  sourceCategory: string;
+  sourceRowNumber: number;
+};
+
+export type ParsedSampleBillProductWorkbook = {
+  fileName: string;
+  sheetName: string;
+  products: ParsedSampleBillProductRow[];
+  totalRows: number;
+  skippedRows: number;
+  duplicateCodes: string[];
+};
+
+export function parseSampleBillProductWorkbook(
+  file: File
+): Promise<ParsedSampleBillProductWorkbook> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () =>
+      reject(reader.error || new Error("Không đọc được file danh sách sản phẩm."));
+
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          defval: "",
+          raw: true,
+        }) as unknown[][];
+        const compactHeader = (value: unknown) =>
+          normalizeHeader(value).replace(/[^a-z0-9]/g, "");
+        const headerRowIndex = rows.findIndex((row) => {
+          const headers = row.map(compactHeader);
+          return (
+            headers.some((header) =>
+              ["masanpham", "mahanghoa", "mahang"].includes(header)
+            ) &&
+            headers.some((header) =>
+              ["tensanpham", "tenhanghoa", "tenhang"].includes(header)
+            )
+          );
+        });
+
+        if (headerRowIndex < 0) {
+          throw new Error(
+            "Không tìm thấy cột mã hàng và tên hàng trong file Excel."
+          );
+        }
+
+        const headers = (rows[headerRowIndex] || []).map(compactHeader);
+        const findIndex = (candidates: string[]) =>
+          headers.findIndex((header) => candidates.includes(header));
+        const codeIndex = findIndex(["masanpham", "mahanghoa", "mahang"]);
+        const nameIndex = findIndex(["tensanpham", "tenhanghoa", "tenhang"]);
+        const unitIndex = findIndex(["donvitinh", "dvt"]);
+        const priceIndex = findIndex(["dongia", "giaban"]);
+        const categoryIndex = findIndex([
+          "manhomvthh",
+          "nhomhang3cap",
+          "nhomhang",
+          "danhmuc",
+          "loaihang",
+        ]);
+        const sourceRows = rows
+          .slice(headerRowIndex + 1)
+          .map((row, index) => ({
+            row,
+            sourceRowNumber: headerRowIndex + index + 2,
+          }))
+          .filter(({ row }) => !isRowEmpty(row));
+        const products = sourceRows
+          .map(({ row, sourceRowNumber }) => ({
+            productCode: trimCell(row[codeIndex]),
+            productName: trimCell(row[nameIndex]),
+            unit: unitIndex >= 0 ? trimCell(row[unitIndex]) : "",
+            price:
+              priceIndex >= 0
+                ? Math.max(0, Math.round(parseMoneyValue(row[priceIndex])))
+                : 0,
+            sourceCategory:
+              categoryIndex >= 0 ? trimCell(row[categoryIndex]) : "",
+            sourceRowNumber,
+          }))
+          .filter((product) => product.productCode && product.productName);
+        const counts = products.reduce<Record<string, number>>(
+          (result, product) => {
+            const key = product.productCode.toLocaleLowerCase("vi");
+            result[key] = (result[key] || 0) + 1;
+            return result;
+          },
+          {}
+        );
+        const duplicateCodes = products
+          .filter(
+            (product, index) =>
+              counts[product.productCode.toLocaleLowerCase("vi")] > 1 &&
+              products.findIndex(
+                (candidate) =>
+                  candidate.productCode.toLocaleLowerCase("vi") ===
+                  product.productCode.toLocaleLowerCase("vi")
+              ) === index
+          )
+          .map((product) => product.productCode);
+
+        if (products.length === 0) {
+          throw new Error("File không có sản phẩm hợp lệ để nhập.");
+        }
+
+        resolve({
+          fileName: file.name,
+          sheetName,
+          products,
+          totalRows: sourceRows.length,
+          skippedRows: sourceRows.length - products.length,
+          duplicateCodes,
         });
       } catch (error) {
         reject(error);

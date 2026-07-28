@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Bricolage+Grotesque:wght@500;700;800&family=Great+Vibes&family=Inter:wght@400;500;600;700&family=Lalezar&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Bricolage+Grotesque:wght@500;700;800&family=Inter:wght@400;500;600;700&family=Lalezar&display=swap");
 
 * {
   box-sizing: border-box;
@@ -19,6 +19,68 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+.admin-sidebar {
+  --sidebar-emerald: #064e3b;
+  --sidebar-emerald-deep: #033c2f;
+  --sidebar-gold: #f6c85f;
+  --sidebar-gold-soft: #fde7a3;
+  color: #ffffff;
+  background: linear-gradient(
+    155deg,
+    var(--sidebar-emerald) 0%,
+    #055844 48%,
+    var(--sidebar-emerald-deep) 100%
+  );
+  scrollbar-color: rgba(246, 200, 95, 0.42) transparent;
+}
+
+.admin-sidebar__gold-action {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #063b2e;
+  background: linear-gradient(135deg, #e9ad3f 0%, var(--sidebar-gold) 52%, #f9d777 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 3px 8px rgba(0, 35, 25, 0.2);
+}
+
+.admin-sidebar__ease {
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.admin-sidebar__gold-action > * {
+  position: relative;
+  z-index: 1;
+}
+
+.admin-sidebar__gold-action::after {
+  position: absolute;
+  inset: -30% auto -30% -45%;
+  z-index: 0;
+  width: 32%;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.42),
+    transparent
+  );
+  transform: translateX(-180%) skewX(-18deg);
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.admin-sidebar__gold-action:hover::after {
+  transform: translateX(620%) skewX(-18deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar__gold-action::after {
+    display: none;
+  }
 }
 
 .app-shell {
@@ -784,7 +846,7 @@ a {
   width: 100%;
   margin-top: clamp(2.5rem, 5vw, 4rem);
   padding: 2rem 0 0;
-  background: #a17a5d;
+  background: #795200;
   color: #f8eee4;
 }
 
@@ -1252,78 +1314,106 @@ a {
 }
 
 .editorial-share-label {
-  color: #7f6d5f;
-  font-size: 0.95rem;
-  font-weight: 600;
+  color: #6f5d50;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .editorial-share-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  gap: 0.55rem;
 }
 
 .editorial-share-button {
-  min-width: 46px;
-  height: 46px;
-  border: 1px solid rgba(133, 101, 77, 0.22);
+  min-width: 48px;
+  height: 48px;
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: #fffdfa;
+  background: #f7f4f0;
   color: #4f4339;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0 0.95rem;
+  padding: 0 0.85rem;
   font: inherit;
-  font-size: 0.92rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 800;
   line-height: 1;
   cursor: pointer;
+  transform: translateY(0) scale(1);
   transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease,
-    background 0.18s ease;
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms ease-out,
+    border-color 180ms ease-out,
+    color 180ms ease-out,
+    background-color 180ms ease-out;
 }
 
 .editorial-share-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 22px rgba(67, 46, 29, 0.1);
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 4px 8px rgba(45, 32, 23, 0.14);
+}
+
+.editorial-share-button:active {
+  transform: translateY(0) scale(0.96);
+  box-shadow: none;
+}
+
+.editorial-share-button:focus-visible {
+  outline: 3px solid rgba(24, 51, 31, 0.22);
+  outline-offset: 3px;
 }
 
 .editorial-share-button svg {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
   flex: 0 0 auto;
 }
 
 .editorial-share-button.is-facebook {
-  width: 46px;
+  width: 48px;
   padding: 0;
+  border-color: rgba(24, 119, 242, 0.16);
+  background: rgba(24, 119, 242, 0.08);
   color: #1877f2;
 }
 
-.editorial-share-button.is-facebook:hover {
-  border-color: rgba(24, 119, 242, 0.34);
-  background: rgba(24, 119, 242, 0.08);
+.editorial-share-button.is-facebook:hover,
+.editorial-share-button.is-facebook:focus-visible {
+  border-color: #1877f2;
+  background: #1877f2;
+  color: #ffffff;
 }
 
 .editorial-share-button.is-zalo {
-  color: #0068ff;
+  min-width: 68px;
+  border-color: rgba(0, 104, 255, 0.16);
+  background: rgba(0, 104, 255, 0.08);
+  color: #005bdc;
 }
 
-.editorial-share-button.is-zalo:hover {
-  border-color: rgba(0, 104, 255, 0.26);
-  background: rgba(0, 104, 255, 0.06);
+.editorial-share-button.is-zalo:hover,
+.editorial-share-button.is-zalo:focus-visible {
+  border-color: #0068ff;
+  background: #0068ff;
+  color: #ffffff;
 }
 
-.editorial-share-button.is-copy:hover {
-  border-color: rgba(24, 51, 31, 0.24);
+.editorial-share-button.is-copy {
+  width: 48px;
+  padding: 0;
+  border-color: rgba(24, 51, 31, 0.14);
+  background: rgba(24, 51, 31, 0.07);
   color: #18331f;
-  background: rgba(24, 51, 31, 0.05);
+}
+
+.editorial-share-button.is-copy:hover,
+.editorial-share-button.is-copy:focus-visible {
+  border-color: #18331f;
+  background: #18331f;
+  color: #ffffff;
 }
 
 .editorial-share-hint {
@@ -1331,6 +1421,17 @@ a {
   color: #8a7868;
   font-size: 0.82rem;
   line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editorial-share-button {
+    transition: none;
+  }
+
+  .editorial-share-button:hover,
+  .editorial-share-button:active {
+    transform: none;
+  }
 }
 
 .editorial-media {
@@ -1423,6 +1524,119 @@ button.editorial-media {
   line-height: 1.82;
 }
 
+.seo-article-blocks {
+  display: grid;
+  gap: clamp(3rem, 6vw, 5rem);
+}
+
+.seo-article-content-block {
+  min-width: 0;
+}
+
+.seo-article-content-block > h2 {
+  max-width: 24ch;
+  margin: 0 0 1.25rem;
+  color: #191613;
+  font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+  font-size: clamp(1.65rem, 3vw, 2.45rem);
+  font-weight: 700;
+  line-height: 1.16;
+  text-wrap: balance;
+}
+
+.seo-article-block-copy {
+  max-width: 70ch;
+  color: #403832;
+  font-size: clamp(1rem, 1.2vw, 1.08rem);
+  line-height: 1.82;
+  text-wrap: pretty;
+}
+
+.seo-article-block-copy p {
+  margin: 0 0 1.25rem;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.seo-article-block-copy p:last-child {
+  margin-bottom: 0;
+}
+
+.seo-article-block-copy h2,
+.seo-article-block-copy h3 {
+  margin: 2rem 0 0.85rem;
+  color: #191613;
+  font-family: "Bricolage Grotesque", "Be Vietnam Pro", sans-serif;
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+.seo-article-block-copy h2 {
+  font-size: clamp(1.45rem, 2.5vw, 2rem);
+}
+
+.seo-article-block-copy h3 {
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+}
+
+.seo-article-block-copy ul,
+.seo-article-block-copy ol {
+  margin: 1rem 0 1.5rem;
+  padding-left: 1.4rem;
+}
+
+.seo-article-block-copy li {
+  margin-bottom: 0.55rem;
+  padding-left: 0.2rem;
+}
+
+.seo-article-block-copy blockquote {
+  margin: 1.75rem 0;
+  border-radius: 8px;
+  background: #f5f3f0;
+  padding: 1.25rem 1.4rem;
+  color: #2c251f;
+  font-size: 1.08em;
+  font-weight: 600;
+}
+
+.seo-article-block-copy blockquote p {
+  margin: 0;
+}
+
+.seo-article-block-copy a {
+  color: #205b38;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.seo-article-block-media {
+  margin: 1.75rem 0 0;
+}
+
+.seo-article-block-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 760px;
+  border-radius: 12px;
+  object-fit: contain;
+  outline: 1px solid rgba(0, 0, 0, 0.1);
+  outline-offset: -1px;
+}
+
+.seo-article-block-media figcaption {
+  margin-top: 0.7rem;
+  color: #75695f;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  text-align: center;
+  text-wrap: pretty;
+}
+
 .editorial-quote {
   margin: 1rem 0 1.2rem;
   padding-left: 0.95rem;
@@ -1489,7 +1703,7 @@ button.editorial-media {
   position: sticky;
   top: calc(94px + 7.1rem);
   padding-top: 0.85rem;
-  background: linear-gradient(180deg, rgba(245, 243, 240, 0) 0%, #f5f3f0 24%);
+  background: linear-gradient(180deg, rgba(245, 243, 240, 0) 0%);
 }
 
 .editorial-side-card-button {
