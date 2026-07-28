@@ -108,7 +108,7 @@ function field_inventory_load_receipt(string $id, bool $lock = false): ?array
                 COALESCE(u.display_name, u.username, u.email, r.created_by) AS creator_name
          FROM inventory_receipts r
          INNER JOIN stores s ON s.id = r.store_id
-         LEFT JOIN users u ON u.id = r.created_by
+         LEFT JOIN users u ON u.id COLLATE utf8mb4_unicode_ci = r.created_by
          WHERE r.id = :id LIMIT 1' . ($lock ? ' FOR UPDATE' : '')
     );
     $statement->execute(['id' => $id]);
@@ -207,4 +207,3 @@ function field_inventory_load_images(string $receiptId): array
         'thumbnailUrl' => '/api/inventory-receipt-images.php?id=' . rawurlencode((string) $row['id']) . '&size=thumbnail',
     ], $statement->fetchAll());
 }
-

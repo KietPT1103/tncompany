@@ -112,7 +112,7 @@ function receipts_list(): void
                 (SELECT COUNT(*) FROM inventory_receipt_images im WHERE im.receipt_id=r.id) image_count,
                 (SELECT im.id FROM inventory_receipt_images im WHERE im.receipt_id=r.id ORDER BY im.created_at LIMIT 1) thumbnail_id
          FROM inventory_receipts r INNER JOIN stores s ON s.id=r.store_id
-         LEFT JOIN users u ON u.id=r.created_by WHERE ' . $whereSql . '
+         LEFT JOIN users u ON u.id COLLATE utf8mb4_unicode_ci=r.created_by WHERE ' . $whereSql . '
          ORDER BY ' . $sort . ' LIMIT :limit OFFSET :offset'
     );
     foreach ($params as $key => $value) {

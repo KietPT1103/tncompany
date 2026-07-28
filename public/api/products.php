@@ -94,7 +94,7 @@ if ($method === 'GET') {
             'SELECT p.*, c.name AS category_name, s.name AS area_name,
                     CASE WHEN p.store_id=:area_id THEN 0 ELSE 1 END AS area_rank
              FROM products p
-             LEFT JOIN categories c ON c.id=p.category_id
+             LEFT JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci=p.category_id
              INNER JOIN stores s ON s.id=p.store_id
              WHERE p.product_name LIKE :needle OR p.product_code LIKE :needle OR p.normalized_name LIKE :normalized
              ORDER BY area_rank, p.product_name LIMIT 30'
@@ -118,7 +118,7 @@ if ($method === 'GET') {
     $statement = db()->prepare(
         'SELECT p.*, c.name AS category_name
          FROM products p
-         LEFT JOIN categories c ON c.id = p.category_id
+         LEFT JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci = p.category_id
          WHERE p.store_id = :store_id
          ORDER BY p.product_name ASC'
     );
