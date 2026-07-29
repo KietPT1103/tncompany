@@ -133,6 +133,38 @@ function receipt_image_emit(array $image, string $size): void
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($method === 'GET' && strtolower(trim((string) ($_GET['action'] ?? ''))) === 'health') {
+    field_inventory_require_permission('inventory_receipts.upload_image');
+    if (receipt_image_storage_driver() !== 'r2') {
+        respond_error('R2 storage is not enabled. Check RECEIPT_IMAGE_STORAGE_DRIVER.', 503);
+    }
+
+    $contents = 'tn-company-r2-health-' . bin2hex(random_bytes(16));
+    $temporaryPath = tempnam(sys_get_temp_dir(), 'r2-health-');
+    if ($temporaryPath === false || file_put_contents($temporaryPath, $contents) === false) {
+        respond_error('Cannot create the temporary R2 health-check file.', 500);
+    }
+    $key = '_health/' . bin2hex(random_bytes(16)) . '.txt';
+    try {
+        receipt_image_r2()->putFile($key, $temporaryPath, 'text/plain');
+        $downloaded = receipt_image_r2()->get($key);
+        if (!hash_equals($contents, $downloaded)) {
+            throw new RuntimeException('R2 health-check content does not match.');
+        }
+        receipt_image_r2()->delete($key);
+    } finally {
+        @unlink($temporaryPath);
+        try { receipt_image_r2()->delete($key); } catch (Throwable $ignored) {}
+    }
+    respond_ok([
+        'driver' => 'r2',
+        'connected' => true,
+        'read' => true,
+        'write' => true,
+        'delete' => true,
+    ]);
+}
+
 if ($method === 'GET') {
     $user = field_inventory_require_permission('inventory_receipts.view');
     $image = receipt_image_find($user, trim((string) ($_GET['id'] ?? '')));
