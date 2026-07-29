@@ -22,12 +22,57 @@ function ingredients_normalized_name(string $value): string
     return $normalized;
 }
 
+function ingredients_exec_with_deadlock_retry(string $sql, int $attempts = 3): void
+{
+    for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+        try {
+            db()->exec($sql);
+            return;
+        } catch (PDOException $exception) {
+            $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+            if (!in_array($driverCode, [1205, 1213], true) || $attempt === $attempts) {
+                throw $exception;
+            }
+            usleep(random_int(80000, 220000) * $attempt);
+        }
+    }
+}
+
 function ingredients_ensure_schema(): void
 {
     static $ensured = false;
     if ($ensured) {
         return;
     }
+
+    db()->exec(
+        'CREATE TABLE IF NOT EXISTS app_schema_migrations (
+            migration_key VARCHAR(100) PRIMARY KEY,
+            applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+    $migrationKey = 'ingredients_suppliers_v2';
+    $migrationCheck = db()->prepare(
+        'SELECT 1 FROM app_schema_migrations WHERE migration_key=:migration_key LIMIT 1'
+    );
+    $migrationCheck->execute(['migration_key' => $migrationKey]);
+    if ($migrationCheck->fetchColumn()) {
+        $ensured = true;
+        return;
+    }
+
+    $lockStatement = db()->prepare('SELECT GET_LOCK(:lock_name, 10)');
+    $lockStatement->execute(['lock_name' => 'tn_company_ingredients_schema_v2']);
+    if ((int) $lockStatement->fetchColumn() !== 1) {
+        throw new RuntimeException('Hệ thống đang cập nhật dữ liệu nguyên liệu. Vui lòng thử lại sau vài giây.');
+    }
+
+    try {
+        $migrationCheck->execute(['migration_key' => $migrationKey]);
+        if ($migrationCheck->fetchColumn()) {
+            $ensured = true;
+            return;
+        }
 
     db()->exec(
         'CREATE TABLE IF NOT EXISTS suppliers (
@@ -130,7 +175,7 @@ function ingredients_ensure_schema(): void
             db()->exec(sprintf('ALTER TABLE `%s` MODIFY product_id VARCHAR(64) NULL', $inventoryTable));
         }
         auth_ensure_column($inventoryTable, 'ingredient_id', 'VARCHAR(64) NULL AFTER product_id');
-        db()->exec(
+        ingredients_exec_with_deadlock_retry(
             sprintf(
                 'UPDATE `%s` target
                  INNER JOIN ingredients i
@@ -150,7 +195,7 @@ function ingredients_ensure_schema(): void
     );
     $column->execute();
     if ($column->fetchColumn()) {
-        db()->exec(
+        ingredients_exec_with_deadlock_retry(
             'INSERT IGNORE INTO ingredients (
                 id,store_id,ingredient_code,ingredient_name,normalized_name,unit,cost,stock_quantity,
                 description,is_active,legacy_product_id,created_at,updated_at
@@ -163,7 +208,7 @@ function ingredients_ensure_schema(): void
              WHERE p.item_type="ingredient"
                 OR LOWER(TRIM(COALESCE(c.name,""))) IN ("nguyên liệu","nguyen lieu")'
         );
-        db()->exec(
+        ingredients_exec_with_deadlock_retry(
             'UPDATE products p
              INNER JOIN ingredients i
                ON i.legacy_product_id COLLATE utf8mb4_unicode_ci=p.id COLLATE utf8mb4_unicode_ci
@@ -179,7 +224,7 @@ function ingredients_ensure_schema(): void
     );
     $componentsTable->execute();
     if ($componentsTable->fetchColumn()) {
-        db()->exec(
+        ingredients_exec_with_deadlock_retry(
             'INSERT IGNORE INTO product_ingredients (store_id,product_id,ingredient_id,quantity,created_at,updated_at)
              SELECT pc.store_id,pc.product_id,i.id,pc.quantity,pc.created_at,pc.updated_at
              FROM product_components pc
@@ -189,7 +234,14 @@ function ingredients_ensure_schema(): void
         );
     }
 
-    $ensured = true;
+        $markMigration = db()->prepare(
+            'INSERT IGNORE INTO app_schema_migrations (migration_key) VALUES (:migration_key)'
+        );
+        $markMigration->execute(['migration_key' => $migrationKey]);
+        $ensured = true;
+    } finally {
+        db()->query("SELECT RELEASE_LOCK('tn_company_ingredients_schema_v2')");
+    }
 }
 
 function ingredients_find(string $storeId, string $idOrCode): ?array
