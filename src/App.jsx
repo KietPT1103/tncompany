@@ -13,6 +13,7 @@ import InternalInvoicesPage from "./app/(dashboard)/internal-invoices/page";
 import PayrollPage from "./app/(dashboard)/payroll/page";
 import SalaryEstimatePage from "./app/(dashboard)/payroll-estimate-page";
 import ProductsPage from "./app/(dashboard)/product/page";
+import IngredientsPage from "./app/(dashboard)/product/ingredients/page";
 import InventoryChecksPage from "./app/(dashboard)/product/checks/page";
 import InventoryReceiptsPage from "./app/(dashboard)/product/receipts/page";
 import FieldInventoryReceiptsPage from "./app/(dashboard)/inventory-receipts/page";
@@ -108,6 +109,7 @@ export function App() {
               <Route path="sample-bills/hotpot" element={<HotpotSampleBillsPage />} />
               <Route path="sample-bills/farm" element={<FarmSampleBillsPage />} />
               <Route path="product" element={<ProductsPage />} />
+              <Route path="product/ingredients" element={<IngredientsPage />} />
               <Route path="product/checks" element={<InventoryChecksPage />} />
               <Route path="product/receipts" element={<InventoryReceiptsPage />} />
               <Route path="inventory-receipts" element={<FieldInventoryReceiptsPage />} />

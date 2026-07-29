@@ -77,8 +77,12 @@ export type ProductSearchResult = {
   areaId: string; areaName: string; attachedToCurrentArea: boolean;
 };
 export const searchProducts = (search: string, areaId: string) =>
-  api<{ items: ProductSearchResult[]; canCreate: boolean }>(
-    `/products.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}`
+  api<{ items: ProductSearchResult[]; canCreate: boolean; suggestedCode: string }>(
+    `/products.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}&itemType=ingredient`
+  );
+export const getNextProductCode = (areaId: string) =>
+  api<{ suggestedCode: string }>(
+    `/products.php?action=next-code&areaId=${encodeURIComponent(areaId)}&itemType=ingredient`
   );
 export const attachProduct = (productId: string, areaId: string) =>
   api<{ item: { id: string } }>("/area-products.php", {

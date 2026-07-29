@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
+require_once __DIR__ . '/_lib/products_inventory.php';
+
+products_inventory_ensure_schema();
 
 function receipt_item_body(): array
 {
@@ -29,7 +32,10 @@ function receipt_item_product(string $storeId, array $body): array
     $productCode = trim((string) ($body['productCode'] ?? ''));
     $statement = db()->prepare(
         'SELECT id,product_code,product_name,unit FROM products
-         WHERE store_id=:store_id AND (id=:product_id OR product_code=:product_code) LIMIT 1'
+         WHERE store_id=:store_id
+           AND item_type="ingredient"
+           AND (id=:product_id OR product_code=:product_code)
+         LIMIT 1'
     );
     $statement->execute(['store_id' => $storeId, 'product_id' => $productId, 'product_code' => $productCode]);
     $product = $statement->fetch();

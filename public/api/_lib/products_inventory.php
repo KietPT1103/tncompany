@@ -13,6 +13,7 @@ function products_inventory_ensure_schema(): void
     }
 
     auth_ensure_column('products', 'stock_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER is_selling');
+    auth_ensure_column('products', 'item_type', "VARCHAR(20) NOT NULL DEFAULT 'product' AFTER stock_quantity");
 
     db()->exec(
         'CREATE TABLE IF NOT EXISTS product_components (
@@ -31,6 +32,16 @@ function products_inventory_ensure_schema(): void
             CONSTRAINT fk_product_components_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
             CONSTRAINT fk_product_components_component FOREIGN KEY (component_product_id) REFERENCES products(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    // Existing component rows already represent raw materials. Classify them
+    // automatically so old recipes continue to work on the ingredient screens.
+    db()->exec(
+        'UPDATE products p
+         INNER JOIN product_components pc
+           ON p.id COLLATE utf8mb4_unicode_ci = pc.component_product_id COLLATE utf8mb4_unicode_ci
+         SET p.item_type = "ingredient"
+         WHERE p.item_type <> "ingredient"'
     );
 
     db()->exec(

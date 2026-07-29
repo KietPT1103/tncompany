@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/permissions";
 import {
   Activity,
   BarChart3,
+  Boxes,
   CakeSlice,
   CalendarDays,
   Calculator,
@@ -146,6 +147,12 @@ const navGroups: NavGroup[] = [
         href: "/product",
         label: "Sản phẩm",
         icon: Package,
+        permission: "product.access",
+      },
+      {
+        href: "/product/ingredients",
+        label: "Nguyên liệu",
+        icon: Boxes,
         permission: "product.access",
       },
       {

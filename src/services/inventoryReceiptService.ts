@@ -45,7 +45,7 @@ export const completeInventoryReceipt = async (id: string) =>
 export const cancelInventoryReceipt = async (id: string, reason: string) =>
   (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=cancel", { method: "POST", body: JSON.stringify({ id, reason }) })).item;
 export const searchReceiptProducts = async (search: string, areaId: string) =>
-  (await apiRequest<{ items: ProductResult[] }>(`/products.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}`)).items;
+  (await apiRequest<{ items: ProductResult[] }>(`/products.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}&itemType=ingredient`)).items;
 export const attachReceiptProduct = async (productId: string, areaId: string) =>
   (await apiRequest<{ item: { id: string } }>("/area-products.php", { method: "POST", body: JSON.stringify({ productId, areaId }) })).item;
 export const createReceiptProduct = async (payload: object) =>

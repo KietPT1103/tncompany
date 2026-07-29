@@ -14,6 +14,9 @@ export type Product = {
   componentCostTotal?: number;
   components?: ProductComponent[];
   storeId?: string;
+  unit?: string;
+  description?: string;
+  itemType?: "product" | "ingredient";
 };
 
 export type ProductComponent = {
@@ -39,11 +42,17 @@ export type ProductPayload = {
     productCode: string;
     quantity: number;
   }>;
+  unit?: string;
+  description?: string;
+  itemType?: "product" | "ingredient";
 };
 
-export async function getAllProducts(storeId = "cafe"): Promise<Product[]> {
+export async function getAllProducts(
+  storeId = "cafe",
+  itemType: "product" | "ingredient" = "product"
+): Promise<Product[]> {
   const { items } = await apiRequest<{ items: Product[] }>(
-    `/products.php?storeId=${encodeURIComponent(storeId)}`,
+    `/products.php?storeId=${encodeURIComponent(storeId)}&itemType=${encodeURIComponent(itemType)}`,
     { method: "GET" }
   );
   return items.map((item) => ({
@@ -54,6 +63,16 @@ export async function getAllProducts(storeId = "cafe"): Promise<Product[]> {
     componentCostTotal: item.componentCostTotal ?? 0,
     components: item.components || [],
   }));
+}
+
+export async function getNextProductCode(
+  storeId: string,
+  itemType: "product" | "ingredient" = "product"
+) {
+  const { suggestedCode } = await apiRequest<{ suggestedCode: string }>(
+    `/products.php?action=next-code&areaId=${encodeURIComponent(storeId)}&itemType=${encodeURIComponent(itemType)}`
+  );
+  return suggestedCode;
 }
 
 export async function upsertProductsFromExcel(
@@ -91,6 +110,9 @@ export async function updateProductCost(
     category?: string;
     isSelling?: boolean;
     stockQuantity?: number;
+    unit?: string;
+    description?: string;
+    itemType?: "product" | "ingredient";
     components?: Array<{
       productCode: string;
       quantity: number;
@@ -127,6 +149,9 @@ export async function addProduct(product: ProductPayload) {
       isSelling: product.isSelling !== false,
       storeId: product.storeId || "cafe",
       stockQuantity: product.stockQuantity ?? 0,
+      unit: product.unit ?? "",
+      description: product.description ?? "",
+      itemType: product.itemType ?? "product",
       components: product.components || [],
     }),
   });

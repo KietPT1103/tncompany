@@ -46,6 +46,9 @@ function inventory_checks_normalize_items(string $storeId, array $items, bool $r
         if (!$product) {
             respond_error(sprintf('Khong tim thay hang hoa %s.', $productCode), 422);
         }
+        if ((string) ($product['item_type'] ?? 'product') !== 'ingredient') {
+            respond_error(sprintf('%s khong phai la nguyen lieu.', $productCode), 422);
+        }
 
         $actualExists = array_key_exists('actualQuantity', $item) || array_key_exists('actual_quantity', $item);
         $actualRaw = $item['actualQuantity'] ?? $item['actual_quantity'] ?? null;

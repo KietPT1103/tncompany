@@ -47,7 +47,7 @@ export default function LoginScreen() {
           returnKeyType="done"
           onSubmitEditing={submit}
         />
-        <PrimaryButton title="Đăng nhập" onPress={submit} loading={busy} disabled={!login || !password} />
+        <PrimaryButton title="Đăng nhập" loadingTitle="Đang đăng nhập…" onPress={submit} loading={busy} disabled={!login || !password} />
       </View>
     </ScrollView>
   </KeyboardAvoidingView></Screen>;

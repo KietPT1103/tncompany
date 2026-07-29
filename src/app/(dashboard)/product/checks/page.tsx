@@ -104,7 +104,7 @@ export default function InventoryChecksPage() {
 
   async function loadPageData() {
     const [productItems, checkItems] = await Promise.all([
-      getAllProducts(storeId),
+      getAllProducts(storeId, "ingredient"),
       getInventoryChecks({ storeId, limit: 40 }),
     ]);
 
@@ -407,9 +407,9 @@ export default function InventoryChecksPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <Link
-              href="/product"
+              href="/product/ingredients"
               className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
-              title="Trở về hàng hóa"
+              title="Trở về nguyên liệu"
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
@@ -499,7 +499,7 @@ export default function InventoryChecksPage() {
                     <thead className="bg-sky-50 text-slate-700">
                       <tr>
                         <th className="px-4 py-3 text-left font-semibold">STT</th>
-                        <th className="px-4 py-3 text-left font-semibold">Mã hàng hóa</th>
+                        <th className="px-4 py-3 text-left font-semibold">Mã nguyên liệu</th>
                         <th className="px-4 py-3 text-left font-semibold">Tên hàng</th>
                         <th className="px-4 py-3 text-right font-semibold">Tồn kho</th>
                         <th className="px-4 py-3 text-right font-semibold">Thực tế</th>

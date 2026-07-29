@@ -58,8 +58,16 @@ function products_row_to_payload(array $row): array
         'has_cost' => (bool) $row['has_cost'],
         'isSelling' => (bool) $row['is_selling'],
         'stockQuantity' => $row['stock_quantity'] !== null ? (float) $row['stock_quantity'] : 0.0,
+        'unit' => $row['unit'] !== null ? (string) $row['unit'] : '',
+        'description' => $row['description'] !== null ? (string) $row['description'] : '',
+        'itemType' => (string) ($row['item_type'] ?? 'product'),
         'storeId' => (string) $row['store_id'],
     ];
+}
+
+function products_normalize_item_type(?string $value): string
+{
+    return strtolower(trim((string) $value)) === 'ingredient' ? 'ingredient' : 'product';
 }
 
 function products_normalized_name(string $value): string
@@ -77,14 +85,41 @@ function products_normalized_name(string $value): string
     return $normalized;
 }
 
+function products_next_sp_code(): string
+{
+    $statement = db()->query(
+        "SELECT product_code
+         FROM products
+         WHERE UPPER(product_code) REGEXP '^SP[0-9]+$'
+         ORDER BY CAST(SUBSTRING(product_code, 3) AS UNSIGNED) DESC,
+                  CHAR_LENGTH(SUBSTRING(product_code, 3)) DESC
+         LIMIT 1"
+    );
+    $currentCode = (string) ($statement->fetchColumn() ?: '');
+    if ($currentCode === '') {
+        return 'SP1';
+    }
+
+    $digits = substr($currentCode, 2);
+    $nextNumber = (int) $digits + 1;
+    return 'SP' . str_pad((string) $nextNumber, strlen($digits), '0', STR_PAD_LEFT);
+}
+
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 products_inventory_ensure_schema();
 
 if ($method === 'GET') {
     $user = auth_require_permission(['product.access', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update']);
 
+    $fieldAction = strtolower(trim((string) ($_GET['action'] ?? '')));
     $fieldSearch = trim((string) ($_GET['search'] ?? ''));
     $fieldAreaId = trim((string) ($_GET['areaId'] ?? ''));
+    $fieldItemType = products_normalize_item_type((string) ($_GET['itemType'] ?? 'product'));
+    if ($fieldAction === 'next-code') {
+        require_once __DIR__ . '/_lib/field_inventory.php';
+        field_inventory_require_store($user, $fieldAreaId);
+        respond_ok(['suggestedCode' => products_next_sp_code()]);
+    }
     if ($fieldSearch !== '' || $fieldAreaId !== '') {
         require_once __DIR__ . '/_lib/field_inventory.php';
         field_inventory_require_store($user, $fieldAreaId);
@@ -94,15 +129,16 @@ if ($method === 'GET') {
                 LEFT JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci=p.category_id
                 INNER JOIN stores s
                   ON s.id COLLATE utf8mb4_unicode_ci = p.store_id COLLATE utf8mb4_unicode_ci';
-        $params = ['rank_area_id' => $fieldAreaId];
+        $params = ['rank_area_id' => $fieldAreaId, 'item_type' => $fieldItemType];
         if ($fieldSearch === '') {
-            $sql .= ' WHERE p.store_id=:filter_area_id';
+            $sql .= ' WHERE p.store_id=:filter_area_id AND p.item_type=:item_type';
             $params['filter_area_id'] = $fieldAreaId;
         } else {
             $needle = '%' . $fieldSearch . '%';
-            $sql .= ' WHERE p.product_name LIKE :name_needle
-                         OR p.product_code LIKE :code_needle
-                         OR p.normalized_name LIKE :normalized_needle';
+            $sql .= ' WHERE p.item_type=:item_type
+                      AND (p.product_name LIKE :name_needle
+                           OR p.product_code LIKE :code_needle
+                           OR p.normalized_name LIKE :normalized_needle)';
             $params['name_needle'] = $needle;
             $params['code_needle'] = $needle;
             $params['normalized_needle'] = '%' . products_normalized_name($fieldSearch) . '%';
@@ -120,20 +156,28 @@ if ($method === 'GET') {
             'areaName' => (string) $row['area_name'],
             'attachedToCurrentArea' => (string) $row['store_id'] === $fieldAreaId,
             'similar' => (string) $row['store_id'] !== $fieldAreaId,
+            'itemType' => (string) ($row['item_type'] ?? 'product'),
         ], $statement->fetchAll());
-        respond_ok(['items' => $items, 'canCreate' => field_inventory_has_permission($user, 'products.create')]);
+        respond_ok([
+            'items' => $items,
+            'canCreate' => field_inventory_has_permission($user, 'products.create'),
+            'suggestedCode' => products_next_sp_code(),
+        ]);
     }
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
+    $itemType = products_normalize_item_type((string) ($_GET['itemType'] ?? 'product'));
     $statement = db()->prepare(
         'SELECT p.*, c.name AS category_name
          FROM products p
          LEFT JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci = p.category_id
          WHERE p.store_id = :store_id
+           AND p.item_type = :item_type
          ORDER BY p.product_name ASC'
     );
     $statement->execute([
         'store_id' => $storeId,
+        'item_type' => $itemType,
     ]);
 
     $rows = $statement->fetchAll();
@@ -179,14 +223,15 @@ if ($method === 'POST') {
     $body = read_json_body();
     $action = strtolower((string) ($body['action'] ?? 'create'));
     $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? 'cafe'));
+    $itemType = products_normalize_item_type((string) ($body['itemType'] ?? 'product'));
 
     if ($action === 'import') {
         $items = is_array($body['items'] ?? null) ? $body['items'] : [];
         $statement = db()->prepare(
             'INSERT INTO products (
-                id, store_id, product_code, product_name, category_id, cost, price, has_cost, is_selling, stock_quantity
+                id, store_id, product_code, product_name, category_id, cost, price, has_cost, is_selling, stock_quantity, item_type
              ) VALUES (
-                :id, :store_id, :product_code, :product_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity
+                :id, :store_id, :product_code, :product_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity, :item_type
              )
              ON DUPLICATE KEY UPDATE
                 product_name = VALUES(product_name),
@@ -195,7 +240,8 @@ if ($method === 'POST') {
                 price = VALUES(price),
                 has_cost = VALUES(has_cost),
                 is_selling = VALUES(is_selling),
-                stock_quantity = VALUES(stock_quantity)'
+                stock_quantity = VALUES(stock_quantity),
+                item_type = VALUES(item_type)'
         );
 
         $preparedComponents = [];
@@ -224,6 +270,7 @@ if ($method === 'POST') {
                 'has_cost' => is_numeric($cost) ? 1 : 0,
                 'is_selling' => $isSelling,
                 'stock_quantity' => is_numeric($stockQuantity) ? round((float) $stockQuantity, 3) : 0,
+                'item_type' => products_normalize_item_type((string) ($item['itemType'] ?? $itemType)),
             ]);
 
             if (array_key_exists('components', $item) && is_array($item['components'])) {
@@ -271,10 +318,14 @@ if ($method === 'POST') {
     $normalizedName = products_normalized_name($productName);
     $duplicate = db()->prepare(
         'SELECT id,store_id,product_code,product_name,unit FROM products
-         WHERE LOWER(product_code)=LOWER(:code) OR normalized_name=:normalized
-            OR LOWER(TRIM(product_name))=LOWER(TRIM(:name)) LIMIT 1'
+         WHERE LOWER(product_code)=LOWER(:code)
+            OR (item_type=:item_type AND (
+                normalized_name=:normalized
+                OR LOWER(TRIM(product_name))=LOWER(TRIM(:name))
+            ))
+         LIMIT 1'
     );
-    $duplicate->execute(['code' => $productCode, 'normalized' => $normalizedName, 'name' => $productName]);
+    $duplicate->execute(['code' => $productCode, 'item_type' => $itemType, 'normalized' => $normalizedName, 'name' => $productName]);
     if ($similar = $duplicate->fetch()) {
         respond_error('Sản phẩm tương tự đã tồn tại.', 409, ['similarProduct' => $similar]);
     }
@@ -286,9 +337,9 @@ if ($method === 'POST') {
     try {
         $statement = db()->prepare(
             'INSERT INTO products (
-                id, store_id, product_code, product_name, normalized_name, category_id, cost, price, has_cost, is_selling, stock_quantity, unit, description
+                id, store_id, product_code, product_name, normalized_name, category_id, cost, price, has_cost, is_selling, stock_quantity, item_type, unit, description
              ) VALUES (
-                :id, :store_id, :product_code, :product_name, :normalized_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity, :unit, :description
+                :id, :store_id, :product_code, :product_name, :normalized_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity, :item_type, :unit, :description
              )'
         );
         $statement->execute([
@@ -303,6 +354,7 @@ if ($method === 'POST') {
             'has_cost' => !empty($body['has_cost']) || is_numeric($body['cost'] ?? null) ? 1 : 0,
             'is_selling' => array_key_exists('isSelling', $body) ? (!empty($body['isSelling']) ? 1 : 0) : 1,
             'stock_quantity' => products_inventory_parse_decimal($body['stockQuantity'] ?? 0),
+            'item_type' => $itemType,
             'unit' => trim((string) ($body['unit'] ?? '')) ?: null,
             'description' => trim((string) ($body['description'] ?? '')) ?: null,
         ]);
@@ -320,6 +372,7 @@ if ($method === 'POST') {
     respond_ok(['created' => true, 'item' => [
         'id' => $productId, 'productCode' => $productCode, 'productName' => $productName,
         'unit' => trim((string) ($body['unit'] ?? '')), 'areaId' => $storeId,
+        'itemType' => $itemType,
     ]], 201);
 }
 
@@ -369,6 +422,21 @@ if ($method === 'PATCH') {
     if (array_key_exists('stockQuantity', $body)) {
         $fields[] = 'stock_quantity = :stock_quantity';
         $params['stock_quantity'] = products_inventory_parse_decimal($body['stockQuantity'] ?? 0);
+    }
+
+    if (array_key_exists('unit', $body)) {
+        $fields[] = 'unit = :unit';
+        $params['unit'] = trim((string) $body['unit']) ?: null;
+    }
+
+    if (array_key_exists('description', $body)) {
+        $fields[] = 'description = :description';
+        $params['description'] = trim((string) $body['description']) ?: null;
+    }
+
+    if (array_key_exists('itemType', $body)) {
+        $fields[] = 'item_type = :item_type';
+        $params['item_type'] = products_normalize_item_type((string) $body['itemType']);
     }
 
     $hasComponents = array_key_exists('components', $body);

@@ -110,7 +110,7 @@ export default function FieldInventoryReceiptDetailPage() {
   async function createNew() {
     setBusy(true);
     try {
-      const product = await createReceiptProduct({ areaId: receipt.areaId, productCode: newCode, productName: query.trim(), unit: newUnit });
+      const product = await createReceiptProduct({ areaId: receipt.areaId, productCode: newCode, productName: query.trim(), unit: newUnit, itemType: "ingredient" });
       setSelected(product); setResults([]); setShowCreate(false);
     } catch (error) { alert(error instanceof Error ? error.message : "Không thể tạo sản phẩm."); }
     finally { setBusy(false); }

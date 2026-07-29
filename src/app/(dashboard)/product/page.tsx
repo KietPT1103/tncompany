@@ -824,6 +824,7 @@ export default function ProductsPage() {
   const [selectedAction, setSelectedAction] = useState<ProductAction>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [products, setProducts] = useState<Product[]>([]);
+  const [ingredients, setIngredients] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
@@ -975,6 +976,11 @@ export default function ProductsPage() {
     setProducts(items);
   }
 
+  async function loadIngredients() {
+    const items = await getAllProducts(storeId, "ingredient");
+    setIngredients(items);
+  }
+
   async function loadCategories() {
     const items = await getCategories(storeId);
     setCategories(items);
@@ -984,7 +990,7 @@ export default function ProductsPage() {
     async function init() {
       setLoading(true);
       try {
-        await Promise.all([loadProducts(), loadCategories()]);
+        await Promise.all([loadProducts(), loadIngredients(), loadCategories()]);
       } finally {
         setLoading(false);
       }
@@ -1708,7 +1714,7 @@ export default function ProductsPage() {
         mode={modalMode}
         form={formState}
         categories={categories}
-        products={products}
+        products={ingredients}
         saving={saving}
         newCategoryName={newCategoryName}
         componentQuery={componentQuery}
