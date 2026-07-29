@@ -1,4 +1,6 @@
 import Constants from "expo-constants";
+import { fetch } from "expo/fetch";
+import { File } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
 import type { AppUser, Area, Receipt } from "@/types";
 
@@ -82,6 +84,8 @@ export async function uploadReceiptImage(receiptId: string, photoUri: string, me
   clientFileId: string; capturedAt: string; location: { latitude: number | null; longitude: number | null; accuracy: number | null; address: string };
   finalizeQuick?: boolean;
 }) {
+  const photo = new File(photoUri);
+  if (!photo.exists) throw new Error("Ảnh chờ đồng bộ không còn tồn tại trên thiết bị.");
   const form = new FormData();
   form.append("receiptId", receiptId);
   form.append("clientFileId", metadata.clientFileId);
@@ -91,6 +95,6 @@ export async function uploadReceiptImage(receiptId: string, photoUri: string, me
   form.append("locationAccuracy", String(metadata.location.accuracy ?? ""));
   form.append("locationAddress", metadata.location.address);
   form.append("finalizeQuick", metadata.finalizeQuick ? "1" : "0");
-  form.append("photo", { uri: photoUri, type: "image.jpg", name: "watermarked.jpg" } as unknown as Blob);
+  form.append("photo", photo);
   return api("/inventory-receipt-images.php", { method: "POST", body: form });
 }
