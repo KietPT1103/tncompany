@@ -76,20 +76,44 @@ export type ProductSearchResult = {
   id: string; productCode: string; productName: string; unit: string;
   areaId: string; areaName: string; attachedToCurrentArea: boolean;
 };
-export const searchProducts = (search: string, areaId: string) =>
-  api<{ items: ProductSearchResult[]; canCreate: boolean; suggestedCode: string }>(
-    `/products.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}&itemType=ingredient`
+export async function searchProducts(search: string, areaId: string) {
+  const result = await api<{ items: {
+    id: string; ingredientCode: string; ingredientName: string; unit: string; storeId: string;
+  }[]; canCreate: boolean; suggestedCode: string }>(
+    `/ingredients.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}`
   );
+  return {
+    ...result,
+    items: result.items.map((item): ProductSearchResult => ({
+      id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
+      unit: item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true,
+    })),
+  };
+}
 export const getNextProductCode = (areaId: string) =>
   api<{ suggestedCode: string }>(
-    `/products.php?action=next-code&areaId=${encodeURIComponent(areaId)}&itemType=ingredient`
+    `/ingredients.php?action=next-code&areaId=${encodeURIComponent(areaId)}`
   );
 export const attachProduct = (productId: string, areaId: string) =>
   api<{ item: { id: string } }>("/area-products.php", {
     method: "POST", body: JSON.stringify({ productId, areaId })
   });
 export const createProduct = (payload: object) =>
-  api<{ item: ProductSearchResult }>("/products.php", { method: "POST", body: JSON.stringify(payload) });
+  api<{ item: {
+    id: string; ingredientCode: string; ingredientName: string; unit: string; storeId: string;
+  } }>("/ingredients.php", { method: "POST", body: JSON.stringify(payload) }).then(({ item }) => ({
+    item: {
+      id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
+      unit: item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true,
+    } satisfies ProductSearchResult,
+  }));
+export type SupplierSearchResult = {
+  id: string; supplierCode: string; supplierName: string; phone: string; address: string;
+};
+export const searchSuppliers = (search: string, areaId: string) =>
+  api<{ items: SupplierSearchResult[] }>(
+    `/suppliers.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}`
+  );
 export const addReceiptItem = (payload: object) =>
   api("/inventory-receipt-items.php", { method: "POST", body: JSON.stringify(payload) });
 export async function uploadReceiptImage(receiptId: string, photoUri: string, metadata: {

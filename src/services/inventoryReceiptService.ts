@@ -15,6 +15,7 @@ export type InventoryReceipt = {
   capturedAt: string | null; createdAt: string; updatedAt: string; createdBy: string;
   createdByName: string; totalQuantity: number; totalAmount: number; itemCount: number;
   imageCount: number; thumbnailUrl?: string | null; note: string;
+  supplierId?: string | null; supplier?: { id: string; supplierCode: string; supplierName: string } | null;
   items: InventoryReceiptItem[]; images: InventoryReceiptImage[];
 };
 export type ReceiptCounts = Record<ReceiptStatus | "all", number>;
@@ -45,11 +46,24 @@ export const completeInventoryReceipt = async (id: string) =>
 export const cancelInventoryReceipt = async (id: string, reason: string) =>
   (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=cancel", { method: "POST", body: JSON.stringify({ id, reason }) })).item;
 export const searchReceiptProducts = async (search: string, areaId: string) =>
-  (await apiRequest<{ items: ProductResult[] }>(`/products.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}&itemType=ingredient`)).items;
+  (await apiRequest<{ items: Array<{
+    id: string; ingredientCode: string; ingredientName: string; unit: string; storeId: string;
+  }> }>(`/ingredients.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}`)).items
+    .map((item) => ({
+      id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
+      unit: item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
+    }));
 export const attachReceiptProduct = async (productId: string, areaId: string) =>
   (await apiRequest<{ item: { id: string } }>("/area-products.php", { method: "POST", body: JSON.stringify({ productId, areaId }) })).item;
-export const createReceiptProduct = async (payload: object) =>
-  (await apiRequest<{ item: ProductResult }>("/products.php", { method: "POST", body: JSON.stringify(payload) })).item;
+export const createReceiptProduct = async (payload: object): Promise<ProductResult> => {
+  const item = (await apiRequest<{ item: {
+    id: string; ingredientCode: string; ingredientName: string; unit: string; storeId: string;
+  } }>("/ingredients.php", { method: "POST", body: JSON.stringify(payload) })).item;
+  return {
+    id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
+    unit: item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
+  };
+};
 export const addInventoryReceiptItem = (payload: object) =>
   apiRequest("/inventory-receipt-items.php", { method: "POST", body: JSON.stringify(payload) });
 export const updateInventoryReceiptItem = (id: number, payload: object) =>

@@ -42,12 +42,9 @@ function inventory_checks_normalize_items(string $storeId, array $items, bool $r
             continue;
         }
 
-        $product = products_inventory_find_product($storeId, $productCode);
+        $product = ingredients_find($storeId, $productCode);
         if (!$product) {
-            respond_error(sprintf('Khong tim thay hang hoa %s.', $productCode), 422);
-        }
-        if ((string) ($product['item_type'] ?? 'product') !== 'ingredient') {
-            respond_error(sprintf('%s khong phai la nguyen lieu.', $productCode), 422);
+            respond_error(sprintf('Khong tim thay nguyen lieu %s.', $productCode), 422);
         }
 
         $actualExists = array_key_exists('actualQuantity', $item) || array_key_exists('actual_quantity', $item);
@@ -81,8 +78,8 @@ function inventory_checks_normalize_items(string $storeId, array $items, bool $r
         $productId = (string) $product['id'];
         $normalizedByProductId[$productId] = [
             'productId' => $productId,
-            'productCode' => (string) $product['product_code'],
-            'productName' => (string) $product['product_name'],
+            'productCode' => (string) $product['ingredient_code'],
+            'productName' => (string) $product['ingredient_name'],
             'systemQuantity' => round($systemQuantity, 3),
             'isCounted' => $isCounted,
             'actualQuantity' => round($actualQuantity, 3),
@@ -134,10 +131,10 @@ function inventory_checks_insert_items(string $checkId, array $items): void
 {
     $statement = db()->prepare(
         'INSERT INTO inventory_check_items (
-            check_id, product_id, product_code, product_name, system_quantity, is_counted,
+            check_id, product_id, ingredient_id, product_code, product_name, system_quantity, is_counted,
             actual_quantity, variance_quantity, unit_cost, variance_value, note
          ) VALUES (
-            :check_id, :product_id, :product_code, :product_name, :system_quantity, :is_counted,
+            :check_id, NULL, :ingredient_id, :product_code, :product_name, :system_quantity, :is_counted,
             :actual_quantity, :variance_quantity, :unit_cost, :variance_value, :note
          )'
     );
@@ -145,7 +142,7 @@ function inventory_checks_insert_items(string $checkId, array $items): void
     foreach ($items as $item) {
         $statement->execute([
             'check_id' => $checkId,
-            'product_id' => $item['productId'],
+            'ingredient_id' => $item['productId'],
             'product_code' => $item['productCode'],
             'product_name' => $item['productName'],
             'system_quantity' => $item['systemQuantity'],
@@ -175,7 +172,7 @@ function inventory_checks_load_one(string $checkId): ?array
     }
 
     $itemsStatement = db()->prepare(
-        'SELECT id, product_id, product_code, product_name, system_quantity, is_counted,
+        'SELECT id, product_id, ingredient_id, product_code, product_name, system_quantity, is_counted,
                 actual_quantity, variance_quantity, unit_cost, variance_value, note
          FROM inventory_check_items
          WHERE check_id = :check_id
@@ -186,7 +183,7 @@ function inventory_checks_load_one(string $checkId): ?array
         static function (array $row): array {
             return [
                 'id' => (int) $row['id'],
-                'productId' => (string) $row['product_id'],
+                'productId' => (string) ($row['ingredient_id'] ?: $row['product_id']),
                 'productCode' => (string) $row['product_code'],
                 'productName' => (string) $row['product_name'],
                 'systemQuantity' => (float) $row['system_quantity'],
@@ -285,7 +282,7 @@ if ($method === 'GET') {
         $placeholders = implode(', ', array_fill(0, count($checkIds), '?'));
         $itemsStatement = db()->prepare(
             sprintf(
-                'SELECT id, check_id, product_id, product_code, product_name, system_quantity, is_counted,
+                'SELECT id, check_id, product_id, ingredient_id, product_code, product_name, system_quantity, is_counted,
                         actual_quantity, variance_quantity, unit_cost, variance_value, note
                  FROM inventory_check_items
                  WHERE check_id IN (%s)
@@ -301,7 +298,7 @@ if ($method === 'GET') {
 
             $itemsByCheck[$checkId][] = [
                 'id' => (int) $row['id'],
-                'productId' => (string) $row['product_id'],
+                'productId' => (string) ($row['ingredient_id'] ?: $row['product_id']),
                 'productCode' => (string) $row['product_code'],
                 'productName' => (string) $row['product_name'],
                 'systemQuantity' => (float) $row['system_quantity'],

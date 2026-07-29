@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
+require_once __DIR__ . '/_lib/ingredients.php';
 
 products_inventory_ensure_schema();
 
@@ -107,11 +108,14 @@ function receipts_list(): void
     $sorts = ['oldest' => 'r.created_at ASC', 'amount_desc' => 'r.total_amount DESC', 'newest' => 'r.created_at DESC'];
     $sort = $sorts[strtolower((string) ($_GET['sort'] ?? 'newest'))] ?? $sorts['newest'];
     $statement = db()->prepare(
-        'SELECT r.*, s.name area_name, COALESCE(u.display_name,u.username,u.email,r.created_by) creator_name,
+        'SELECT r.*, s.name area_name,supplier.supplier_code,supplier.supplier_name,
+                COALESCE(u.display_name,u.username,u.email,r.created_by) creator_name,
                 (SELECT COUNT(*) FROM inventory_receipt_items i WHERE i.receipt_id=r.id) item_count,
                 (SELECT COUNT(*) FROM inventory_receipt_images im WHERE im.receipt_id=r.id) image_count,
                 (SELECT im.id FROM inventory_receipt_images im WHERE im.receipt_id=r.id ORDER BY im.created_at LIMIT 1) thumbnail_id
          FROM inventory_receipts r INNER JOIN stores s ON s.id=r.store_id
+         LEFT JOIN suppliers supplier
+           ON supplier.id COLLATE utf8mb4_unicode_ci=r.supplier_id COLLATE utf8mb4_unicode_ci
          LEFT JOIN users u ON u.id COLLATE utf8mb4_unicode_ci=r.created_by WHERE ' . $whereSql . '
          ORDER BY ' . $sort . ' LIMIT :limit OFFSET :offset'
     );
@@ -155,17 +159,30 @@ function receipts_create(array $body): void
         }
     }
     $location = is_array($body['location'] ?? null) ? $body['location'] : [];
+    $supplierId = trim((string) ($body['supplierId'] ?? ''));
+    if ($supplierId === '') {
+        respond_error('Vui lòng chọn nhà phân phối.', 422);
+    }
+    $supplier = db()->prepare(
+        'SELECT id FROM suppliers WHERE id=:id AND store_id=:store_id AND is_active=1 LIMIT 1'
+    );
+    $supplier->execute(['id' => $supplierId, 'store_id' => $storeId]);
+    if (!$supplier->fetchColumn()) {
+        respond_error('Nhà phân phối không tồn tại tại khu vực này.', 422);
+    }
     $id = uuidv4();
     $statement = db()->prepare(
         'INSERT INTO inventory_receipts (
-          id,store_id,receipt_code,client_request_id,receipt_date,status,note,received_at,captured_at,
+          id,store_id,supplier_id,receipt_code,client_request_id,receipt_date,status,note,received_at,captured_at,
           latitude,longitude,location_accuracy,location_address,total_quantity,total_amount,created_by
          ) VALUES (
-          :id,:store_id,:code,:client_id,CURDATE(),"draft",:note,:received_at,:captured_at,
+          :id,:store_id,:supplier_id,:code,:client_id,CURDATE(),"draft",:note,:received_at,:captured_at,
           :latitude,:longitude,:accuracy,:address,0,0,:created_by)'
     );
     $statement->execute([
-        'id' => $id, 'store_id' => $storeId, 'code' => products_inventory_generate_receipt_code($storeId),
+        'id' => $id, 'store_id' => $storeId,
+        'supplier_id' => $supplierId,
+        'code' => products_inventory_generate_receipt_code($storeId),
         'client_id' => $clientId ?: null, 'note' => trim((string) ($body['note'] ?? '')),
         'received_at' => field_inventory_datetime($body['receivedAt'] ?? null),
         'captured_at' => field_inventory_datetime($body['capturedAt'] ?? null),
@@ -196,8 +213,13 @@ function receipts_update(array $body): void
             respond_error('Phiếu chưa giải trình phải có ít nhất một ảnh watermark.', 422);
         }
     }
-    $statement = db()->prepare('UPDATE inventory_receipts SET status=:status,note=:note,updated_at=NOW() WHERE id=:id');
-    $statement->execute(['id' => $id, 'status' => $status, 'note' => trim((string) ($body['note'] ?? $receipt['note']))]);
+    $supplierId = trim((string) ($body['supplierId'] ?? $receipt['supplier_id'] ?? '')) ?: null;
+    $statement = db()->prepare('UPDATE inventory_receipts SET status=:status,note=:note,supplier_id=:supplier_id,updated_at=NOW() WHERE id=:id');
+    $statement->execute([
+        'id' => $id, 'status' => $status,
+        'note' => trim((string) ($body['note'] ?? $receipt['note'])),
+        'supplier_id' => $supplierId,
+    ]);
     respond_ok(['item' => receipts_full($user, $id)]);
 }
 
@@ -224,8 +246,8 @@ function receipts_complete(array $body): void
             throw new ReceiptValidationException('Cần ít nhất một ảnh watermark.');
         }
         $query = db()->prepare(
-            'SELECT i.id,i.product_id,i.quantity,i.unit_cost,p.stock_quantity,p.store_id
-             FROM inventory_receipt_items i INNER JOIN products p ON p.id=i.product_id
+            'SELECT i.id,i.ingredient_id,i.quantity,i.unit_cost,p.stock_quantity,p.store_id
+             FROM inventory_receipt_items i INNER JOIN ingredients p ON p.id=i.ingredient_id
              WHERE i.receipt_id=:id ORDER BY i.id FOR UPDATE'
         );
         $query->execute(['id' => $id]);
@@ -234,11 +256,11 @@ function receipts_complete(array $body): void
             throw new ReceiptValidationException('Cần ít nhất một dòng hàng.');
         }
         $updateLine = db()->prepare('UPDATE inventory_receipt_items SET line_total=:total,updated_at=NOW() WHERE id=:id');
-        $updateStock = db()->prepare('UPDATE products SET stock_quantity=:stock,cost=:cost,has_cost=1 WHERE id=:id');
+        $updateStock = db()->prepare('UPDATE ingredients SET stock_quantity=:stock,cost=:cost WHERE id=:id');
         $movement = db()->prepare(
             'INSERT INTO inventory_stock_movements
-             (id,receipt_id,receipt_item_id,store_id,product_id,quantity,stock_before,stock_after,created_by)
-             VALUES (:id,:receipt,:item,:store,:product,:quantity,:before,:after,:actor)'
+             (id,receipt_id,receipt_item_id,store_id,product_id,ingredient_id,quantity,stock_before,stock_after,created_by)
+             VALUES (:id,:receipt,:item,:store,NULL,:ingredient,:quantity,:before,:after,:actor)'
         );
         $totalQuantity = 0.0;
         $totalAmount = 0.0;
@@ -251,10 +273,10 @@ function receipts_complete(array $body): void
             $lineTotal = round($quantity * $price, 2);
             $after = round((float) $item['stock_quantity'] + $quantity, 3);
             $updateLine->execute(['id' => $item['id'], 'total' => $lineTotal]);
-            $updateStock->execute(['id' => $item['product_id'], 'stock' => $after, 'cost' => $price]);
+            $updateStock->execute(['id' => $item['ingredient_id'], 'stock' => $after, 'cost' => $price]);
             $movement->execute([
                 'id' => uuidv4(), 'receipt' => $id, 'item' => $item['id'], 'store' => $receipt['store_id'],
-                'product' => $item['product_id'], 'quantity' => $quantity, 'before' => $item['stock_quantity'],
+                'ingredient' => $item['ingredient_id'], 'quantity' => $quantity, 'before' => $item['stock_quantity'],
                 'after' => $after, 'actor' => $user['id'],
             ]);
             $totalQuantity += $quantity;

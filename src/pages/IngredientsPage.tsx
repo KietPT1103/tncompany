@@ -1,0 +1,154 @@
+import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { Boxes, LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { useStore } from "@/context/StoreContext";
+import {
+  createIngredient, deleteIngredient, getIngredients, getNextIngredientCode,
+  updateIngredient, type Ingredient,
+} from "@/services/ingredients";
+import { getSuppliers, type Supplier } from "@/services/suppliers";
+
+type Form = {
+  code: string; name: string; unit: string; stock: string; cost: string;
+  supplierId: string; supplierItemCode: string; description: string;
+};
+const blank = (): Form => ({
+  code: "", name: "", unit: "", stock: "0", cost: "0",
+  supplierId: "", supplierItemCode: "", description: "",
+});
+const decimal = (value: string) => Number(value.replace(",", ".")) || 0;
+
+export default function IngredientsPage() {
+  const { storeId } = useStore();
+  const [items, setItems] = useState<Ingredient[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [search, setSearch] = useState("");
+  const [form, setForm] = useState<Form>(blank());
+  const [editing, setEditing] = useState<Ingredient | null>(null);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [deleting, setDeleting] = useState("");
+  const [error, setError] = useState("");
+
+  async function reload() {
+    const [ingredientResult, supplierResult] = await Promise.all([
+      getIngredients(storeId), getSuppliers(storeId),
+    ]);
+    setItems(ingredientResult.items);
+    setSuppliers(supplierResult.items);
+  }
+  useEffect(() => {
+    setLoading(true);
+    reload().catch((e) => setError(e instanceof Error ? e.message : "Không thể tải dữ liệu."))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId]);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase("vi");
+    return q ? items.filter((item) =>
+      `${item.ingredientCode} ${item.ingredientName} ${item.supplierName || ""}`.toLocaleLowerCase("vi").includes(q)
+    ) : items;
+  }, [items, search]);
+
+  async function startCreate() {
+    setPreparing(true);
+    setError("");
+    try {
+      setEditing(null);
+      setForm({ ...blank(), code: await getNextIngredientCode(storeId) });
+      setOpen(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể lấy mã nguyên liệu.");
+    } finally {
+      setPreparing(false);
+    }
+  }
+  function startEdit(item: Ingredient) {
+    setEditing(item);
+    setForm({
+      code: item.ingredientCode, name: item.ingredientName, unit: item.unit,
+      stock: String(item.stockQuantity), cost: String(item.cost ?? 0),
+      supplierId: item.supplierId || "", supplierItemCode: item.supplierItemCode,
+      description: item.description,
+    });
+    setOpen(true);
+  }
+  async function save() {
+    if (!form.code.trim() || !form.name.trim() || !form.unit.trim()) {
+      setError("Vui lòng nhập mã, tên và đơn vị nguyên liệu.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const payload = {
+      storeId, ingredientName: form.name.trim(), unit: form.unit.trim(),
+      stockQuantity: Math.max(0, decimal(form.stock)), cost: Math.max(0, decimal(form.cost)),
+      supplierId: form.supplierId || null, supplierItemCode: form.supplierItemCode.trim(),
+      description: form.description.trim(),
+    };
+    try {
+      if (editing) await updateIngredient(editing.ingredientCode, payload);
+      else await createIngredient({ ...payload, ingredientCode: form.code.trim() });
+      await reload();
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể lưu nguyên liệu.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function remove(item: Ingredient) {
+    if (!window.confirm(`Xóa nguyên liệu “${item.ingredientName}”?`)) return;
+    setDeleting(item.ingredientCode);
+    try {
+      await deleteIngredient(storeId, item.ingredientCode);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể xóa nguyên liệu.");
+    } finally {
+      setDeleting("");
+    }
+  }
+
+  return <div className="min-h-screen bg-slate-50 p-4 md:p-8"><div className="mx-auto max-w-7xl">
+    <header className="flex flex-wrap items-center justify-between gap-4">
+      <div><h1 className="text-3xl font-bold">Nguyên liệu</h1><p className="mt-1 text-slate-500">Dữ liệu riêng cho định mức, nhập hàng và kiểm kho.</p></div>
+      <button disabled={preparing} onClick={() => void startCreate()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">
+        {preparing ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}{preparing ? "Đang chuẩn bị…" : "Thêm nguyên liệu"}</button>
+    </header>
+    {error && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700">{error}</div>}
+    <div className="mt-6 rounded-3xl border bg-white shadow-sm">
+      <label className="relative block border-b p-5"><Search className="absolute left-9 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm mã, tên nguyên liệu hoặc nhà phân phối" className="h-12 w-full rounded-xl border bg-slate-50 pl-12 pr-4" /></label>
+      <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left">
+        <thead className="bg-slate-50 text-sm text-slate-600"><tr><th className="p-4">Mã</th><th className="p-4">Tên nguyên liệu</th><th className="p-4">Đơn vị</th><th className="p-4">Nhà phân phối</th><th className="p-4 text-right">Tồn kho</th><th className="p-4 text-right">Giá vốn</th><th className="p-4 text-right">Thao tác</th></tr></thead>
+        <tbody className="divide-y">{loading ? <tr><td colSpan={7} className="p-14 text-center"><LoaderCircle className="mx-auto animate-spin" /></td></tr>
+          : filtered.length === 0 ? <tr><td colSpan={7} className="p-14 text-center text-slate-500"><Boxes className="mx-auto mb-2 text-slate-300" />Chưa có nguyên liệu.</td></tr>
+          : filtered.map((item) => <tr key={item.id} className="hover:bg-slate-50">
+            <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b><small className="block text-slate-500">{item.supplierItemCode}</small></td>
+            <td className="p-4">{item.unit || "—"}</td><td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{item.stockQuantity.toLocaleString("vi-VN")}</td><td className="p-4 text-right">{Number(item.cost || 0).toLocaleString("vi-VN")} ₫</td>
+            <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button><button disabled={Boolean(deleting)} onClick={() => void remove(item)} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
+          </tr>)}</tbody>
+      </table></div>
+    </div>
+  </div>
+  {open && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/55 p-4"><div className="w-full max-w-2xl rounded-3xl bg-white p-6">
+    <div className="flex justify-between"><h2 className="text-2xl font-bold">{editing ? "Sửa nguyên liệu" : "Thêm nguyên liệu"}</h2><button disabled={saving} onClick={() => setOpen(false)}><X /></button></div>
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <Field label="Mã nguyên liệu *"><input disabled={Boolean(editing)} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Field>
+      <Field label="Tên nguyên liệu *"><input value={form.name} placeholder="Ví dụ: Cà phê hạt" onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+      <Field label="Đơn vị *"><input value={form.unit} placeholder="kg, chai, thùng…" onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
+      <Field label="Tồn kho"><input inputMode="decimal" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></Field>
+      <Field label="Giá vốn"><input inputMode="decimal" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></Field>
+      <Field label="Nhà phân phối"><select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}><option value="">Chưa chọn</option>{suppliers.filter((s) => s.isActive).map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}</select></Field>
+      <Field label="Mã tại nhà phân phối"><input value={form.supplierItemCode} placeholder="Mã hàng của nhà phân phối" onChange={(e) => setForm({ ...form, supplierItemCode: e.target.value })} /></Field>
+      <Field label="Ghi chú"><input value={form.description} placeholder="Quy cách hoặc ghi chú bảo quản" onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+    </div>
+    <div className="mt-6 flex justify-end gap-3"><button disabled={saving} onClick={() => setOpen(false)} className="px-5">Hủy</button><button disabled={saving} onClick={() => void save()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">{saving && <LoaderCircle className="h-5 w-5 animate-spin" />}{saving ? "Đang lưu…" : "Lưu nguyên liệu"}</button></div>
+  </div></div>}</div>;
+}
+
+function Field({ label, children }: { label: string; children: ReactElement }) {
+  return <label className="text-sm font-semibold text-slate-700">{label}<span className="block [&>input]:mt-2 [&>input]:h-12 [&>input]:w-full [&>input]:rounded-xl [&>input]:border [&>input]:px-4 [&>select]:mt-2 [&>select]:h-12 [&>select]:w-full [&>select]:rounded-xl [&>select]:border [&>select]:px-3">{children}</span></label>;
+}

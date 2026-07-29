@@ -110,7 +110,7 @@ export default function FieldInventoryReceiptDetailPage() {
   async function createNew() {
     setBusy(true);
     try {
-      const product = await createReceiptProduct({ areaId: receipt.areaId, productCode: newCode, productName: query.trim(), unit: newUnit, itemType: "ingredient" });
+      const product = await createReceiptProduct({ areaId: receipt.areaId, ingredientCode: newCode, ingredientName: query.trim(), unit: newUnit });
       setSelected(product); setResults([]); setShowCreate(false);
     } catch (error) { alert(error instanceof Error ? error.message : "Không thể tạo sản phẩm."); }
     finally { setBusy(false); }
@@ -119,7 +119,8 @@ export default function FieldInventoryReceiptDetailPage() {
   return <div className="min-h-screen bg-slate-50 p-4 md:p-8"><div className="mx-auto max-w-7xl">
     <button onClick={() => navigate("/admin/inventory-receipts")} className="flex items-center gap-2 font-semibold text-emerald-700"><ArrowLeft className="h-4 w-4" /> Danh sách phiếu</button>
     <div className="mt-5 rounded-3xl border bg-white p-6"><div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-3xl font-bold">{receipt.receiptCode}</h1><p className="mt-2 text-slate-500">{receipt.area.name} • {receipt.createdByName} • {new Date(receipt.createdAt).toLocaleString("vi-VN")}</p></div>
+      <div><h1 className="text-3xl font-bold">{receipt.receiptCode}</h1><p className="mt-2 text-slate-500">{receipt.area.name} • {receipt.createdByName} • {new Date(receipt.createdAt).toLocaleString("vi-VN")}</p>
+        <p className="mt-1 text-sm font-semibold text-emerald-700">Nhà phân phối: {receipt.supplier?.supplierName || "Chưa chọn"}</p></div>
       <div className="flex items-center gap-2">{editable && <button disabled={busy} onClick={cancelReceipt} className="rounded-full border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 disabled:opacity-50">Hủy phiếu</button>}
         <div className="rounded-full bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-800">{receipt.status}</div></div>
     </div><div className="mt-5 grid gap-3 text-sm sm:grid-cols-3"><div><span className="text-slate-500">Địa điểm</span><b className="block">{receipt.images[0]?.locationAddress || "Tọa độ đã lưu trong ảnh"}</b></div>

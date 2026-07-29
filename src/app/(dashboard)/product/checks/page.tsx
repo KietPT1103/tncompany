@@ -12,7 +12,8 @@ import {
   InventoryCheck,
   saveInventoryCheck,
 } from "@/services/inventoryCheckService";
-import { getAllProducts, Product } from "@/services/products.firebase";
+import { Product } from "@/services/products.firebase";
+import { getIngredients } from "@/services/ingredients";
 import {
   ArrowLeft,
   Check,
@@ -103,12 +104,16 @@ export default function InventoryChecksPage() {
   const [form, setForm] = useState<CheckFormState>(createEmptyForm());
 
   async function loadPageData() {
-    const [productItems, checkItems] = await Promise.all([
-      getAllProducts(storeId, "ingredient"),
+    const [ingredientResult, checkItems] = await Promise.all([
+      getIngredients(storeId),
       getInventoryChecks({ storeId, limit: 40 }),
     ]);
 
-    setProducts(productItems);
+    setProducts(ingredientResult.items.map((item) => ({
+      product_code: item.ingredientCode, product_name: item.ingredientName,
+      cost: item.cost, price: null, has_cost: item.cost !== null,
+      stockQuantity: item.stockQuantity, unit: item.unit, storeId: item.storeId,
+    })));
     setChecks(checkItems);
   }
 

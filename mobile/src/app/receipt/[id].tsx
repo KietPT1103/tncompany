@@ -30,7 +30,7 @@ export default function ReceiptDetailScreen() {
   const [pendingAction, setPendingAction] = useState<"add" | "create" | "complete" | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [preparingCreate, setPreparingCreate] = useState(false);
-  const [suggestedCode, setSuggestedCode] = useState("SP1");
+  const [suggestedCode, setSuggestedCode] = useState("NL1");
   const [newCode, setNewCode] = useState("");
   const [newUnit, setNewUnit] = useState("");
 
@@ -43,7 +43,7 @@ export default function ReceiptDetailScreen() {
     if (!area || !suggestionsOpen) return;
     const timer = setTimeout(() => searchProducts(query.trim(), area.id).then((r) => {
       setResults(r.items);
-      setSuggestedCode(r.suggestedCode || "SP1");
+      setSuggestedCode(r.suggestedCode || "NL1");
       setSearchError("");
     }).catch((error) => {
       setResults([]);
@@ -82,7 +82,7 @@ export default function ReceiptDetailScreen() {
     try {
       setPendingAction("create");
       const created = await createProduct({
-        areaId: currentArea.id, productCode: newCode, productName: query.trim(), unit: newUnit, itemType: "ingredient"
+        areaId: currentArea.id, ingredientCode: newCode, ingredientName: query.trim(), unit: newUnit
       });
       setSelected({ ...created.item, attachedToCurrentArea: true }); setCreateOpen(false); setResults([]);
     } catch (e) { Alert.alert("Không thể tạo nguyên liệu", e instanceof Error ? e.message : "Vui lòng thử lại."); }
@@ -92,8 +92,8 @@ export default function ReceiptDetailScreen() {
     try {
       setPreparingCreate(true);
       const result = await getNextProductCode(currentArea.id);
-      setSuggestedCode(result.suggestedCode || "SP1");
-      setNewCode(result.suggestedCode || "SP1");
+      setSuggestedCode(result.suggestedCode || "NL1");
+      setNewCode(result.suggestedCode || "NL1");
       setNewUnit("");
       setCreateOpen(true);
     } catch (error) {
@@ -120,7 +120,8 @@ export default function ReceiptDetailScreen() {
     automaticallyAdjustKeyboardInsets
   >
     <Pressable style={({ pressed }) => pressed && styles.pressed} onPress={() => router.back()}><Text style={styles.back}>‹ Quay lại</Text></Pressable>
-    <View style={styles.header}><View><Text style={styles.code}>{receipt.receiptCode}</Text><Text style={styles.area}>Khu đang thao tác: {area.name}</Text></View>
+    <View style={styles.header}><View><Text style={styles.code}>{receipt.receiptCode}</Text><Text style={styles.area}>Khu đang thao tác: {area.name}</Text>
+      <Text style={styles.area}>Nhà phân phối: {receipt.supplier?.supplierName || "Chưa chọn"}</Text></View>
       <Text style={[styles.badge, receipt.status === "completed" && styles.done]}>{receipt.status}</Text></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gallery}>
       {receipt.images.map((image) => <Image

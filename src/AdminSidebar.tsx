@@ -28,6 +28,7 @@ import {
   ReceiptText,
   Tags,
   Tractor,
+  Truck,
   UtensilsCrossed,
   Wallet,
   X,
@@ -153,6 +154,12 @@ const navGroups: NavGroup[] = [
         href: "/product/ingredients",
         label: "Nguyên liệu",
         icon: Boxes,
+        permission: "product.access",
+      },
+      {
+        href: "/product/suppliers",
+        label: "Nhà phân phối",
+        icon: Truck,
         permission: "product.access",
       },
       {

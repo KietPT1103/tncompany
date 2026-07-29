@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/ingredients.php';
 
 const FIELD_RECEIPT_STATUSES = ['pending_explanation', 'draft', 'completed', 'cancelled'];
 
@@ -103,11 +104,14 @@ function field_inventory_nullable_decimal($value): ?float
 
 function field_inventory_load_receipt(string $id, bool $lock = false): ?array
 {
+    ingredients_ensure_schema();
     $statement = db()->prepare(
-        'SELECT r.*, s.name AS area_name,
+        'SELECT r.*, s.name AS area_name,supplier.supplier_code,supplier.supplier_name,
                 COALESCE(u.display_name, u.username, u.email, r.created_by) AS creator_name
          FROM inventory_receipts r
          INNER JOIN stores s ON s.id = r.store_id
+         LEFT JOIN suppliers supplier
+           ON supplier.id COLLATE utf8mb4_unicode_ci=r.supplier_id COLLATE utf8mb4_unicode_ci
          LEFT JOIN users u ON u.id COLLATE utf8mb4_unicode_ci = r.created_by
          WHERE r.id = :id LIMIT 1' . ($lock ? ' FOR UPDATE' : '')
     );
@@ -135,6 +139,12 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
         'areaId' => (string) $row['store_id'],
         'storeId' => (string) $row['store_id'],
         'area' => ['id' => (string) $row['store_id'], 'name' => (string) ($row['area_name'] ?? '')],
+        'supplierId' => $row['supplier_id'] ?: null,
+        'supplier' => $row['supplier_id'] ? [
+            'id' => (string) $row['supplier_id'],
+            'supplierCode' => (string) ($row['supplier_code'] ?? ''),
+            'supplierName' => (string) ($row['supplier_name'] ?? ''),
+        ] : null,
         'status' => (string) $row['status'],
         'receiptDate' => (string) $row['receipt_date'],
         'receivedAt' => $row['received_at'] ?: null,
@@ -164,16 +174,19 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
 
 function field_inventory_load_items(string $receiptId): array
 {
+    ingredients_ensure_schema();
     $statement = db()->prepare(
-        'SELECT i.*, p.unit AS current_unit
+        'SELECT i.*, ingredient.unit AS current_unit
          FROM inventory_receipt_items i
-         INNER JOIN products p ON p.id = i.product_id
+         LEFT JOIN ingredients ingredient
+           ON ingredient.id COLLATE utf8mb4_unicode_ci=i.ingredient_id COLLATE utf8mb4_unicode_ci
          WHERE i.receipt_id = :receipt_id ORDER BY i.id'
     );
     $statement->execute(['receipt_id' => $receiptId]);
     return array_map(static fn(array $row): array => [
         'id' => (int) $row['id'],
-        'productId' => (string) $row['product_id'],
+        'productId' => (string) ($row['ingredient_id'] ?: $row['product_id']),
+        'ingredientId' => (string) ($row['ingredient_id'] ?: $row['product_id']),
         'productCode' => (string) $row['product_code'],
         'productName' => (string) $row['product_name'],
         'unit' => $row['unit'] ?: ($row['current_unit'] ?: ''),

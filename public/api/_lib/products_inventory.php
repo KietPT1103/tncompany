@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/ingredients.php';
 
 function products_inventory_ensure_schema(): void
 {
@@ -13,7 +14,6 @@ function products_inventory_ensure_schema(): void
     }
 
     auth_ensure_column('products', 'stock_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER is_selling');
-    auth_ensure_column('products', 'item_type', "VARCHAR(20) NOT NULL DEFAULT 'product' AFTER stock_quantity");
 
     db()->exec(
         'CREATE TABLE IF NOT EXISTS product_components (
@@ -32,16 +32,6 @@ function products_inventory_ensure_schema(): void
             CONSTRAINT fk_product_components_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
             CONSTRAINT fk_product_components_component FOREIGN KEY (component_product_id) REFERENCES products(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
-    );
-
-    // Existing component rows already represent raw materials. Classify them
-    // automatically so old recipes continue to work on the ingredient screens.
-    db()->exec(
-        'UPDATE products p
-         INNER JOIN product_components pc
-           ON p.id COLLATE utf8mb4_unicode_ci = pc.component_product_id COLLATE utf8mb4_unicode_ci
-         SET p.item_type = "ingredient"
-         WHERE p.item_type <> "ingredient"'
     );
 
     db()->exec(
@@ -175,6 +165,7 @@ function products_inventory_ensure_schema(): void
     );
 
     auth_ensure_column('inventory_check_items', 'is_counted', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER system_quantity');
+    ingredients_ensure_schema();
 
     $ensured = true;
 }
@@ -217,7 +208,7 @@ function products_inventory_replace_components(string $storeId, string $productI
 {
     products_inventory_ensure_schema();
 
-    $delete = db()->prepare('DELETE FROM product_components WHERE store_id = :store_id AND product_id = :product_id');
+    $delete = db()->prepare('DELETE FROM product_ingredients WHERE store_id = :store_id AND product_id = :product_id');
     $delete->execute([
         'store_id' => $storeId,
         'product_id' => $productId,
@@ -228,15 +219,15 @@ function products_inventory_replace_components(string $storeId, string $productI
     }
 
     $findComponent = db()->prepare(
-        'SELECT id, product_code
-         FROM products
+        'SELECT id, ingredient_code
+         FROM ingredients
          WHERE store_id = :store_id
-           AND product_code = :product_code
+           AND ingredient_code = :ingredient_code
          LIMIT 1'
     );
     $insert = db()->prepare(
-        'INSERT INTO product_components (store_id, product_id, component_product_id, quantity)
-         VALUES (:store_id, :product_id, :component_product_id, :quantity)'
+        'INSERT INTO product_ingredients (store_id, product_id, ingredient_id, quantity)
+         VALUES (:store_id, :product_id, :ingredient_id, :quantity)'
     );
 
     $seen = [];
@@ -255,7 +246,7 @@ function products_inventory_replace_components(string $storeId, string $productI
 
         $findComponent->execute([
             'store_id' => $storeId,
-            'product_code' => $componentCode,
+            'ingredient_code' => $componentCode,
         ]);
         $componentRow = $findComponent->fetch();
         $findComponent->closeCursor();
@@ -263,17 +254,17 @@ function products_inventory_replace_components(string $storeId, string $productI
             continue;
         }
 
-        $componentProductId = (string) $componentRow['id'];
-        if (isset($seen[$componentProductId])) {
+        $ingredientId = (string) $componentRow['id'];
+        if (isset($seen[$ingredientId])) {
             continue;
         }
 
-        $seen[$componentProductId] = true;
+        $seen[$ingredientId] = true;
 
         $insert->execute([
             'store_id' => $storeId,
             'product_id' => $productId,
-            'component_product_id' => $componentProductId,
+            'ingredient_id' => $ingredientId,
             'quantity' => $quantity,
         ]);
     }
@@ -293,20 +284,20 @@ function products_inventory_load_components(string $storeId, array $productIds):
     $statement = db()->prepare(
         sprintf(
             'SELECT
-                pc.product_id,
-                component.product_code AS component_product_code,
-                component.product_name AS component_product_name,
-                component.cost AS component_cost,
-                component.stock_quantity AS component_stock_quantity,
-                pc.quantity
-             FROM product_components pc
+                pi.product_id,
+                ingredient.ingredient_code AS component_product_code,
+                ingredient.ingredient_name AS component_product_name,
+                ingredient.cost AS component_cost,
+                ingredient.stock_quantity AS component_stock_quantity,
+                pi.quantity
+             FROM product_ingredients pi
              INNER JOIN products parent
-               ON parent.id COLLATE utf8mb4_unicode_ci = pc.product_id COLLATE utf8mb4_unicode_ci
-             INNER JOIN products component
-               ON component.id COLLATE utf8mb4_unicode_ci = pc.component_product_id COLLATE utf8mb4_unicode_ci
-             WHERE pc.store_id = ?
-               AND pc.product_id IN (%s)
-             ORDER BY component.product_name ASC',
+               ON parent.id COLLATE utf8mb4_unicode_ci = pi.product_id COLLATE utf8mb4_unicode_ci
+             INNER JOIN ingredients ingredient
+               ON ingredient.id COLLATE utf8mb4_unicode_ci = pi.ingredient_id COLLATE utf8mb4_unicode_ci
+             WHERE pi.store_id = ?
+               AND pi.product_id IN (%s)
+             ORDER BY ingredient.ingredient_name ASC',
             $placeholders
         )
     );
@@ -390,7 +381,7 @@ function products_inventory_apply_receipt(string $receiptId): void
     }
 
     $itemsStatement = db()->prepare(
-        'SELECT product_id, quantity, unit_cost
+        'SELECT ingredient_id, quantity, unit_cost
          FROM inventory_receipt_items
          WHERE receipt_id = :receipt_id'
     );
@@ -399,22 +390,21 @@ function products_inventory_apply_receipt(string $receiptId): void
 
     $productStatement = db()->prepare(
         'SELECT id, cost, stock_quantity
-         FROM products
+         FROM ingredients
          WHERE id = :id
          LIMIT 1
          FOR UPDATE'
     );
     $updateStatement = db()->prepare(
-        'UPDATE products
+        'UPDATE ingredients
          SET stock_quantity = :stock_quantity,
              cost = :cost,
-             has_cost = :has_cost,
              updated_at = NOW()
          WHERE id = :id'
     );
 
     foreach ($items as $item) {
-        $productStatement->execute(['id' => (string) $item['product_id']]);
+        $productStatement->execute(['id' => (string) $item['ingredient_id']]);
         $product = $productStatement->fetch();
         if (!$product) {
             continue;
@@ -438,7 +428,6 @@ function products_inventory_apply_receipt(string $receiptId): void
             'id' => (string) $product['id'],
             'stock_quantity' => round($nextStock, 3),
             'cost' => round($nextCost, 2),
-            'has_cost' => $nextCost > 0 ? 1 : 0,
         ]);
     }
 }
@@ -465,7 +454,7 @@ function products_inventory_apply_check(string $checkId): void
     }
 
     $itemsStatement = db()->prepare(
-        'SELECT product_id, actual_quantity
+        'SELECT ingredient_id, actual_quantity
          FROM inventory_check_items
          WHERE check_id = :check_id'
     );
@@ -474,13 +463,13 @@ function products_inventory_apply_check(string $checkId): void
 
     $lockProduct = db()->prepare(
         'SELECT id
-         FROM products
+         FROM ingredients
          WHERE id = :id
          LIMIT 1
          FOR UPDATE'
     );
     $updateProduct = db()->prepare(
-        'UPDATE products
+        'UPDATE ingredients
          SET stock_quantity = :stock_quantity,
              updated_at = NOW()
          WHERE id = :id'
@@ -488,7 +477,7 @@ function products_inventory_apply_check(string $checkId): void
 
     foreach ($items as $item) {
         $lockProduct->execute([
-            'id' => (string) $item['product_id'],
+            'id' => (string) $item['ingredient_id'],
         ]);
         $product = $lockProduct->fetch();
         if (!$product) {
@@ -496,7 +485,7 @@ function products_inventory_apply_check(string $checkId): void
         }
 
         $updateProduct->execute([
-            'id' => (string) $item['product_id'],
+            'id' => (string) $item['ingredient_id'],
             'stock_quantity' => round((float) $item['actual_quantity'], 3),
         ]);
     }
@@ -598,11 +587,14 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
     }
 
     $componentStatement = db()->prepare(
-        'SELECT pc.product_id, component.id AS component_id, component.product_code, component.product_name, component.cost, component.stock_quantity, pc.quantity
-         FROM product_components pc
-         INNER JOIN products component
-           ON component.id COLLATE utf8mb4_unicode_ci = pc.component_product_id COLLATE utf8mb4_unicode_ci
-         WHERE pc.store_id = :store_id'
+        'SELECT pi.product_id, ingredient.id AS component_id,
+                ingredient.ingredient_code AS product_code,
+                ingredient.ingredient_name AS product_name,
+                ingredient.cost,ingredient.stock_quantity,pi.quantity
+         FROM product_ingredients pi
+         INNER JOIN ingredients ingredient
+           ON ingredient.id COLLATE utf8mb4_unicode_ci = pi.ingredient_id COLLATE utf8mb4_unicode_ci
+         WHERE pi.store_id = :store_id'
     );
     $componentStatement->execute([
         'store_id' => $storeId,
@@ -641,6 +633,26 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
         }
 
         $components = $componentsByProductId[$product['id']] ?? [];
+        if ($components === []) {
+            $errors[] = sprintf('Hàng hoá %s chưa có định mức nguyên liệu.', $product['productCode']);
+            return;
+        }
+        foreach ($components as $component) {
+            $ingredientId = $component['id'];
+            if (!isset($aggregated[$ingredientId])) {
+                $aggregated[$ingredientId] = [
+                    'productId' => $ingredientId,
+                    'productCode' => $component['productCode'],
+                    'productName' => $component['productName'],
+                    'quantity' => 0.0,
+                    'stockBefore' => (float) $component['stockQuantity'],
+                    'costUnit' => (float) $component['cost'],
+                ];
+            }
+            $aggregated[$ingredientId]['quantity'] += $quantity * (float) $component['quantity'];
+        }
+        return;
+
         if ($components !== []) {
             $nextPath = array_merge($path, [$product['id']]);
 
@@ -833,20 +845,20 @@ function products_inventory_apply_sales_consumption(
     );
     $insertConsumptionItem = db()->prepare(
         'INSERT INTO inventory_consumption_items (
-            consumption_id, product_id, product_code, product_name, consumed_quantity, stock_before, stock_after, cost_unit, line_cost
+            consumption_id, product_id, ingredient_id, product_code, product_name, consumed_quantity, stock_before, stock_after, cost_unit, line_cost
          ) VALUES (
-            :consumption_id, :product_id, :product_code, :product_name, :consumed_quantity, :stock_before, :stock_after, :cost_unit, :line_cost
+            :consumption_id, NULL, :ingredient_id, :product_code, :product_name, :consumed_quantity, :stock_before, :stock_after, :cost_unit, :line_cost
          )'
     );
     $lockProduct = db()->prepare(
         'SELECT id, stock_quantity
-         FROM products
+         FROM ingredients
          WHERE id = :id
          LIMIT 1
          FOR UPDATE'
     );
     $updateProduct = db()->prepare(
-        'UPDATE products
+        'UPDATE ingredients
          SET stock_quantity = :stock_quantity,
              updated_at = NOW()
          WHERE id = :id'
@@ -889,7 +901,7 @@ function products_inventory_apply_sales_consumption(
 
             $insertConsumptionItem->execute([
                 'consumption_id' => $consumptionId,
-                'product_id' => (string) $item['productId'],
+                'ingredient_id' => (string) $item['productId'],
                 'product_code' => (string) $item['productCode'],
                 'product_name' => (string) $item['productName'],
                 'consumed_quantity' => (float) $item['quantity'],

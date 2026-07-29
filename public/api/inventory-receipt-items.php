@@ -28,13 +28,13 @@ function receipt_item_find(array $user, int $id): array
 
 function receipt_item_product(string $storeId, array $body): array
 {
-    $productId = trim((string) ($body['productId'] ?? ''));
-    $productCode = trim((string) ($body['productCode'] ?? ''));
+    $productId = trim((string) ($body['ingredientId'] ?? $body['productId'] ?? ''));
+    $productCode = trim((string) ($body['ingredientCode'] ?? $body['productCode'] ?? ''));
     $statement = db()->prepare(
-        'SELECT id,product_code,product_name,unit FROM products
+        'SELECT id,ingredient_code AS product_code,ingredient_name AS product_name,unit FROM ingredients
          WHERE store_id=:store_id
-           AND item_type="ingredient"
-           AND (id=:product_id OR product_code=:product_code)
+           AND is_active=1
+           AND (id=:product_id OR ingredient_code=:product_code)
          LIMIT 1'
     );
     $statement->execute(['store_id' => $storeId, 'product_id' => $productId, 'product_code' => $productCode]);
@@ -78,11 +78,11 @@ if ($method === 'POST') {
     [$quantity, $unitPrice, $lineTotal] = receipt_item_values($body);
     $statement = db()->prepare(
         'INSERT INTO inventory_receipt_items
-         (receipt_id,product_id,product_code,product_name,unit,quantity,unit_cost,line_total,note)
-         VALUES (:receipt,:product,:code,:name,:unit,:quantity,:price,:total,:note)'
+         (receipt_id,product_id,ingredient_id,product_code,product_name,unit,quantity,unit_cost,line_total,note)
+         VALUES (:receipt,NULL,:ingredient,:code,:name,:unit,:quantity,:price,:total,:note)'
     );
     $statement->execute([
-        'receipt' => $receiptId, 'product' => $product['id'], 'code' => $product['product_code'],
+        'receipt' => $receiptId, 'ingredient' => $product['id'], 'code' => $product['product_code'],
         'name' => $product['product_name'], 'unit' => $product['unit'], 'quantity' => $quantity,
         'price' => $unitPrice, 'total' => $lineTotal, 'note' => trim((string) ($body['note'] ?? '')) ?: null,
     ]);
@@ -98,17 +98,17 @@ if (!in_array($existing['status'], ['pending_explanation', 'draft'], true)) {
 
 if (in_array($method, ['PUT', 'PATCH'], true)) {
     $product = receipt_item_product((string) $existing['store_id'], $body + [
-        'productId' => $existing['product_id'], 'productCode' => $existing['product_code'],
+        'ingredientId' => $existing['ingredient_id'] ?? $existing['product_id'], 'productCode' => $existing['product_code'],
     ]);
     [$quantity, $unitPrice, $lineTotal] = receipt_item_values($body + [
         'quantity' => $existing['quantity'], 'unitPrice' => $existing['unit_cost'],
     ]);
     $statement = db()->prepare(
-        'UPDATE inventory_receipt_items SET product_id=:product,product_code=:code,product_name=:name,
+        'UPDATE inventory_receipt_items SET product_id=NULL,ingredient_id=:ingredient,product_code=:code,product_name=:name,
          unit=:unit,quantity=:quantity,unit_cost=:price,line_total=:total,note=:note,updated_at=NOW() WHERE id=:id'
     );
     $statement->execute([
-        'id' => $id, 'product' => $product['id'], 'code' => $product['product_code'], 'name' => $product['product_name'],
+        'id' => $id, 'ingredient' => $product['id'], 'code' => $product['product_code'], 'name' => $product['product_name'],
         'unit' => $product['unit'], 'quantity' => $quantity, 'price' => $unitPrice, 'total' => $lineTotal,
         'note' => trim((string) ($body['note'] ?? $existing['note'])) ?: null,
     ]);

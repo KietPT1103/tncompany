@@ -22,6 +22,7 @@ import RoleGuard from "@/components/RoleGuard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useRouter } from "next/navigation";
+import { getIngredients } from "@/services/ingredients";
 
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Pagination } from "@/components/ui/Pagination";
@@ -977,8 +978,19 @@ export default function ProductsPage() {
   }
 
   async function loadIngredients() {
-    const items = await getAllProducts(storeId, "ingredient");
-    setIngredients(items);
+    const { items } = await getIngredients(storeId);
+    setIngredients(items.map((item) => ({
+      product_code: item.ingredientCode,
+      product_name: item.ingredientName,
+      cost: item.cost,
+      price: null,
+      has_cost: item.cost !== null,
+      isSelling: item.isActive,
+      stockQuantity: item.stockQuantity,
+      unit: item.unit,
+      description: item.description,
+      storeId: item.storeId,
+    })));
   }
 
   async function loadCategories() {
