@@ -95,7 +95,12 @@ export default function CameraScreen() {
           upload: { fileUri: watermarkedUri, clientFileId, capturedAt: capturedAt.toISOString(), location, finalizeQuick: mode === "quick" }
         };
         await enqueueQuickReceipt(job);
-        Alert.alert("Đã lưu trên thiết bị", "Mạng yếu. Phiếu sẽ tự đồng bộ khi có kết nối.", [{ text: "OK", onPress: () => router.replace("/home") }]);
+        const reason = error instanceof Error ? error.message : "Không thể kết nối máy chủ.";
+        Alert.alert(
+          "Đã lưu trên thiết bị",
+          `Chưa thể đồng bộ: ${reason}\n\nPhiếu sẽ được thử lại khi có kết nối.`,
+          [{ text: "OK", onPress: () => router.replace("/home") }]
+        );
       } else {
         Alert.alert("Không thể lưu ảnh", error instanceof Error ? error.message : "Vui lòng thử lại.");
       }

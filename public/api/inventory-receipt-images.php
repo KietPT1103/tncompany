@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
+require_once __DIR__ . '/_lib/r2_storage.php';
 
 const RECEIPT_IMAGE_MAX_BYTES = 12582912;
 
@@ -12,6 +13,52 @@ function receipt_image_storage_root(): string
     global $config;
     $configured = trim((string) ($config['private_storage_path'] ?? ''));
     return $configured !== '' ? rtrim($configured, DIRECTORY_SEPARATOR) : dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'private';
+}
+
+function receipt_image_storage_driver(): string
+{
+    $configured = strtolower(receipt_image_storage_config('receipt_image_storage_driver', 'RECEIPT_IMAGE_STORAGE_DRIVER', 'local'));
+    return $configured === 'r2' ? 'r2' : 'local';
+}
+
+function receipt_image_storage_config(string $configKey, string $environmentKey, string $default = ''): string
+{
+    global $config;
+    $environmentValue = getenv($environmentKey);
+    if ($environmentValue !== false && trim((string) $environmentValue) !== '') {
+        return trim((string) $environmentValue);
+    }
+    $configured = trim((string) ($config[$configKey] ?? ''));
+    return $configured !== '' ? $configured : $default;
+}
+
+function receipt_image_r2(): R2Storage
+{
+    static $storage = null;
+    if ($storage instanceof R2Storage) return $storage;
+
+    $accountId = receipt_image_storage_config('r2_account_id', 'R2_ACCOUNT_ID');
+    $endpoint = receipt_image_storage_config('r2_endpoint', 'R2_ENDPOINT');
+    if ($endpoint === '' && $accountId !== '') {
+        $endpoint = 'https://' . $accountId . '.r2.cloudflarestorage.com';
+    }
+    $storage = new R2Storage(
+        $endpoint,
+        receipt_image_storage_config('r2_bucket', 'R2_BUCKET'),
+        receipt_image_storage_config('r2_access_key_id', 'R2_ACCESS_KEY_ID'),
+        receipt_image_storage_config('r2_secret_access_key', 'R2_SECRET_ACCESS_KEY')
+    );
+    return $storage;
+}
+
+function receipt_image_is_r2_path(string $path): bool
+{
+    return strpos($path, 'r2://') === 0;
+}
+
+function receipt_image_r2_key(string $path): string
+{
+    return receipt_image_is_r2_path($path) ? substr($path, 5) : $path;
 }
 
 function receipt_image_find(array $user, string $id): array
@@ -63,6 +110,15 @@ function receipt_image_create_thumbnail(string $source, string $target, string $
 function receipt_image_emit(array $image, string $size): void
 {
     $relative = $size === 'thumbnail' && $image['thumbnail_path'] ? $image['thumbnail_path'] : $image['file_path'];
+    if (receipt_image_is_r2_path($relative)) {
+        $contents = receipt_image_r2()->get(receipt_image_r2_key($relative));
+        while (ob_get_level() > 0) @ob_end_clean();
+        header('Content-Type: ' . $image['mime_type']);
+        header('Content-Length: ' . strlen($contents));
+        header('Cache-Control: private, max-age=3600');
+        echo $contents;
+        exit;
+    }
     $root = realpath(receipt_image_storage_root());
     $path = realpath(receipt_image_storage_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative));
     if (!$root || !$path || strpos($path, $root . DIRECTORY_SEPARATOR) !== 0 || !is_file($path)) {
@@ -115,17 +171,55 @@ if ($method === 'POST') {
     $imageId = uuidv4();
     $relativeDir = 'inventory-receipts/' . rawurlencode((string) $receipt['store_id']) . '/' .
         (new DateTimeImmutable($capturedAt))->format('Y-m') . '/' . rawurlencode($receiptId);
-    $directory = receipt_image_storage_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir);
-    if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) throw new RuntimeException('Không thể tạo thư mục ảnh.');
     $filename = bin2hex(random_bytes(24)) . '.' . $extensions[$mime];
-    $absolute = $directory . DIRECTORY_SEPARATOR . $filename;
-    if (!move_uploaded_file($photo['tmp_name'], $absolute)) throw new RuntimeException('Không thể lưu ảnh.');
-    $relativePath = $relativeDir . '/' . $filename;
+    $objectPath = $relativeDir . '/' . $filename;
+    $relativePath = receipt_image_storage_driver() === 'r2' ? 'r2://' . $objectPath : $objectPath;
     $thumbnailName = pathinfo($filename, PATHINFO_FILENAME) . '.thumb.' . $extensions[$mime];
-    $thumbnailAbsolute = $directory . DIRECTORY_SEPARATOR . $thumbnailName;
-    $thumbnailPath = receipt_image_create_thumbnail($absolute, $thumbnailAbsolute, $mime)
-        ? $relativeDir . '/' . $thumbnailName
-        : null;
+    $thumbnailObjectPath = $relativeDir . '/' . $thumbnailName;
+    $thumbnailPath = receipt_image_storage_driver() === 'r2' ? 'r2://' . $thumbnailObjectPath : $thumbnailObjectPath;
+    $thumbnailAbsolute = tempnam(sys_get_temp_dir(), 'receipt-thumb-');
+    if ($thumbnailAbsolute === false || !receipt_image_create_thumbnail($photo['tmp_name'], $thumbnailAbsolute, $mime)) {
+        if (is_string($thumbnailAbsolute) && is_file($thumbnailAbsolute)) @unlink($thumbnailAbsolute);
+        $thumbnailAbsolute = null;
+        $thumbnailPath = null;
+    }
+    $absolute = null;
+    $storedOriginal = false;
+    $storedThumbnail = false;
+
+    if (receipt_image_storage_driver() === 'r2') {
+        try {
+            receipt_image_r2()->putFile($objectPath, $photo['tmp_name'], $mime);
+            $storedOriginal = true;
+            if ($thumbnailPath && $thumbnailAbsolute) {
+                receipt_image_r2()->putFile($thumbnailObjectPath, $thumbnailAbsolute, $mime);
+                $storedThumbnail = true;
+            }
+        } catch (Throwable $exception) {
+            if ($storedOriginal) {
+                try { receipt_image_r2()->delete($objectPath); } catch (Throwable $ignored) {}
+            }
+            if ($thumbnailAbsolute && is_file($thumbnailAbsolute)) @unlink($thumbnailAbsolute);
+            throw $exception;
+        }
+    } else {
+        $directory = receipt_image_storage_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir);
+        if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) {
+            throw new RuntimeException('Không thể tạo thư mục ảnh.');
+        }
+        $absolute = $directory . DIRECTORY_SEPARATOR . $filename;
+        if (!move_uploaded_file($photo['tmp_name'], $absolute)) throw new RuntimeException('Không thể lưu ảnh.');
+        $storedOriginal = true;
+        if ($thumbnailPath && $thumbnailAbsolute) {
+            $targetThumbnail = $directory . DIRECTORY_SEPARATOR . $thumbnailName;
+            if (@rename($thumbnailAbsolute, $targetThumbnail) || @copy($thumbnailAbsolute, $targetThumbnail)) {
+                $storedThumbnail = true;
+            } else {
+                $thumbnailPath = null;
+            }
+        }
+    }
+    if ($thumbnailAbsolute && is_file($thumbnailAbsolute)) @unlink($thumbnailAbsolute);
 
     try {
         db()->beginTransaction();
@@ -155,8 +249,19 @@ if ($method === 'POST') {
         db()->commit();
     } catch (Throwable $exception) {
         if (db()->inTransaction()) db()->rollBack();
-        @unlink($absolute);
-        if ($thumbnailPath) @unlink($thumbnailAbsolute);
+        if (receipt_image_storage_driver() === 'r2') {
+            if ($storedOriginal) {
+                try { receipt_image_r2()->delete($objectPath); } catch (Throwable $ignored) {}
+            }
+            if ($storedThumbnail && $thumbnailPath) {
+                try { receipt_image_r2()->delete($thumbnailObjectPath); } catch (Throwable $ignored) {}
+            }
+        } else {
+            if ($absolute) @unlink($absolute);
+            if ($storedThumbnail && $thumbnailPath) {
+                @unlink($directory . DIRECTORY_SEPARATOR . $thumbnailName);
+            }
+        }
         throw $exception;
     }
     respond_ok(['item' => field_inventory_load_images($receiptId)], 201);
@@ -167,14 +272,19 @@ if ($method === 'DELETE') {
     $body = read_json_body();
     $image = receipt_image_find($user, trim((string) ($_GET['id'] ?? $body['id'] ?? '')));
     if ($image['status'] === 'completed') respond_error('Không thể xóa ảnh của phiếu đã hoàn thành.', 409);
+    if (receipt_image_is_r2_path($image['file_path'])) {
+        receipt_image_r2()->delete(receipt_image_r2_key($image['file_path']));
+        if ($image['thumbnail_path']) receipt_image_r2()->delete(receipt_image_r2_key($image['thumbnail_path']));
+    } else {
+        $path = receipt_image_storage_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $image['file_path']);
+        if (is_file($path)) @unlink($path);
+        if ($image['thumbnail_path']) {
+            $thumbnail = receipt_image_storage_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $image['thumbnail_path']);
+            if (is_file($thumbnail)) @unlink($thumbnail);
+        }
+    }
     $delete = db()->prepare('DELETE FROM inventory_receipt_images WHERE id=:id');
     $delete->execute(['id' => $image['id']]);
-    $path = receipt_image_storage_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $image['file_path']);
-    if (is_file($path)) @unlink($path);
-    if ($image['thumbnail_path']) {
-        $thumbnail = receipt_image_storage_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $image['thumbnail_path']);
-        if (is_file($thumbnail)) @unlink($thumbnail);
-    }
     respond_ok(['deleted' => true]);
 }
 

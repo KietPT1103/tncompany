@@ -9,6 +9,13 @@ return [
     'timezone' => 'Asia/Ho_Chi_Minh',
     // Keep receipt evidence outside the public web root.
     'private_storage_path' => dirname(__DIR__, 2) . '/storage/private',
+    // Set RECEIPT_IMAGE_STORAGE_DRIVER=r2 in the server .env to use Cloudflare R2.
+    'receipt_image_storage_driver' => getenv('RECEIPT_IMAGE_STORAGE_DRIVER') ?: 'local',
+    'r2_account_id' => getenv('R2_ACCOUNT_ID') ?: '',
+    'r2_endpoint' => getenv('R2_ENDPOINT') ?: '',
+    'r2_bucket' => getenv('R2_BUCKET') ?: '',
+    'r2_access_key_id' => getenv('R2_ACCESS_KEY_ID') ?: '',
+    'r2_secret_access_key' => getenv('R2_SECRET_ACCESS_KEY') ?: '',
     'gesture_edit_provider' => 'local_flux',
     'gesture_edit_model' => 'gpt-image-1',
     'gesture_edit_size' => '1024x1024',

@@ -47,6 +47,10 @@
 
 - Thumbnail generation uses PHP GD when available; without GD, the authorized image endpoint falls back to the full image.
 - `storage/private/inventory-receipts` must be writable by PHP and must not be served directly by the web server.
+- To use a private Cloudflare R2 bucket instead of local disk, put these values in
+  the project-level `.env` outside `public_html`: `RECEIPT_IMAGE_STORAGE_DRIVER=r2`,
+  `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`.
+  `R2_ENDPOINT` is optional unless the bucket uses a jurisdiction-specific endpoint.
 - Offline background execution remains best-effort; reliable retry happens on app launch, foreground, and the manual “Thử lại đồng bộ” action.
 - EAS project IDs and signing credentials are intentionally not committed; configure them for the organization before release builds.
 - The web receipt detail page supports adding, editing and deleting draft line items, completing a receipt, and cancelling a draft with a required reason.
