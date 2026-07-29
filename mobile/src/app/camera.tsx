@@ -4,6 +4,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Crypto from "expo-crypto";
 import { File } from "expo-file-system";
 import * as Location from "expo-location";
+import { Asset, requestPermissionsAsync as requestMediaLibraryPermissionsAsync } from "expo-media-library";
 import { captureRef } from "react-native-view-shot";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -13,6 +14,13 @@ import { createReceipt, uploadReceiptImage } from "@/services/api";
 import { WatermarkPreview } from "@/features/inventory-receipts/WatermarkPreview";
 import type { LocationMetadata } from "@/types";
 import { enqueueQuickReceipt, type QuickReceiptJob } from "@/database/offline";
+
+type CapturedPhoto = {
+  fileUri: string;
+  clientFileId: string;
+  capturedAt: string;
+  location: LocationMetadata;
+};
 
 export default function CameraScreen() {
   const { mode = "quick" } = useLocalSearchParams<{ mode?: "quick" | "full" }>();
@@ -24,6 +32,10 @@ export default function CameraScreen() {
   const [location, setLocation] = useState<LocationMetadata | null>(null);
   const [rawUri, setRawUri] = useState<string | null>(null);
   const [capturedAt, setCapturedAt] = useState<Date | null>(null);
+  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const clientRequestId = useRef(Crypto.randomUUID());
+  const galleryPermissionChecked = useRef(false);
+  const galleryPermissionGranted = useRef(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -61,72 +73,120 @@ export default function CameraScreen() {
     if (rawUri) { try { new File(rawUri).delete(); } catch {} }
     setRawUri(null); setCapturedAt(null);
   }
-  async function usePhoto() {
+  async function saveToGallery(fileUri: string) {
+    if (!galleryPermissionChecked.current) {
+      const permission = await requestMediaLibraryPermissionsAsync(true, ["photo"]);
+      galleryPermissionChecked.current = true;
+      galleryPermissionGranted.current = permission.granted;
+    }
+    if (!galleryPermissionGranted.current) return false;
+    await Asset.create(fileUri);
+    return true;
+  }
+  async function acceptPhoto() {
     if (!rawUri || !capturedAt || !location || !composite.current || !area) return;
-    let watermarkedUri = "";
-    const clientRequestId = Crypto.randomUUID();
-    const clientFileId = Crypto.randomUUID();
     try {
       setBusy(true);
-      watermarkedUri = await captureRef(composite, { format: "jpg", quality: 0.92, result: "tmpfile", width: 1080, height: 1440 });
-      new File(rawUri).delete();
+      const watermarkedUri = await captureRef(composite, { format: "jpg", quality: 0.92, result: "tmpfile", width: 1080, height: 1440 });
+      try {
+        const saved = await saveToGallery(watermarkedUri);
+        if (!saved) Alert.alert("Chưa lưu vào thư viện", "Bạn chưa cấp quyền lưu ảnh. Ảnh vẫn được giữ để gửi lên phiếu.");
+      } catch {
+        Alert.alert("Chưa lưu vào thư viện", "Ảnh vẫn được giữ để gửi lên phiếu, nhưng chưa thể sao chép vào kho ảnh của điện thoại.");
+      }
+      try { new File(rawUri).delete(); } catch {}
+      setPhotos((current) => [...current, {
+        fileUri: watermarkedUri,
+        clientFileId: Crypto.randomUUID(),
+        capturedAt: capturedAt.toISOString(),
+        location
+      }]);
       setRawUri(null);
-      const createPayload = {
-        clientRequestId, areaId: area.id, status: mode === "quick" ? "pending_explanation" as const : "draft" as const,
-        capturedAt: capturedAt.toISOString(), location
-      };
+      setCapturedAt(null);
+    } catch (error) {
+      Alert.alert("Không thể lưu ảnh", error instanceof Error ? error.message : "Vui lòng thử lại.");
+    } finally { setBusy(false); }
+  }
+  async function finishPhotos() {
+    if (photos.length === 0 || !area) return Alert.alert("Chưa có ảnh", "Hãy chụp ít nhất một ảnh trước khi hoàn tất.");
+    const first = photos[0];
+    const createPayload = {
+      clientRequestId: clientRequestId.current,
+      areaId: area.id,
+      status: mode === "quick" ? "pending_explanation" as const : "draft" as const,
+      capturedAt: first.capturedAt,
+      location: first.location
+    };
+    try {
+      setBusy(true);
       const receipt = await createReceipt(createPayload);
-      await uploadReceiptImage(receipt.item.id, watermarkedUri, {
-        clientFileId, capturedAt: capturedAt.toISOString(), location, finalizeQuick: mode === "quick"
-      });
-      try { new File(watermarkedUri).delete(); } catch {}
+      for (const [index, photo] of photos.entries()) {
+        await uploadReceiptImage(receipt.item.id, photo.fileUri, {
+          clientFileId: photo.clientFileId,
+          capturedAt: photo.capturedAt,
+          location: photo.location,
+          finalizeQuick: mode === "quick" && index === photos.length - 1
+        });
+      }
+      for (const photo of photos) {
+        try { new File(photo.fileUri).delete(); } catch {}
+      }
       if (mode === "quick") {
-        Alert.alert("Đã lưu", "Đã lưu vào danh sách Chưa giải trình.", [{ text: "OK", onPress: () => router.replace("/home") }]);
+        Alert.alert("Đã lưu", `Đã tải ${photos.length} ảnh và lưu vào danh sách Chưa giải trình.`, [{ text: "OK", onPress: () => router.replace("/home") }]);
       } else {
         router.replace({ pathname: "/receipt/[id]", params: { id: receipt.item.id } });
       }
     } catch (error) {
-      if (watermarkedUri) {
-        const job: QuickReceiptJob = {
-          createPayload: {
-            clientRequestId, areaId: area.id, status: mode === "quick" ? "pending_explanation" : "draft",
-            capturedAt: capturedAt.toISOString(), location
-          },
-          upload: { fileUri: watermarkedUri, clientFileId, capturedAt: capturedAt.toISOString(), location, finalizeQuick: mode === "quick" }
-        };
-        await enqueueQuickReceipt(job);
-        const reason = error instanceof Error ? error.message : "Không thể kết nối máy chủ.";
-        Alert.alert(
-          "Đã lưu trên thiết bị",
-          `Chưa thể đồng bộ: ${reason}\n\nPhiếu sẽ được thử lại khi có kết nối.`,
-          [{ text: "OK", onPress: () => router.replace("/home") }]
-        );
-      } else {
-        Alert.alert("Không thể lưu ảnh", error instanceof Error ? error.message : "Vui lòng thử lại.");
-      }
+      const job: QuickReceiptJob = {
+        createPayload,
+        uploads: photos.map((photo, index) => ({
+          ...photo,
+          finalizeQuick: mode === "quick" && index === photos.length - 1
+        }))
+      };
+      await enqueueQuickReceipt(job);
+      const reason = error instanceof Error ? error.message : "Không thể kết nối máy chủ.";
+      Alert.alert(
+        "Đã lưu trên thiết bị",
+        `Đã giữ ${photos.length} ảnh. Chưa thể đồng bộ: ${reason}\n\nPhiếu sẽ được thử lại khi có kết nối.`,
+        [{ text: "OK", onPress: () => router.replace("/home") }]
+      );
     } finally { setBusy(false); }
   }
 
   if (rawUri && capturedAt && location) return <View style={styles.preview}>
     <WatermarkPreview ref={composite} uri={rawUri} capturedAt={capturedAt} area={area} user={user} location={location} />
     <View style={styles.previewActions}><PrimaryButton tone="secondary" title="Chụp lại" onPress={discard} disabled={busy} />
-      <PrimaryButton title="Dùng ảnh này" onPress={usePhoto} loading={busy} /></View>
+      <PrimaryButton title={`Thêm ảnh này (${photos.length + 1})`} onPress={acceptPhoto} loading={busy} /></View>
   </View>;
 
   return <View style={styles.cameraWrap}><CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" />
     <View style={styles.top}><Pressable onPress={() => router.back()}><Text style={styles.white}>‹ Quay lại</Text></Pressable>
-      <Text style={styles.gps}>{location ? `GPS: ${location.address}` : "Đang lấy GPS…"}</Text></View>
+      <Text style={styles.gps}>{location ? `GPS: ${location.address}` : "Đang lấy GPS…"}</Text>
+      {photos.length > 0 && <Text style={styles.photoCount}>Đã chụp {photos.length} ảnh</Text>}</View>
     <View style={styles.bottom}><Text style={styles.area}>Khu vực: {area.name}</Text>
-      <Pressable style={styles.shutter} onPress={takePhoto}><View style={styles.shutterInner} /></Pressable>
-      <Text style={styles.hint}>Chỉ chụp trực tiếp • Không dùng thư viện ảnh</Text></View>
+      <View style={styles.captureRow}>
+        <View style={styles.sideAction} />
+        <Pressable style={styles.shutter} onPress={takePhoto} disabled={busy}><View style={styles.shutterInner} /></Pressable>
+        <Pressable style={[styles.finish, photos.length === 0 && styles.finishDisabled]} onPress={finishPhotos} disabled={photos.length === 0 || busy}>
+          <Text style={styles.finishText}>Hoàn tất</Text><Text style={styles.finishCount}>{photos.length} ảnh</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.hint}>Ảnh dùng sẽ tự lưu vào thư viện • Có thể chụp nhiều ảnh</Text></View>
   </View>;
 }
 const styles = StyleSheet.create({
   center: { flex: 1, padding: 24, justifyContent: "center", gap: 20 }, permission: { fontSize: 18, textAlign: "center" },
   cameraWrap: { flex: 1, backgroundColor: "#000" }, top: { position: "absolute", top: 58, left: 20, right: 20, gap: 10 },
   white: { color: "#fff", fontSize: 17, fontWeight: "700" }, gps: { color: "#fff", backgroundColor: "rgba(0,0,0,.5)", borderRadius: 12, padding: 10 },
+  photoCount: { alignSelf: "flex-start", color: "#064e3b", backgroundColor: "#d1fae5", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, fontWeight: "800" },
   bottom: { position: "absolute", left: 20, right: 20, bottom: 38, alignItems: "center", gap: 12 },
   area: { color: "#fff", fontSize: 17, fontWeight: "800" }, shutter: { width: 78, height: 78, borderRadius: 39, backgroundColor: "#fff", padding: 6 },
-  shutterInner: { flex: 1, borderRadius: 32, borderWidth: 3, borderColor: "#0f172a" }, hint: { color: "#e2e8f0" },
+  captureRow: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sideAction: { width: 86 },
+  finish: { width: 86, minHeight: 52, borderRadius: 14, backgroundColor: "#10b981", alignItems: "center", justifyContent: "center", padding: 7 },
+  finishDisabled: { opacity: 0.45 },
+  finishText: { color: "#fff", fontWeight: "900" }, finishCount: { color: "#d1fae5", fontSize: 11, marginTop: 2 },
+  shutterInner: { flex: 1, borderRadius: 32, borderWidth: 3, borderColor: "#0f172a" }, hint: { color: "#e2e8f0", textAlign: "center" },
   preview: { flex: 1, backgroundColor: "#020617", justifyContent: "center" }, previewActions: { gap: 10, padding: 18, backgroundColor: "#f8fafc" }
 });

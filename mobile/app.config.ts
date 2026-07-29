@@ -25,7 +25,12 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-secure-store",
     ["expo-camera", { cameraPermission: "Cho phép chụp hóa đơn nhập hàng." }],
-    ["expo-location", { locationWhenInUsePermission: "Cho phép lấy vị trí để đóng watermark lên ảnh." }]
+    ["expo-location", { locationWhenInUsePermission: "Cho phép lấy vị trí để đóng watermark lên ảnh." }],
+    ["expo-media-library", {
+      photosPermission: "Cho phép truy cập ảnh để lưu ảnh nhập hàng.",
+      savePhotosPermission: "Cho phép lưu ảnh nhập hàng đã đóng thông tin vào thư viện ảnh.",
+      granularPermissions: ["photo"]
+    }]
   ],
   extra: {
     apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL,

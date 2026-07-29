@@ -18,12 +18,20 @@ async function runSync(): Promise<SyncResult> {
       await markJobRunning(row.id);
       try {
         const job = JSON.parse(row.payload_json) as QuickReceiptJob;
+        const uploads = job.uploads ?? (job.upload ? [job.upload] : []);
+        if (uploads.length === 0) throw new Error("Phiếu đồng bộ không có ảnh.");
         const receipt = await createReceipt(job.createPayload);
-        await uploadReceiptImage(receipt.item.id, job.upload.fileUri, {
-          clientFileId: job.upload.clientFileId, capturedAt: job.upload.capturedAt,
-          location: job.upload.location, finalizeQuick: job.upload.finalizeQuick
-        });
-        try { new File(job.upload.fileUri).delete(); } catch {}
+        for (const [index, upload] of uploads.entries()) {
+          await uploadReceiptImage(receipt.item.id, upload.fileUri, {
+            clientFileId: upload.clientFileId,
+            capturedAt: upload.capturedAt,
+            location: upload.location,
+            finalizeQuick: job.createPayload.status === "pending_explanation" && index === uploads.length - 1
+          });
+        }
+        for (const upload of uploads) {
+          try { new File(upload.fileUri).delete(); } catch {}
+        }
         await removeJob(row.id);
         result.succeeded += 1;
       } catch (error) {

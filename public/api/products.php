@@ -88,18 +88,28 @@ if ($method === 'GET') {
     if ($fieldSearch !== '' || $fieldAreaId !== '') {
         require_once __DIR__ . '/_lib/field_inventory.php';
         field_inventory_require_store($user, $fieldAreaId);
-        $needle = '%' . $fieldSearch . '%';
-        $normalizedNeedle = '%' . products_normalized_name($fieldSearch) . '%';
-        $statement = db()->prepare(
-            'SELECT p.*, c.name AS category_name, s.name AS area_name,
-                    CASE WHEN p.store_id=:area_id THEN 0 ELSE 1 END AS area_rank
-             FROM products p
-             LEFT JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci=p.category_id
-             INNER JOIN stores s ON s.id=p.store_id
-             WHERE p.product_name LIKE :needle OR p.product_code LIKE :needle OR p.normalized_name LIKE :normalized
-             ORDER BY area_rank, p.product_name LIMIT 30'
-        );
-        $statement->execute(['area_id' => $fieldAreaId, 'needle' => $needle, 'normalized' => $normalizedNeedle]);
+        $sql = 'SELECT p.*, c.name AS category_name, s.name AS area_name,
+                       CASE WHEN p.store_id=:rank_area_id THEN 0 ELSE 1 END AS area_rank
+                FROM products p
+                LEFT JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci=p.category_id
+                INNER JOIN stores s
+                  ON s.id COLLATE utf8mb4_unicode_ci = p.store_id COLLATE utf8mb4_unicode_ci';
+        $params = ['rank_area_id' => $fieldAreaId];
+        if ($fieldSearch === '') {
+            $sql .= ' WHERE p.store_id=:filter_area_id';
+            $params['filter_area_id'] = $fieldAreaId;
+        } else {
+            $needle = '%' . $fieldSearch . '%';
+            $sql .= ' WHERE p.product_name LIKE :name_needle
+                         OR p.product_code LIKE :code_needle
+                         OR p.normalized_name LIKE :normalized_needle';
+            $params['name_needle'] = $needle;
+            $params['code_needle'] = $needle;
+            $params['normalized_needle'] = '%' . products_normalized_name($fieldSearch) . '%';
+        }
+        $sql .= ' ORDER BY area_rank, p.product_name';
+        $statement = db()->prepare($sql);
+        $statement->execute($params);
         $items = array_map(static fn(array $row): array => [
             'id' => (string) $row['id'],
             'productCode' => (string) $row['product_code'],

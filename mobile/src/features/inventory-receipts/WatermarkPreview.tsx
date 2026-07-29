@@ -26,9 +26,9 @@ export const WatermarkPreview = forwardRef<View, {
 const styles = StyleSheet.create({
   frame: { width: "100%", aspectRatio: 3 / 4, backgroundColor: "#0f172a", overflow: "hidden" },
   shade: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,.08)" },
-  watermark: { position: "absolute", left: 22, right: 22, bottom: 24, padding: 18, borderRadius: 18, backgroundColor: "rgba(0,0,0,.52)" },
-  time: { color: "#fff", fontSize: 48, lineHeight: 52, fontWeight: "300" }, date: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  weekday: { color: "#e2e8f0", fontSize: 16, marginTop: 2, textTransform: "capitalize" },
-  rule: { height: 2, width: 64, backgroundColor: "#fbbf24", marginVertical: 12 },
-  address: { color: "#fff", fontSize: 14, lineHeight: 20, marginBottom: 8 }, meta: { color: "#fff", fontSize: 14, lineHeight: 20, fontWeight: "600" }
+  watermark: { position: "absolute", left: 28, right: 28, bottom: 22, padding: 14, borderRadius: 16, backgroundColor: "rgba(0,0,0,.52)" },
+  time: { color: "#fff", fontSize: 38, lineHeight: 42, fontWeight: "300" }, date: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  weekday: { color: "#e2e8f0", fontSize: 14, marginTop: 1, textTransform: "capitalize" },
+  rule: { height: 2, width: 52, backgroundColor: "#fbbf24", marginVertical: 8 },
+  address: { color: "#fff", fontSize: 13, lineHeight: 18, marginBottom: 6 }, meta: { color: "#fff", fontSize: 13, lineHeight: 18, fontWeight: "600" }
 });

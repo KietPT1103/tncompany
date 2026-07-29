@@ -289,8 +289,10 @@ function products_inventory_load_components(string $storeId, array $productIds):
                 component.stock_quantity AS component_stock_quantity,
                 pc.quantity
              FROM product_components pc
-             INNER JOIN products parent ON parent.id = pc.product_id
-             INNER JOIN products component ON component.id = pc.component_product_id
+             INNER JOIN products parent
+               ON parent.id COLLATE utf8mb4_unicode_ci = pc.product_id COLLATE utf8mb4_unicode_ci
+             INNER JOIN products component
+               ON component.id COLLATE utf8mb4_unicode_ci = pc.component_product_id COLLATE utf8mb4_unicode_ci
              WHERE pc.store_id = ?
                AND pc.product_id IN (%s)
              ORDER BY component.product_name ASC',
@@ -587,7 +589,8 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
     $componentStatement = db()->prepare(
         'SELECT pc.product_id, component.id AS component_id, component.product_code, component.product_name, component.cost, component.stock_quantity, pc.quantity
          FROM product_components pc
-         INNER JOIN products component ON component.id = pc.component_product_id
+         INNER JOIN products component
+           ON component.id COLLATE utf8mb4_unicode_ci = pc.component_product_id COLLATE utf8mb4_unicode_ci
          WHERE pc.store_id = :store_id'
     );
     $componentStatement->execute([

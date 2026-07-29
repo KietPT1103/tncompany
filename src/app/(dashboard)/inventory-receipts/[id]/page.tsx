@@ -15,6 +15,8 @@ export default function FieldInventoryReceiptDetailPage() {
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductResult[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const [activeResult, setActiveResult] = useState(0);
   const [selected, setSelected] = useState<ProductResult | null>(null);
   const [quantity, setQuantity] = useState("");
@@ -32,13 +34,20 @@ export default function FieldInventoryReceiptDetailPage() {
   const reload = () => getInventoryReceipt(id).then(setReceipt);
   useEffect(() => { reload(); }, [id]);
   useEffect(() => {
-    if (!receipt || query.trim().length < 2) { setResults([]); return; }
+    if (!receipt || !suggestionsOpen) return;
     const sequence = ++searchSequence.current;
     const timer = setTimeout(() => searchReceiptProducts(query, receipt.areaId).then((items) => {
-      if (searchSequence.current === sequence) { setResults(items); setActiveResult(0); }
-    }), 300);
+      if (searchSequence.current === sequence) {
+        setResults(items); setActiveResult(0); setSearchError("");
+      }
+    }).catch((error) => {
+      if (searchSequence.current === sequence) {
+        setResults([]);
+        setSearchError(error instanceof Error ? error.message : "Không thể tải danh sách sản phẩm.");
+      }
+    }), 250);
     return () => clearTimeout(timer);
-  }, [query, receipt?.areaId]);
+  }, [query, receipt?.areaId, suggestionsOpen]);
   if (!receipt) return <div className="p-10 text-slate-500">Đang tải phiếu…</div>;
   const editable = receipt.status === "pending_explanation" || receipt.status === "draft";
 
@@ -48,7 +57,7 @@ export default function FieldInventoryReceiptDetailPage() {
       const attached = await attachReceiptProduct(product.id, receipt.areaId);
       product = { ...product, id: attached.id, attachedToCurrentArea: true, areaId: receipt.areaId };
     }
-    setSelected(product); setQuery(product.productName); setResults([]);
+    setSelected(product); setQuery(product.productName); setResults([]); setSuggestionsOpen(false); setSearchError("");
   }
   async function addItem() {
     if (!selected || !receipt) return;
@@ -130,18 +139,23 @@ export default function FieldInventoryReceiptDetailPage() {
           </>}</div>
         </div>)}</div>
         {editable && <div className="mt-5 rounded-2xl bg-emerald-50 p-4"><h3 className="font-bold">Thêm món</h3>
-          <div className="relative mt-3"><input value={query} onChange={(e) => { setQuery(e.target.value); setSelected(null); }}
+          <div className="relative mt-3"><input value={query} onFocus={() => setSuggestionsOpen(true)} onChange={(e) => { setQuery(e.target.value); setSelected(null); setSuggestionsOpen(true); }}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") { e.preventDefault(); setActiveResult((x) => Math.min(results.length - 1, x + 1)); }
               if (e.key === "ArrowUp") { e.preventDefault(); setActiveResult((x) => Math.max(0, x - 1)); }
               if (e.key === "Enter" && results[activeResult]) { e.preventDefault(); choose(results[activeResult]); }
               if (e.key === "Escape") setResults([]);
-            }} placeholder="Tìm tên hoặc mã sản phẩm" className="w-full rounded-xl border px-4 py-3 outline-none focus:border-emerald-500" />
-            {results.length > 0 && <div className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-xl border bg-white p-1 shadow-xl">{results.map((product, index) =>
+            }} placeholder="Chạm để xem hàng của quầy hoặc nhập tên/mã" className="w-full rounded-xl border px-4 py-3 outline-none focus:border-emerald-500" />
+            {searchError && <p className="mt-2 text-sm text-rose-700">{searchError}</p>}
+            {suggestionsOpen && results.length > 0 && <div className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-xl border bg-white p-1 shadow-xl">{results.map((product, index) =>
               <button key={`${product.areaId}-${product.id}`} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(product)} className={`block w-full rounded-lg p-3 text-left ${activeResult === index ? "bg-emerald-50" : "hover:bg-slate-50"}`}>
                 <b>{product.productName}</b><small className="ml-2 text-slate-500">{product.productCode} • {product.unit}</small>
                 {!product.attachedToCurrentArea && <span className="block text-xs text-amber-700">Đã tồn tại – chưa sử dụng tại {receipt.area.name}. Nhấn để thêm.</span>}
-              </button>)}<button onClick={() => setShowCreate(true)} className="w-full rounded-lg p-3 text-left font-bold text-emerald-700"><Plus className="mr-2 inline h-4 w-4" />Tạo mới “{query}”</button></div>}
+              </button>)}{query.trim().length >= 2 && <button onClick={() => setShowCreate(true)} className="w-full rounded-lg p-3 text-left font-bold text-emerald-700"><Plus className="mr-2 inline h-4 w-4" />Tạo mới “{query}”</button>}</div>}
+            {suggestionsOpen && query.trim().length >= 2 && results.length === 0 && !selected && !searchError &&
+              <button onMouseDown={(event) => event.preventDefault()} onClick={() => setShowCreate(true)} className="mt-2 w-full rounded-xl bg-white p-3 text-left font-bold text-emerald-700 shadow-sm">
+                <Plus className="mr-2 inline h-4 w-4" />Tạo mới “{query.trim()}”
+              </button>}
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2"><input value={quantity} onChange={(e) => setQuantity(e.target.value)} type="number" min="0" step="0.001" placeholder="Số lượng" className="rounded-xl border px-4 py-3" />
             <input value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} type="number" min="0" step="100" placeholder="Đơn giá" className="rounded-xl border px-4 py-3" /></div>

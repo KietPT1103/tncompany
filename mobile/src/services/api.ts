@@ -9,6 +9,14 @@ const configuredBase = process.env.EXPO_PUBLIC_API_BASE_URL ||
   (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) || "";
 export const API_BASE_URL = configuredBase.replace(/\/$/, "");
 
+export function apiAssetUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  if (API_BASE_URL.endsWith("/api") && path.startsWith("/api/")) {
+    return `${API_BASE_URL.slice(0, -4)}${path}`;
+  }
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 type Envelope<T> = { ok: boolean; data: T; error?: string };
 
 export async function getToken() {

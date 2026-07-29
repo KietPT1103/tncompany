@@ -6,7 +6,13 @@ export type QuickReceiptJob = {
     clientRequestId: string; areaId: string; status: "pending_explanation" | "draft";
     capturedAt: string; location: { latitude: number | null; longitude: number | null; accuracy: number | null; address: string };
   };
-  upload: {
+  uploads?: {
+    fileUri: string; clientFileId: string; capturedAt: string;
+    location: { latitude: number | null; longitude: number | null; accuracy: number | null; address: string };
+    finalizeQuick: boolean;
+  }[];
+  /** Kept for jobs created by older installed builds. */
+  upload?: {
     fileUri: string; clientFileId: string; capturedAt: string;
     location: { latitude: number | null; longitude: number | null; accuracy: number | null; address: string };
     finalizeQuick: boolean;

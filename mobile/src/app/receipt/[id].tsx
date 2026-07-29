@@ -8,7 +8,7 @@ import { Screen } from "@/components/Screen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useArea } from "@/features/areas/AreaProvider";
 import {
-  API_BASE_URL, addReceiptItem, attachProduct, completeReceipt, createProduct, getReceipt, getToken,
+  addReceiptItem, apiAssetUrl, attachProduct, completeReceipt, createProduct, getReceipt, getToken,
   searchProducts, type ProductSearchResult
 } from "@/services/api";
 import type { Receipt } from "@/types";
@@ -20,6 +20,8 @@ export default function ReceiptDetailScreen() {
   const [token, setToken] = useState("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductSearchResult[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const [selected, setSelected] = useState<ProductSearchResult | null>(null);
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
@@ -35,10 +37,16 @@ export default function ReceiptDetailScreen() {
     getToken().then((value) => setToken(value || ""));
   }, [id]);
   useEffect(() => {
-    if (!area || query.trim().length < 2) return;
-    const timer = setTimeout(() => searchProducts(query.trim(), area.id).then((r) => setResults(r.items)).catch(() => setResults([])), 300);
+    if (!area || !suggestionsOpen) return;
+    const timer = setTimeout(() => searchProducts(query.trim(), area.id).then((r) => {
+      setResults(r.items);
+      setSearchError("");
+    }).catch((error) => {
+      setResults([]);
+      setSearchError(error instanceof Error ? error.message : "Không thể tải danh sách sản phẩm.");
+    }), 250);
     return () => clearTimeout(timer);
-  }, [query, area]);
+  }, [query, area, suggestionsOpen]);
 
   const lineTotal = useMemo(() => (Number(quantity) || 0) * (Number(price) || 0), [quantity, price]);
   if (!receipt || !area) return <Screen><Text>Đang tải phiếu…</Text></Screen>;
@@ -52,7 +60,7 @@ export default function ReceiptDetailScreen() {
         const attached = await attachProduct(product.id, currentArea.id);
         setSelected({ ...product, id: attached.item.id, areaId: currentArea.id, attachedToCurrentArea: true });
       } else setSelected(product);
-      setQuery(product.productName); setResults([]);
+      setQuery(product.productName); setResults([]); setSuggestionsOpen(false); setSearchError("");
     } catch (e) { Alert.alert("Không thể thêm vào khu", e instanceof Error ? e.message : "Vui lòng thử lại."); }
   }
   async function addItem() {
@@ -95,7 +103,12 @@ export default function ReceiptDetailScreen() {
     <View style={styles.header}><View><Text style={styles.code}>{receipt.receiptCode}</Text><Text style={styles.area}>Khu đang thao tác: {area.name}</Text></View>
       <Text style={[styles.badge, receipt.status === "completed" && styles.done]}>{receipt.status}</Text></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gallery}>
-      {receipt.images.map((image) => <Image key={image.id} source={{ uri: `${API_BASE_URL}${image.url}`, headers: { Authorization: `Bearer ${token}` } }} style={styles.photo} />)}
+      {receipt.images.map((image) => <Image
+        key={image.id}
+        source={{ uri: apiAssetUrl(image.url), headers: { Authorization: `Bearer ${token}` } }}
+        style={styles.photo}
+        resizeMode="cover"
+      />)}
     </ScrollView>
 
     <Text style={styles.section}>Các món đã nhập</Text>
@@ -109,18 +122,20 @@ export default function ReceiptDetailScreen() {
         label="Sản phẩm"
         required
         value={query}
-        onChangeText={(value) => { setQuery(value); setSelected(null); }}
+        onFocus={() => setSuggestionsOpen(true)}
+        onChangeText={(value) => { setQuery(value); setSelected(null); setSuggestionsOpen(true); }}
         placeholder="Nhập tên hoặc mã sản phẩm để tìm"
         autoCorrect={false}
         returnKeyType="search"
-        hint="Nhập ít nhất 2 ký tự, sau đó chọn một kết quả bên dưới."
+        hint="Chạm vào ô để xem toàn bộ sản phẩm của quầy, hoặc nhập tên/mã để lọc."
       />
-      {results.length > 0 && <View style={styles.results}>{results.map((product) => <Pressable key={`${product.areaId}-${product.id}`} style={styles.result} onPress={() => selectProduct(product)}>
+      {searchError ? <Text style={styles.searchError}>{searchError}</Text> : null}
+      {suggestionsOpen && results.length > 0 && <View style={styles.results}>{results.map((product) => <Pressable key={`${product.areaId}-${product.id}`} style={styles.result} onPress={() => selectProduct(product)}>
         <View style={{ flex: 1 }}><Text style={styles.resultName}>{product.productName}</Text><Text style={styles.itemMeta}>{product.productCode} • {product.unit || "Chưa có đơn vị"}</Text>
           {!product.attachedToCurrentArea && <Text style={styles.attach}>Đã tồn tại – chưa dùng tại {area.name}. Nhấn để thêm.</Text>}</View></Pressable>)}
-        <Pressable style={styles.create} onPress={() => { setNewCode(""); setNewUnit(""); setCreateOpen(true); }}><Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text></Pressable>
+        {query.trim().length >= 2 && <Pressable style={styles.create} onPress={() => { setNewCode(""); setNewUnit(""); setCreateOpen(true); }}><Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text></Pressable>}
       </View>}
-      {query.trim().length >= 2 && results.length === 0 && !selected && <Pressable style={styles.createSolo} onPress={() => setCreateOpen(true)}><Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text></Pressable>}
+      {suggestionsOpen && query.trim().length >= 2 && results.length === 0 && !selected && !searchError && <Pressable style={styles.createSolo} onPress={() => setCreateOpen(true)}><Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text></Pressable>}
       {selected && <Text style={styles.selected}>Đã chọn: {selected.productName} • {selected.unit}</Text>}
       <View style={styles.row}>
         <FormField
@@ -205,6 +220,7 @@ const styles = StyleSheet.create({
   form: { backgroundColor: "#ecfdf5", borderRadius: 22, padding: 16, marginTop: 16, gap: 12 },
   results: { backgroundColor: "#fff", borderRadius: 14, overflow: "hidden" }, result: { padding: 14, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" }, resultName: { fontWeight: "800" },
   attach: { color: "#d97706", marginTop: 5, fontSize: 12 }, create: { padding: 14 }, createSolo: { backgroundColor: "#fff", borderRadius: 14, padding: 14 }, createText: { color: "#059669", fontWeight: "800" },
+  searchError: { color: "#b91c1c", fontSize: 13, lineHeight: 18 },
   selected: { color: "#047857", fontWeight: "700" }, row: { flexDirection: "row", gap: 10 }, half: { flex: 1 }, provisional: { textAlign: "right", fontWeight: "800", color: "#334155" },
   summary: { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginVertical: 20 }, summaryLabel: { color: "#64748b", marginTop: 4 }, summaryValue: { fontSize: 18, fontWeight: "700" },
   total: { fontSize: 28, color: "#059669", fontWeight: "900", marginTop: 4 }, modalShade: { flex: 1, backgroundColor: "rgba(15,23,42,.55)", justifyContent: "flex-end" },
