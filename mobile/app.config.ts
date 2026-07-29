@@ -18,6 +18,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "vn.tncompany.inventory",
+    softwareKeyboardLayoutMode: "resize",
     permissions: ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
   },
   plugins: [

@@ -47,7 +47,7 @@ export async function pendingJobs() {
   const db = await database();
   return db.getAllAsync<{ id: string; payload_json: string; attempts: number }>(
     `SELECT id,payload_json,attempts FROM sync_jobs
-     WHERE status IN ('pending','failed') ORDER BY created_at LIMIT 20`
+     WHERE status IN ('pending','failed','uploading') ORDER BY created_at LIMIT 20`
   );
 }
 export async function markJobRunning(id: string) {

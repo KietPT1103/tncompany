@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View
+} from "react-native";
+import { FormField } from "@/components/FormField";
 import { Screen } from "@/components/Screen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useArea } from "@/features/areas/AreaProvider";
@@ -82,7 +85,12 @@ export default function ReceiptDetailScreen() {
     ]);
   }
 
-  return <Screen><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+  return <Screen><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboard}>
+  <ScrollView
+    contentContainerStyle={styles.content}
+    keyboardShouldPersistTaps="handled"
+    automaticallyAdjustKeyboardInsets
+  >
     <Pressable onPress={() => router.back()}><Text style={styles.back}>‹ Quay lại</Text></Pressable>
     <View style={styles.header}><View><Text style={styles.code}>{receipt.receiptCode}</Text><Text style={styles.area}>Khu đang thao tác: {area.name}</Text></View>
       <Text style={[styles.badge, receipt.status === "completed" && styles.done]}>{receipt.status}</Text></View>
@@ -97,7 +105,16 @@ export default function ReceiptDetailScreen() {
     {receipt.items.length === 0 && <Text style={styles.empty}>Chưa có món hàng nào.</Text>}
 
     {editable && <View style={styles.form}><Text style={styles.section}>Thêm món hàng</Text>
-      <TextInput value={query} onChangeText={(value) => { setQuery(value); setSelected(null); }} placeholder="Tìm tên hoặc mã sản phẩm" style={styles.input} />
+      <FormField
+        label="Sản phẩm"
+        required
+        value={query}
+        onChangeText={(value) => { setQuery(value); setSelected(null); }}
+        placeholder="Nhập tên hoặc mã sản phẩm để tìm"
+        autoCorrect={false}
+        returnKeyType="search"
+        hint="Nhập ít nhất 2 ký tự, sau đó chọn một kết quả bên dưới."
+      />
       {results.length > 0 && <View style={styles.results}>{results.map((product) => <Pressable key={`${product.areaId}-${product.id}`} style={styles.result} onPress={() => selectProduct(product)}>
         <View style={{ flex: 1 }}><Text style={styles.resultName}>{product.productName}</Text><Text style={styles.itemMeta}>{product.productCode} • {product.unit || "Chưa có đơn vị"}</Text>
           {!product.attachedToCurrentArea && <Text style={styles.attach}>Đã tồn tại – chưa dùng tại {area.name}. Nhấn để thêm.</Text>}</View></Pressable>)}
@@ -105,39 +122,95 @@ export default function ReceiptDetailScreen() {
       </View>}
       {query.trim().length >= 2 && results.length === 0 && !selected && <Pressable style={styles.createSolo} onPress={() => setCreateOpen(true)}><Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text></Pressable>}
       {selected && <Text style={styles.selected}>Đã chọn: {selected.productName} • {selected.unit}</Text>}
-      <View style={styles.row}><TextInput keyboardType="decimal-pad" value={quantity} onChangeText={setQuantity} placeholder="Số lượng" style={[styles.input, styles.half]} />
-        <TextInput keyboardType="decimal-pad" value={price} onChangeText={setPrice} placeholder="Đơn giá" style={[styles.input, styles.half]} /></View>
-      <TextInput value={note} onChangeText={setNote} placeholder="Ghi chú (tùy chọn)" style={styles.input} />
+      <View style={styles.row}>
+        <FormField
+          label="Số lượng"
+          required
+          keyboardType="decimal-pad"
+          value={quantity}
+          onChangeText={setQuantity}
+          placeholder="Ví dụ: 10"
+          containerStyle={styles.half}
+        />
+        <FormField
+          label="Đơn giá"
+          required
+          keyboardType="decimal-pad"
+          value={price}
+          onChangeText={setPrice}
+          placeholder="Ví dụ: 25000"
+          containerStyle={styles.half}
+        />
+      </View>
+      <FormField
+        label="Ghi chú"
+        value={note}
+        onChangeText={setNote}
+        placeholder="Ví dụ: số lô, hạn sử dụng hoặc tình trạng hàng"
+        multiline
+        numberOfLines={3}
+      />
       <Text style={styles.provisional}>Thành tiền: {lineTotal.toLocaleString("vi-VN")} ₫</Text>
       <PrimaryButton title="Thêm món" onPress={addItem} loading={busy} disabled={!selected || Number(quantity) <= 0 || Number(price) < 0 || price === ""} />
     </View>}
     <View style={styles.summary}><Text style={styles.summaryLabel}>Tổng số lượng</Text><Text style={styles.summaryValue}>{receipt.totalQuantity}</Text>
       <Text style={styles.summaryLabel}>Tổng tiền</Text><Text style={styles.total}>{receipt.totalAmount.toLocaleString("vi-VN")} ₫</Text></View>
     {editable && <PrimaryButton title="Hoàn thành nhập kho" onPress={finish} loading={busy} disabled={receipt.items.length === 0 || receipt.images.length === 0} />}
-  </ScrollView>
+  </ScrollView></KeyboardAvoidingView>
 
   <Modal visible={createOpen} transparent animationType="slide" onRequestClose={() => setCreateOpen(false)}>
-    <View style={styles.modalShade}><View style={styles.modal}><Text style={styles.modalTitle}>Tạo hàng hóa mới</Text>
-      <Text style={styles.prefill}>Tên sản phẩm: {query.trim()}</Text>
-      <TextInput value={newCode} onChangeText={setNewCode} placeholder="Mã sản phẩm" style={styles.input} />
-      <TextInput value={newUnit} onChangeText={setNewUnit} placeholder="Đơn vị tính *" style={styles.input} />
-      <PrimaryButton title="Tạo và thêm vào khu" onPress={createNew} loading={busy} disabled={!query.trim() || !newCode.trim() || !newUnit.trim()} />
-      <Pressable onPress={() => setCreateOpen(false)}><Text style={styles.cancel}>Hủy</Text></Pressable>
-    </View></View>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalShade}>
+      <ScrollView
+        style={styles.modalScroll}
+        contentContainerStyle={styles.modal}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
+        <Text style={styles.modalTitle}>Tạo hàng hóa mới</Text>
+        <View style={styles.prefillBox}>
+          <Text style={styles.prefillLabel}>Tên sản phẩm</Text>
+          <Text style={styles.prefill}>{query.trim()}</Text>
+        </View>
+        <FormField
+          label="Mã sản phẩm"
+          required
+          value={newCode}
+          onChangeText={setNewCode}
+          placeholder="Ví dụ: SP-001"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          hint="Mã dùng để tìm kiếm và phân biệt sản phẩm."
+        />
+        <FormField
+          label="Đơn vị tính"
+          required
+          value={newUnit}
+          onChangeText={setNewUnit}
+          placeholder="Ví dụ: kg, thùng, chai"
+          returnKeyType="done"
+        />
+        <PrimaryButton title="Tạo và thêm vào khu" onPress={createNew} loading={busy} disabled={!query.trim() || !newCode.trim() || !newUnit.trim()} />
+        <Pressable onPress={() => setCreateOpen(false)} disabled={busy}><Text style={styles.cancel}>Hủy</Text></Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   </Modal></Screen>;
 }
 const styles = StyleSheet.create({
+  keyboard: { flex: 1 },
   content: { paddingBottom: 32 }, back: { color: "#059669", fontWeight: "700" }, header: { flexDirection: "row", justifyContent: "space-between", marginTop: 18 },
   code: { fontSize: 26, fontWeight: "800", color: "#0f172a" }, area: { color: "#64748b", marginTop: 5 }, badge: { backgroundColor: "#fef3c7", color: "#92400e", padding: 8, borderRadius: 10, alignSelf: "flex-start", fontSize: 11 },
   done: { backgroundColor: "#d1fae5", color: "#065f46" }, gallery: { gap: 10, paddingVertical: 20 }, photo: { width: 260, height: 340, borderRadius: 20, backgroundColor: "#e2e8f0" },
   section: { fontSize: 20, fontWeight: "800", color: "#0f172a", marginBottom: 10 }, item: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 16, padding: 15, marginBottom: 9 },
   itemName: { fontSize: 16, fontWeight: "700" }, itemMeta: { color: "#64748b", marginTop: 4 }, itemTotal: { fontWeight: "800" }, empty: { color: "#94a3b8", marginBottom: 18 },
-  form: { backgroundColor: "#ecfdf5", borderRadius: 22, padding: 16, marginTop: 16, gap: 10 }, input: { minHeight: 52, borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#fff", borderRadius: 14, paddingHorizontal: 14, fontSize: 15 },
+  form: { backgroundColor: "#ecfdf5", borderRadius: 22, padding: 16, marginTop: 16, gap: 12 },
   results: { backgroundColor: "#fff", borderRadius: 14, overflow: "hidden" }, result: { padding: 14, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" }, resultName: { fontWeight: "800" },
   attach: { color: "#d97706", marginTop: 5, fontSize: 12 }, create: { padding: 14 }, createSolo: { backgroundColor: "#fff", borderRadius: 14, padding: 14 }, createText: { color: "#059669", fontWeight: "800" },
   selected: { color: "#047857", fontWeight: "700" }, row: { flexDirection: "row", gap: 10 }, half: { flex: 1 }, provisional: { textAlign: "right", fontWeight: "800", color: "#334155" },
   summary: { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginVertical: 20 }, summaryLabel: { color: "#64748b", marginTop: 4 }, summaryValue: { fontSize: 18, fontWeight: "700" },
   total: { fontSize: 28, color: "#059669", fontWeight: "900", marginTop: 4 }, modalShade: { flex: 1, backgroundColor: "rgba(15,23,42,.55)", justifyContent: "flex-end" },
-  modal: { backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, gap: 12 }, modalTitle: { fontSize: 24, fontWeight: "800" }, prefill: { color: "#334155", fontWeight: "600" },
+  modalScroll: { flexGrow: 0, maxHeight: "92%", backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  modal: { padding: 22, paddingBottom: 28, gap: 16 }, modalTitle: { fontSize: 24, fontWeight: "800" },
+  prefillBox: { backgroundColor: "#f1f5f9", borderRadius: 14, padding: 14, gap: 4 },
+  prefillLabel: { color: "#64748b", fontSize: 12, fontWeight: "700" }, prefill: { color: "#0f172a", fontSize: 16, fontWeight: "700" },
   cancel: { textAlign: "center", padding: 12, color: "#64748b", fontWeight: "700" }
 });
