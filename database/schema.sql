@@ -84,6 +84,10 @@ CREATE TABLE IF NOT EXISTS product_components (
 CREATE TABLE IF NOT EXISTS inventory_receipts (
   id VARCHAR(64) PRIMARY KEY,
   store_id VARCHAR(32) NOT NULL,
+  locked_at DATETIME NULL,
+  locked_by VARCHAR(64) NULL,
+  unlocked_at DATETIME NULL,
+  unlocked_by VARCHAR(64) NULL,
   receipt_code VARCHAR(100) NOT NULL,
   receipt_date DATE NOT NULL,
   status ENUM('draft', 'completed') NOT NULL DEFAULT 'draft',

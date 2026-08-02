@@ -64,6 +64,34 @@ SET @column_sql := IF(
 PREPARE column_stmt FROM @column_sql; EXECUTE column_stmt; DEALLOCATE PREPARE column_stmt;
 
 SET @column_sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='inventory_receipts' AND column_name='locked_at'),
+  'SELECT 1',
+  'ALTER TABLE inventory_receipts ADD COLUMN locked_at DATETIME NULL AFTER order_creator_name'
+);
+PREPARE column_stmt FROM @column_sql; EXECUTE column_stmt; DEALLOCATE PREPARE column_stmt;
+
+SET @column_sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='inventory_receipts' AND column_name='locked_by'),
+  'SELECT 1',
+  'ALTER TABLE inventory_receipts ADD COLUMN locked_by VARCHAR(64) NULL AFTER locked_at'
+);
+PREPARE column_stmt FROM @column_sql; EXECUTE column_stmt; DEALLOCATE PREPARE column_stmt;
+
+SET @column_sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='inventory_receipts' AND column_name='unlocked_at'),
+  'SELECT 1',
+  'ALTER TABLE inventory_receipts ADD COLUMN unlocked_at DATETIME NULL AFTER locked_by'
+);
+PREPARE column_stmt FROM @column_sql; EXECUTE column_stmt; DEALLOCATE PREPARE column_stmt;
+
+SET @column_sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='inventory_receipts' AND column_name='unlocked_by'),
+  'SELECT 1',
+  'ALTER TABLE inventory_receipts ADD COLUMN unlocked_by VARCHAR(64) NULL AFTER unlocked_at'
+);
+PREPARE column_stmt FROM @column_sql; EXECUTE column_stmt; DEALLOCATE PREPARE column_stmt;
+
+SET @column_sql := IF(
   EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='inventory_receipts' AND column_name='received_at'),
   'SELECT 1',
   'ALTER TABLE inventory_receipts ADD COLUMN received_at DATETIME NULL AFTER receipt_date'

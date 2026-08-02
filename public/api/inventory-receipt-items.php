@@ -71,6 +71,7 @@ $body = receipt_item_body();
 if ($method === 'POST') {
     $receiptId = trim((string) ($body['receiptId'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $receiptId);
+    field_inventory_assert_receipt_editable($user, $receipt);
     if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
         respond_error('Phiếu đã khóa.', 409);
     }
@@ -92,6 +93,10 @@ if ($method === 'POST') {
 
 $id = (int) ($_GET['id'] ?? $body['id'] ?? 0);
 $existing = receipt_item_find($user, $id);
+field_inventory_assert_receipt_editable(
+    $user,
+    field_inventory_require_receipt($user, (string) $existing['receipt_id'])
+);
 if (!in_array($existing['status'], ['pending_explanation', 'draft'], true)) {
     respond_error('Phiếu đã khóa.', 409);
 }

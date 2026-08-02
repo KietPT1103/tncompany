@@ -4,13 +4,15 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, Plus, Trash2, X, ZoomIn }
 import {
   addInventoryReceiptItem, attachReceiptProduct, completeInventoryReceipt, createReceiptProduct,
   cancelInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchReceiptProducts,
-  updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ProductResult
+  unlockInventoryReceipt, updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ProductResult
 } from "@/services/inventoryReceiptService";
 import PrivateApiImage from "@/components/PrivateApiImage";
+import { useAuth } from "@/context/AuthContext";
 
 export default function FieldInventoryReceiptDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const { role } = useAuth();
   const [receipt, setReceipt] = useState<InventoryReceipt | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -49,7 +51,8 @@ export default function FieldInventoryReceiptDetailPage() {
     return () => clearTimeout(timer);
   }, [query, receipt?.areaId, suggestionsOpen]);
   if (!receipt) return <div className="p-10 text-slate-500">Đang tải phiếu…</div>;
-  const editable = receipt.status === "pending_explanation" || receipt.status === "draft";
+  const editableStatus = receipt.status === "pending_explanation" || receipt.status === "draft";
+  const editable = editableStatus && receipt.canEdit;
 
   async function choose(product: ProductResult) {
     if (!receipt) return;
@@ -107,6 +110,13 @@ export default function FieldInventoryReceiptDetailPage() {
     catch (error) { alert(error instanceof Error ? error.message : "Không thể hủy phiếu."); }
     finally { setBusy(false); }
   }
+  async function unlockReceipt() {
+    if (!confirm("Mở khóa để nhân viên có thể tiếp tục giải trình phiếu này?")) return;
+    setBusy(true);
+    try { setReceipt(await unlockInventoryReceipt(receipt.id)); }
+    catch (error) { alert(error instanceof Error ? error.message : "Không thể mở khóa phiếu."); }
+    finally { setBusy(false); }
+  }
   async function createNew() {
     setBusy(true);
     try {
@@ -118,9 +128,16 @@ export default function FieldInventoryReceiptDetailPage() {
 
   return <div className="min-h-screen bg-slate-50 p-4 md:p-8"><div className="mx-auto max-w-7xl">
     <button onClick={() => navigate("/admin/inventory-receipts")} className="flex items-center gap-2 font-semibold text-emerald-700"><ArrowLeft className="h-4 w-4" /> Danh sách phiếu</button>
+    {receipt.isLocked && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><b>Phiếu đã tự động khóa sau 24 giờ</b>
+        <p className="mt-1 text-sm">{role === "admin" ? "Admin vẫn có thể giải trình trực tiếp hoặc mở khóa cho nhân viên." : "Chỉ admin mới có thể giải trình hoặc mở khóa phiếu này."}</p></div>
+        {receipt.canUnlock && <button disabled={busy} onClick={unlockReceipt} className="rounded-xl bg-amber-600 px-4 py-2 font-bold text-white disabled:opacity-50">Mở khóa cho nhân viên</button>}
+      </div>
+    </div>}
     <div className="mt-5 rounded-3xl border bg-white p-6"><div className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="text-3xl font-bold">{receipt.receiptCode}</h1><p className="mt-2 text-slate-500">{receipt.area.name} • {receipt.createdByName} • {new Date(receipt.createdAt).toLocaleString("vi-VN")}</p>
-        <p className="mt-1 text-sm font-semibold text-emerald-700">Nhà phân phối: {receipt.supplier?.supplierName || "Chưa chọn"}</p></div>
+        <p className="mt-1 text-sm font-semibold text-emerald-700">Nhà phân phối: {receipt.supplier?.supplierName || "Chưa chọn"}</p>
+        <p className="mt-1 text-sm font-semibold text-slate-700">Người tạo đơn: {receipt.orderCreatorName || "Chưa nhập"}</p></div>
       <div className="flex items-center gap-2">{editable && <button disabled={busy} onClick={cancelReceipt} className="rounded-full border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 disabled:opacity-50">Hủy phiếu</button>}
         <div className="rounded-full bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-800">{receipt.status}</div></div>
     </div><div className="mt-5 grid gap-3 text-sm sm:grid-cols-3"><div><span className="text-slate-500">Địa điểm</span><b className="block">{receipt.images[0]?.locationAddress || "Tọa độ đã lưu trong ảnh"}</b></div>

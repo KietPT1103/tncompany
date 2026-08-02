@@ -8,6 +8,10 @@ require_once __DIR__ . '/_lib/products_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
 
 auth_ensure_column('inventory_receipts', 'order_creator_name', 'VARCHAR(255) NULL AFTER supplier_id');
+auth_ensure_column('inventory_receipts', 'locked_at', 'DATETIME NULL AFTER order_creator_name');
+auth_ensure_column('inventory_receipts', 'locked_by', 'VARCHAR(64) NULL AFTER locked_at');
+auth_ensure_column('inventory_receipts', 'unlocked_at', 'DATETIME NULL AFTER locked_by');
+auth_ensure_column('inventory_receipts', 'unlocked_by', 'VARCHAR(64) NULL AFTER unlocked_at');
 
 final class ReceiptValidationException extends RuntimeException
 {
@@ -27,7 +31,7 @@ function receipts_store(array $body = []): string
 function receipts_full(array $user, string $id): array
 {
     $row = field_inventory_require_receipt($user, $id);
-    return field_inventory_receipt_payload($row, field_inventory_load_items($id), field_inventory_load_images($id));
+    return field_inventory_receipt_payload($row, field_inventory_load_items($id), field_inventory_load_images($id), $user);
 }
 
 function receipts_recalculate(string $id): void
@@ -45,6 +49,7 @@ function receipts_recalculate(string $id): void
 function receipts_list(): void
 {
     $user = field_inventory_require_permission('inventory_receipts.view');
+    field_inventory_refresh_receipt_lock();
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id !== '') {
         respond_ok(['item' => receipts_full($user, $id)]);
@@ -125,8 +130,8 @@ function receipts_list(): void
     $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
     $statement->bindValue(':offset', ($page - 1) * $limit, PDO::PARAM_INT);
     $statement->execute();
-    $items = array_map(static function (array $row): array {
-        $item = field_inventory_receipt_payload($row);
+    $items = array_map(static function (array $row) use ($user): array {
+        $item = field_inventory_receipt_payload($row, [], [], $user);
         $item['itemCount'] = (int) $row['item_count'];
         $item['imageCount'] = (int) $row['image_count'];
         $item['thumbnailUrl'] = $row['thumbnail_id'] ? '/api/inventory-receipt-images.php?id=' . rawurlencode($row['thumbnail_id']) . '&size=thumbnail' : null;
@@ -203,6 +208,7 @@ function receipts_update(array $body): void
     $user = field_inventory_require_permission('inventory_receipts.update');
     $id = trim((string) ($_GET['id'] ?? $body['id'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $id);
+    field_inventory_assert_receipt_editable($user, $receipt);
     if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
         respond_error('Phiếu đã khóa, không thể chỉnh sửa.', 409);
     }
@@ -261,6 +267,9 @@ function receipts_complete(array $body): void
         }
         if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
             throw new ReceiptValidationException('Không thể hoàn thành phiếu ở trạng thái hiện tại.', 409);
+        }
+        if (!field_inventory_can_edit_receipt($user, $receipt)) {
+            throw new ReceiptValidationException('Phiếu đã tự động khóa sau 24 giờ. Chỉ admin mới có thể giải trình hoặc mở khóa.', 423);
         }
         if (trim((string) ($receipt['supplier_id'] ?? '')) === '') {
             throw new ReceiptValidationException('Vui lòng chọn nhà phân phối trước khi hoàn thành.');
@@ -334,6 +343,7 @@ function receipts_cancel(array $body): void
     $user = field_inventory_require_permission('inventory_receipts.cancel');
     $id = trim((string) ($body['id'] ?? $_GET['id'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $id);
+    field_inventory_assert_receipt_editable($user, $receipt);
     if ($receipt['status'] === 'completed') respond_error('Không thể hủy phiếu đã hoàn thành.', 409);
     if ($receipt['status'] === 'cancelled') respond_ok(['item' => receipts_full($user, $id), 'idempotent' => true]);
     $statement = db()->prepare(
@@ -344,18 +354,43 @@ function receipts_cancel(array $body): void
     respond_ok(['item' => receipts_full($user, $id)]);
 }
 
+function receipts_unlock(array $body): void
+{
+    $user = field_inventory_require_permission('inventory_receipts.update');
+    if (!field_inventory_is_admin($user)) {
+        respond_error('Chỉ admin mới có thể mở khóa phiếu.', 403);
+    }
+    $id = trim((string) ($body['id'] ?? $_GET['id'] ?? ''));
+    $receipt = field_inventory_require_receipt($user, $id);
+    if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
+        respond_error('Chỉ có thể mở khóa phiếu chưa hoàn thành.', 409);
+    }
+    if (!field_inventory_receipt_is_locked($receipt)) {
+        respond_ok(['item' => receipts_full($user, $id), 'idempotent' => true]);
+    }
+    $statement = db()->prepare(
+        'UPDATE inventory_receipts
+         SET locked_at=NULL,locked_by=NULL,unlocked_at=NOW(),unlocked_by=:actor,updated_at=NOW()
+         WHERE id=:id'
+    );
+    $statement->execute(['id' => $id, 'actor' => $user['id']]);
+    respond_ok(['item' => receipts_full($user, $id)]);
+}
+
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = strtolower(trim((string) ($_GET['action'] ?? '')));
 if ($method === 'GET') receipts_list();
 $body = read_json_body();
 if ($method === 'POST' && $action === 'complete') receipts_complete($body);
 if ($method === 'POST' && $action === 'cancel') receipts_cancel($body);
+if ($method === 'POST' && $action === 'unlock') receipts_unlock($body);
 if ($method === 'POST') receipts_create($body);
 if (in_array($method, ['PUT', 'PATCH'], true)) receipts_update($body);
 if ($method === 'DELETE') {
     $user = field_inventory_require_permission('inventory_receipts.cancel');
     $id = trim((string) ($_GET['id'] ?? $body['id'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $id);
+    field_inventory_assert_receipt_editable($user, $receipt);
     if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) respond_error('Chỉ có thể xóa phiếu chưa hoàn thành.', 409);
     $delete = db()->prepare('DELETE FROM inventory_receipts WHERE id=:id');
     $delete->execute(['id' => $id]);

@@ -16,6 +16,8 @@ export type InventoryReceipt = {
   createdByName: string; orderCreatorName: string; totalQuantity: number; totalAmount: number; itemCount: number;
   imageCount: number; thumbnailUrl?: string | null; note: string;
   supplierId?: string | null; supplier?: { id: string; supplierCode: string; supplierName: string } | null;
+  isLocked: boolean; lockedAt?: string | null; lockedBy?: string | null; unlockedAt?: string | null;
+  canEdit: boolean; canUnlock: boolean; autoLockAt?: string | null;
   items: InventoryReceiptItem[]; images: InventoryReceiptImage[];
 };
 export type ReceiptCounts = Record<ReceiptStatus | "all", number>;
@@ -43,6 +45,8 @@ export const updateInventoryReceipt = async (id: string, payload: object) =>
   (await apiRequest<{ item: InventoryReceipt }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(payload) })).item;
 export const completeInventoryReceipt = async (id: string) =>
   (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=complete", { method: "POST", body: JSON.stringify({ id }) })).item;
+export const unlockInventoryReceipt = async (id: string) =>
+  (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=unlock", { method: "POST", body: JSON.stringify({ id }) })).item;
 export const cancelInventoryReceipt = async (id: string, reason: string) =>
   (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=cancel", { method: "POST", body: JSON.stringify({ id, reason }) })).item;
 export const searchReceiptProducts = async (search: string, areaId: string) =>

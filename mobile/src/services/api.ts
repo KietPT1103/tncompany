@@ -35,10 +35,18 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!API_BASE_URL) throw new Error("Chưa cấu hình EXPO_PUBLIC_API_BASE_URL.");
   const token = await getToken();
   const headers = new Headers(init.headers);
+  const originalMethod = (init.method || "GET").toUpperCase();
+  const useMethodOverride = ["PUT", "PATCH", "DELETE"].includes(originalMethod) &&
+    /(?:^|\/)[^/?]+\.php(?:[?#]|$)/i.test(path);
   headers.set("Accept", "application/json");
   if (!(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  if (useMethodOverride) headers.set("X-HTTP-Method-Override", originalMethod);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    method: useMethodOverride ? "POST" : originalMethod,
+    headers,
+  });
   const raw = await response.text();
   let payload: Envelope<T>;
   try {
@@ -74,6 +82,10 @@ export const updateReceipt = (id: string, payload: object) =>
   });
 export const completeReceipt = (id: string) =>
   api<{ item: Receipt }>("/inventory-receipts.php?action=complete", {
+    method: "POST", body: JSON.stringify({ id })
+  });
+export const unlockReceipt = (id: string) =>
+  api<{ item: Receipt }>("/inventory-receipts.php?action=unlock", {
     method: "POST", body: JSON.stringify({ id })
   });
 export type ProductSearchResult = {

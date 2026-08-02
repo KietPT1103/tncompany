@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import {
-  ActivityIndicator, Alert, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View
+  ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View
 } from "react-native";
 import { FormField } from "@/components/FormField";
 import { Screen } from "@/components/Screen";
@@ -9,7 +9,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { useArea } from "@/features/areas/AreaProvider";
 import {
   addReceiptItem, apiAssetUrl, attachProduct, completeReceipt, createProduct, getNextProductCode, getReceipt, getToken,
-  searchProducts, searchSuppliers, updateReceipt, type ProductSearchResult, type SupplierSearchResult
+  searchProducts, searchSuppliers, unlockReceipt, updateReceipt, type ProductSearchResult, type SupplierSearchResult
 } from "@/services/api";
 import type { Receipt } from "@/types";
 
@@ -22,8 +22,6 @@ export default function ReceiptDetailScreen() {
   const [results, setResults] = useState<ProductSearchResult[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const productPickerRef = useRef<View>(null);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 16, width: 320 });
   const [searchError, setSearchError] = useState("");
   const [selectingProductId, setSelectingProductId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ProductSearchResult | null>(null);
@@ -86,24 +84,11 @@ export default function ReceiptDetailScreen() {
   if (!receipt || !area) return <Screen><Text>Đang tải phiếu…</Text></Screen>;
   const currentReceipt = receipt;
   const currentArea = area;
-  const editable = currentReceipt.status === "pending_explanation" || currentReceipt.status === "draft";
+  const editableStatus = currentReceipt.status === "pending_explanation" || currentReceipt.status === "draft";
+  const editable = editableStatus && currentReceipt.canEdit;
 
   function openProductSuggestions() {
-    productPickerRef.current?.measureInWindow((x, y, width, height) => {
-      const screenHeight = Dimensions.get("window").height;
-      const desiredTop = y + height + 5;
-      setDropdownPosition({
-        left: Math.max(12, x),
-        top: Math.min(desiredTop, screenHeight - 280),
-        width: Math.max(240, width),
-      });
-      setSuggestionsOpen(true);
-    });
-  }
-
-  function closeProductSuggestions() {
-    setSuggestionsOpen(false);
-    Keyboard.dismiss();
+    setSuggestionsOpen(true);
   }
 
   function validateReceiptDetails() {
@@ -118,13 +103,24 @@ export default function ReceiptDetailScreen() {
     return true;
   }
 
-  async function saveReceiptDetails(showConfirmation = true) {
-    if (!validateReceiptDetails()) return null;
+  async function saveReceiptDetails(
+    showConfirmation = true,
+    requireAll = true,
+    supplier = selectedSupplier,
+    creatorName = orderCreatorName
+  ) {
+    if (requireAll && !validateReceiptDetails()) return null;
+    const normalizedName = creatorName.trim();
+    const supplierId = supplier?.id || null;
+    if (supplierId === (currentReceipt.supplierId || null) && normalizedName === currentReceipt.orderCreatorName) {
+      if (showConfirmation) Alert.alert("Đã lưu", "Thông tin phiếu nhập không có thay đổi.");
+      return currentReceipt;
+    }
     try {
       setPendingAction("saveDetails");
       const updated = await updateReceipt(currentReceipt.id, {
-        supplierId: selectedSupplier!.id,
-        orderCreatorName: orderCreatorName.trim(),
+        supplierId,
+        orderCreatorName: normalizedName,
       });
       setReceipt(updated.item);
       if (showConfirmation) Alert.alert("Đã lưu", "Thông tin phiếu nhập đã được cập nhật.");
@@ -132,6 +128,18 @@ export default function ReceiptDetailScreen() {
     } catch (error) {
       Alert.alert("Không thể lưu thông tin phiếu", error instanceof Error ? error.message : "Vui lòng thử lại.");
       return null;
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function unlockCurrentReceipt() {
+    try {
+      setPendingAction("saveDetails");
+      setReceipt((await unlockReceipt(currentReceipt.id)).item);
+      Alert.alert("Đã mở khóa", "Nhân viên có thể tiếp tục giải trình phiếu này.");
+    } catch (error) {
+      Alert.alert("Không thể mở khóa", error instanceof Error ? error.message : "Vui lòng thử lại.");
     } finally {
       setPendingAction(null);
     }
@@ -207,7 +215,10 @@ export default function ReceiptDetailScreen() {
     keyboardShouldPersistTaps="handled"
     automaticallyAdjustKeyboardInsets
   >
-    <Pressable style={({ pressed }) => pressed && styles.pressed} onPress={() => router.back()}><Text style={styles.back}>‹ Quay lại</Text></Pressable>
+    <Pressable style={({ pressed }) => pressed && styles.pressed} onPress={async () => {
+      if (editable) await saveReceiptDetails(false, false);
+      router.back();
+    }}><Text style={styles.back}>‹ Quay lại</Text></Pressable>
     <View style={styles.header}><View><Text style={styles.code}>{receipt.receiptCode}</Text><Text style={styles.area}>Khu đang thao tác: {area.name}</Text></View>
       <Text style={[styles.badge, receipt.status === "completed" && styles.done]}>{receipt.status}</Text></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gallery}>
@@ -219,6 +230,20 @@ export default function ReceiptDetailScreen() {
       />)}
     </ScrollView>
 
+    {currentReceipt.isLocked && <View style={styles.lockNotice}>
+      <Text style={styles.lockTitle}>Phiếu đã khóa sau 24 giờ</Text>
+      <Text style={styles.lockText}>{currentReceipt.canEdit
+        ? "Bạn đang dùng tài khoản admin nên vẫn có thể giải trình phiếu này."
+        : "Chỉ admin mới có thể giải trình hoặc mở khóa để nhân viên tiếp tục thao tác."}</Text>
+      {currentReceipt.canUnlock && <PrimaryButton
+        title="Mở khóa cho nhân viên"
+        loadingTitle="Đang mở khóa…"
+        onPress={unlockCurrentReceipt}
+        loading={pendingAction === "saveDetails"}
+        disabled={pendingAction !== null}
+      />}
+    </View>}
+
     {editable ? <View style={styles.detailsCard}>
       <Text style={styles.section}>Thông tin phiếu nhập</Text>
       <FormField
@@ -226,6 +251,7 @@ export default function ReceiptDetailScreen() {
         required
         value={orderCreatorName}
         onChangeText={setOrderCreatorName}
+        onBlur={() => { void saveReceiptDetails(false, false); }}
         placeholder="Nhập họ và tên người tạo đơn"
         maxLength={255}
         autoCapitalize="words"
@@ -261,19 +287,45 @@ export default function ReceiptDetailScreen() {
     {receipt.items.length === 0 && <Text style={styles.empty}>Chưa có nguyên liệu nào.</Text>}
 
     {editable && <View style={styles.form}><Text style={styles.section}>Thêm nguyên liệu</Text>
-      <View ref={productPickerRef} collapsable={false}>
+      <View style={styles.productPicker}>
         <FormField
           label="Nguyên liệu"
           required
           value={query}
           onFocus={openProductSuggestions}
-          onChangeText={(value) => { setQuery(value); setSelected(null); openProductSuggestions(); }}
+          onBlur={() => setTimeout(() => setSuggestionsOpen(false), 180)}
+          onChangeText={(value) => { setQuery(value); setSelected(null); setSuggestionsOpen(true); }}
           placeholder="Nhập tên hoặc mã nguyên liệu để tìm"
           autoCorrect={false}
           returnKeyType="search"
-          hint="Chạm vào ô để xem toàn bộ nguyên liệu của quầy, hoặc nhập tên/mã để lọc."
         />
+        {suggestionsOpen && <View style={styles.productDropdown}>
+          {suggestionsLoading ? <ActivityIndicator color="#059669" style={styles.dropdownLoading} /> : null}
+          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+            {searchError ? <Text style={styles.dropdownError}>{searchError}</Text> : null}
+            {results.map((product) => {
+              const selecting = selectingProductId === product.id;
+              return <Pressable key={`${product.areaId}-${product.id}`} disabled={selectingProductId !== null}
+                accessibilityRole="button" accessibilityState={{ disabled: selectingProductId !== null, busy: selecting }}
+                style={({ pressed }) => [styles.result, (pressed || selecting) && styles.pressed]} onPress={() => selectProduct(product)}>
+                <View style={{ flex: 1 }}><Text style={styles.resultName}>{product.productName}</Text>
+                  <Text style={styles.itemMeta}>{product.productCode} • {product.unit || "Chưa có đơn vị"}</Text>
+                  {!product.attachedToCurrentArea && <Text style={styles.attach}>Đã tồn tại – chưa dùng tại {area.name}. Nhấn để thêm.</Text>}
+                </View>
+                {selecting && <View style={styles.selecting}><ActivityIndicator color="#059669" /><Text style={styles.selectingText}>Đang chọn…</Text></View>}
+              </Pressable>;
+            })}
+            {!suggestionsLoading && results.length === 0 && !searchError && query.trim().length < 2 ?
+              <Text style={styles.dropdownEmpty}>Không có nguyên liệu phù hợp.</Text> : null}
+            {query.trim().length >= 2 && <Pressable disabled={preparingCreate} style={({ pressed }) => [styles.create, (pressed || preparingCreate) && styles.pressed]} onPress={() => {
+              setSuggestionsOpen(false); openCreateModal();
+            }}>
+              {preparingCreate ? <View style={styles.preparing}><ActivityIndicator color="#059669" /><Text style={styles.createText}>Đang lấy mã mới…</Text></View> : <Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text>}
+            </Pressable>}
+          </ScrollView>
+        </View>}
       </View>
+      <Text style={styles.fieldHint}>Chạm vào ô để xem toàn bộ nguyên liệu của quầy, hoặc nhập tên/mã để lọc.</Text>
       {searchError ? <Text style={styles.searchError}>{searchError}</Text> : null}
       {selected && <Text style={styles.selected}>Đã chọn: {selected.productName} • {selected.unit}</Text>}
       <View style={styles.row}>
@@ -312,49 +364,6 @@ export default function ReceiptDetailScreen() {
     {editable && <PrimaryButton title="Hoàn thành nhập kho" loadingTitle="Đang hoàn thành…" onPress={finish} loading={pendingAction === "complete"} disabled={pendingAction !== null || receipt.items.length === 0 || receipt.images.length === 0} />}
   </ScrollView></KeyboardAvoidingView>
 
-  <Modal visible={suggestionsOpen} transparent animationType="none" statusBarTranslucent onRequestClose={closeProductSuggestions}>
-    <View style={styles.dropdownLayer}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={closeProductSuggestions} accessibilityLabel="Đóng gợi ý nguyên liệu" />
-      <View style={[styles.productDropdown, dropdownPosition]}>
-        {suggestionsLoading ? <ActivityIndicator color="#059669" style={styles.dropdownLoading} /> : null}
-        <ScrollView
-          style={styles.dropdownScroll}
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator
-        >
-          {searchError ? <Text style={styles.dropdownError}>{searchError}</Text> : null}
-          {results.map((product) => {
-            const selecting = selectingProductId === product.id;
-            return <Pressable
-              key={`${product.areaId}-${product.id}`}
-              disabled={selectingProductId !== null}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: selectingProductId !== null, busy: selecting }}
-              style={({ pressed }) => [styles.result, (pressed || selecting) && styles.pressed]}
-              onPress={() => selectProduct(product)}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.resultName}>{product.productName}</Text>
-                <Text style={styles.itemMeta}>{product.productCode} • {product.unit || "Chưa có đơn vị"}</Text>
-                {!product.attachedToCurrentArea && <Text style={styles.attach}>Đã tồn tại – chưa dùng tại {area.name}. Nhấn để thêm.</Text>}
-              </View>
-              {selecting && <View style={styles.selecting}><ActivityIndicator color="#059669" /><Text style={styles.selectingText}>Đang chọn…</Text></View>}
-            </Pressable>;
-          })}
-          {!suggestionsLoading && results.length === 0 && !searchError && query.trim().length < 2 ?
-            <Text style={styles.dropdownEmpty}>Không có nguyên liệu phù hợp.</Text> : null}
-          {query.trim().length >= 2 && <Pressable disabled={preparingCreate} style={({ pressed }) => [styles.create, (pressed || preparingCreate) && styles.pressed]} onPress={() => {
-            setSuggestionsOpen(false);
-            openCreateModal();
-          }}>
-            {preparingCreate ? <View style={styles.preparing}><ActivityIndicator color="#059669" /><Text style={styles.createText}>Đang lấy mã mới…</Text></View> : <Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text>}
-          </Pressable>}
-        </ScrollView>
-      </View>
-    </View>
-  </Modal>
-
   <Modal visible={supplierOpen} transparent animationType="slide" onRequestClose={() => setSupplierOpen(false)}>
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalShade}>
       <View style={styles.supplierSheet}>
@@ -376,6 +385,7 @@ export default function ReceiptDetailScreen() {
             setSelectedSupplier(supplier);
             setSupplierQuery(supplier.supplierName);
             setSupplierOpen(false);
+            void saveReceiptDetails(false, false, supplier, orderCreatorName);
           }} style={({ pressed }) => [styles.supplierRow, pressed && styles.pressed]}>
             <Text style={styles.supplierName}>{supplier.supplierName}</Text>
             <Text style={styles.itemMeta}>{supplier.supplierCode}{supplier.phone ? ` • ${supplier.phone}` : ""}</Text>
@@ -430,6 +440,8 @@ const styles = StyleSheet.create({
   code: { fontSize: 26, fontWeight: "800", color: "#0f172a" }, area: { color: "#64748b", marginTop: 5 }, badge: { backgroundColor: "#fef3c7", color: "#92400e", padding: 8, borderRadius: 10, alignSelf: "flex-start", fontSize: 11 },
   done: { backgroundColor: "#d1fae5", color: "#065f46" }, gallery: { gap: 10, paddingVertical: 20 }, photo: { width: 260, height: 340, borderRadius: 20, backgroundColor: "#e2e8f0" },
   detailsCard: { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginBottom: 22, gap: 14 },
+  lockNotice: { backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fdba74", borderRadius: 18, padding: 16, marginBottom: 18, gap: 10 },
+  lockTitle: { color: "#9a3412", fontSize: 17, fontWeight: "800" }, lockText: { color: "#7c2d12", lineHeight: 20 },
   detailLabel: { color: "#64748b", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
   detailValue: { color: "#0f172a", fontSize: 16, fontWeight: "800", marginTop: -8 },
   supplierField: { gap: 7 }, fieldLabel: { color: "#334155", fontSize: 14, fontWeight: "700" }, required: { color: "#dc2626" },
@@ -438,7 +450,9 @@ const styles = StyleSheet.create({
   section: { fontSize: 20, fontWeight: "800", color: "#0f172a", marginBottom: 10 }, item: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 16, padding: 15, marginBottom: 9 },
   itemName: { fontSize: 16, fontWeight: "700" }, itemMeta: { color: "#64748b", marginTop: 4 }, itemTotal: { fontWeight: "800" }, empty: { color: "#94a3b8", marginBottom: 18 },
   form: { backgroundColor: "#ecfdf5", borderRadius: 22, padding: 16, marginTop: 16, gap: 12 },
-  dropdownLayer: { flex: 1 }, productDropdown: { position: "absolute", maxHeight: 260, backgroundColor: "#fff", borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#cbd5e1", elevation: 12, shadowColor: "#0f172a", shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } },
+  productPicker: { position: "relative", zIndex: 30 },
+  fieldHint: { color: "#64748b", fontSize: 12, lineHeight: 17 },
+  productDropdown: { position: "absolute", top: 78, left: 0, right: 0, zIndex: 40, maxHeight: 260, backgroundColor: "#fff", borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#cbd5e1", elevation: 12, shadowColor: "#0f172a", shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } },
   dropdownScroll: { maxHeight: 260 }, dropdownLoading: { paddingVertical: 12 }, dropdownEmpty: { color: "#64748b", padding: 18, textAlign: "center" }, dropdownError: { color: "#b91c1c", padding: 14, fontSize: 13 },
   result: { minHeight: 64, flexDirection: "row", alignItems: "center", padding: 14, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" }, resultName: { fontWeight: "800" },
   selecting: { alignItems: "center", gap: 3, marginLeft: 8 }, selectingText: { color: "#059669", fontSize: 10, fontWeight: "700" },

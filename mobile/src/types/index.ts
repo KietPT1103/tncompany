@@ -48,6 +48,13 @@ export type Receipt = {
   supplierId?: string | null;
   supplier?: { id: string; supplierCode: string; supplierName: string } | null;
   orderCreatorName: string;
+  isLocked: boolean;
+  lockedAt?: string | null;
+  lockedBy?: string | null;
+  unlockedAt?: string | null;
+  canEdit: boolean;
+  canUnlock: boolean;
+  autoLockAt?: string | null;
   thumbnailUrl?: string | null;
   items: ReceiptItem[];
   images: ReceiptImage[];

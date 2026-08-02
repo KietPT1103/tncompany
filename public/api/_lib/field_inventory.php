@@ -25,6 +25,43 @@ function field_inventory_require_permission(string $permission): array
     return $user;
 }
 
+function field_inventory_is_admin(array $user): bool
+{
+    return strtolower(trim((string) ($user['role'] ?? ''))) === 'admin';
+}
+
+function field_inventory_refresh_receipt_lock(?string $id = null): void
+{
+    $sql = 'UPDATE inventory_receipts
+            SET locked_at=NOW(),locked_by="system",updated_at=NOW()
+            WHERE status IN ("pending_explanation","draft")
+              AND locked_at IS NULL
+              AND COALESCE(unlocked_at,created_at) <= DATE_SUB(NOW(), INTERVAL 1 DAY)';
+    $params = [];
+    if ($id !== null && $id !== '') {
+        $sql .= ' AND id=:id';
+        $params['id'] = $id;
+    }
+    db()->prepare($sql)->execute($params);
+}
+
+function field_inventory_receipt_is_locked(array $receipt): bool
+{
+    return !empty($receipt['locked_at']);
+}
+
+function field_inventory_can_edit_receipt(array $user, array $receipt): bool
+{
+    return !field_inventory_receipt_is_locked($receipt) || field_inventory_is_admin($user);
+}
+
+function field_inventory_assert_receipt_editable(array $user, array $receipt): void
+{
+    if (!field_inventory_can_edit_receipt($user, $receipt)) {
+        respond_error('Phiếu đã tự động khóa sau 24 giờ. Chỉ admin mới có thể giải trình hoặc mở khóa.', 423);
+    }
+}
+
 function field_inventory_can_access_store(array $user, string $storeId): bool
 {
     if ($storeId === '') {
@@ -121,6 +158,7 @@ function field_inventory_load_receipt(string $id, bool $lock = false): ?array
 
 function field_inventory_require_receipt(array $user, string $id, bool $lock = false): array
 {
+    field_inventory_refresh_receipt_lock($id);
     $receipt = field_inventory_load_receipt($id, $lock);
     if (!$receipt) {
         respond_error('Không tìm thấy phiếu nhập.', 404);
@@ -129,8 +167,17 @@ function field_inventory_require_receipt(array $user, string $id, bool $lock = f
     return $receipt;
 }
 
-function field_inventory_receipt_payload(array $row, array $items = [], array $images = []): array
+function field_inventory_receipt_payload(array $row, array $items = [], array $images = [], array $user = []): array
 {
+    $isLocked = field_inventory_receipt_is_locked($row);
+    $isAdmin = field_inventory_is_admin($user);
+    $lockBase = trim((string) ($row['unlocked_at'] ?? '')) ?: trim((string) ($row['created_at'] ?? ''));
+    $autoLockAt = null;
+    if ($lockBase !== '') {
+        try {
+            $autoLockAt = (new DateTimeImmutable($lockBase))->modify('+1 day')->format(DateTimeInterface::ATOM);
+        } catch (Throwable $ignored) {}
+    }
     return [
         'id' => (string) $row['id'],
         'receiptCode' => (string) $row['receipt_code'],
@@ -145,6 +192,13 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
             'supplierName' => (string) ($row['supplier_name'] ?? ''),
         ] : null,
         'orderCreatorName' => trim((string) ($row['order_creator_name'] ?? '')),
+        'isLocked' => $isLocked,
+        'lockedAt' => $row['locked_at'] ?? null,
+        'lockedBy' => $row['locked_by'] ?? null,
+        'unlockedAt' => $row['unlocked_at'] ?? null,
+        'canEdit' => !$isLocked || $isAdmin,
+        'canUnlock' => $isLocked && $isAdmin,
+        'autoLockAt' => $autoLockAt,
         'status' => (string) $row['status'],
         'receiptDate' => (string) $row['receipt_date'],
         'receivedAt' => $row['received_at'] ?: null,

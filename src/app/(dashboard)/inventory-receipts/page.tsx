@@ -82,7 +82,7 @@ export default function FieldInventoryReceiptsPage() {
           <b className="text-slate-700">{item.area.name}</b><span className="text-sm text-slate-600">{item.createdByName}</span>
           <span className="text-sm text-slate-600">{item.status === "pending_explanation" ? "Chưa nhập" : `${item.itemCount} món`}<small className="block">{item.imageCount} ảnh</small></span>
           <b>{item.status === "pending_explanation" ? "Chưa nhập" : `${item.totalAmount.toLocaleString("vi-VN")} ₫`}</b>
-          <span className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${badges[item.status]}`}>{labels[item.status]}</span>
+          <span className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${item.isLocked ? "bg-amber-100 text-amber-800" : badges[item.status]}`}>{item.isLocked ? "Đã khóa" : labels[item.status]}</span>
         </button>)}
     </div>
     <div className="mt-4 flex items-center justify-end gap-3"><button disabled={pagination.page <= 1} onClick={() => change({ page: pagination.page - 1 })} className="rounded-xl border bg-white p-2 disabled:opacity-40"><ChevronLeft /></button>

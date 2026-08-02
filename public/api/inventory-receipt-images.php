@@ -176,6 +176,7 @@ if ($method === 'POST') {
     $receiptId = trim((string) ($_POST['receiptId'] ?? ''));
     $clientFileId = trim((string) ($_POST['clientFileId'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $receiptId);
+    field_inventory_assert_receipt_editable($user, $receipt);
     if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) respond_error('Phiếu đã khóa.', 409);
     if ($clientFileId === '') respond_error('Thiếu clientFileId.', 422);
 
@@ -303,6 +304,10 @@ if ($method === 'DELETE') {
     $user = field_inventory_require_permission('inventory_receipts.upload_image');
     $body = read_json_body();
     $image = receipt_image_find($user, trim((string) ($_GET['id'] ?? $body['id'] ?? '')));
+    field_inventory_assert_receipt_editable(
+        $user,
+        field_inventory_require_receipt($user, (string) $image['receipt_id'])
+    );
     if ($image['status'] === 'completed') respond_error('Không thể xóa ảnh của phiếu đã hoàn thành.', 409);
     if (receipt_image_is_r2_path($image['file_path'])) {
         receipt_image_r2()->delete(receipt_image_r2_key($image['file_path']));
