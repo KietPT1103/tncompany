@@ -31,7 +31,12 @@ function ingredient_payload(array $row): array
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    $user = auth_require_permission(['product.access', 'inventory_checks.access', 'inventory_receipts.access']);
+    $user = auth_require_permission([
+        'product.access',
+        'inventory_checks.access',
+        'inventory_receipts.access',
+        'inventory_receipts.view',
+    ]);
     $storeId = trim((string) ($_GET['areaId'] ?? $_GET['storeId'] ?? ''));
     field_inventory_require_store($user, $storeId);
     if (strtolower(trim((string) ($_GET['action'] ?? ''))) === 'next-code') {
@@ -155,4 +160,3 @@ if ($method === 'DELETE') {
 }
 
 respond_error('Method not allowed', 405);
-
