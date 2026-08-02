@@ -180,6 +180,10 @@ function receipts_create(array $body): void
         }
     }
     $orderCreatorName = trim((string) ($body['orderCreatorName'] ?? '')) ?: null;
+    $requestedStatus = strtolower(trim((string) ($body['status'] ?? 'draft')));
+    if ($requestedStatus === 'pending_explanation' && $orderCreatorName === null) {
+        respond_error('Vui lòng nhập tên người chụp bill nhanh.', 422);
+    }
     if ($orderCreatorName !== null && mb_strlen($orderCreatorName) > 255) {
         respond_error('Tên người tạo đơn không được vượt quá 255 ký tự.', 422);
     }

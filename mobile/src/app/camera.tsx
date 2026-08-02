@@ -6,7 +6,9 @@ import { File } from "expo-file-system";
 import * as Location from "expo-location";
 import { Asset, requestPermissionsAsync as requestMediaLibraryPermissionsAsync } from "expo-media-library";
 import { captureRef } from "react-native-view-shot";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View
+} from "react-native";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useArea } from "@/features/areas/AreaProvider";
 import { useAuth } from "@/features/auth/AuthProvider";
@@ -38,6 +40,8 @@ export default function CameraScreen() {
   const galleryPermissionGranted = useRef(false);
   const [busy, setBusy] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [quickNameOpen, setQuickNameOpen] = useState(false);
+  const [quickCreatorName, setQuickCreatorName] = useState("");
   useEffect(() => {
     (async () => {
       const result = await Location.requestForegroundPermissionsAsync();
@@ -114,13 +118,18 @@ export default function CameraScreen() {
       Alert.alert("Không thể lưu ảnh", error instanceof Error ? error.message : "Vui lòng thử lại.");
     } finally { setBusy(false); }
   }
-  async function finishPhotos() {
+  async function finishPhotos(creatorName = "") {
     if (photos.length === 0 || !area) return Alert.alert("Chưa có ảnh", "Hãy chụp ít nhất một ảnh trước khi hoàn tất.");
+    const normalizedCreatorName = creatorName.trim();
+    if (mode === "quick" && !normalizedCreatorName) {
+      return Alert.alert("Thiếu tên người chụp", "Vui lòng nhập tên người chụp bill.");
+    }
     const first = photos[0];
     const createPayload = {
       clientRequestId: clientRequestId.current,
       areaId: area.id,
       status: mode === "quick" ? "pending_explanation" as const : "draft" as const,
+      ...(mode === "quick" ? { orderCreatorName: normalizedCreatorName } : {}),
       capturedAt: first.capturedAt,
       location: first.location
     };
@@ -139,6 +148,7 @@ export default function CameraScreen() {
         try { new File(photo.fileUri).delete(); } catch {}
       }
       if (mode === "quick") {
+        setQuickNameOpen(false);
         Alert.alert("Đã lưu", `Đã tải ${photos.length} ảnh và lưu vào danh sách Chưa giải trình.`, [{ text: "OK", onPress: () => router.replace("/home") }]);
       } else {
         router.replace({ pathname: "/receipt/[id]", params: { id: receipt.item.id } });
@@ -152,6 +162,7 @@ export default function CameraScreen() {
         }))
       };
       await enqueueQuickReceipt(job);
+      setQuickNameOpen(false);
       const reason = error instanceof Error ? error.message : "Không thể kết nối máy chủ.";
       Alert.alert(
         "Đã lưu trên thiết bị",
@@ -159,6 +170,18 @@ export default function CameraScreen() {
         [{ text: "OK", onPress: () => router.replace("/home") }]
       );
     } finally { setBusy(false); }
+  }
+  function requestFinish() {
+    if (photos.length === 0) {
+      Alert.alert("Chưa có ảnh", "Hãy chụp ít nhất một ảnh trước khi hoàn tất.");
+      return;
+    }
+    if (mode === "quick") {
+      setQuickCreatorName("");
+      setQuickNameOpen(true);
+      return;
+    }
+    void finishPhotos();
   }
 
   if (rawUri && capturedAt && location) return <View style={styles.preview}>
@@ -186,13 +209,48 @@ export default function CameraScreen() {
           accessibilityRole="button"
           accessibilityState={{ disabled: photos.length === 0 || busy || capturing, busy }}
           style={({ pressed }) => [styles.finish, (photos.length === 0 || busy || capturing) && styles.finishDisabled, pressed && styles.pressed]}
-          onPress={finishPhotos}
+          onPress={requestFinish}
           disabled={photos.length === 0 || busy || capturing}
         >
           {busy ? <><ActivityIndicator color="#fff" /><Text style={styles.finishCount}>Đang tải…</Text></> : <><Text style={styles.finishText}>Hoàn tất</Text><Text style={styles.finishCount}>{photos.length} ảnh</Text></>}
         </Pressable>
       </View>
       <Text style={styles.hint}>Ảnh dùng sẽ tự lưu vào thư viện • Có thể chụp nhiều ảnh</Text></View>
+    <Modal
+      visible={quickNameOpen}
+      transparent
+      animationType="fade"
+      onRequestClose={() => { if (!busy) setQuickNameOpen(false); }}
+    >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalShade}>
+        <View style={styles.nameModal}>
+          <Text style={styles.nameTitle}>Tên người chụp bill</Text>
+          <Text style={styles.nameCopy}>Nhập tên người vừa chụp. Tên này sẽ được lưu là người nhập bill.</Text>
+          <TextInput
+            autoFocus
+            value={quickCreatorName}
+            onChangeText={setQuickCreatorName}
+            editable={!busy}
+            maxLength={255}
+            placeholder="Nhập họ và tên"
+            placeholderTextColor="#94a3b8"
+            returnKeyType="done"
+            onSubmitEditing={() => { if (quickCreatorName.trim() && !busy) void finishPhotos(quickCreatorName); }}
+            style={styles.nameInput}
+          />
+          <PrimaryButton
+            title="Lưu tên và hoàn tất"
+            loadingTitle="Đang lưu bill…"
+            onPress={() => void finishPhotos(quickCreatorName)}
+            loading={busy}
+            disabled={busy || !quickCreatorName.trim()}
+          />
+          <Pressable disabled={busy} onPress={() => setQuickNameOpen(false)} style={({ pressed }) => pressed && styles.pressed}>
+            <Text style={styles.nameCancel}>Hủy</Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   </View>;
 }
 const styles = StyleSheet.create({
@@ -210,5 +268,11 @@ const styles = StyleSheet.create({
   finishDisabled: { opacity: 0.45 },
   finishText: { color: "#fff", fontWeight: "900" }, finishCount: { color: "#d1fae5", fontSize: 11, marginTop: 2 },
   shutterInner: { flex: 1, borderRadius: 32, borderWidth: 3, borderColor: "#0f172a" }, hint: { color: "#e2e8f0", textAlign: "center" },
-  preview: { flex: 1, backgroundColor: "#020617", justifyContent: "center" }, previewActions: { gap: 10, padding: 18, backgroundColor: "#f8fafc" }
+  preview: { flex: 1, backgroundColor: "#020617", justifyContent: "center" }, previewActions: { gap: 10, padding: 18, backgroundColor: "#f8fafc" },
+  modalShade: { flex: 1, backgroundColor: "rgba(15,23,42,.65)", justifyContent: "center", padding: 22 },
+  nameModal: { borderRadius: 24, backgroundColor: "#fff", padding: 22, gap: 16 },
+  nameTitle: { color: "#0f172a", fontSize: 24, fontWeight: "900" },
+  nameCopy: { color: "#64748b", fontSize: 14, lineHeight: 21 },
+  nameInput: { minHeight: 54, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 14, paddingHorizontal: 15, color: "#0f172a", fontSize: 16 },
+  nameCancel: { color: "#64748b", fontWeight: "800", textAlign: "center", paddingVertical: 8 }
 });

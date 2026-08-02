@@ -5,6 +5,7 @@ export type QuickReceiptJob = {
   createPayload: {
     clientRequestId: string; areaId: string; status: "pending_explanation" | "draft";
     supplierId?: string;
+    orderCreatorName?: string;
     capturedAt: string; location: { latitude: number | null; longitude: number | null; accuracy: number | null; address: string };
   };
   uploads?: {
