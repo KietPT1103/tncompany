@@ -253,10 +253,14 @@ function ingredients_find(string $storeId, string $idOrCode): ?array
          LEFT JOIN suppliers s
            ON s.id COLLATE utf8mb4_unicode_ci=i.supplier_id COLLATE utf8mb4_unicode_ci
          WHERE i.store_id=:store_id
-           AND (i.id=:value OR i.ingredient_code=:value)
+           AND (i.id=:value_id OR i.ingredient_code=:value_code)
          LIMIT 1'
     );
-    $statement->execute(['store_id' => $storeId, 'value' => $idOrCode]);
+    $statement->execute([
+        'store_id' => $storeId,
+        'value_id' => $idOrCode,
+        'value_code' => $idOrCode,
+    ]);
     $row = $statement->fetch();
     return $row ?: null;
 }

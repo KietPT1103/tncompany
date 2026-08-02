@@ -95,13 +95,18 @@ function receipts_list(): void
     }
     $keyword = trim((string) ($_GET['keyword'] ?? $_GET['search'] ?? ''));
     if ($keyword !== '') {
-        $where[] = '(r.receipt_code LIKE :keyword OR r.note LIKE :keyword OR r.location_address LIKE :keyword)';
-        $params['keyword'] = '%' . $keyword . '%';
+        $needle = '%' . $keyword . '%';
+        $where[] = '(r.receipt_code LIKE :keyword_code OR r.note LIKE :keyword_note OR r.location_address LIKE :keyword_address)';
+        $params['keyword_code'] = $needle;
+        $params['keyword_note'] = $needle;
+        $params['keyword_address'] = $needle;
     }
     $productKeyword = trim((string) ($_GET['productKeyword'] ?? ''));
     if ($productKeyword !== '') {
-        $where[] = 'EXISTS (SELECT 1 FROM inventory_receipt_items si WHERE si.receipt_id=r.id AND (si.product_code LIKE :pk OR si.product_name LIKE :pk))';
-        $params['pk'] = '%' . $productKeyword . '%';
+        $needle = '%' . $productKeyword . '%';
+        $where[] = 'EXISTS (SELECT 1 FROM inventory_receipt_items si WHERE si.receipt_id=r.id AND (si.product_code LIKE :product_code OR si.product_name LIKE :product_name))';
+        $params['product_code'] = $needle;
+        $params['product_name'] = $needle;
     }
     $whereSql = implode(' AND ', $where);
     $page = max(1, (int) ($_GET['page'] ?? 1));

@@ -50,9 +50,12 @@ if ($method === 'GET') {
               ON s.id COLLATE utf8mb4_unicode_ci=i.supplier_id COLLATE utf8mb4_unicode_ci
             WHERE i.store_id=:store_id';
     if ($search !== '') {
-        $sql .= ' AND (i.ingredient_code LIKE :needle OR i.ingredient_name LIKE :needle
-                       OR i.normalized_name LIKE :normalized OR s.supplier_name LIKE :needle)';
-        $params['needle'] = '%' . $search . '%';
+        $sql .= ' AND (i.ingredient_code LIKE :needle_code OR i.ingredient_name LIKE :needle_name
+                       OR i.normalized_name LIKE :normalized OR s.supplier_name LIKE :needle_supplier)';
+        $needle = '%' . $search . '%';
+        $params['needle_code'] = $needle;
+        $params['needle_name'] = $needle;
+        $params['needle_supplier'] = $needle;
         $params['normalized'] = '%' . ingredients_normalized_name($search) . '%';
     }
     $sql .= ' ORDER BY i.ingredient_name';
@@ -94,25 +97,39 @@ if ($method === 'POST') {
         if (!$supplier->fetchColumn()) respond_error('Nhà phân phối không thuộc khu vực này.', 422);
     }
     $id = uuidv4();
-    $statement = db()->prepare(
-        'INSERT INTO ingredients
-         (id,store_id,ingredient_code,ingredient_name,normalized_name,unit,cost,stock_quantity,
-          supplier_id,supplier_item_code,description,is_active)
-         VALUES
-         (:id,:store_id,:code,:name,:normalized,:unit,:cost,:stock,:supplier,:supplier_item_code,:description,:active)'
-    );
-    $statement->execute([
-        'id' => $id, 'store_id' => $storeId, 'code' => $code, 'name' => $name,
-        'normalized' => ingredients_normalized_name($name),
-        'unit' => trim((string) ($body['unit'] ?? '')) ?: null,
-        'cost' => is_numeric($body['cost'] ?? null) ? (float) $body['cost'] : null,
-        'stock' => is_numeric($body['stockQuantity'] ?? null) ? round((float) $body['stockQuantity'], 3) : 0,
-        'supplier' => $supplierId,
-        'supplier_item_code' => trim((string) ($body['supplierItemCode'] ?? '')) ?: null,
-        'description' => trim((string) ($body['description'] ?? '')) ?: null,
-        'active' => array_key_exists('isActive', $body) && !$body['isActive'] ? 0 : 1,
-    ]);
-    respond_ok(['created' => true, 'item' => ingredient_payload(ingredients_find($storeId, $id) ?: [])], 201);
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $statement = $pdo->prepare(
+            'INSERT INTO ingredients
+             (id,store_id,ingredient_code,ingredient_name,normalized_name,unit,cost,stock_quantity,
+              supplier_id,supplier_item_code,description,is_active)
+             VALUES
+             (:id,:store_id,:code,:name,:normalized,:unit,:cost,:stock,:supplier,:supplier_item_code,:description,:active)'
+        );
+        $statement->execute([
+            'id' => $id, 'store_id' => $storeId, 'code' => $code, 'name' => $name,
+            'normalized' => ingredients_normalized_name($name),
+            'unit' => trim((string) ($body['unit'] ?? '')) ?: null,
+            'cost' => is_numeric($body['cost'] ?? null) ? (float) $body['cost'] : null,
+            'stock' => is_numeric($body['stockQuantity'] ?? null) ? round((float) $body['stockQuantity'], 3) : 0,
+            'supplier' => $supplierId,
+            'supplier_item_code' => trim((string) ($body['supplierItemCode'] ?? '')) ?: null,
+            'description' => trim((string) ($body['description'] ?? '')) ?: null,
+            'active' => array_key_exists('isActive', $body) && !$body['isActive'] ? 0 : 1,
+        ]);
+        $created = ingredients_find($storeId, $id);
+        if (!$created) {
+            throw new RuntimeException('Khong the doc lai nguyen lieu vua tao.');
+        }
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
+    respond_ok(['created' => true, 'item' => ingredient_payload($created)], 201);
 }
 
 $code = trim((string) ($body['ingredientCode'] ?? $_GET['ingredientCode'] ?? ''));

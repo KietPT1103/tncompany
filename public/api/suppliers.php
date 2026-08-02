@@ -46,9 +46,12 @@ if ($method === 'GET') {
             LEFT JOIN ingredients i ON i.supplier_id COLLATE utf8mb4_unicode_ci=s.id COLLATE utf8mb4_unicode_ci
             WHERE s.store_id=:store_id';
     if ($search !== '') {
-        $sql .= ' AND (s.supplier_code LIKE :needle OR s.supplier_name LIKE :needle
-                       OR s.normalized_name LIKE :normalized OR s.phone LIKE :needle)';
-        $params['needle'] = '%' . $search . '%';
+        $sql .= ' AND (s.supplier_code LIKE :needle_code OR s.supplier_name LIKE :needle_name
+                       OR s.normalized_name LIKE :normalized OR s.phone LIKE :needle_phone)';
+        $needle = '%' . $search . '%';
+        $params['needle_code'] = $needle;
+        $params['needle_name'] = $needle;
+        $params['needle_phone'] = $needle;
         $params['normalized'] = '%' . ingredients_normalized_name($search) . '%';
     }
     $sql .= ' GROUP BY s.id ORDER BY s.supplier_name';
