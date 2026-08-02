@@ -8,6 +8,7 @@ export type ManagedUser = {
   displayName?: string | null;
   role: UserRole;
   storeId?: string | null;
+  storeIds: string[];
   isActive: boolean;
   permissions: AppPermission[];
   createdAt?: string | null;
@@ -29,6 +30,7 @@ export async function createManagedUser(payload: {
   password: string;
   role: UserRole;
   storeId?: string;
+  storeIds?: string[];
   isActive?: boolean;
   permissions?: AppPermission[];
 }) {
@@ -49,6 +51,7 @@ export async function updateManagedUser(
     password: string;
     role: UserRole;
     storeId: string;
+    storeIds: string[];
     isActive: boolean;
     permissions: AppPermission[];
   }>

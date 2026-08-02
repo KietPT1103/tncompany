@@ -30,6 +30,12 @@ const STORE_OPTIONS = [
   { value: "farm", label: "Farm" },
 ];
 
+const INVENTORY_AREA_OPTIONS = [
+  { value: "cafe", label: "Cafe" },
+  { value: "restaurant", label: "Lẩu / Bếp" },
+  { value: "farm", label: "Farm" },
+];
+
 const ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
   { value: "manager", label: "Manager" },
@@ -44,6 +50,7 @@ type FormState = {
   password: string;
   role: UserRole;
   storeId: string;
+  storeIds: string[];
   isActive: boolean;
   permissions: AppPermission[];
 };
@@ -55,9 +62,26 @@ const DEFAULT_FORM: FormState = {
   password: "",
   role: "manager",
   storeId: "cafe",
+  storeIds: [],
   isActive: true,
   permissions: getDefaultPermissionsForRole("manager"),
 };
+
+const INVENTORY_ACCOUNT_PERMISSIONS = new Set<AppPermission>([
+  "inventory_receipts.access",
+  "inventory_receipts.view",
+  "inventory_receipts.create",
+  "inventory_receipts.update",
+  "inventory_receipts.complete",
+  "inventory_receipts.cancel",
+  "inventory_receipts.upload_image",
+  "products.create",
+  "products.attach_area",
+]);
+
+function requiresAssignedStore(role: UserRole, permissions: AppPermission[]) {
+  return role !== "admin" && permissions.some((permission) => INVENTORY_ACCOUNT_PERMISSIONS.has(permission));
+}
 
 function mapRoleLabel(role: ManagedUser["role"]) {
   return ROLE_OPTIONS.find((item) => item.value === role)?.label || role;
@@ -69,6 +93,14 @@ function mapPermissionSummary(user: ManagedUser) {
   }
 
   return `${normalizePermissionList(user.permissions).length} chuc nang`;
+}
+
+function mapStoreSummary(user: ManagedUser) {
+  const storeIds = user.storeIds?.length ? user.storeIds : user.storeId ? [user.storeId] : [];
+  if (storeIds.length === 0) return "Không gắn khu vực";
+  return storeIds.map((assignedStoreId) =>
+    INVENTORY_AREA_OPTIONS.find((option) => option.value === assignedStoreId)?.label || assignedStoreId
+  ).join(", ");
 }
 
 export default function AccountManagementPage() {
@@ -131,6 +163,7 @@ export default function AccountManagementPage() {
         (item.displayName || "").toLowerCase().includes(keyword) ||
         item.role.toLowerCase().includes(keyword) ||
         (item.storeId || "").toLowerCase().includes(keyword) ||
+        (item.storeIds || []).some((assignedStoreId) => assignedStoreId.toLowerCase().includes(keyword)) ||
         permissionText.includes(keyword)
       );
     });
@@ -148,6 +181,14 @@ export default function AccountManagementPage() {
   }
 
   function startEdit(item: ManagedUser) {
+    const permissions = normalizePermissionList(item.permissions);
+    const storeIds = item.storeIds?.length
+      ? item.storeIds
+      : item.storeId
+      ? [item.storeId]
+      : requiresAssignedStore(item.role, permissions)
+      ? INVENTORY_AREA_OPTIONS.map((option) => option.value)
+      : [];
     setEditingId(item.id);
     setForm({
       email: item.email,
@@ -156,8 +197,9 @@ export default function AccountManagementPage() {
       password: "",
       role: item.role,
       storeId: item.storeId || "",
+      storeIds,
       isActive: item.isActive,
-      permissions: normalizePermissionList(item.permissions),
+      permissions,
     });
     setError("");
     setMessage("");
@@ -178,11 +220,15 @@ export default function AccountManagementPage() {
 
     setForm((current) => {
       const exists = current.permissions.includes(permission);
+      const permissions = exists
+        ? current.permissions.filter((item) => item !== permission)
+        : normalizePermissionList([...current.permissions, permission]);
       return {
         ...current,
-        permissions: exists
-          ? current.permissions.filter((item) => item !== permission)
-          : normalizePermissionList([...current.permissions, permission]),
+        permissions,
+        storeIds: !exists && INVENTORY_ACCOUNT_PERMISSIONS.has(permission) && current.storeIds.length === 0
+          ? INVENTORY_AREA_OPTIONS.map((option) => option.value)
+          : current.storeIds,
       };
     });
   }
@@ -204,6 +250,9 @@ export default function AccountManagementPage() {
       permissions: normalizePermissionList(
         MANAGED_PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.id))
       ),
+      storeIds: current.storeIds.length > 0
+        ? current.storeIds
+        : INVENTORY_AREA_OPTIONS.map((option) => option.value),
     }));
   }
 
@@ -219,9 +268,13 @@ export default function AccountManagementPage() {
   }
 
   async function handleSubmit() {
-    setSaving(true);
     setError("");
     setMessage("");
+    if (requiresAssignedStore(form.role, form.permissions) && form.storeIds.length === 0) {
+      setError("Tài khoản có chức năng nhập hàng phải được cấp ít nhất một khu vực.");
+      return;
+    }
+    setSaving(true);
 
     try {
       if (editingId) {
@@ -230,6 +283,7 @@ export default function AccountManagementPage() {
           username: form.username,
           displayName: form.displayName,
           storeId: form.storeId,
+          storeIds: form.storeIds,
           isActive: form.isActive,
           ...(canManageAccess
             ? {
@@ -251,6 +305,7 @@ export default function AccountManagementPage() {
           displayName: form.displayName,
           password: form.password,
           storeId: form.storeId,
+          storeIds: form.storeIds,
           isActive: form.isActive,
           ...(canManageAccess
             ? {
@@ -401,7 +456,7 @@ export default function AccountManagementPage() {
                           <div className="mt-2 text-sm text-slate-500">{item.email}</div>
                           <div className="mt-1 text-sm text-slate-500">
                             {item.username ? `@${item.username}` : "Không có username"} •{" "}
-                            {item.storeId || "Không gắn cửa hàng"}
+                            {mapStoreSummary(item)}
                           </div>
                         </div>
 
@@ -506,7 +561,9 @@ export default function AccountManagementPage() {
               )}
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Cửa hàng</span>
+                <span className="mb-2 block text-sm font-medium text-slate-700">
+                  Cửa hàng chính
+                </span>
                 <select
                   value={form.storeId}
                   onChange={(event) =>
@@ -521,6 +578,50 @@ export default function AccountManagementPage() {
                   ))}
                 </select>
               </label>
+
+              {requiresAssignedStore(form.role, form.permissions) ? (
+                <fieldset className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <legend className="text-sm font-semibold text-emerald-950">Khu vực nhập hàng *</legend>
+                      <p className="mt-1 text-xs leading-5 text-emerald-800">
+                        Tài khoản có thể chuyển đổi giữa mọi khu vực được chọn trên app.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-emerald-700"
+                      onClick={() => setForm((current) => ({
+                        ...current,
+                        storeIds: INVENTORY_AREA_OPTIONS.map((option) => option.value),
+                      }))}
+                    >
+                      Chọn cả 3
+                    </button>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    {INVENTORY_AREA_OPTIONS.map((option) => {
+                      const checked = form.storeIds.includes(option.value);
+                      return (
+                        <label key={option.value} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-3 text-sm font-medium ${checked ? "border-emerald-400 bg-white text-emerald-900" : "border-slate-200 bg-white/70 text-slate-600"}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setForm((current) => ({
+                              ...current,
+                              storeIds: checked
+                                ? current.storeIds.filter((storeId) => storeId !== option.value)
+                                : [...current.storeIds, option.value],
+                            }))}
+                            className="h-4 w-4"
+                          />
+                          {option.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              ) : null}
 
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-3">

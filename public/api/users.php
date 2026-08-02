@@ -7,6 +7,17 @@ require_once __DIR__ . '/_lib/auth.php';
 
 function users_map_row(array $row): array
 {
+    $storeIds = [];
+    $storeStatement = db()->prepare(
+        'SELECT store_id FROM user_store_access WHERE user_id=:user_id ORDER BY store_id'
+    );
+    $storeStatement->execute(['user_id' => $row['id']]);
+    $storeIds = $storeStatement->fetchAll(PDO::FETCH_COLUMN);
+    $primaryStoreId = trim((string) ($row['store_id'] ?? ''));
+    if ($primaryStoreId !== '' && !in_array($primaryStoreId, $storeIds, true)) {
+        $storeIds[] = $primaryStoreId;
+    }
+
     return [
         'id' => (string) $row['id'],
         'email' => (string) $row['email'],
@@ -14,11 +25,62 @@ function users_map_row(array $row): array
         'displayName' => $row['display_name'] !== null ? (string) $row['display_name'] : null,
         'role' => (string) $row['role'],
         'storeId' => $row['store_id'] !== null ? (string) $row['store_id'] : null,
+        'storeIds' => array_values($storeIds),
         'isActive' => (bool) ($row['is_active'] ?? false),
         'permissions' => auth_effective_permissions($row),
         'createdAt' => null,
         'updatedAt' => null,
     ];
+}
+
+function users_normalize_store_ids($value, string $primaryStoreId = ''): array
+{
+    $allowed = ['cafe', 'restaurant', 'farm'];
+    $source = is_array($value) ? $value : [];
+    if ($primaryStoreId !== '') {
+        $source[] = $primaryStoreId;
+    }
+    $lookup = [];
+    foreach ($source as $storeId) {
+        $normalized = strtolower(trim((string) $storeId));
+        if (in_array($normalized, $allowed, true)) {
+            $lookup[$normalized] = true;
+        }
+    }
+    return array_values(array_filter($allowed, static fn(string $storeId): bool => isset($lookup[$storeId])));
+}
+
+function users_requires_store_access(string $role, array $permissions): bool
+{
+    if (strtolower(trim($role)) === 'admin') {
+        return false;
+    }
+
+    $inventoryPermissions = [
+        'inventory_receipts.access',
+        'inventory_receipts.view',
+        'inventory_receipts.create',
+        'inventory_receipts.update',
+        'inventory_receipts.complete',
+        'inventory_receipts.cancel',
+        'inventory_receipts.upload_image',
+        'products.create',
+        'products.attach_area',
+    ];
+
+    return array_intersect($permissions, $inventoryPermissions) !== [];
+}
+
+function users_sync_store_access(string $userId, array $storeIds): void
+{
+    $delete = db()->prepare('DELETE FROM user_store_access WHERE user_id=:user_id');
+    $delete->execute(['user_id' => $userId]);
+    $insert = db()->prepare(
+        'INSERT INTO user_store_access (user_id,store_id) VALUES (:user_id,:store_id)'
+    );
+    foreach ($storeIds as $storeId) {
+        $insert->execute(['user_id' => $userId, 'store_id' => $storeId]);
+    }
 }
 
 $currentUser = auth_require_permission('accounts.access');
@@ -58,6 +120,7 @@ if ($method === 'POST') {
                 : auth_default_permissions_for_role($role)
         )
         : auth_default_permissions_for_role($role);
+    $storeIds = users_normalize_store_ids($body['storeIds'] ?? [], $storeId);
 
     if ($email === '' || $password === '') {
         respond_error('Email và mật khẩu là bắt buộc.', 422);
@@ -66,26 +129,37 @@ if ($method === 'POST') {
     if (!in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
         respond_error('Vai trò không hợp lệ.', 422);
     }
+    if (users_requires_store_access($role, $permissions) && $storeIds === []) {
+        respond_error('Tài khoản có chức năng nhập hàng phải được cấp ít nhất một khu vực.', 422);
+    }
 
     $id = uuidv4();
-    $statement = db()->prepare(
-        'INSERT INTO users (
-            id, email, username, display_name, password_hash, role, store_id, is_active, permissions_json
-         ) VALUES (
-            :id, :email, :username, :display_name, :password_hash, :role, :store_id, :is_active, :permissions_json
-         )'
-    );
-    $statement->execute([
-        'id' => $id,
-        'email' => $email,
-        'username' => $username !== '' ? $username : null,
-        'display_name' => $displayName !== '' ? $displayName : null,
-        'password_hash' => password_hash($password, PASSWORD_DEFAULT),
-        'role' => $role,
-        'store_id' => $storeId !== '' ? $storeId : null,
-        'is_active' => !array_key_exists('isActive', $body) || !empty($body['isActive']) ? 1 : 0,
-        'permissions_json' => json_encode($permissions, JSON_UNESCAPED_UNICODE),
-    ]);
+    db()->beginTransaction();
+    try {
+        $statement = db()->prepare(
+            'INSERT INTO users (
+                id, email, username, display_name, password_hash, role, store_id, is_active, permissions_json
+             ) VALUES (
+                :id, :email, :username, :display_name, :password_hash, :role, :store_id, :is_active, :permissions_json
+             )'
+        );
+        $statement->execute([
+            'id' => $id,
+            'email' => $email,
+            'username' => $username !== '' ? $username : null,
+            'display_name' => $displayName !== '' ? $displayName : null,
+            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+            'role' => $role,
+            'store_id' => $storeIds[0] ?? ($storeId !== '' ? $storeId : null),
+            'is_active' => !array_key_exists('isActive', $body) || !empty($body['isActive']) ? 1 : 0,
+            'permissions_json' => json_encode($permissions, JSON_UNESCAPED_UNICODE),
+        ]);
+        users_sync_store_access($id, $storeIds);
+        db()->commit();
+    } catch (Throwable $exception) {
+        if (db()->inTransaction()) db()->rollBack();
+        throw $exception;
+    }
 
     $find = db()->prepare(
         'SELECT id, email, username, display_name, role, store_id, is_active, permissions_json
@@ -103,6 +177,15 @@ if ($method === 'PATCH') {
     $id = trim((string) ($body['id'] ?? ''));
     if ($id === '') {
         respond_error('Thiếu id tài khoản.', 422);
+    }
+
+    $existingStatement = db()->prepare(
+        'SELECT id,role,store_id,permissions_json FROM users WHERE id=:id LIMIT 1'
+    );
+    $existingStatement->execute(['id' => $id]);
+    $existing = $existingStatement->fetch();
+    if (!$existing) {
+        respond_error('Không tìm thấy tài khoản.', 404);
     }
 
     $fields = [];
@@ -175,18 +258,59 @@ if ($method === 'PATCH') {
         $params['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
     }
 
-    if ($fields === []) {
+    $storeAccessChanged = array_key_exists('storeIds', $body);
+    if ($fields === [] && !$storeAccessChanged) {
         respond_error('Không có dữ liệu cần cập nhật.', 422);
     }
 
-    $statement = db()->prepare(
-        sprintf('UPDATE users SET %s WHERE id = :id', implode(', ', $fields))
-    );
-    $statement->execute($params);
+    $nextRole = array_key_exists('role', $body)
+        ? trim((string) $body['role'])
+        : (string) $existing['role'];
+    $nextStoreId = array_key_exists('storeId', $body)
+        ? trim((string) $body['storeId'])
+        : trim((string) ($existing['store_id'] ?? ''));
+    $nextPermissions = array_key_exists('permissions', $body)
+        ? auth_normalize_permissions($body['permissions'])
+        : auth_effective_permissions($existing);
+    if ($storeAccessChanged) {
+        $nextStoreIds = users_normalize_store_ids($body['storeIds']);
+    } else {
+        $currentStoreStatement = db()->prepare(
+            'SELECT store_id FROM user_store_access WHERE user_id=:user_id ORDER BY store_id'
+        );
+        $currentStoreStatement->execute(['user_id' => $id]);
+        $nextStoreIds = users_normalize_store_ids(
+            $currentStoreStatement->fetchAll(PDO::FETCH_COLUMN),
+            $nextStoreId
+        );
+    }
+    if (users_requires_store_access($nextRole, $nextPermissions) && $nextStoreIds === []) {
+        respond_error('Tài khoản có chức năng nhập hàng phải được cấp ít nhất một khu vực.', 422);
+    }
+    if ($storeAccessChanged) {
+        if (!in_array('store_id = :store_id', $fields, true)) {
+            $fields[] = 'store_id = :store_id';
+        }
+        $params['store_id'] = $nextStoreIds[0] ?? null;
+    }
 
-    if (array_key_exists('isActive', $body) && empty($body['isActive'])) {
-        $deleteTokens = db()->prepare('DELETE FROM api_tokens WHERE user_id = :user_id');
-        $deleteTokens->execute(['user_id' => $id]);
+    db()->beginTransaction();
+    try {
+        $statement = db()->prepare(
+            sprintf('UPDATE users SET %s WHERE id = :id', implode(', ', $fields))
+        );
+        $statement->execute($params);
+        if ($storeAccessChanged) {
+            users_sync_store_access($id, $nextStoreIds);
+        }
+        if (array_key_exists('isActive', $body) && empty($body['isActive'])) {
+            $deleteTokens = db()->prepare('DELETE FROM api_tokens WHERE user_id = :user_id');
+            $deleteTokens->execute(['user_id' => $id]);
+        }
+        db()->commit();
+    } catch (Throwable $exception) {
+        if (db()->inTransaction()) db()->rollBack();
+        throw $exception;
     }
 
     $find = db()->prepare(
@@ -210,11 +334,18 @@ if ($method === 'DELETE') {
         respond_error('Không thể xóa tài khoản đang đăng nhập.', 422);
     }
 
-    $deleteTokens = db()->prepare('DELETE FROM api_tokens WHERE user_id = :user_id');
-    $deleteTokens->execute(['user_id' => $id]);
-
-    $statement = db()->prepare('DELETE FROM users WHERE id = :id');
-    $statement->execute(['id' => $id]);
+    db()->beginTransaction();
+    try {
+        $deleteTokens = db()->prepare('DELETE FROM api_tokens WHERE user_id = :user_id');
+        $deleteTokens->execute(['user_id' => $id]);
+        db()->prepare('DELETE FROM user_store_access WHERE user_id=:user_id')->execute(['user_id' => $id]);
+        $statement = db()->prepare('DELETE FROM users WHERE id = :id');
+        $statement->execute(['id' => $id]);
+        db()->commit();
+    } catch (Throwable $exception) {
+        if (db()->inTransaction()) db()->rollBack();
+        throw $exception;
+    }
 
     respond_ok([
         'deleted' => true,

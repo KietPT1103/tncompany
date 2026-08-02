@@ -65,6 +65,16 @@ function auth_ensure_tables(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
 
+    db()->exec(
+        'CREATE TABLE IF NOT EXISTS user_store_access (
+            user_id VARCHAR(36) NOT NULL,
+            store_id VARCHAR(50) NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, store_id),
+            KEY idx_user_store_access_store (store_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
     auth_ensure_column('users', 'username', 'VARCHAR(100) NULL AFTER email');
     auth_ensure_column('users', 'display_name', 'VARCHAR(255) NULL AFTER username');
     auth_ensure_column('users', 'role', 'VARCHAR(30) NOT NULL DEFAULT "user" AFTER password_hash');
