@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { getAreas } from "@/services/api";
 import { useArea } from "@/features/areas/AreaProvider";
+import { useAuth } from "@/features/auth/AuthProvider";
 import type { Area } from "@/types";
 
 export default function AreasScreen() {
@@ -12,6 +13,7 @@ export default function AreasScreen() {
   const [error, setError] = useState("");
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const { selectArea } = useArea();
+  const { user, loading: authLoading } = useAuth();
   async function loadAreas() {
     try {
       setLoading(true);
@@ -28,6 +30,7 @@ export default function AreasScreen() {
     }
   }
   useEffect(() => {
+    if (authLoading || !user) return;
     let active = true;
     getAreas().then((result) => {
       if (active) setAreas(result.items);
@@ -41,7 +44,9 @@ export default function AreasScreen() {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, []);
+  }, [authLoading, user]);
+  if (authLoading) return null;
+  if (!user) return <Redirect href="/login" />;
   return <Screen><Text style={styles.kicker}>KHU VỰC THAO TÁC</Text><Text style={styles.title}>Bạn đang nhập hàng ở đâu?</Text>
     {loading && <View style={styles.notice}><ActivityIndicator color="#059669" /><Text style={styles.noticeText}>Đang tải khu vực…</Text></View>}
     {!loading && error ? <View style={styles.errorNotice}><Text style={styles.errorText}>{error}</Text>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -9,10 +9,12 @@ import { syncPendingJobs } from "@/features/sync/syncService";
 
 export default function HomeScreen() {
   const { area } = useArea();
-  const { user, signOut } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const [syncing, setSyncing] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  if (!area) { router.replace("/areas"); return null; }
+  if (loading) return null;
+  if (!user) return <Redirect href="/login" />;
+  if (!area) return <Redirect href="/areas" />;
   async function handleSync() {
     try {
       setSyncing(true);
