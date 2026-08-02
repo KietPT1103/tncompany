@@ -1,10 +1,11 @@
 import type { ExpoConfig } from "expo/config";
 
 const config: ExpoConfig = {
-  name: "TN Company Nhập hàng",
+  name: "Bấm bill đi thu ngân",
   slug: "tn-company-inventory",
   scheme: "tncompany",
   version: "1.0.0",
+  icon: "./assets/mobile-icon.png",
   orientation: "portrait",
   userInterfaceStyle: "light",
   newArchEnabled: true,

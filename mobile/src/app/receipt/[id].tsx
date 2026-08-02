@@ -8,7 +8,7 @@ import { Screen } from "@/components/Screen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useArea } from "@/features/areas/AreaProvider";
 import {
-  addReceiptItem, apiAssetUrl, attachProduct, completeReceipt, createProduct, getNextProductCode, getReceipt, getToken,
+  addReceiptItem, attachProduct, cacheApiAsset, completeReceipt, createProduct, getNextProductCode, getReceipt,
   searchProducts, searchSuppliers, unlockReceipt, updateReceipt, type ProductSearchResult, type SupplierSearchResult
 } from "@/services/api";
 import type { Receipt } from "@/types";
@@ -17,7 +17,8 @@ export default function ReceiptDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { area } = useArea();
   const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const [token, setToken] = useState("");
+  const [imageUris, setImageUris] = useState<Record<string, string>>({});
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductSearchResult[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -51,8 +52,19 @@ export default function ReceiptDetailScreen() {
         setSupplierQuery(data.item.supplier.supplierName);
       }
     }).catch((e) => Alert.alert("Không tải được phiếu", e.message));
-    getToken().then((value) => setToken(value || ""));
   }, [id]);
+  useEffect(() => {
+    if (!receipt) return;
+    let active = true;
+    receipt.images.forEach((image) => {
+      cacheApiAsset(image.url, image.id).then((uri) => {
+        if (active) setImageUris((current) => ({ ...current, [image.id]: uri }));
+      }).catch(() => {
+        if (active) setImageErrors((current) => ({ ...current, [image.id]: true }));
+      });
+    });
+    return () => { active = false; };
+  }, [receipt]);
   useEffect(() => {
     if (!area || !suggestionsOpen) return;
     const timer = setTimeout(() => {
@@ -145,6 +157,16 @@ export default function ReceiptDetailScreen() {
     }
   }
 
+  async function retryImage(imageId: string, imageUrl: string) {
+    setImageErrors((current) => ({ ...current, [imageId]: false }));
+    try {
+      const uri = await cacheApiAsset(imageUrl, imageId);
+      setImageUris((current) => ({ ...current, [imageId]: uri }));
+    } catch {
+      setImageErrors((current) => ({ ...current, [imageId]: true }));
+    }
+  }
+
   async function selectProduct(product: ProductSearchResult) {
     try {
       setSelectingProductId(product.id);
@@ -222,12 +244,14 @@ export default function ReceiptDetailScreen() {
     <View style={styles.header}><View><Text style={styles.code}>{receipt.receiptCode}</Text><Text style={styles.area}>Khu đang thao tác: {area.name}</Text></View>
       <Text style={[styles.badge, receipt.status === "completed" && styles.done]}>{receipt.status}</Text></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gallery}>
-      {receipt.images.map((image) => <Image
-        key={image.id}
-        source={{ uri: apiAssetUrl(image.url), headers: { Authorization: `Bearer ${token}` } }}
-        style={styles.photo}
-        resizeMode="cover"
-      />)}
+      {receipt.images.map((image) => <View key={image.id} style={styles.photo}>
+        {imageUris[image.id] ? <Image source={{ uri: imageUris[image.id] }} style={StyleSheet.absoluteFill} resizeMode="cover" /> :
+          <View style={styles.photoPlaceholder}>{imageErrors[image.id] ?
+            <Pressable onPress={() => retryImage(image.id, image.url)} style={({ pressed }) => pressed && styles.pressed}>
+              <Text style={styles.retryImage}>Không tải được ảnh · Chạm để thử lại</Text>
+            </Pressable> : <><ActivityIndicator color="#059669" /><Text style={styles.loadingImage}>Đang tải ảnh…</Text></>}
+          </View>}
+      </View>)}
     </ScrollView>
 
     {currentReceipt.isLocked && <View style={styles.lockNotice}>
@@ -438,7 +462,10 @@ const styles = StyleSheet.create({
   content: { paddingBottom: 32 }, back: { color: "#059669", fontWeight: "700" }, header: { flexDirection: "row", justifyContent: "space-between", marginTop: 18 },
   pressed: { opacity: 0.55 },
   code: { fontSize: 26, fontWeight: "800", color: "#0f172a" }, area: { color: "#64748b", marginTop: 5 }, badge: { backgroundColor: "#fef3c7", color: "#92400e", padding: 8, borderRadius: 10, alignSelf: "flex-start", fontSize: 11 },
-  done: { backgroundColor: "#d1fae5", color: "#065f46" }, gallery: { gap: 10, paddingVertical: 20 }, photo: { width: 260, height: 340, borderRadius: 20, backgroundColor: "#e2e8f0" },
+  done: { backgroundColor: "#d1fae5", color: "#065f46" }, gallery: { gap: 10, paddingVertical: 20 },
+  photo: { width: 260, height: 340, borderRadius: 20, overflow: "hidden", backgroundColor: "#e2e8f0" },
+  photoPlaceholder: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20, gap: 10 },
+  loadingImage: { color: "#64748b", fontWeight: "700" }, retryImage: { color: "#b91c1c", textAlign: "center", fontWeight: "800" },
   detailsCard: { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginBottom: 22, gap: 14 },
   lockNotice: { backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fdba74", borderRadius: 18, padding: 16, marginBottom: 18, gap: 10 },
   lockTitle: { color: "#9a3412", fontSize: 17, fontWeight: "800" }, lockText: { color: "#7c2d12", lineHeight: 20 },

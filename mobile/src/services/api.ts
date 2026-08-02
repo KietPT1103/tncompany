@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 import { fetch } from "expo/fetch";
-import { File } from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
 import type { AppUser, Area, Receipt } from "@/types";
 
@@ -15,6 +15,18 @@ export function apiAssetUrl(path: string) {
     return `${API_BASE_URL.slice(0, -4)}${path}`;
   }
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export async function cacheApiAsset(path: string, cacheKey: string) {
+  const token = await getToken();
+  if (!token) throw new Error("Phiên đăng nhập chưa sẵn sàng để tải ảnh.");
+  const safeKey = cacheKey.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const target = new File(Paths.cache, `tn-receipt-${safeKey}.jpg`);
+  const downloaded = await File.downloadFileAsync(apiAssetUrl(path), target, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "image/*" },
+    idempotent: true,
+  });
+  return downloaded.uri;
 }
 
 type Envelope<T> = { ok: boolean; data: T; error?: string };
