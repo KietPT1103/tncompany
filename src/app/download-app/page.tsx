@@ -68,7 +68,7 @@ export default function DownloadAppPage() {
 
             <div className="mt-6 flex items-start gap-3 text-sm text-slate-500">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-              <p>Bản nội bộ 1.0.0 · Build 11 · APK khoảng 124 MB. Android có thể yêu cầu cho phép cài ứng dụng từ nguồn này.</p>
+              <p>Bản nội bộ 1.0.0 · Build 12 · APK khoảng 124 MB. Android có thể yêu cầu cho phép cài ứng dụng từ nguồn này.</p>
             </div>
           </section>
 
