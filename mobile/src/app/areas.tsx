@@ -47,7 +47,7 @@ export default function AreasScreen() {
     {!loading && error ? <View style={styles.errorNotice}><Text style={styles.errorText}>{error}</Text>
       <Pressable onPress={() => void loadAreas()}><Text style={styles.retry}>Thử lại</Text></Pressable></View> : null}
     {!loading && !error && areas.length === 0 ? <View style={styles.notice}><Text style={styles.noticeTitle}>Tài khoản chưa được cấp khu vực</Text>
-      <Text style={styles.noticeText}>Admin cần mở Tài khoản, chọn Cafe, Lẩu/Bếp hoặc Farm trong phần Khu vực nhập hàng rồi lưu lại.</Text></View> : null}
+      <Text style={styles.noticeText}>Admin cần mở Tài khoản, chọn Cafe, Lẩu/Bếp, Farm hoặc Kho trong phần Khu vực nhập hàng rồi lưu lại.</Text></View> : null}
     <View style={styles.grid}>{areas.map((area) => {
       const selecting = selectingId === area.id;
       return <Pressable

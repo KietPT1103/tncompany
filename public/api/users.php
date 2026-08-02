@@ -35,7 +35,7 @@ function users_map_row(array $row): array
 
 function users_normalize_store_ids($value, string $primaryStoreId = ''): array
 {
-    $allowed = ['cafe', 'restaurant', 'farm'];
+    $allowed = ['cafe', 'restaurant', 'farm', 'warehouse'];
     $source = is_array($value) ? $value : [];
     if ($primaryStoreId !== '') {
         $source[] = $primaryStoreId;

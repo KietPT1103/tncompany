@@ -28,12 +28,14 @@ const STORE_OPTIONS = [
   { value: "restaurant", label: "Lẩu / Bếp" },
   { value: "bakery", label: "Tiệm bánh" },
   { value: "farm", label: "Farm" },
+  { value: "warehouse", label: "Kho" },
 ];
 
 const INVENTORY_AREA_OPTIONS = [
   { value: "cafe", label: "Cafe" },
   { value: "restaurant", label: "Lẩu / Bếp" },
   { value: "farm", label: "Farm" },
+  { value: "warehouse", label: "Kho" },
 ];
 
 const ROLE_OPTIONS = [
@@ -596,10 +598,10 @@ export default function AccountManagementPage() {
                         storeIds: INVENTORY_AREA_OPTIONS.map((option) => option.value),
                       }))}
                     >
-                      Chọn cả 3
+                      Chọn cả 4
                     </button>
                   </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     {INVENTORY_AREA_OPTIONS.map((option) => {
                       const checked = form.storeIds.includes(option.value);
                       return (
