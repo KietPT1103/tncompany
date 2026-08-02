@@ -23,15 +23,27 @@ export default function FieldInventoryReceiptsPage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [filters, setFilters] = useState<ReceiptFilters>({ status: "pending_explanation", page: 1, limit: 20 });
   const key = useMemo(() => JSON.stringify(filters), [filters]);
-  useEffect(() => { getAreas().then(setAreas); }, []);
+  useEffect(() => { getAreas().then(setAreas).catch(() => setAreas([])); }, []);
   useEffect(() => {
+    let active = true;
     setLoading(true);
+    setError("");
     getInventoryReceipts(filters).then((data) => {
+      if (!active) return;
       setItems(data.items); setCounts(data.counts); setPagination(data.pagination);
-    }).finally(() => setLoading(false));
-  }, [key]);
+    }).catch((reason: unknown) => {
+      if (!active) return;
+      setItems([]);
+      setError(reason instanceof Error ? reason.message : "Không thể tải danh sách phiếu nhập.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [key, reloadKey]);
   const change = (next: Partial<ReceiptFilters>) => setFilters((current) => ({ ...current, ...next, page: next.page ?? 1 }));
 
   return <div className="min-h-screen bg-slate-50 p-4 md:p-8"><div className="mx-auto max-w-7xl">
@@ -59,7 +71,10 @@ export default function FieldInventoryReceiptsPage() {
       <div className="hidden grid-cols-[72px_1.2fr_.7fr_1fr_.7fr_.8fr_.8fr] gap-4 border-b bg-slate-50 px-5 py-3 text-xs font-bold uppercase text-slate-500 lg:grid">
         <span>Ảnh</span><span>Phiếu</span><span>Khu</span><span>Nhân viên</span><span>Số liệu</span><span>Tổng tiền</span><span>Trạng thái</span>
       </div>
-      {loading ? <div className="p-12 text-center text-slate-500">Đang tải…</div> : items.length === 0 ? <div className="p-12 text-center text-slate-500">Không có phiếu phù hợp.</div> :
+      {loading ? <div className="p-12 text-center text-slate-500">Đang tải…</div> : error ? <div className="p-12 text-center">
+        <p className="text-sm font-semibold text-red-600">{error}</p>
+        <button onClick={() => setReloadKey((value) => value + 1)} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">Thử lại</button>
+      </div> : items.length === 0 ? <div className="p-12 text-center text-slate-500">Không có phiếu phù hợp.</div> :
         items.map((item) => <button key={item.id} onClick={() => navigate(`/admin/inventory-receipts/${item.id}`)}
           className="grid w-full gap-3 border-b px-5 py-4 text-left hover:bg-slate-50 lg:grid-cols-[72px_1.2fr_.7fr_1fr_.7fr_.8fr_.8fr] lg:items-center lg:gap-4">
           <div className="h-14 w-14 overflow-hidden rounded-xl bg-slate-100">{item.thumbnailUrl ? <PrivateApiImage src={item.thumbnailUrl} className="h-full w-full object-cover" /> : <ImageIcon className="m-4 h-6 w-6 text-slate-300" />}</div>

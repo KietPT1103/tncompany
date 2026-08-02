@@ -66,6 +66,35 @@ final class R2Storage
         $this->request('DELETE', $key, hash('sha256', ''));
     }
 
+    public function presignedGetUrl(string $key, int $expiresInSeconds = 900): string
+    {
+        $expiresInSeconds = max(60, min(604800, $expiresInSeconds));
+        $host = (string) parse_url($this->endpoint, PHP_URL_HOST);
+        $canonicalUri = '/' . rawurlencode($this->bucket) . '/' . $this->encodeKey($key);
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $amzDate = $now->format('Ymd\THis\Z');
+        $date = $now->format('Ymd');
+        $scope = "{$date}/auto/s3/aws4_request";
+        $query = [
+            'X-Amz-Algorithm' => 'AWS4-HMAC-SHA256',
+            'X-Amz-Credential' => $this->accessKeyId . '/' . $scope,
+            'X-Amz-Date' => $amzDate,
+            'X-Amz-Expires' => (string) $expiresInSeconds,
+            'X-Amz-SignedHeaders' => 'host',
+        ];
+        ksort($query);
+        $canonicalQuery = http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+        $canonicalRequest = "GET\n{$canonicalUri}\n{$canonicalQuery}\nhost:{$host}\n\nhost\nUNSIGNED-PAYLOAD";
+        $stringToSign = "AWS4-HMAC-SHA256\n{$amzDate}\n{$scope}\n" . hash('sha256', $canonicalRequest);
+        $dateKey = hash_hmac('sha256', $date, 'AWS4' . $this->secretAccessKey, true);
+        $regionKey = hash_hmac('sha256', 'auto', $dateKey, true);
+        $serviceKey = hash_hmac('sha256', 's3', $regionKey, true);
+        $signingKey = hash_hmac('sha256', 'aws4_request', $serviceKey, true);
+        $query['X-Amz-Signature'] = hash_hmac('sha256', $stringToSign, $signingKey);
+
+        return $this->endpoint . $canonicalUri . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    }
+
     /**
      * @param resource|null $uploadHandle
      */
@@ -122,7 +151,7 @@ final class R2Storage
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 90,
+            CURLOPT_TIMEOUT => is_resource($uploadHandle) ? 600 : 90,
         ]);
         if (is_resource($uploadHandle)) {
             curl_setopt($curl, CURLOPT_UPLOAD, true);
@@ -162,4 +191,3 @@ final class R2Storage
         return implode('/', array_map('rawurlencode', $segments));
     }
 }
-

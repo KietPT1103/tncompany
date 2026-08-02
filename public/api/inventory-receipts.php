@@ -7,8 +7,6 @@ require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
 
-products_inventory_ensure_schema();
-
 final class ReceiptValidationException extends RuntimeException
 {
     public int $status;

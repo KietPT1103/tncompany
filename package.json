@@ -27,6 +27,7 @@
     "firebase": "^12.7.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.562.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.2.0",

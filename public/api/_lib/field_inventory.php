@@ -104,7 +104,6 @@ function field_inventory_nullable_decimal($value): ?float
 
 function field_inventory_load_receipt(string $id, bool $lock = false): ?array
 {
-    ingredients_ensure_schema();
     $statement = db()->prepare(
         'SELECT r.*, s.name AS area_name,supplier.supplier_code,supplier.supplier_name,
                 COALESCE(u.display_name, u.username, u.email, r.created_by) AS creator_name
@@ -174,7 +173,6 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
 
 function field_inventory_load_items(string $receiptId): array
 {
-    ingredients_ensure_schema();
     $statement = db()->prepare(
         'SELECT i.*, ingredient.unit AS current_unit
          FROM inventory_receipt_items i
