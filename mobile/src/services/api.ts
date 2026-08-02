@@ -68,6 +68,10 @@ export const getReceipt = (id: string) =>
   api<{ item: Receipt }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`);
 export const createReceipt = (payload: object) =>
   api<{ item: Receipt }>("/inventory-receipts.php", { method: "POST", body: JSON.stringify(payload) });
+export const updateReceipt = (id: string, payload: object) =>
+  api<{ item: Receipt }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`, {
+    method: "PUT", body: JSON.stringify(payload)
+  });
 export const completeReceipt = (id: string) =>
   api<{ item: Receipt }>("/inventory-receipts.php?action=complete", {
     method: "POST", body: JSON.stringify({ id })

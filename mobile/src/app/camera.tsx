@@ -6,11 +6,11 @@ import { File } from "expo-file-system";
 import * as Location from "expo-location";
 import { Asset, requestPermissionsAsync as requestMediaLibraryPermissionsAsync } from "expo-media-library";
 import { captureRef } from "react-native-view-shot";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useArea } from "@/features/areas/AreaProvider";
 import { useAuth } from "@/features/auth/AuthProvider";
-import { createReceipt, searchSuppliers, uploadReceiptImage, type SupplierSearchResult } from "@/services/api";
+import { createReceipt, uploadReceiptImage } from "@/services/api";
 import { WatermarkPreview } from "@/features/inventory-receipts/WatermarkPreview";
 import type { LocationMetadata } from "@/types";
 import { enqueueQuickReceipt, type QuickReceiptJob } from "@/database/offline";
@@ -38,24 +38,6 @@ export default function CameraScreen() {
   const galleryPermissionGranted = useRef(false);
   const [busy, setBusy] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [supplierQuery, setSupplierQuery] = useState("");
-  const [supplierResults, setSupplierResults] = useState<SupplierSearchResult[]>([]);
-  const [selectedSupplier, setSelectedSupplier] = useState<SupplierSearchResult | null>(null);
-  const [supplierOpen, setSupplierOpen] = useState(false);
-  const [supplierLoading, setSupplierLoading] = useState(false);
-
-  useEffect(() => {
-    if (!area || !supplierOpen) return;
-    const timer = setTimeout(() => {
-      setSupplierLoading(true);
-      searchSuppliers(supplierQuery.trim(), area.id)
-        .then((result) => setSupplierResults(result.items))
-        .catch((error) => Alert.alert("Không tải được nhà phân phối", error instanceof Error ? error.message : "Vui lòng thử lại."))
-        .finally(() => setSupplierLoading(false));
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [area, supplierOpen, supplierQuery]);
-
   useEffect(() => {
     (async () => {
       const result = await Location.requestForegroundPermissionsAsync();
@@ -134,15 +116,10 @@ export default function CameraScreen() {
   }
   async function finishPhotos() {
     if (photos.length === 0 || !area) return Alert.alert("Chưa có ảnh", "Hãy chụp ít nhất một ảnh trước khi hoàn tất.");
-    if (!selectedSupplier) {
-      setSupplierOpen(true);
-      return Alert.alert("Chưa chọn nhà phân phối", "Hãy chọn nhà phân phối trước khi tạo phiếu.");
-    }
     const first = photos[0];
     const createPayload = {
       clientRequestId: clientRequestId.current,
       areaId: area.id,
-      supplierId: selectedSupplier.id,
       status: mode === "quick" ? "pending_explanation" as const : "draft" as const,
       capturedAt: first.capturedAt,
       location: first.location
@@ -193,10 +170,6 @@ export default function CameraScreen() {
   return <View style={styles.cameraWrap}><CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" />
     <View style={styles.top}><Pressable style={({ pressed }) => pressed && styles.pressed} onPress={() => router.back()}><Text style={styles.white}>‹ Quay lại</Text></Pressable>
       <Text style={styles.gps}>{location ? `GPS: ${location.address}` : "Đang lấy GPS…"}</Text>
-      <Pressable onPress={() => setSupplierOpen(true)} style={({ pressed }) => [styles.supplierButton, pressed && styles.pressed]}>
-        <Text style={styles.supplierLabel}>Nhà phân phối</Text>
-        <Text numberOfLines={1} style={styles.supplierValue}>{selectedSupplier?.supplierName || "Chạm để tìm và chọn"}</Text>
-      </Pressable>
       {photos.length > 0 && <Text style={styles.photoCount}>Đã chụp {photos.length} ảnh</Text>}</View>
     <View style={styles.bottom}><Text style={styles.area}>Khu vực: {area.name}</Text>
       <View style={styles.captureRow}>
@@ -220,26 +193,6 @@ export default function CameraScreen() {
         </Pressable>
       </View>
       <Text style={styles.hint}>Ảnh dùng sẽ tự lưu vào thư viện • Có thể chụp nhiều ảnh</Text></View>
-    <Modal visible={supplierOpen} transparent animationType="slide" onRequestClose={() => setSupplierOpen(false)}>
-      <View style={styles.modalBackdrop}><View style={styles.supplierSheet}>
-        <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>Chọn nhà phân phối</Text>
-          <Pressable onPress={() => setSupplierOpen(false)}><Text style={styles.close}>Đóng</Text></Pressable></View>
-        <TextInput autoFocus value={supplierQuery} onChangeText={setSupplierQuery}
-          placeholder="Nhập tên, mã hoặc số điện thoại" placeholderTextColor="#94a3b8" style={styles.supplierSearch} />
-        {supplierLoading && <ActivityIndicator color="#059669" style={{ marginVertical: 12 }} />}
-        <ScrollView keyboardShouldPersistTaps="handled" style={styles.supplierList}>
-          {supplierResults.map((supplier) => <Pressable key={supplier.id} onPress={() => {
-            setSelectedSupplier(supplier);
-            setSupplierQuery(supplier.supplierName);
-            setSupplierOpen(false);
-          }} style={({ pressed }) => [styles.supplierRow, pressed && styles.pressed]}>
-            <Text style={styles.supplierName}>{supplier.supplierName}</Text>
-            <Text style={styles.supplierMeta}>{supplier.supplierCode}{supplier.phone ? ` • ${supplier.phone}` : ""}</Text>
-          </Pressable>)}
-          {!supplierLoading && supplierResults.length === 0 && <Text style={styles.noSupplier}>Không tìm thấy nhà phân phối trong khu vực này.</Text>}
-        </ScrollView>
-      </View></View>
-    </Modal>
   </View>;
 }
 const styles = StyleSheet.create({
@@ -248,9 +201,6 @@ const styles = StyleSheet.create({
   white: { color: "#fff", fontSize: 17, fontWeight: "700" }, gps: { color: "#fff", backgroundColor: "rgba(0,0,0,.5)", borderRadius: 12, padding: 10 },
   pressed: { opacity: 0.55 },
   photoCount: { alignSelf: "flex-start", color: "#064e3b", backgroundColor: "#d1fae5", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, fontWeight: "800" },
-  supplierButton: { borderRadius: 12, backgroundColor: "rgba(255,255,255,.92)", paddingHorizontal: 12, paddingVertical: 9 },
-  supplierLabel: { color: "#64748b", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-  supplierValue: { color: "#0f172a", fontSize: 15, fontWeight: "800", marginTop: 2 },
   bottom: { position: "absolute", left: 20, right: 20, bottom: 38, alignItems: "center", gap: 12 },
   area: { color: "#fff", fontSize: 17, fontWeight: "800" }, shutter: { width: 78, height: 78, borderRadius: 39, backgroundColor: "#fff", padding: 6 },
   shutterBusy: { alignItems: "center", justifyContent: "center", opacity: 0.75 },
@@ -260,13 +210,5 @@ const styles = StyleSheet.create({
   finishDisabled: { opacity: 0.45 },
   finishText: { color: "#fff", fontWeight: "900" }, finishCount: { color: "#d1fae5", fontSize: 11, marginTop: 2 },
   shutterInner: { flex: 1, borderRadius: 32, borderWidth: 3, borderColor: "#0f172a" }, hint: { color: "#e2e8f0", textAlign: "center" },
-  preview: { flex: 1, backgroundColor: "#020617", justifyContent: "center" }, previewActions: { gap: 10, padding: 18, backgroundColor: "#f8fafc" },
-  modalBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(2,6,23,.55)" },
-  supplierSheet: { maxHeight: "72%", minHeight: 390, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: "#fff", padding: 20 },
-  sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sheetTitle: { color: "#0f172a", fontSize: 22, fontWeight: "900" }, close: { color: "#059669", fontSize: 16, fontWeight: "800" },
-  supplierSearch: { height: 50, marginTop: 18, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 14, paddingHorizontal: 15, color: "#0f172a", fontSize: 16 },
-  supplierList: { marginTop: 10 }, supplierRow: { paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#cbd5e1" },
-  supplierName: { color: "#0f172a", fontSize: 16, fontWeight: "800" }, supplierMeta: { color: "#64748b", marginTop: 4 },
-  noSupplier: { paddingVertical: 28, color: "#64748b", textAlign: "center" }
+  preview: { flex: 1, backgroundColor: "#020617", justifyContent: "center" }, previewActions: { gap: 10, padding: 18, backgroundColor: "#f8fafc" }
 });

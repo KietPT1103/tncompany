@@ -57,6 +57,13 @@ SET @column_sql := IF(
 PREPARE column_stmt FROM @column_sql; EXECUTE column_stmt; DEALLOCATE PREPARE column_stmt;
 
 SET @column_sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='inventory_receipts' AND column_name='order_creator_name'),
+  'SELECT 1',
+  'ALTER TABLE inventory_receipts ADD COLUMN order_creator_name VARCHAR(255) NULL AFTER supplier_id'
+);
+PREPARE column_stmt FROM @column_sql; EXECUTE column_stmt; DEALLOCATE PREPARE column_stmt;
+
+SET @column_sql := IF(
   EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='inventory_receipts' AND column_name='received_at'),
   'SELECT 1',
   'ALTER TABLE inventory_receipts ADD COLUMN received_at DATETIME NULL AFTER receipt_date'

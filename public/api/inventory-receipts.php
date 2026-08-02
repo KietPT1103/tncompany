@@ -7,6 +7,8 @@ require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
 
+auth_ensure_column('inventory_receipts', 'order_creator_name', 'VARCHAR(255) NULL AFTER supplier_id');
+
 final class ReceiptValidationException extends RuntimeException
 {
     public int $status;
@@ -157,29 +159,33 @@ function receipts_create(array $body): void
         }
     }
     $location = is_array($body['location'] ?? null) ? $body['location'] : [];
-    $supplierId = trim((string) ($body['supplierId'] ?? ''));
-    if ($supplierId === '') {
-        respond_error('Vui lòng chọn nhà phân phối.', 422);
+    $supplierId = trim((string) ($body['supplierId'] ?? '')) ?: null;
+    if ($supplierId !== null) {
+        $supplier = db()->prepare(
+            'SELECT id FROM suppliers WHERE id=:id AND store_id=:store_id AND is_active=1 LIMIT 1'
+        );
+        $supplier->execute(['id' => $supplierId, 'store_id' => $storeId]);
+        if (!$supplier->fetchColumn()) {
+            respond_error('Nhà phân phối không tồn tại tại khu vực này.', 422);
+        }
     }
-    $supplier = db()->prepare(
-        'SELECT id FROM suppliers WHERE id=:id AND store_id=:store_id AND is_active=1 LIMIT 1'
-    );
-    $supplier->execute(['id' => $supplierId, 'store_id' => $storeId]);
-    if (!$supplier->fetchColumn()) {
-        respond_error('Nhà phân phối không tồn tại tại khu vực này.', 422);
+    $orderCreatorName = trim((string) ($body['orderCreatorName'] ?? '')) ?: null;
+    if ($orderCreatorName !== null && mb_strlen($orderCreatorName) > 255) {
+        respond_error('Tên người tạo đơn không được vượt quá 255 ký tự.', 422);
     }
     $id = uuidv4();
     $statement = db()->prepare(
         'INSERT INTO inventory_receipts (
-          id,store_id,supplier_id,receipt_code,client_request_id,receipt_date,status,note,received_at,captured_at,
+          id,store_id,supplier_id,order_creator_name,receipt_code,client_request_id,receipt_date,status,note,received_at,captured_at,
           latitude,longitude,location_accuracy,location_address,total_quantity,total_amount,created_by
          ) VALUES (
-          :id,:store_id,:supplier_id,:code,:client_id,CURDATE(),"draft",:note,:received_at,:captured_at,
+          :id,:store_id,:supplier_id,:order_creator_name,:code,:client_id,CURDATE(),"draft",:note,:received_at,:captured_at,
           :latitude,:longitude,:accuracy,:address,0,0,:created_by)'
     );
     $statement->execute([
         'id' => $id, 'store_id' => $storeId,
         'supplier_id' => $supplierId,
+        'order_creator_name' => $orderCreatorName,
         'code' => products_inventory_generate_receipt_code($storeId),
         'client_id' => $clientId ?: null, 'note' => trim((string) ($body['note'] ?? '')),
         'received_at' => field_inventory_datetime($body['receivedAt'] ?? null),
@@ -211,12 +217,30 @@ function receipts_update(array $body): void
             respond_error('Phiếu chưa giải trình phải có ít nhất một ảnh watermark.', 422);
         }
     }
-    $supplierId = trim((string) ($body['supplierId'] ?? $receipt['supplier_id'] ?? '')) ?: null;
-    $statement = db()->prepare('UPDATE inventory_receipts SET status=:status,note=:note,supplier_id=:supplier_id,updated_at=NOW() WHERE id=:id');
+    $supplierId = array_key_exists('supplierId', $body)
+        ? (trim((string) $body['supplierId']) ?: null)
+        : ($receipt['supplier_id'] ?: null);
+    if ($supplierId !== null) {
+        $supplier = db()->prepare(
+            'SELECT id FROM suppliers WHERE id=:id AND store_id=:store_id AND is_active=1 LIMIT 1'
+        );
+        $supplier->execute(['id' => $supplierId, 'store_id' => $receipt['store_id']]);
+        if (!$supplier->fetchColumn()) {
+            respond_error('Nhà phân phối không tồn tại tại khu vực này.', 422);
+        }
+    }
+    $orderCreatorName = array_key_exists('orderCreatorName', $body)
+        ? trim((string) $body['orderCreatorName'])
+        : trim((string) ($receipt['order_creator_name'] ?? ''));
+    if (mb_strlen($orderCreatorName) > 255) {
+        respond_error('Tên người tạo đơn không được vượt quá 255 ký tự.', 422);
+    }
+    $statement = db()->prepare('UPDATE inventory_receipts SET status=:status,note=:note,supplier_id=:supplier_id,order_creator_name=:order_creator_name,updated_at=NOW() WHERE id=:id');
     $statement->execute([
         'id' => $id, 'status' => $status,
         'note' => trim((string) ($body['note'] ?? $receipt['note'])),
         'supplier_id' => $supplierId,
+        'order_creator_name' => $orderCreatorName ?: null,
     ]);
     respond_ok(['item' => receipts_full($user, $id)]);
 }
@@ -237,6 +261,12 @@ function receipts_complete(array $body): void
         }
         if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
             throw new ReceiptValidationException('Không thể hoàn thành phiếu ở trạng thái hiện tại.', 409);
+        }
+        if (trim((string) ($receipt['supplier_id'] ?? '')) === '') {
+            throw new ReceiptValidationException('Vui lòng chọn nhà phân phối trước khi hoàn thành.');
+        }
+        if (trim((string) ($receipt['order_creator_name'] ?? '')) === '') {
+            throw new ReceiptValidationException('Vui lòng nhập tên người tạo đơn trước khi hoàn thành.');
         }
         $imageCheck = db()->prepare('SELECT COUNT(*) FROM inventory_receipt_images WHERE receipt_id=:id');
         $imageCheck->execute(['id' => $id]);

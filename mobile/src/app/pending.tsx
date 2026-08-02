@@ -20,7 +20,7 @@ export default function PendingScreen() {
     <FlatList data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.list}
       ListEmptyComponent={<Text style={styles.empty}>Không có phiếu đang chờ.</Text>}
       renderItem={({ item }) => <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]} onPress={() => router.push({ pathname: "/receipt/[id]", params: { id: item.id } })}>
-        <View><Text style={styles.code}>{item.receiptCode}</Text><Text style={styles.meta}>{item.createdByName} • {new Date(item.createdAt).toLocaleString("vi-VN")}</Text>
+        <View><Text style={styles.code}>{item.receiptCode}</Text><Text style={styles.meta}>{item.orderCreatorName || item.createdByName} • {new Date(item.createdAt).toLocaleString("vi-VN")}</Text>
           <Text style={styles.meta}>{item.imageCount} ảnh • Đã chờ {Math.max(0, Math.floor((renderedAt - new Date(item.createdAt).getTime()) / 60000))} phút</Text></View>
         <Text style={styles.action}>Giải trình →</Text>
       </Pressable>} />

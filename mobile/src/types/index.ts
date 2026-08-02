@@ -47,6 +47,7 @@ export type Receipt = {
   imageCount: number;
   supplierId?: string | null;
   supplier?: { id: string; supplierCode: string; supplierName: string } | null;
+  orderCreatorName: string;
   thumbnailUrl?: string | null;
   items: ReceiptItem[];
   images: ReceiptImage[];

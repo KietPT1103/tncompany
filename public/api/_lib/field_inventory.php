@@ -144,6 +144,7 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
             'supplierCode' => (string) ($row['supplier_code'] ?? ''),
             'supplierName' => (string) ($row['supplier_name'] ?? ''),
         ] : null,
+        'orderCreatorName' => trim((string) ($row['order_creator_name'] ?? '')),
         'status' => (string) $row['status'],
         'receiptDate' => (string) $row['receipt_date'],
         'receivedAt' => $row['received_at'] ?: null,
