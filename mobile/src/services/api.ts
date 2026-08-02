@@ -41,8 +41,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   headers.set("Accept", "application/json");
   if (!(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (useMethodOverride) headers.set("X-HTTP-Method-Override", originalMethod);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const requestPath = useMethodOverride
+    ? `${path}${path.includes("?") ? "&" : "?"}_method=${encodeURIComponent(originalMethod)}`
+    : path;
+  const response = await fetch(`${API_BASE_URL}${requestPath}`, {
     ...init,
     method: useMethodOverride ? "POST" : originalMethod,
     headers,

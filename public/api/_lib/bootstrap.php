@@ -41,7 +41,10 @@ function bootstrap_effective_request_method(): string
         return $method;
     }
 
-    $override = $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? $_SERVER['REDIRECT_HTTP_X_HTTP_METHOD_OVERRIDE'] ?? '';
+    $override = $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']
+        ?? $_SERVER['REDIRECT_HTTP_X_HTTP_METHOD_OVERRIDE']
+        ?? $_GET['_method']
+        ?? '';
     $override = strtoupper(trim((string) $override));
 
     if (!in_array($override, ['PUT', 'PATCH', 'DELETE'], true)) {

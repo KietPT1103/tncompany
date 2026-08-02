@@ -203,11 +203,10 @@ export async function apiRequest<T>(
       ? Math.max(API_TIMEOUT_MS, 120000)
       : API_TIMEOUT_MS;
 
-  if (useMethodOverride) {
-    headers.set("X-HTTP-Method-Override", originalMethod);
-  }
-
-  const requestUrls = buildRequestUrls(path, options);
+  const requestPath = useMethodOverride
+    ? `${path}${path.includes("?") ? "&" : "?"}_method=${encodeURIComponent(originalMethod)}`
+    : path;
+  const requestUrls = buildRequestUrls(requestPath, options);
   let lastError: Error | null = null;
 
   for (let index = 0; index < requestUrls.length; index += 1) {
