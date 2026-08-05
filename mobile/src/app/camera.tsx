@@ -4,7 +4,10 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Crypto from "expo-crypto";
 import { File } from "expo-file-system";
 import * as Location from "expo-location";
-import { Asset, requestPermissionsAsync as requestMediaLibraryPermissionsAsync } from "expo-media-library";
+import {
+  createAssetAsync,
+  requestPermissionsAsync as requestMediaLibraryPermissionsAsync,
+} from "expo-media-library/legacy";
 import { captureRef } from "react-native-view-shot";
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View
@@ -92,7 +95,7 @@ export default function CameraScreen() {
       galleryPermissionGranted.current = permission.granted;
     }
     if (!galleryPermissionGranted.current) return false;
-    await Asset.create(fileUri);
+    await createAssetAsync(fileUri);
     return true;
   }
   async function acceptPhoto() {
