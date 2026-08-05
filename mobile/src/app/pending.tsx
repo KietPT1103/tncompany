@@ -21,8 +21,9 @@ export default function PendingScreen() {
       ListEmptyComponent={<Text style={styles.empty}>Không có phiếu đang chờ.</Text>}
       renderItem={({ item }) => <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]} onPress={() => router.push({ pathname: "/receipt/[id]", params: { id: item.id } })}>
         <View><Text style={styles.code}>{item.receiptCode}</Text><Text style={styles.meta}>{item.orderCreatorName || item.createdByName} • {new Date(item.createdAt).toLocaleString("vi-VN")}</Text>
-          <Text style={styles.meta}>{item.imageCount} ảnh • Đã chờ {Math.max(0, Math.floor((renderedAt - new Date(item.createdAt).getTime()) / 60000))} phút</Text></View>
-        <Text style={styles.action}>Giải trình →</Text>
+          <Text style={styles.meta}>{item.imageCount} ảnh • Đã chờ {Math.max(0, Math.floor((renderedAt - new Date(item.createdAt).getTime()) / 60000))} phút</Text>
+          {item.syncStatus && item.syncStatus !== "synced" && <Text style={styles.sync}>{item.syncStatus === "failed" ? "Đồng bộ lỗi — app sẽ tự thử lại" : "Đang chờ đồng bộ"}</Text>}</View>
+        <Text style={styles.action}>{item.syncStatus && item.syncStatus !== "synced" ? "Xem →" : "Giải trình →"}</Text>
       </Pressable>} />
   </Screen>;
 }
@@ -30,5 +31,5 @@ const styles = StyleSheet.create({
   back: { color: "#059669", fontWeight: "700", marginTop: 8 }, title: { fontSize: 30, fontWeight: "800", color: "#0f172a", marginTop: 18 },
   subtitle: { color: "#64748b", marginTop: 4 }, list: { gap: 12, paddingVertical: 20 }, empty: { textAlign: "center", color: "#94a3b8", marginTop: 80 },
   card: { backgroundColor: "#fff", borderRadius: 20, padding: 18, gap: 14 }, code: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
-  pressed: { opacity: 0.55 }, meta: { color: "#64748b", marginTop: 5 }, action: { color: "#059669", fontWeight: "800" }
+  pressed: { opacity: 0.55 }, meta: { color: "#64748b", marginTop: 5 }, sync: { color: "#d97706", marginTop: 6, fontWeight: "800" }, action: { color: "#059669", fontWeight: "800" }
 });

@@ -14,8 +14,9 @@ import { useArea } from "@/features/areas/AreaProvider";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { createReceipt, uploadReceiptImage } from "@/services/api";
 import { WatermarkPreview } from "@/features/inventory-receipts/WatermarkPreview";
-import type { LocationMetadata } from "@/types";
+import type { LocationMetadata, Receipt } from "@/types";
 import { enqueueQuickReceipt, type QuickReceiptJob } from "@/database/offline";
+import { scheduleExplanationReminders } from "@/features/notifications/explanationReminders";
 
 type CapturedPhoto = {
   fileUri: string;
@@ -147,6 +148,7 @@ export default function CameraScreen() {
       for (const photo of photos) {
         try { new File(photo.fileUri).delete(); } catch {}
       }
+      await scheduleExplanationReminders([receipt.item]).catch(() => {});
       if (mode === "quick") {
         setQuickNameOpen(false);
         Alert.alert("Đã lưu", `Đã tải ${photos.length} ảnh và lưu vào danh sách Chưa giải trình.`, [{ text: "OK", onPress: () => router.replace("/home") }]);
@@ -154,14 +156,47 @@ export default function CameraScreen() {
         router.replace({ pathname: "/receipt/[id]", params: { id: receipt.item.id } });
       }
     } catch (error) {
+      const createdAt = new Date().toISOString();
+      const localReceipt: Receipt = {
+        id: `local:${clientRequestId.current}`,
+        clientRequestId: clientRequestId.current,
+        receiptCode: "Chờ đồng bộ",
+        areaId: area.id,
+        area,
+        status: createPayload.status,
+        capturedAt: first.capturedAt,
+        createdAt,
+        createdByName: user?.displayName || normalizedCreatorName,
+        totalQuantity: 0,
+        totalAmount: 0,
+        itemCount: 0,
+        imageCount: photos.length,
+        orderCreatorName: normalizedCreatorName,
+        isLocked: false,
+        canEdit: false,
+        canUnlock: false,
+        autoLockAt: new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        syncStatus: "pending",
+        thumbnailUrl: photos[0]?.fileUri,
+        items: [],
+        images: photos.map((photo) => ({
+          id: photo.clientFileId,
+          url: photo.fileUri,
+          thumbnailUrl: photo.fileUri,
+          capturedAt: photo.capturedAt,
+          locationAddress: photo.location.address,
+        })),
+      };
       const job: QuickReceiptJob = {
         createPayload,
+        localReceipt,
         uploads: photos.map((photo, index) => ({
           ...photo,
           finalizeQuick: mode === "quick" && index === photos.length - 1
         }))
       };
       await enqueueQuickReceipt(job);
+      await scheduleExplanationReminders([localReceipt]).catch(() => {});
       setQuickNameOpen(false);
       const reason = error instanceof Error ? error.message : "Không thể kết nối máy chủ.";
       Alert.alert(

@@ -34,6 +34,7 @@ export type ReceiptItem = {
 };
 export type Receipt = {
   id: string;
+  clientRequestId?: string | null;
   receiptCode: string;
   areaId: string;
   area: Area;
@@ -55,6 +56,7 @@ export type Receipt = {
   canEdit: boolean;
   canUnlock: boolean;
   autoLockAt?: string | null;
+  syncStatus?: "pending" | "failed" | "synced";
   thumbnailUrl?: string | null;
   items: ReceiptItem[];
   images: ReceiptImage[];

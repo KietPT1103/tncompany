@@ -25,6 +25,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-secure-store",
+    ["expo-notifications", { color: "#059669", defaultChannel: "receipt-explanation-deadlines" }],
     ["expo-camera", { cameraPermission: "Cho phép chụp hóa đơn nhập hàng." }],
     ["expo-location", { locationWhenInUsePermission: "Cho phép lấy vị trí để đóng watermark lên ảnh." }],
     ["expo-media-library", {

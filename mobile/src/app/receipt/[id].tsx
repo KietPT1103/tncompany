@@ -8,7 +8,7 @@ import { Screen } from "@/components/Screen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useArea } from "@/features/areas/AreaProvider";
 import {
-  addReceiptItem, attachProduct, cacheApiAsset, completeReceipt, createProduct, getNextProductCode, getReceipt,
+  addReceiptItem, attachProduct, cacheApiAsset, completeReceipt, createProduct, createQuickSupplier, getNextProductCode, getReceipt,
   searchProducts, searchSuppliers, unlockReceipt, updateReceipt, type ProductSearchResult, type SupplierSearchResult
 } from "@/services/api";
 import type { Receipt } from "@/types";
@@ -41,6 +41,7 @@ export default function ReceiptDetailScreen() {
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierSearchResult | null>(null);
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [supplierLoading, setSupplierLoading] = useState(false);
+  const [creatingSupplier, setCreatingSupplier] = useState(false);
 
   async function reload() { setReceipt((await getReceipt(id)).item); }
   useEffect(() => {
@@ -57,6 +58,10 @@ export default function ReceiptDetailScreen() {
     if (!receipt) return;
     let active = true;
     receipt.images.forEach((image) => {
+      if (image.url.startsWith("file:")) {
+        setImageUris((current) => ({ ...current, [image.id]: image.url }));
+        return;
+      }
       cacheApiAsset(image.url, image.id).then((uri) => {
         if (active) setImageUris((current) => ({ ...current, [image.id]: uri }));
       }).catch(() => {
@@ -97,7 +102,29 @@ export default function ReceiptDetailScreen() {
   const currentReceipt = receipt;
   const currentArea = area;
   const editableStatus = currentReceipt.status === "pending_explanation" || currentReceipt.status === "draft";
-  const editable = editableStatus && currentReceipt.canEdit;
+  const editable = editableStatus && currentReceipt.canEdit && currentReceipt.syncStatus !== "pending" && currentReceipt.syncStatus !== "failed";
+  const normalizedSupplierQuery = supplierQuery.trim().toLocaleLowerCase("vi");
+  const canQuickCreateSupplier = normalizedSupplierQuery.length > 0 && !supplierResults.some(
+    (supplier) => supplier.supplierName.trim().toLocaleLowerCase("vi") === normalizedSupplierQuery
+  );
+
+  async function quickCreateSupplier() {
+    const name = supplierQuery.trim();
+    if (!name) return;
+    try {
+      setCreatingSupplier(true);
+      const created = await createQuickSupplier(name, currentArea.id);
+      setSelectedSupplier(created.item);
+      setSupplierQuery(created.item.supplierName);
+      setSupplierOpen(false);
+      await saveReceiptDetails(false, false, created.item, orderCreatorName);
+      Alert.alert("Đã tạo nhà phân phối", "Nhà phân phối mới đã được lưu. Admin có thể bổ sung thông tin chi tiết sau.");
+    } catch (error) {
+      Alert.alert("Không thể tạo nhà phân phối", error instanceof Error ? error.message : "Vui lòng thử lại.");
+    } finally {
+      setCreatingSupplier(false);
+    }
+  }
 
   function openProductSuggestions() {
     setSuggestionsOpen(true);
@@ -254,6 +281,10 @@ export default function ReceiptDetailScreen() {
       </View>)}
     </ScrollView>
 
+    {currentReceipt.syncStatus && currentReceipt.syncStatus !== "synced" && <View style={styles.syncNotice}>
+      <Text style={styles.syncTitle}>{currentReceipt.syncStatus === "failed" ? "Phiếu chưa đồng bộ thành công" : "Phiếu đang chờ đồng bộ"}</Text>
+      <Text style={styles.syncText}>Ảnh và dữ liệu đã được giữ trên thiết bị. App sẽ tự gửi khi có mạng; có thể giải trình sau khi đồng bộ xong.</Text>
+    </View>}
     {currentReceipt.isLocked && <View style={styles.lockNotice}>
       <Text style={styles.lockTitle}>Phiếu đã khóa sau 24 giờ</Text>
       <Text style={styles.lockText}>{currentReceipt.canEdit
@@ -404,6 +435,14 @@ export default function ReceiptDetailScreen() {
           style={styles.supplierSearch}
         />
         {supplierLoading && <ActivityIndicator color="#059669" style={styles.supplierLoading} />}
+        {canQuickCreateSupplier && !supplierLoading && <Pressable
+          disabled={creatingSupplier}
+          onPress={() => void quickCreateSupplier()}
+          style={({ pressed }) => [styles.quickSupplier, pressed && styles.pressed]}
+        >
+          {creatingSupplier ? <ActivityIndicator color="#059669" /> : <Text style={styles.quickSupplierText}>＋ Tạo “{supplierQuery.trim()}”</Text>}
+          <Text style={styles.quickSupplierHint}>Chỉ lưu tên, admin bổ sung chi tiết sau</Text>
+        </Pressable>}
         <ScrollView keyboardShouldPersistTaps="handled" style={styles.supplierList} nestedScrollEnabled>
           {supplierResults.map((supplier) => <Pressable key={supplier.id} onPress={() => {
             setSelectedSupplier(supplier);
@@ -468,6 +507,8 @@ const styles = StyleSheet.create({
   loadingImage: { color: "#64748b", fontWeight: "700" }, retryImage: { color: "#b91c1c", textAlign: "center", fontWeight: "800" },
   detailsCard: { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginBottom: 22, gap: 14 },
   lockNotice: { backgroundColor: "#fff7ed", borderWidth: 1, borderColor: "#fdba74", borderRadius: 18, padding: 16, marginBottom: 18, gap: 10 },
+  syncNotice: { backgroundColor: "#eff6ff", borderWidth: 1, borderColor: "#93c5fd", borderRadius: 18, padding: 16, marginBottom: 18, gap: 6 },
+  syncTitle: { color: "#1d4ed8", fontSize: 16, fontWeight: "900" }, syncText: { color: "#1e3a8a", lineHeight: 20 },
   lockTitle: { color: "#9a3412", fontSize: 17, fontWeight: "800" }, lockText: { color: "#7c2d12", lineHeight: 20 },
   detailLabel: { color: "#64748b", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
   detailValue: { color: "#0f172a", fontSize: 16, fontWeight: "800", marginTop: -8 },
@@ -492,6 +533,8 @@ const styles = StyleSheet.create({
   supplierSheet: { maxHeight: "78%", minHeight: 420, backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22 },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, close: { color: "#059669", fontSize: 16, fontWeight: "800" },
   supplierSearch: { minHeight: 52, marginTop: 18, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 14, paddingHorizontal: 14, color: "#0f172a", fontSize: 15 },
+  quickSupplier: { backgroundColor: "#ecfdf5", borderRadius: 14, padding: 14, marginTop: 12, gap: 4 },
+  quickSupplierText: { color: "#047857", fontSize: 16, fontWeight: "900" }, quickSupplierHint: { color: "#64748b", fontSize: 12 },
   supplierLoading: { marginVertical: 12 }, supplierList: { marginTop: 8 }, supplierRow: { paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#cbd5e1" }, supplierName: { color: "#0f172a", fontSize: 16, fontWeight: "800" },
   modalScroll: { flexGrow: 0, maxHeight: "92%", backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28 },
   modal: { padding: 22, paddingBottom: 28, gap: 16 }, modalTitle: { fontSize: 24, fontWeight: "800" },

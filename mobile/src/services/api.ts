@@ -3,6 +3,7 @@ import { fetch } from "expo/fetch";
 import { File, Paths } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
 import type { AppUser, Area, Receipt } from "@/types";
+import { cacheReceipts, cachedReceipt, cachedReceipts } from "@/database/offline";
 
 const TOKEN_KEY = "tn_company_api_token";
 const configuredBase = process.env.EXPO_PUBLIC_API_BASE_URL ||
@@ -84,10 +85,38 @@ export async function login(loginName: string, password: string) {
 }
 export const getMe = () => api<{ user: AppUser }>("/auth.php?action=me");
 export const getAreas = () => api<{ items: Area[] }>("/areas.php");
-export const getReceipts = (query: string) =>
-  api<{ items: Receipt[]; counts: Record<string, number> }>(`/inventory-receipts.php?${query}`);
-export const getReceipt = (id: string) =>
-  api<{ item: Receipt }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`);
+export async function getReceipts(query: string) {
+  const params = new URLSearchParams(query);
+  const areaId = params.get("areaId") || "";
+  const status = params.get("status") || undefined;
+  try {
+    const result = await api<{ items: Receipt[]; counts: Record<string, number> }>(`/inventory-receipts.php?${query}`);
+    await cacheReceipts(result.items);
+    const local = areaId ? (await cachedReceipts(areaId, status)).filter((item) => item.syncStatus !== "synced") : [];
+    const serverIds = new Set(result.items.map((item) => item.clientRequestId).filter(Boolean));
+    return { ...result, items: [...local.filter((item) => !serverIds.has(item.clientRequestId)), ...result.items] };
+  } catch (error) {
+    if (!areaId) throw error;
+    const items = await cachedReceipts(areaId, status);
+    return { items, counts: {} as Record<string, number>, offline: true };
+  }
+}
+export async function getReceipt(id: string) {
+  if (id.startsWith("local:")) {
+    const item = await cachedReceipt(id);
+    if (!item) throw new Error("Không tìm thấy phiếu đã lưu trên thiết bị.");
+    return { item, offline: true };
+  }
+  try {
+    const result = await api<{ item: Receipt }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`);
+    await cacheReceipts([result.item]);
+    return result;
+  } catch (error) {
+    const item = await cachedReceipt(id);
+    if (!item) throw error;
+    return { item, offline: true };
+  }
+}
 export const createReceipt = (payload: object) =>
   api<{ item: Receipt }>("/inventory-receipts.php", { method: "POST", body: JSON.stringify(payload) });
 export const updateReceipt = (id: string, payload: object) =>
@@ -144,6 +173,10 @@ export const searchSuppliers = (search: string, areaId: string) =>
   api<{ items: SupplierSearchResult[] }>(
     `/suppliers.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}`
   );
+export const createQuickSupplier = (supplierName: string, areaId: string) =>
+  api<{ created: boolean; id: string; item: SupplierSearchResult }>("/suppliers.php?action=quick-create", {
+    method: "POST", body: JSON.stringify({ supplierName, areaId, quickCreate: true })
+  });
 export const addReceiptItem = (payload: object) =>
   api("/inventory-receipt-items.php", { method: "POST", body: JSON.stringify(payload) });
 export async function uploadReceiptImage(receiptId: string, photoUri: string, metadata: {

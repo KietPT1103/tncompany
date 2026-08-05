@@ -1,6 +1,6 @@
 import { File } from "expo-file-system";
 import { createReceipt, uploadReceiptImage } from "@/services/api";
-import { markJobFailed, markJobRunning, pendingJobs, removeJob, type QuickReceiptJob } from "@/database/offline";
+import { cacheReceipts, markJobFailed, markJobRunning, pendingJobs, removeJob, type QuickReceiptJob } from "@/database/offline";
 
 export type SyncResult = {
   total: number;
@@ -32,11 +32,14 @@ async function runSync(): Promise<SyncResult> {
         for (const upload of uploads) {
           try { new File(upload.fileUri).delete(); } catch {}
         }
+        await cacheReceipts([receipt.item]);
         await removeJob(row.id);
         result.succeeded += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Đồng bộ thất bại";
-        await markJobFailed(row.id, message);
+        let clientRequestId: string | undefined;
+        try { clientRequestId = (JSON.parse(row.payload_json) as QuickReceiptJob).createPayload.clientRequestId; } catch {}
+        await markJobFailed(row.id, message, clientRequestId);
         result.failed += 1;
         result.errors.push(message);
       }

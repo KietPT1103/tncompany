@@ -66,9 +66,25 @@ $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? $_GET['storeId'
 field_inventory_require_store($user, $storeId);
 
 if ($method === 'POST') {
+    $quickCreate = strtolower(trim((string) ($_GET['action'] ?? ''))) === 'quick-create'
+        || !empty($body['quickCreate']);
     $code = trim((string) ($body['supplierCode'] ?? ''));
     $name = trim((string) ($body['supplierName'] ?? ''));
-    if ($code === '' || $name === '') respond_error('Vui lòng nhập mã và tên nhà phân phối.', 422);
+    if ($name === '') respond_error('Vui lòng nhập tên nhà phân phối.', 422);
+    if ($quickCreate) {
+        $duplicate = db()->prepare(
+            'SELECT s.*,0 ingredient_count FROM suppliers s
+             WHERE s.store_id=:store AND s.normalized_name=:normalized AND s.is_active=1 LIMIT 1'
+        );
+        $duplicate->execute(['store' => $storeId, 'normalized' => ingredients_normalized_name($name)]);
+        if ($existing = $duplicate->fetch()) {
+            respond_ok(['created' => false, 'id' => (string) $existing['id'], 'item' => supplier_payload($existing)]);
+        }
+    }
+    if ($code === '' && $quickCreate) {
+        $code = ingredients_next_code('NCC', 'suppliers', 'supplier_code');
+    }
+    if ($code === '') respond_error('Vui lòng nhập mã nhà phân phối.', 422);
     $id = uuidv4();
     try {
         $statement = db()->prepare(
@@ -91,7 +107,9 @@ if ($method === 'POST') {
         if ((string) $exception->getCode() === '23000') respond_error('Mã nhà phân phối đã tồn tại.', 409);
         throw $exception;
     }
-    respond_ok(['created' => true, 'id' => $id], 201);
+    $created = db()->prepare('SELECT s.*,0 ingredient_count FROM suppliers s WHERE s.id=:id LIMIT 1');
+    $created->execute(['id' => $id]);
+    respond_ok(['created' => true, 'id' => $id, 'item' => supplier_payload($created->fetch())], 201);
 }
 
 $code = trim((string) ($body['supplierCode'] ?? $_GET['supplierCode'] ?? ''));
