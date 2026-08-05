@@ -220,7 +220,7 @@ export default function CameraScreen() {
   }
 
   if (rawUri && capturedAt && location) return <View style={styles.preview}>
-    <WatermarkPreview ref={composite} uri={rawUri} capturedAt={capturedAt} area={area} user={user} location={location} />
+    <WatermarkPreview ref={composite} uri={rawUri} capturedAt={capturedAt} area={area} location={location} />
     <View style={styles.previewActions}><PrimaryButton tone="secondary" title="Chụp lại" onPress={discard} disabled={busy} />
       <PrimaryButton title={`Thêm ảnh này (${photos.length + 1})`} loadingTitle="Đang lưu ảnh…" onPress={acceptPhoto} loading={busy} /></View>
   </View>;
