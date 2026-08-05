@@ -30,11 +30,11 @@ export default function DownloadAppPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#043f32] px-4 py-10 text-slate-950">
+    <main className="relative flex min-h-screen w-full max-w-full items-center justify-center overflow-x-hidden bg-[#043f32] px-3 py-6 text-slate-950 sm:px-4 sm:py-10">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,.2),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,.35),transparent_42%)]" />
-      <div className="relative w-full max-w-4xl overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-black/30">
-        <div className="grid md:grid-cols-[1.15fr_.85fr]">
-          <section className="p-7 sm:p-10 md:p-12">
+      <div className="relative min-w-0 w-full max-w-4xl overflow-hidden rounded-[1.5rem] bg-white shadow-2xl shadow-black/30 sm:rounded-[2rem]">
+        <div className="grid min-w-0 grid-cols-1 md:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
+          <section className="min-w-0 p-5 sm:p-10 md:p-12">
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-extrabold uppercase tracking-[.16em] text-emerald-700">
               <Smartphone className="h-4 w-4" /> Ứng dụng Android
             </div>
@@ -53,7 +53,7 @@ export default function DownloadAppPage() {
 
             <div className="mt-7">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Liên kết tải trực tiếp</label>
-              <div className="mt-2 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 pl-4">
+              <div className="mt-2 flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-2 pl-3 sm:pl-4">
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-600">{APK_URL}</span>
                 <button
                   type="button"
@@ -68,15 +68,16 @@ export default function DownloadAppPage() {
 
             <div className="mt-6 flex items-start gap-3 text-sm text-slate-500">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-              <p>Bản nội bộ 1.0.0 · Build 18 · APK khoảng 124 MB. Android có thể yêu cầu cho phép cài ứng dụng từ nguồn này.</p>
+              <p className="min-w-0 break-words">Bản nội bộ 1.0.0 · Build 19 · APK khoảng 131 MB. Android có thể yêu cầu cho phép cài ứng dụng từ nguồn này.</p>
             </div>
           </section>
 
-          <aside className="flex flex-col items-center justify-center bg-emerald-50 p-8 text-center sm:p-10">
-            <div className="rounded-[1.75rem] bg-white p-5 shadow-xl shadow-emerald-900/10 ring-1 ring-emerald-100">
+          <aside className="flex min-w-0 flex-col items-center justify-center overflow-hidden bg-emerald-50 px-5 py-8 text-center sm:p-10">
+            <div className="w-full max-w-[264px] rounded-[1.5rem] bg-white p-4 shadow-xl shadow-emerald-900/10 ring-1 ring-emerald-100 sm:rounded-[1.75rem] sm:p-5">
               <QRCodeSVG
                 value={APK_URL}
                 size={224}
+                className="h-auto w-full max-w-full"
                 level="H"
                 marginSize={1}
                 fgColor="#064e3b"
@@ -84,7 +85,7 @@ export default function DownloadAppPage() {
                 title="QR tải ứng dụng TN Company Nhập hàng"
               />
             </div>
-            <h2 className="mt-6 text-xl font-black text-emerald-950">Quét để tải ứng dụng</h2>
+            <h2 className="mt-6 max-w-full text-xl font-black text-emerald-950">Quét để tải ứng dụng</h2>
             <p className="mt-2 max-w-xs text-sm leading-6 text-emerald-900/65">Mở camera trên điện thoại Android và quét mã QR để tải file APK.</p>
           </aside>
         </div>
