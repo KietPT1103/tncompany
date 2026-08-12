@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import {
-  ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View
+  ActivityIndicator, Alert, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View
 } from "react-native";
 import { FormField } from "@/components/FormField";
 import { Screen } from "@/components/Screen";
@@ -262,6 +262,7 @@ export default function ReceiptDetailScreen() {
   <ScrollView
     contentContainerStyle={styles.content}
     keyboardShouldPersistTaps="handled"
+    nestedScrollEnabled
     automaticallyAdjustKeyboardInsets
   >
     <Pressable style={({ pressed }) => pressed && styles.pressed} onPress={async () => {
@@ -343,52 +344,25 @@ export default function ReceiptDetailScreen() {
 
     {editable && <View style={styles.form}><Text style={styles.section}>Thêm nguyên liệu</Text>
       <View style={styles.productPicker}>
-        <FormField
-          label="Nguyên liệu"
-          required
-          value={query}
-          onFocus={openProductSuggestions}
-          onBlur={() => setTimeout(() => setSuggestionsOpen(false), 180)}
-          onChangeText={(value) => { setQuery(value); setSelected(null); setSuggestionsOpen(true); }}
-          placeholder="Nhập tên hoặc mã nguyên liệu để tìm"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {suggestionsOpen && <View style={styles.productDropdown}>
-          {suggestionsLoading ? <ActivityIndicator color="#059669" style={styles.dropdownLoading} /> : null}
-          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
-            {searchError ? <Text style={styles.dropdownError}>{searchError}</Text> : null}
-            {results.map((product) => {
-              const selecting = selectingProductId === product.id;
-              return <Pressable key={`${product.areaId}-${product.id}`} disabled={selectingProductId !== null}
-                accessibilityRole="button" accessibilityState={{ disabled: selectingProductId !== null, busy: selecting }}
-                style={({ pressed }) => [styles.result, (pressed || selecting) && styles.pressed]} onPress={() => selectProduct(product)}>
-                <View style={{ flex: 1 }}><Text style={styles.resultName}>{product.productName}</Text>
-                  <Text style={styles.itemMeta}>{product.productCode} • {product.unit || "Chưa có đơn vị"}</Text>
-                  {!product.attachedToCurrentArea && <Text style={styles.attach}>Đã tồn tại – chưa dùng tại {area.name}. Nhấn để thêm.</Text>}
-                </View>
-                {selecting && <View style={styles.selecting}><ActivityIndicator color="#059669" /><Text style={styles.selectingText}>Đang chọn…</Text></View>}
-              </Pressable>;
-            })}
-            {!suggestionsLoading && results.length === 0 && !searchError && query.trim().length < 2 ?
-              <Text style={styles.dropdownEmpty}>Không có nguyên liệu phù hợp.</Text> : null}
-            {query.trim().length >= 2 && <Pressable disabled={preparingCreate} style={({ pressed }) => [styles.create, (pressed || preparingCreate) && styles.pressed]} onPress={() => {
-              setSuggestionsOpen(false); openCreateModal();
-            }}>
-              {preparingCreate ? <View style={styles.preparing}><ActivityIndicator color="#059669" /><Text style={styles.createText}>Đang lấy mã mới…</Text></View> : <Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text>}
-            </Pressable>}
-          </ScrollView>
-        </View>}
+        <Text style={styles.fieldLabel}>Nguyên liệu <Text style={styles.required}>*</Text></Text>
+        <Pressable onPress={openProductSuggestions} style={({ pressed }) => [styles.productSelectButton, pressed && styles.pressed]}>
+          <View style={styles.productSelectCopy}>
+            <Text numberOfLines={1} style={selected ? styles.supplierValue : styles.supplierPlaceholder}>
+              {selected?.productName || "Chạm để tìm và chọn nguyên liệu"}
+            </Text>
+            {selected && <Text style={styles.productSelectMeta}>{selected.productCode} • {selected.unit || "Chưa có đơn vị"}</Text>}
+          </View>
+          <Text style={styles.selectArrow}>⌄</Text>
+        </Pressable>
       </View>
-      <Text style={styles.fieldHint}>Chạm vào ô để xem toàn bộ nguyên liệu của quầy, hoặc nhập tên/mã để lọc.</Text>
-      {searchError ? <Text style={styles.searchError}>{searchError}</Text> : null}
-      {selected && <Text style={styles.selected}>Đã chọn: {selected.productName} • {selected.unit}</Text>}
+      <Text style={styles.fieldHint}>Danh sách mở toàn màn hình để dễ tìm và cuộn trên điện thoại.</Text>
       <View style={styles.row}>
         <FormField
           label="Số lượng"
           required
           keyboardType="decimal-pad"
           value={quantity}
+          onFocus={() => setSuggestionsOpen(false)}
           onChangeText={setQuantity}
           placeholder="Ví dụ: 10"
           containerStyle={styles.half}
@@ -398,6 +372,7 @@ export default function ReceiptDetailScreen() {
           required
           keyboardType="decimal-pad"
           value={price}
+          onFocus={() => setSuggestionsOpen(false)}
           onChangeText={setPrice}
           placeholder="Ví dụ: 25000"
           containerStyle={styles.half}
@@ -406,6 +381,7 @@ export default function ReceiptDetailScreen() {
       <FormField
         label="Ghi chú"
         value={note}
+        onFocus={() => setSuggestionsOpen(false)}
         onChangeText={setNote}
         placeholder="Ví dụ: số lô, hạn sử dụng hoặc tình trạng hàng"
         multiline
@@ -414,10 +390,64 @@ export default function ReceiptDetailScreen() {
       <Text style={styles.provisional}>Thành tiền: {lineTotal.toLocaleString("vi-VN")} ₫</Text>
       <PrimaryButton title="Thêm nguyên liệu" loadingTitle="Đang thêm nguyên liệu…" onPress={addItem} loading={pendingAction === "add"} disabled={pendingAction !== null || !selected || Number(quantity) <= 0 || Number(price) < 0 || price === ""} />
     </View>}
-    <View style={styles.summary}><Text style={styles.summaryLabel}>Tổng số lượng</Text><Text style={styles.summaryValue}>{receipt.totalQuantity}</Text>
-      <Text style={styles.summaryLabel}>Tổng tiền</Text><Text style={styles.total}>{receipt.totalAmount.toLocaleString("vi-VN")} ₫</Text></View>
-    {editable && <PrimaryButton title="Hoàn thành nhập kho" loadingTitle="Đang hoàn thành…" onPress={finish} loading={pendingAction === "complete"} disabled={pendingAction !== null || receipt.items.length === 0 || receipt.images.length === 0} />}
   </ScrollView></KeyboardAvoidingView>
+
+  <View style={styles.stickyFooter}>
+    <View style={styles.stickySummary}>
+      <View><Text style={styles.stickyLabel}>{receipt.itemCount} nguyên liệu • {receipt.totalQuantity} đơn vị</Text>
+        <Text style={styles.stickyTotal}>{receipt.totalAmount.toLocaleString("vi-VN")} ₫</Text></View>
+      {!editable && <Text style={[styles.badge, receipt.status === "completed" && styles.done]}>{receipt.status}</Text>}
+    </View>
+    {editable && <PrimaryButton title="Hoàn thành nhập kho" loadingTitle="Đang hoàn thành…" onPress={finish} loading={pendingAction === "complete"} disabled={pendingAction !== null || receipt.items.length === 0 || receipt.images.length === 0} />}
+  </View>
+
+  <Modal visible={suggestionsOpen} transparent animationType="slide" onRequestClose={() => setSuggestionsOpen(false)}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalShade}>
+      <View style={styles.productSheet}>
+        <View style={styles.sheetHeader}>
+          <View><Text style={styles.modalTitle}>Chọn nguyên liệu</Text><Text style={styles.sheetSubtitle}>{area.name}</Text></View>
+          <Pressable onPress={() => setSuggestionsOpen(false)}><Text style={styles.close}>Đóng</Text></Pressable>
+        </View>
+        <TextInput
+          autoFocus
+          value={query}
+          onChangeText={(value) => { setQuery(value); setSelected(null); }}
+          placeholder="Nhập tên hoặc mã nguyên liệu"
+          placeholderTextColor="#94a3b8"
+          autoCorrect={false}
+          returnKeyType="search"
+          style={styles.productSearch}
+        />
+        <FlatList
+          data={results}
+          style={styles.productListScroll}
+          keyExtractor={(product) => `${product.areaId}-${product.id}`}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={styles.productList}
+          ListHeaderComponent={suggestionsLoading ? <ActivityIndicator color="#059669" style={styles.dropdownLoading} /> : searchError ? <Text style={styles.dropdownError}>{searchError}</Text> : null}
+          ListEmptyComponent={!suggestionsLoading && !searchError ? <Text style={styles.dropdownEmpty}>Không có nguyên liệu phù hợp.</Text> : null}
+          ListFooterComponent={query.trim().length >= 2 ? <Pressable disabled={preparingCreate} style={({ pressed }) => [styles.create, (pressed || preparingCreate) && styles.pressed]} onPress={() => {
+            setSuggestionsOpen(false); void openCreateModal();
+          }}>
+            {preparingCreate ? <View style={styles.preparing}><ActivityIndicator color="#059669" /><Text style={styles.createText}>Đang lấy mã mới…</Text></View> : <Text style={styles.createText}>+ Tạo mới “{query.trim()}”</Text>}
+          </Pressable> : null}
+          renderItem={({ item: product }) => {
+            const selecting = selectingProductId === product.id;
+            return <Pressable disabled={selectingProductId !== null}
+              accessibilityRole="button" accessibilityState={{ disabled: selectingProductId !== null, busy: selecting }}
+              style={({ pressed }) => [styles.result, (pressed || selecting) && styles.pressed]} onPress={() => selectProduct(product)}>
+              <View style={{ flex: 1 }}><Text style={styles.resultName}>{product.productName}</Text>
+                <Text style={styles.itemMeta}>{product.productCode} • {product.unit || "Chưa có đơn vị"}</Text>
+                {!product.attachedToCurrentArea && <Text style={styles.attach}>Đã tồn tại – chưa dùng tại {area.name}. Nhấn để thêm.</Text>}
+              </View>
+              {selecting && <View style={styles.selecting}><ActivityIndicator color="#059669" /><Text style={styles.selectingText}>Đang chọn…</Text></View>}
+            </Pressable>;
+          }}
+        />
+      </View>
+    </KeyboardAvoidingView>
+  </Modal>
 
   <Modal visible={supplierOpen} transparent animationType="slide" onRequestClose={() => setSupplierOpen(false)}>
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalShade}>
@@ -498,7 +528,7 @@ export default function ReceiptDetailScreen() {
 }
 const styles = StyleSheet.create({
   keyboard: { flex: 1 },
-  content: { paddingBottom: 32 }, back: { color: "#059669", fontWeight: "700" }, header: { flexDirection: "row", justifyContent: "space-between", marginTop: 18 },
+  content: { paddingBottom: 24 }, back: { color: "#059669", fontWeight: "700" }, header: { flexDirection: "row", justifyContent: "space-between", marginTop: 18 },
   pressed: { opacity: 0.55 },
   code: { fontSize: 26, fontWeight: "800", color: "#0f172a" }, area: { color: "#64748b", marginTop: 5 }, badge: { backgroundColor: "#fef3c7", color: "#92400e", padding: 8, borderRadius: 10, alignSelf: "flex-start", fontSize: 11 },
   done: { backgroundColor: "#d1fae5", color: "#065f46" }, gallery: { gap: 10, paddingVertical: 20 },
@@ -518,7 +548,9 @@ const styles = StyleSheet.create({
   section: { fontSize: 20, fontWeight: "800", color: "#0f172a", marginBottom: 10 }, item: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 16, padding: 15, marginBottom: 9 },
   itemName: { fontSize: 16, fontWeight: "700" }, itemMeta: { color: "#64748b", marginTop: 4 }, itemTotal: { fontWeight: "800" }, empty: { color: "#94a3b8", marginBottom: 18 },
   form: { backgroundColor: "#ecfdf5", borderRadius: 22, padding: 16, marginTop: 16, gap: 12 },
-  productPicker: { position: "relative", zIndex: 30 },
+  productPicker: { gap: 7 },
+  productSelectButton: { minHeight: 58, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#a7f3d0", backgroundColor: "#fff", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 9 },
+  productSelectCopy: { flex: 1, minWidth: 0 }, productSelectMeta: { color: "#64748b", fontSize: 12, marginTop: 3 },
   fieldHint: { color: "#64748b", fontSize: 12, lineHeight: 17 },
   productDropdown: { position: "absolute", top: 78, left: 0, right: 0, zIndex: 40, maxHeight: 260, backgroundColor: "#fff", borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#cbd5e1", elevation: 12, shadowColor: "#0f172a", shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } },
   dropdownScroll: { maxHeight: 260 }, dropdownLoading: { paddingVertical: 12 }, dropdownEmpty: { color: "#64748b", padding: 18, textAlign: "center" }, dropdownError: { color: "#b91c1c", padding: 14, fontSize: 13 },
@@ -528,8 +560,12 @@ const styles = StyleSheet.create({
   preparing: { flexDirection: "row", alignItems: "center", gap: 8 },
   searchError: { color: "#b91c1c", fontSize: 13, lineHeight: 18 },
   selected: { color: "#047857", fontWeight: "700" }, row: { flexDirection: "row", gap: 10 }, half: { flex: 1 }, provisional: { textAlign: "right", fontWeight: "800", color: "#334155" },
-  summary: { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginVertical: 20 }, summaryLabel: { color: "#64748b", marginTop: 4 }, summaryValue: { fontSize: 18, fontWeight: "700" },
-  total: { fontSize: 28, color: "#059669", fontWeight: "900", marginTop: 4 }, modalShade: { flex: 1, backgroundColor: "rgba(15,23,42,.55)", justifyContent: "flex-end" },
+  stickyFooter: { backgroundColor: "#fff", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#cbd5e1", marginHorizontal: -20, marginBottom: -20, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, gap: 10, shadowColor: "#0f172a", shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: -4 }, elevation: 12 },
+  stickySummary: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, stickyLabel: { color: "#64748b", fontSize: 12, fontWeight: "700" }, stickyTotal: { color: "#047857", fontSize: 22, fontWeight: "900", marginTop: 2 },
+  modalShade: { flex: 1, backgroundColor: "rgba(15,23,42,.55)", justifyContent: "flex-end" },
+  productSheet: { height: "86%", backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 10 },
+  sheetSubtitle: { color: "#64748b", fontSize: 13, marginTop: 3 }, productSearch: { minHeight: 52, marginTop: 18, marginBottom: 10, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 14, paddingHorizontal: 14, color: "#0f172a", fontSize: 15 },
+  productListScroll: { flex: 1 }, productList: { paddingBottom: 24 },
   supplierSheet: { maxHeight: "78%", minHeight: 420, backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22 },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, close: { color: "#059669", fontSize: 16, fontWeight: "800" },
   supplierSearch: { minHeight: 52, marginTop: 18, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 14, paddingHorizontal: 14, color: "#0f172a", fontSize: 15 },
