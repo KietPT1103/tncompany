@@ -238,9 +238,8 @@ export default function CafePosPage() {
   const [tableNumber, setTableNumber] = useState("");
   const [menuSearch, setMenuSearch] = useState("");
   const [category, setCategory] = useState<string>(ALL_CATEGORY_ID);
-  const [activeTab, setActiveTab] = useState<"tables" | "menu">("menu");
+  const [activeTab, setActiveTab] = useState<"tables" | "menu">("tables");
   const [tableSearch, setTableSearch] = useState("");
-  const [autoOpenMenu, setAutoOpenMenu] = useState(true);
   const [orderDrafts, setOrderDrafts] = useState<Record<string, OrderDraft>>(
     {}
   );
@@ -420,10 +419,10 @@ export default function CafePosPage() {
         if (isFarmStore) {
           setTableNumber("");
         } else if (
-          tableList.length > 0 &&
-          (!tableNumber || !tableList.some((t) => t.name === tableNumber))
+          tableNumber &&
+          !tableList.some((t) => t.name === tableNumber)
         ) {
-          setTableNumber(tableList[0].name);
+          setTableNumber("");
         }
       } catch (error) {
         console.error("Failed to load POS data", error);
@@ -734,8 +733,12 @@ export default function CafePosPage() {
   useEffect(() => {
     if (isFarmStore) {
       setActiveTab("menu");
+      setTableNumber("");
+    } else {
+      setActiveTab("tables");
+      setTableNumber("");
     }
-  }, [isFarmStore]);
+  }, [isFarmStore, storeId]);
 
   const activeOrderKey = useMemo(() => {
     if (isFarmStore) return FARM_ORDER_KEY;
@@ -1898,6 +1901,11 @@ export default function CafePosPage() {
       setCashReceivedInput("");
       setPaymentMethod("cash");
       setShowReceipt(false);
+      if (!isFarmStore) {
+        setTableNumber("");
+        setTableSearch("");
+        setActiveTab("tables");
+      }
     } catch (error) {
       console.error(error);
       alert("Lỗi khi lưu hoặc in bill. Vui lòng thử lại.");
@@ -1908,9 +1916,7 @@ export default function CafePosPage() {
 
   const handleSelectTable = (name: string) => {
     setTableNumber(name);
-    if (autoOpenMenu) {
-      setActiveTab("menu");
-    }
+    setActiveTab("menu");
   };
 
   const handleOpenAddTableModal = () => {
@@ -2026,8 +2032,8 @@ export default function CafePosPage() {
       return;
     }
     const openingCash = parseMoney(openingCashInput);
-    if (openingCashInput.trim() === "") {
-      alert("Vui lòng nhập tiền mặt đầu ca.");
+    if (openingCashInput.trim() === "" || openingCash <= 0) {
+      alert("Vui lòng nhập tiền mặt đầu ca lớn hơn 0.");
       return;
     }
 
@@ -2936,7 +2942,8 @@ export default function CafePosPage() {
                     Phòng bàn
                   </button>}
                   <button
-                    onClick={() => setActiveTab("menu")}
+                    onClick={() => setActiveTab(!isFarmStore && !tableNumber ? "tables" : "menu")}
+                    title={!isFarmStore && !tableNumber ? "Vui lòng chọn bàn trước" : "Mở thực đơn"}
                     className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
                       activeTab === "menu"
                         ? "bg-sky-600 text-white shadow-sm"
@@ -2967,15 +2974,6 @@ export default function CafePosPage() {
                           {tableOptions.length} bàn
                         </span>
                       </div>
-                      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-                          checked={autoOpenMenu}
-                          onChange={(e) => setAutoOpenMenu(e.target.checked)}
-                        />
-                        Mở thực đơn khi chọn bàn
-                      </label>
                     </div>
                     <Input
                       value={tableSearch}
@@ -4027,6 +4025,7 @@ export default function CafePosPage() {
                 value={formatMoneyInput(openingCashInput)}
                 onChange={(e) => setOpeningCashInput(e.target.value)}
                 placeholder="Nhập tiền đầu ca"
+                inputMode="numeric"
               />
               <Input
                 label="Ghi chú"
@@ -4049,7 +4048,7 @@ export default function CafePosPage() {
                 className="bg-sky-600 hover:bg-sky-700"
                 onClick={handleOpenShift}
                 isLoading={isOpeningShift || isLoadingShift}
-                disabled={!deviceIdentity?.id}
+                disabled={!deviceIdentity?.id || parseMoney(openingCashInput) <= 0}
               >
                 Mở ca
               </Button>

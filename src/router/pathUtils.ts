@@ -35,13 +35,13 @@ export function normalizeAdminHref(href: string) {
     return href;
   }
 
-  if (href === "/pos" || href === "/bar") {
-    return "/pos";
-  }
-
   const queryIndex = href.search(/[?#]/);
   const pathname = queryIndex >= 0 ? href.slice(0, queryIndex) : href;
   const suffix = queryIndex >= 0 ? href.slice(queryIndex) : "";
+
+  if (pathname === "/pos" || pathname === "/bar") {
+    return `${pathname}${suffix}`;
+  }
 
   const shouldPrefix = ADMIN_PATHS.some((path) => {
     if (path === "/") {

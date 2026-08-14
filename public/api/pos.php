@@ -671,6 +671,10 @@ if ($method === 'POST' && $resource === 'shifts') {
     if ($cashierUid === '' || $deviceId === '') {
         respond_error('Thiếu thông tin tài khoản hoặc thiết bị mở ca', 422);
     }
+    if (!array_key_exists('openingCash', $body) || !is_numeric($body['openingCash']) || (float) $body['openingCash'] <= 0) {
+        respond_error('Tiền mặt đầu ca phải lớn hơn 0', 422);
+    }
+    $openingCash = (float) $body['openingCash'];
 
     $lockName = 'pos_shift_' . substr(hash('sha256', $storeId . '|' . $cashierUid), 0, 48);
     $lockStatement = db()->prepare('SELECT GET_LOCK(:lock_name, 5)');
@@ -708,7 +712,7 @@ if ($method === 'POST' && $resource === 'shifts') {
                 'cashier_uid' => $cashierUid,
                 'cashier_name' => $cashierName,
                 'shift_type' => in_array($body['shiftType'] ?? 'single', ['shift_1','shift_2','shift_3','single'], true) ? $body['shiftType'] : 'single',
-                'opening_cash' => (float) ($body['openingCash'] ?? 0),
+                'opening_cash' => $openingCash,
                 'open_note' => trim((string) ($body['openNote'] ?? '')),
                 'device_id' => $deviceId,
                 'device_name' => $deviceName !== '' ? $deviceName : 'Thiết bị POS',
