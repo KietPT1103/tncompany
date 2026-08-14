@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/realtime.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $resource = strtolower(trim((string) ($_GET['resource'] ?? '')));
@@ -431,6 +432,7 @@ if ($method === 'POST' && $resource === 'tables') {
         'id' => $id, 'store_id' => trim((string) ($body['storeId'] ?? 'cafe')),
         'name' => trim((string) ($body['name'] ?? '')), 'area' => trim((string) ($body['area'] ?? '')),
     ]);
+    realtime_publish($posStoreId, 'tables-updated', ['id' => $id, 'action' => 'created']);
     respond_ok(['id' => $id], 201);
 }
 
@@ -451,6 +453,7 @@ if ($method === 'POST' && $resource === 'surcharges') {
         'type' => ($body['type'] ?? '') === 'fixed' ? 'fixed' : 'percent', 'value' => (float) ($body['value'] ?? 0),
         'enabled' => pos_bool($body['isEnabled'] ?? true, true) ? 1 : 0,
     ]);
+    realtime_publish($posStoreId, 'surcharges-updated', ['id' => $id, 'action' => 'created']);
     respond_ok(['id' => $id], 201);
 }
 
@@ -462,6 +465,7 @@ if ($method === 'PATCH' && $resource === 'surcharges') {
     if (array_key_exists('type', $body)) { $fields[] = 'surcharge_type=:type'; $params['type'] = $body['type'] === 'fixed' ? 'fixed' : 'percent'; }
     if (array_key_exists('isEnabled', $body)) { $fields[] = 'is_enabled=:enabled'; $params['enabled'] = pos_bool($body['isEnabled']) ? 1 : 0; }
     if ($fields !== []) db()->prepare('UPDATE surcharges SET ' . implode(',', $fields) . ' WHERE id=:id')->execute($params);
+    realtime_publish($posStoreId, 'surcharges-updated', ['id' => $id, 'action' => 'updated']);
     respond_ok(['updated' => true]);
 }
 
@@ -469,6 +473,7 @@ if ($method === 'DELETE' && $resource === 'surcharges') {
     $id = trim((string) ($_GET['id'] ?? ''));
     pos_assert_record_store('surcharges', $id, $user, $posStoreId);
     db()->prepare('DELETE FROM surcharges WHERE id=:id')->execute(['id' => $id]);
+    realtime_publish($posStoreId, 'surcharges-updated', ['id' => $id, 'action' => 'deleted']);
     respond_ok(['deleted' => true]);
 }
 
@@ -512,6 +517,7 @@ if ($method === 'POST' && $resource === 'bills') {
         pos_replace_bill_children($id, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
         db()->commit();
     } catch (Throwable $exception) { if (db()->inTransaction()) db()->rollBack(); throw $exception; }
+    realtime_publish($posStoreId, 'bill-created', ['id' => $id]);
     respond_ok(['id' => $id], 201);
 }
 
@@ -546,6 +552,7 @@ if ($method === 'PATCH' && $resource === 'bills') {
         }
         db()->commit();
     } catch (Throwable $exception) { if (db()->inTransaction()) db()->rollBack(); throw $exception; }
+    realtime_publish($posStoreId, 'bill-updated', ['id' => $id]);
     respond_ok(['updated' => true]);
 }
 
@@ -562,6 +569,7 @@ if ($method === 'DELETE' && $resource === 'bills') {
         db()->prepare('DELETE FROM bills WHERE id=:id')->execute(['id' => $id]);
         db()->commit();
     } catch (Throwable $exception) { if (db()->inTransaction()) db()->rollBack(); throw $exception; }
+    realtime_publish($posStoreId, 'bill-deleted', ['id' => $id]);
     respond_ok(['deleted' => true]);
 }
 
@@ -716,6 +724,7 @@ if ($method === 'POST' && $resource === 'shifts') {
     if (!$shiftRow) {
         respond_error('Không thể tải ca vừa mở', 500);
     }
+    realtime_publish($posStoreId, 'shifts-updated', ['id' => (string) $shiftRow['id'], 'action' => $alreadyOpen ? 'synced' : 'opened']);
     respond_ok(
         ['item' => pos_shift_payload($shiftRow), 'alreadyOpen' => $alreadyOpen],
         $alreadyOpen ? 200 : 201
@@ -730,7 +739,7 @@ if ($method === 'PATCH' && $resource === 'shifts') {
         'expected'=>(float)($summary['expectedClosingCash']??0),'cash_sales'=>(float)($summary['cashSales']??0),'transfer_sales'=>(float)($summary['transferSales']??0),
         'total_sales'=>(float)($summary['totalSales']??0),'completed'=>(int)($summary['completedBills']??0),'cancelled'=>(int)($summary['cancelledBills']??0),
         'cancelled_amount'=>(float)($summary['cancelledAmount']??0),'income'=>(float)($summary['incomeVouchers']??0),'expense'=>(float)($summary['expenseVouchers']??0),'net'=>(float)($summary['netCashFlow']??0),
-    ]); respond_ok(['updated'=>true]);
+    ]); realtime_publish($posStoreId,'shifts-updated',['id'=>trim((string)($body['id']??'')),'action'=>'closed']);respond_ok(['updated'=>true]);
 }
 
 if ($method === 'GET' && $resource === 'live-orders') {
@@ -742,11 +751,11 @@ if ($method === 'GET' && $resource === 'live-orders') {
 
 if ($method === 'PUT' && $resource === 'live-orders') {
     $storeId=trim((string)($body['storeId']??''));$orderKey=trim((string)($body['orderKey']??''));$id=$storeId.'__'.hash('sha256',strtolower($orderKey));$items=is_array($body['items']??null)?$body['items']:[];
-    db()->beginTransaction();try{db()->prepare("INSERT INTO live_orders (id,store_id,order_key,status) VALUES (:id,:store_id,:order_key,'open') ON DUPLICATE KEY UPDATE order_key=VALUES(order_key),status='open',updated_at=NOW()")->execute(['id'=>$id,'store_id'=>$storeId,'order_key'=>$orderKey]);db()->prepare('DELETE FROM live_order_items WHERE live_order_id=:id')->execute(['id'=>$id]);$s=db()->prepare('INSERT INTO live_order_items (live_order_id,menu_id,name,price,quantity,note,category) VALUES (:id,:menu_id,:name,:price,:quantity,:note,:category)');foreach($items as $item)$s->execute(['id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'price'=>(float)($item['price']??0),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??'')),'category'=>trim((string)($item['category']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}respond_ok(['id'=>$id]);
+    db()->beginTransaction();try{db()->prepare("INSERT INTO live_orders (id,store_id,order_key,status) VALUES (:id,:store_id,:order_key,'open') ON DUPLICATE KEY UPDATE order_key=VALUES(order_key),status='open',updated_at=NOW()")->execute(['id'=>$id,'store_id'=>$storeId,'order_key'=>$orderKey]);db()->prepare('DELETE FROM live_order_items WHERE live_order_id=:id')->execute(['id'=>$id]);$s=db()->prepare('INSERT INTO live_order_items (live_order_id,menu_id,name,price,quantity,note,category) VALUES (:id,:menu_id,:name,:price,:quantity,:note,:category)');foreach($items as $item)$s->execute(['id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'price'=>(float)($item['price']??0),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??'')),'category'=>trim((string)($item['category']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}realtime_publish($storeId,'live-orders-updated',['id'=>$id,'orderKey'=>$orderKey,'action'=>'updated']);respond_ok(['id'=>$id]);
 }
 
 if ($method === 'DELETE' && $resource === 'live-orders') {
-    db()->prepare('DELETE FROM live_orders WHERE store_id=:store_id AND order_key=:order_key')->execute(['store_id'=>trim((string)($_GET['storeId']??'')),'order_key'=>trim((string)($_GET['orderKey']??''))]);respond_ok(['deleted'=>true]);
+    $storeId=trim((string)($_GET['storeId']??''));$orderKey=trim((string)($_GET['orderKey']??''));db()->prepare('DELETE FROM live_orders WHERE store_id=:store_id AND order_key=:order_key')->execute(['store_id'=>$storeId,'order_key'=>$orderKey]);realtime_publish($storeId,'live-orders-updated',['orderKey'=>$orderKey,'action'=>'deleted']);respond_ok(['deleted'=>true]);
 }
 
 if (in_array($resource, ['kitchen-jobs','bar-jobs'], true)) {
@@ -757,7 +766,7 @@ if (in_array($resource, ['kitchen-jobs','bar-jobs'], true)) {
         $where=$isBoard?"workflow_status<>'collected'":"status='pending'";
         $statement=db()->prepare("SELECT * FROM {$jobTable} WHERE store_id=:store_id AND {$where} ORDER BY created_at");$statement->execute(['store_id'=>trim((string)($_GET['storeId']??''))]);$rows=$statement->fetchAll();$ids=array_map(static fn(array $r):string=>(string)$r['id'],$rows);$items=pos_job_items($itemTable,$ids);pos_polling_response(array_map(static fn(array $row):array=>['id'=>(string)$row['id'],'storeId'=>(string)$row['store_id'],'orderKey'=>(string)$row['table_number'],'tableNumber'=>(string)$row['table_number'],'sourceBillId'=>$row['bill_id']?:'','items'=>$items[(string)$row['id']]??[],'status'=>(string)$row['status'],'workflowStatus'=>(string)($row['workflow_status']??'new'),'createdAt'=>pos_timestamp($row['created_at']),'workflowUpdatedAt'=>pos_timestamp($row['workflow_updated_at']??null),'collectedAt'=>pos_timestamp($row['collected_at']??null),'printedAt'=>pos_timestamp($row['printed_at']),'printedByTerminal'=>$row['terminal_name']?:''],$rows));
     }
-    if($method==='POST'){$id=uuidv4();$items=is_array($body['items']??null)?$body['items']:[];db()->beginTransaction();try{db()->prepare("INSERT INTO {$jobTable} (id,store_id,bill_id,table_number,status,note) VALUES (:id,:store_id,:bill_id,:table_number,'pending',:note)")->execute(['id'=>$id,'store_id'=>trim((string)($body['storeId']??'')),'bill_id'=>trim((string)($body['sourceBillId']??''))?:null,'table_number'=>trim((string)($body['tableNumber']??'')),'note'=>trim((string)($body['orderKey']??''))]);$s=db()->prepare("INSERT INTO {$itemTable} (job_id,menu_id,name,quantity,note) VALUES (:job_id,:menu_id,:name,:quantity,:note)");foreach($items as $item)$s->execute(['job_id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}respond_ok(['id'=>$id],201);}
+    if($method==='POST'){$id=uuidv4();$items=is_array($body['items']??null)?$body['items']:[];db()->beginTransaction();try{db()->prepare("INSERT INTO {$jobTable} (id,store_id,bill_id,table_number,status,note) VALUES (:id,:store_id,:bill_id,:table_number,'pending',:note)")->execute(['id'=>$id,'store_id'=>trim((string)($body['storeId']??'')),'bill_id'=>trim((string)($body['sourceBillId']??''))?:null,'table_number'=>trim((string)($body['tableNumber']??'')),'note'=>trim((string)($body['orderKey']??''))]);$s=db()->prepare("INSERT INTO {$itemTable} (job_id,menu_id,name,quantity,note) VALUES (:job_id,:menu_id,:name,:quantity,:note)");foreach($items as $item)$s->execute(['job_id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}realtime_publish($posStoreId,$prefix.'-jobs-updated',['id'=>$id,'action'=>'created']);respond_ok(['id'=>$id],201);}
     if($method==='PATCH'){
         $id=trim((string)($body['id']??''));pos_assert_record_store($jobTable,$id,$user,$posStoreId);
         if($prefix==='bar'&&array_key_exists('workflowStatus',$body)){
@@ -767,6 +776,7 @@ if (in_array($resource, ['kitchen-jobs','bar-jobs'], true)) {
         }else{
             db()->prepare("UPDATE {$jobTable} SET status='printed',printed_at=NOW(),terminal_name=:terminal WHERE id=:id")->execute(['id'=>$id,'terminal'=>trim((string)($body['terminalName']??''))]);
         }
+        realtime_publish($posStoreId,$prefix.'-jobs-updated',['id'=>$id,'action'=>'updated']);
         respond_ok(['updated'=>true]);
     }
 }

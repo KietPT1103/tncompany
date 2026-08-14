@@ -67,6 +67,7 @@ import {
 } from "@/services/shiftService";
 import {
   clearLiveOrder,
+  getLiveOrders,
   LiveOrderItem,
   subscribeLiveOrders,
   upsertLiveOrder,
@@ -88,9 +89,10 @@ import {
   SurchargeType,
   createSurcharge,
   deleteSurcharge,
-  subscribeSurcharges,
+  getSurcharges,
   updateSurcharge,
 } from "@/services/surchargeService";
+import { subscribeStoreEvents } from "@/services/realtimeService";
 
 const ALL_CATEGORY = "Tất cả";
 const ALL_CATEGORY_ID = "ALL";
@@ -430,40 +432,43 @@ export default function CafePosPage() {
     loadData();
   }, [storeId, isFarmStore, tableNumber]);
 
-  useEffect(() => {
+  const refreshSurcharges = useCallback(async () => {
     if (!storeId) {
       setSurcharges([]);
       return;
     }
-
-    const unsubscribe = subscribeSurcharges(
-      storeId,
-      (next) => {
-        setSurcharges(next);
-      },
-      (error) => {
-        console.error("Không đồng bộ được cài đặt phụ thu", error);
-      }
-    );
-
-    return () => unsubscribe();
+    try {
+      setSurcharges(await getSurcharges(storeId));
+    } catch (error) {
+      console.error("Không tải được cài đặt phụ thu", error);
+    }
   }, [storeId]);
+
+  useEffect(() => {
+    void refreshSurcharges();
+  }, [refreshSurcharges]);
+
+  useEffect(() => {
+    if (!storeId) return;
+    return subscribeStoreEvents(storeId, ["surcharges-updated"], () => void refreshSurcharges());
+  }, [refreshSurcharges, storeId]);
 
   useEffect(() => {
     setDeviceIdentity(getOrCreatePosDevice());
   }, []);
 
   useEffect(() => {
+    if (!user || !storeId || !isShiftEnabledForUser) {
+      setActiveShift(null);
+      setShowOpenShiftModal(false);
+      return;
+    }
+
     let stopped = false;
     let checking = false;
     let firstLoad = true;
 
     async function loadShiftState() {
-      if (!user || !storeId || !isShiftEnabledForUser) {
-        setActiveShift(null);
-        setShowOpenShiftModal(false);
-        return;
-      }
       if (checking) return;
       checking = true;
       if (firstLoad) setIsLoadingShift(true);
@@ -498,10 +503,12 @@ export default function CafePosPage() {
       }
     }
     void loadShiftState();
-    const timer = window.setInterval(() => void loadShiftState(), 2000);
+    const unsubscribe = subscribeStoreEvents(storeId, ["shifts-updated"], () => void loadShiftState());
+    const fallbackTimer = window.setInterval(() => void loadShiftState(), 120000);
     return () => {
       stopped = true;
-      window.clearInterval(timer);
+      unsubscribe();
+      window.clearInterval(fallbackTimer);
     };
   }, [deviceIdentity?.id, isShiftEnabledForUser, storeId, user?.uid]);
 
@@ -517,9 +524,7 @@ export default function CafePosPage() {
       return;
     }
 
-    const unsubscribe = subscribeLiveOrders(
-      storeId,
-      (orders) => {
+    const applyOrders = (orders: Awaited<ReturnType<typeof getLiveOrders>>) => {
         const next: Record<string, OrderDraft> = {};
         orders.forEach((order) => {
           const orderKey = order.orderKey?.trim();
@@ -543,11 +548,12 @@ export default function CafePosPage() {
           next[orderKey] = { items: mappedItems };
         });
         setOrderDrafts(next);
-      },
-      (error) => {
-        console.error("Không đồng bộ được đơn realtime", error);
-      }
-    );
+    };
+    const handleError = (error: Error) => {
+      console.error("Không đồng bộ được đơn realtime", error);
+    };
+
+    const unsubscribe = subscribeLiveOrders(storeId, applyOrders, handleError);
 
     return () => unsubscribe();
   }, [storeId]);
@@ -2445,6 +2451,7 @@ export default function CafePosPage() {
           isEnabled: surchargeEnabledInput,
         });
       }
+      await refreshSurcharges();
       resetSurchargeForm();
     } catch (error) {
       console.error(error);
@@ -2458,6 +2465,7 @@ export default function CafePosPage() {
     setUpdatingSurchargeId(surcharge.id);
     try {
       await updateSurcharge(surcharge.id, { isEnabled: !surcharge.isEnabled });
+      await refreshSurcharges();
     } catch (error) {
       console.error(error);
       alert("Không thể cập nhật trạng thái phụ thu.");
@@ -2472,6 +2480,7 @@ export default function CafePosPage() {
     setDeletingSurchargeId(surcharge.id);
     try {
       await deleteSurcharge(surcharge.id);
+      await refreshSurcharges();
       if (editingSurchargeId === surcharge.id) {
         resetSurchargeForm();
       }

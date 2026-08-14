@@ -6,7 +6,7 @@ import { BellRing, Check, CheckCircle2, ChefHat, Clock3, Coffee, GripVertical, L
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
-import { BarPrintJob, BarWorkflowStatus, markBarPrintJobPrinted, subscribeBarBoard, subscribePendingBarPrintJobs, updateBarWorkflowStatus } from "@/services/barPrintJobService";
+import { BarPrintJob, BarWorkflowStatus, markBarPrintJobPrinted, subscribeBarBoard, updateBarWorkflowStatus } from "@/services/barPrintJobService";
 
 const AUTO_PRINT_KEY = "pos:bar-auto-print";
 const TERMINAL_KEY = "pos:bar-terminal-name";
@@ -102,14 +102,14 @@ export default function BarBoardPage() {
   }, [playAlert, storeId]);
   useEffect(() => {
     if (!autoPrint) return;
-    return subscribePendingBarPrintJobs(storeId, (pendingJobs) => pendingJobs.forEach(async (job) => {
+    jobs.filter((job) => job.status === "pending").forEach(async (job) => {
       if (printingIds.current.has(job.id)) return;
       printingIds.current.add(job.id);
       try { if (job.items.length) printTicket(job); await markBarPrintJobPrinted(job.id, localStorage.getItem(terminalKey) || terminalName); }
       catch (error) { console.error("Không tự in được phiếu pha chế", error); }
       finally { printingIds.current.delete(job.id); }
-    }));
-  }, [autoPrint, storeId, terminalKey]);
+    });
+  }, [autoPrint, jobs, terminalKey]);
 
   const grouped = useMemo(() => Object.fromEntries(columns.map((column) => [column.id, jobs.filter((job) => job.workflowStatus === column.id)])) as Record<ActiveStatus, BarPrintJob[]>, [jobs]);
   const moveJob = async (job: BarPrintJob, status: BarWorkflowStatus) => {

@@ -31,6 +31,11 @@ return [
     'cors_origin' => $envString('CORS_ORIGIN', '*'),
     'timezone' => $envString('APP_TIMEZONE', 'Asia/Ho_Chi_Minh'),
     'site_url' => rtrim($envString('SITE_URL', 'https://tnservice.vn'), '/'),
+    'pusher_enabled' => $envBool('PUSHER_ENABLED', false),
+    'pusher_app_id' => $envString('PUSHER_APP_ID'),
+    'pusher_app_key' => $envString('PUSHER_APP_KEY'),
+    'pusher_app_secret' => $envString('PUSHER_APP_SECRET'),
+    'pusher_app_cluster' => $envString('PUSHER_APP_CLUSTER', 'ap1'),
 
     // Stored outside the public web root by default.
     'private_storage_path' => $envString(
