@@ -16,7 +16,8 @@ import "@fontsource/hurricane";
 import "@fontsource-variable/cormorant-garamond/wght.css";
 const rootElement = document.getElementById("root");
 const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-const isNewsRoute = pathname === "/tin-tuc" || pathname.startsWith("/tin-tuc/");
+const normalizedPathname = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+const prerenderedPath = rootElement.dataset.prerenderPath;
 const app = (
   <React.StrictMode>
     <BrowserRouter>
@@ -29,8 +30,11 @@ const app = (
   </React.StrictMode>
 );
 
-if (rootElement.hasChildNodes() && !isNewsRoute) {
+if (rootElement.hasChildNodes() && prerenderedPath === normalizedPathname) {
   hydrateRoot(rootElement, app);
 } else {
+  // An app URL can be served through a prerendered public index by a stale or
+  // misconfigured rewrite. Clear that unrelated markup before mounting React.
+  if (rootElement.hasChildNodes()) rootElement.replaceChildren();
   createRoot(rootElement).render(app);
 }

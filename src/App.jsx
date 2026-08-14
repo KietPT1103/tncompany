@@ -5,6 +5,7 @@ import LandingApp from "./LandingApp";
 import DashboardLayout from "./app/(dashboard)/layout";
 import BillsPage from "./app/(dashboard)/bills/page";
 import PosPage from "./app/(dashboard)/pos/page";
+import BarBoardPage from "./app/(dashboard)/bar/page";
 import CashFlowPage from "./app/(dashboard)/cash-flow/page";
 import AccountManagementPage from "./app/(dashboard)/accounts-page";
 import ActivityLogsPage from "./app/(dashboard)/activity-logs/page";
@@ -93,13 +94,13 @@ export function App() {
         <Route
           element={
             <ProtectedLayout
-              allowedRoles={["admin", "user", "server"]}
-              permission="bills.access"
+              allowedRoles={["admin", "user", "server", "bartender"]}
               inferPermission={false}
             />
           }
         >
           <Route path="/pos" element={<PosPage />} />
+          <Route path="/bar" element={<BarBoardPage />} />
         </Route>
         <Route path="/gesture-studio" element={<GestureStudioPage />} />
         <Route path="/dust-ritual" element={<DustRitualPage />} />
@@ -115,6 +116,7 @@ export function App() {
         >
           <Route path="gesture-studio" element={<Navigate to="/gesture-studio" replace />} />
           <Route path="pos" element={<Navigate to="/pos" replace />} />
+          <Route path="bar" element={<Navigate to="/bar" replace />} />
           <Route element={<AdminLayout />}>
             <Route index element={<AdminIndexPage />} />
             <Route element={<ProtectedLayout />}>

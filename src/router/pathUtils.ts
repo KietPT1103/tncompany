@@ -20,6 +20,7 @@ const ADMIN_PATHS = [
   "/tax-invoices",
   "/timesheet",
   "/pos",
+  "/bar",
 ];
 
 const isExternalHref = (value: string) =>
@@ -34,7 +35,7 @@ export function normalizeAdminHref(href: string) {
     return href;
   }
 
-  if (href === "/pos") {
+  if (href === "/pos" || href === "/bar") {
     return "/pos";
   }
 

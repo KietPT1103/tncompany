@@ -172,10 +172,10 @@ export default function LoginPage() {
     try {
       const { token, user } = await loginApi(loginEmail, rawPassword);
       const normalizedRole = normalizeUserRole(user);
-      const isStoreLockedRole = normalizedRole === "user" || normalizedRole === "server";
+      const isStoreLockedRole = normalizedRole === "user" || normalizedRole === "server" || normalizedRole === "bartender";
       if (isStoreLockedRole && !isValidStoreId(user.storeId)) {
         clearApiToken();
-        throw new Error("Tài khoản thu ngân/phục vụ chưa được quản trị viên gán quầy.");
+        throw new Error("Tài khoản thu ngân/phục vụ/pha chế chưa được quản trị viên gán quầy.");
       }
       setApiToken(token);
       await refreshUser();

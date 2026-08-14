@@ -194,7 +194,7 @@ export default function CafePosPage() {
       ? user.storeId
       : null;
   const storeId =
-    (role === "user" || role === "server") && assignedStoreId
+    (role === "user" || role === "server" || role === "bartender") && assignedStoreId
       ? assignedStoreId
       : selectedStoreId;
   const isHotpotStore = storeId === HOTPOT_STORE_ID;
@@ -206,13 +206,16 @@ export default function CafePosPage() {
     .toLowerCase()
     .endsWith("@service.local");
   const isServerAccount = role === "server" || isServiceAccountEmail;
+  const isBartenderAccount = role === "bartender";
   const isCashierAccount = role === "user";
   const isRestaurantServer = isServerAccount && isHotpotStore;
   const canUseKitchenAutoPrint = isHotpotStore && !isRestaurantServer;
   const canUseBarAutoPrint = storeId === CAFE_STORE_ID;
   const isShiftEnabledForUser = isShiftEnabledStore && isCashierAccount;
   const usesThreeShiftByAccount = THREE_SHIFT_STORES.has(storeId);
-  const posTitle = isBakeryStore
+  const posTitle = isBartenderAccount
+    ? "Bấm bill tại quầy pha chế"
+    : isBakeryStore
     ? "Bán hàng tại tiệm bánh"
     : isFarmStore
     ? "Bán hàng tại Farm"
@@ -220,7 +223,7 @@ export default function CafePosPage() {
 
   useEffect(() => {
     if (
-      (role === "user" || role === "server") &&
+      (role === "user" || role === "server" || role === "bartender") &&
       assignedStoreId &&
       selectedStoreId !== assignedStoreId
     ) {
@@ -1382,7 +1385,8 @@ export default function CafePosPage() {
           </div>
           <p class="section-title">${options.title}</p>
           ${options.billCode ? `<p class="bill-code">${options.billCode}</p>` : ""}
-          <div class="line-row"><span><strong>${options.tableLabel}</strong></span><span>Thu ngân: ${cashierName}</span></div>
+          ${isBartenderAccount ? '<p class="bill-code"><strong>ĐƠN DO PHA CHẾ TẠO</strong></p>' : ""}
+          <div class="line-row"><span><strong>${options.tableLabel}</strong></span><span>${isBartenderAccount ? "Pha chế" : "Thu ngân"}: ${cashierName}</span></div>
           <div class="line-row"><span>Giờ vào: ${options.createdAtText}</span><span>Giờ in: ${printTime}</span></div>
           <hr />
           <table>
@@ -2676,7 +2680,10 @@ export default function CafePosPage() {
   }, [showActionMenu]);
 
   return (
-    <RoleGuard allowedRoles={["admin", "user", "server"]}>
+    <RoleGuard
+      allowedRoles={["admin", "user", "server", "bartender"]}
+      permission={role === "bartender" ? "bar.checkout" : "bills.access"}
+    >
       <main className="min-h-screen bg-slate-50 p-3 sm:p-6">
         <div className="mx-auto max-w-[1400px] overflow-hidden rounded-2xl border bg-white shadow-xl">
           <div className="flex items-center justify-between border-b px-4 py-3">
@@ -2693,7 +2700,7 @@ export default function CafePosPage() {
               <div>
                 <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-sky-700">
                   <Coffee className="h-4 w-4" />
-                  Quầy thu ngân
+                  {isBartenderAccount ? "Quầy pha chế" : "Quầy thu ngân"}
                 </p>
                 <h1 className="text-xl font-bold leading-tight text-slate-900">
                   {posTitle}
@@ -2754,7 +2761,17 @@ export default function CafePosPage() {
               </button>
               {showActionMenu && (
                 <div className="absolute right-0 top-12 z-[80] max-h-[calc(100vh-5.5rem)] w-64 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl">
-                  {!isRestaurantServer && (
+                  {isBartenderAccount && (
+                    <Link
+                      href="/bar"
+                      className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                      onClick={() => setShowActionMenu(false)}
+                    >
+                      <Coffee className="h-4 w-4 text-amber-700" />
+                      Về màn hình pha chế
+                    </Link>
+                  )}
+                  {!isRestaurantServer && !isBartenderAccount && (
                     <>
                       <Link
                         href="/bills"
@@ -2764,6 +2781,16 @@ export default function CafePosPage() {
                         <ReceiptText className="h-4 w-4 text-sky-700" />
                         Trang hóa đơn
                       </Link>
+                      {canUseBarAutoPrint && (
+                        <Link
+                          href="/bar"
+                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                          onClick={() => setShowActionMenu(false)}
+                        >
+                          <Coffee className="h-4 w-4 text-amber-700" />
+                          Màn hình pha chế
+                        </Link>
+                      )}
                       <button
                         className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
                         onClick={() => {
@@ -3879,6 +3906,11 @@ export default function CafePosPage() {
                         <span className="truncate font-mono text-xs text-slate-500">
                           {bill.id}
                         </span>
+                        {bill.orderSource === "bar" ? (
+                          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                            Pha chế tạo
+                          </span>
+                        ) : null}
                       </div>
                       <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
                         <Clock3 className="h-3.5 w-3.5" />

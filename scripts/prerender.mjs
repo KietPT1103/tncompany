@@ -12,7 +12,7 @@ const template = await readFile(templatePath, "utf8");
 const { PUBLIC_PRERENDER_ROUTES, renderPublicRoute } = await import(pathToFileURL(entryPath).href);
 const spaShellPath = path.join(distDir, "spa-shell.html");
 
-function injectRouteHtml(html, appHtml, headTags) {
+function injectRouteHtml(html, appHtml, headTags, route) {
   return html
     .replace(/<title>[\s\S]*?<\/title>/i, "")
     .replace(/<meta name="description"[^>]*>/i, "")
@@ -22,14 +22,17 @@ function injectRouteHtml(html, appHtml, headTags) {
     .replace(/<meta name="twitter:[^"]+"[^>]*>\s*/gi, "")
     .replace(/<script id="app-seo-jsonld"[\s\S]*?<\/script>/i, "")
     .replace("</head>", `    ${headTags}\n  </head>`)
-    .replace('<div id="root"></div>', `<div id="root">${appHtml}</div>`);
+    .replace(
+      '<div id="root"></div>',
+      `<div id="root" data-prerender-path="${route}">${appHtml}</div>`,
+    );
 }
 
 await writeFile(spaShellPath, template, "utf8");
 
 for (const route of PUBLIC_PRERENDER_ROUTES) {
   const { appHtml, headTags } = renderPublicRoute(route);
-  const html = injectRouteHtml(template, appHtml, headTags);
+  const html = injectRouteHtml(template, appHtml, headTags, route);
   const outputPath =
     route === "/"
       ? templatePath

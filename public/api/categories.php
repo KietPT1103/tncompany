@@ -8,7 +8,7 @@ require_once __DIR__ . '/_lib/auth.php';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require_permission(['categories.access', 'bills.access']);
+    auth_require_permission(['categories.access', 'bills.access', 'bar.checkout']);
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(

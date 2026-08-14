@@ -747,7 +747,14 @@ export default function BillsPage() {
                                     : "hover:bg-slate-50"
                                 }
                               >
-                                <td className="px-4 py-3 font-mono text-xs">{bill.id}</td>
+                                <td className="px-4 py-3 font-mono text-xs">
+                                  <div>{bill.id}</div>
+                                  {bill.orderSource === "bar" ? (
+                                    <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 font-sans text-[11px] font-bold text-amber-800">
+                                      Pha chế tạo
+                                    </span>
+                                  ) : null}
+                                </td>
                                 <td className="px-4 py-3 text-slate-700">
                                   {created ? created.toLocaleString("vi-VN") : "Chưa có"}
                                 </td>

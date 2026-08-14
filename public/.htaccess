@@ -21,5 +21,6 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Fallback all frontend routes to the SPA entry.
-RewriteRule ^ index.html [L]
+# Fallback app routes to the non-prerendered SPA shell. Using index.html here
+# sends the home-page SSR markup to /pos and causes React hydration errors.
+RewriteRule ^ spa-shell.html [L]

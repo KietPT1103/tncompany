@@ -1,7 +1,9 @@
-export type UserRole = "admin" | "manager" | "user" | "server";
+export type UserRole = "admin" | "manager" | "user" | "server" | "bartender";
 export type AppPermission =
   | "dashboard.access"
   | "bills.access"
+  | "bar.access"
+  | "bar.checkout"
   | "virtual_bills.access"
   | "sample_bills.access"
   | "payroll_estimate.access"
@@ -28,7 +30,7 @@ export type AppPermission =
   | "seo_articles.access"
   | "activity_logs.access"
   | "accounts.access";
-const KNOWN_USER_ROLES: UserRole[] = ["admin", "manager", "user", "server"];
+const KNOWN_USER_ROLES: UserRole[] = ["admin", "manager", "user", "server", "bartender"];
 
 export type AppUser = {
   id: string;

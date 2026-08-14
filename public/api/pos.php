@@ -5,10 +5,29 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 
-$user = auth_require_permission('bills.access');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $resource = strtolower(trim((string) ($_GET['resource'] ?? '')));
 $body = in_array($method, ['POST', 'PUT', 'PATCH'], true) ? read_json_body() : [];
+$user = auth_require();
+
+if (($user['role'] ?? '') === 'bartender') {
+    $isBarBoardRequest = $resource === 'bar-jobs' && in_array($method, ['GET', 'PATCH'], true);
+    $isBarCheckoutRequest =
+        ($method === 'GET' && in_array($resource, ['tables', 'surcharges', 'voucher-categories', 'bills', 'live-orders'], true)) ||
+        ($method === 'POST' && in_array($resource, ['bills', 'bar-jobs'], true)) ||
+        ($method === 'PUT' && $resource === 'live-orders') ||
+        ($method === 'DELETE' && $resource === 'live-orders');
+
+    if ($isBarBoardRequest) {
+        if (!auth_has_permission($user, 'bar.access')) respond_error('Forbidden', 403);
+    } elseif ($isBarCheckoutRequest) {
+        if (!auth_has_permission($user, 'bar.checkout')) respond_error('Forbidden', 403);
+    } else {
+        respond_error('Tài khoản pha chế không được phép thực hiện thao tác này', 403);
+    }
+} elseif (!auth_has_permission($user, 'bills.access')) {
+    respond_error('Forbidden', 403);
+}
 
 function pos_timestamp($value): ?array
 {
@@ -143,6 +162,33 @@ function pos_ensure_shift_device_columns(): void
 {
     auth_ensure_column('cashier_shifts', 'opened_by_device_id', 'VARCHAR(100) NULL AFTER open_note');
     auth_ensure_column('cashier_shifts', 'opened_by_device_name', 'VARCHAR(255) NULL AFTER opened_by_device_id');
+}
+
+function pos_ensure_bill_order_source_column(): void
+{
+    auth_ensure_column('bills', 'order_source', "ENUM('pos','bar') NOT NULL DEFAULT 'pos' AFTER cashier_name");
+}
+
+function pos_ensure_bar_workflow_columns(): void
+{
+    $columnStatement = db()->prepare(
+        'SELECT COLUMN_NAME FROM information_schema.columns
+         WHERE table_schema = DATABASE() AND table_name = :table_name AND column_name = :column_name LIMIT 1'
+    );
+    $columnStatement->execute(['table_name' => 'bar_print_jobs', 'column_name' => 'workflow_status']);
+    $isFirstMigration = !$columnStatement->fetch();
+
+    auth_ensure_column('bar_print_jobs', 'workflow_status', "VARCHAR(20) NOT NULL DEFAULT 'new' AFTER status");
+    auth_ensure_column('bar_print_jobs', 'workflow_updated_at', 'DATETIME NULL AFTER workflow_status');
+    auth_ensure_column('bar_print_jobs', 'collected_at', 'DATETIME NULL AFTER workflow_updated_at');
+
+    if ($isFirstMigration) {
+        db()->exec(
+            "UPDATE bar_print_jobs
+             SET workflow_status='collected', workflow_updated_at=COALESCE(printed_at, created_at), collected_at=COALESCE(printed_at, created_at)
+             WHERE status='printed'"
+        );
+    }
 }
 
 function pos_shift_payload(array $row): array
@@ -287,6 +333,7 @@ function pos_map_bills(array $rows): array
             'shiftId' => $row['shift_id'] ?: '',
             'cashierId' => $row['cashier_id'] ?: '',
             'cashierName' => $row['cashier_name'] ?: '',
+            'orderSource' => ($row['order_source'] ?? 'pos') === 'bar' ? 'bar' : 'pos',
             'createdAt' => pos_timestamp($row['created_at']),
             'cancelledAt' => pos_timestamp($row['cancelled_at']),
             'cancelledBy' => $row['cancelled_by'] ?: '',
@@ -361,6 +408,7 @@ $requestedStoreId = trim((string) ($_GET['storeId'] ?? ($body['storeId'] ?? ''))
 $posStoreId = pos_resolve_store_id($user, $requestedStoreId);
 $_GET['storeId'] = $posStoreId;
 $body['storeId'] = $posStoreId;
+if ($resource === 'bills') pos_ensure_bill_order_source_column();
 
 if ($method === 'GET' && $resource === 'tables') {
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
@@ -427,6 +475,7 @@ if ($method === 'DELETE' && $resource === 'surcharges') {
 if ($method === 'GET' && $resource === 'bills') {
     $where = ['store_id=:store_id'];
     $params = ['store_id' => $posStoreId];
+    if (($user['role'] ?? '') === 'bartender') $where[] = "order_source='bar'";
     if (!pos_bool($_GET['includeCancelled'] ?? false)) $where[] = "status<>'cancelled'";
     if (!empty($_GET['shiftId'])) { $where[] = 'shift_id=:shift_id'; $params['shift_id'] = trim((string) $_GET['shiftId']); }
     if (!empty($_GET['startDate'])) { $where[] = 'created_at>=:start_date'; $params['start_date'] = pos_mysql_datetime($_GET['startDate']); }
@@ -438,12 +487,15 @@ if ($method === 'GET' && $resource === 'bills') {
 }
 
 if ($method === 'POST' && $resource === 'bills') {
+    if (($user['role'] ?? '') === 'bartender' && !auth_has_permission($user, 'bar.checkout')) {
+        respond_error('Tài khoản pha chế chưa được cấp quyền bấm bill', 403);
+    }
     db()->beginTransaction();
     try {
         $id = pos_next_bill_id($posStoreId);
         db()->prepare(
-            'INSERT INTO bills (id,store_id,table_number,note,total,subtotal_before_surcharge,surcharge_total,status,payment_method,cash_received,change_amount,shift_id,cashier_id,cashier_name)
-             VALUES (:id,:store_id,:table_number,:note,:total,:subtotal,:surcharge_total,:status,:payment_method,:cash_received,:change_amount,:shift_id,:cashier_id,:cashier_name)'
+            'INSERT INTO bills (id,store_id,table_number,note,total,subtotal_before_surcharge,surcharge_total,status,payment_method,cash_received,change_amount,shift_id,cashier_id,cashier_name,order_source)
+             VALUES (:id,:store_id,:table_number,:note,:total,:subtotal,:surcharge_total,:status,:payment_method,:cash_received,:change_amount,:shift_id,:cashier_id,:cashier_name,:order_source)'
         )->execute([
             'id' => $id, 'store_id' => trim((string) ($body['storeId'] ?? 'cafe')), 'table_number' => trim((string) ($body['tableNumber'] ?? '')),
             'note' => trim((string) ($body['note'] ?? '')), 'total' => (float) ($body['total'] ?? 0),
@@ -455,6 +507,7 @@ if ($method === 'POST' && $resource === 'bills') {
             'change_amount' => isset($body['changeAmount']) ? (float) $body['changeAmount'] : null,
             'shift_id' => trim((string) ($body['shiftId'] ?? '')) ?: null, 'cashier_id' => trim((string) ($body['cashierId'] ?? '')) ?: null,
             'cashier_name' => trim((string) ($body['cashierName'] ?? '')) ?: null,
+            'order_source' => ($user['role'] ?? '') === 'bartender' ? 'bar' : 'pos',
         ]);
         pos_replace_bill_children($id, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
         db()->commit();
@@ -515,28 +568,43 @@ if ($method === 'DELETE' && $resource === 'bills') {
 if ($method === 'GET' && $resource === 'voucher-categories') {
     $categoryWhere = ['store_id=:category_store_id'];
     $historyWhere = ['store_id=:history_store_id', "TRIM(category)<>''"];
-    $params = [
-        'category_store_id' => $posStoreId,
-        'history_store_id' => $posStoreId,
-    ];
+    $categoryParams = ['category_store_id' => $posStoreId];
+    $historyParams = ['history_store_id' => $posStoreId];
     if (in_array($_GET['type'] ?? '', ['income', 'expense'], true)) {
         $categoryWhere[] = 'voucher_type=:category_type';
         $historyWhere[] = 'voucher_type=:history_type';
-        $params['category_type'] = $_GET['type'];
-        $params['history_type'] = $_GET['type'];
+        $categoryParams['category_type'] = $_GET['type'];
+        $historyParams['history_type'] = $_GET['type'];
     }
-    $statement = db()->prepare(
-        'SELECT store_id,voucher_type,name FROM cash_voucher_categories WHERE ' . implode(' AND ', $categoryWhere) .
-        ' UNION SELECT store_id,voucher_type,category AS name FROM cash_vouchers WHERE ' . implode(' AND ', $historyWhere) .
-        ' ORDER BY name'
+
+    // Read the two sources independently. Some older production tables use a
+    // different collation; asking MySQL to UNION them raises error 1271.
+    $categoryStatement = db()->prepare(
+        'SELECT store_id,voucher_type,name FROM cash_voucher_categories WHERE ' . implode(' AND ', $categoryWhere)
     );
-    $statement->execute($params);
+    $categoryStatement->execute($categoryParams);
+    $historyStatement = db()->prepare(
+        'SELECT store_id,voucher_type,category AS name FROM cash_vouchers WHERE ' . implode(' AND ', $historyWhere)
+    );
+    $historyStatement->execute($historyParams);
+
+    $categoryRows = [];
+    foreach (array_merge($categoryStatement->fetchAll(), $historyStatement->fetchAll()) as $row) {
+        $name = trim((string) ($row['name'] ?? ''));
+        if ($name === '') continue;
+        $normalizedName = function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+        $key = (string) $row['store_id'] . '|' . (string) $row['voucher_type'] . '|' . $normalizedName;
+        $categoryRows[$key] = [...$row, 'name' => $name];
+    }
+    $categoryRows = array_values($categoryRows);
+    usort($categoryRows, static fn(array $left, array $right): int => strnatcasecmp((string) $left['name'], (string) $right['name']));
+
     pos_polling_response(array_map(static fn(array $row): array => [
         'id' => hash('sha256', (string) $row['store_id'] . '|' . (string) $row['voucher_type'] . '|' . (string) $row['name']),
         'storeId' => (string) $row['store_id'],
         'type' => (string) $row['voucher_type'],
         'name' => (string) $row['name'],
-    ], $statement->fetchAll()));
+    ], $categoryRows));
 }
 
 if ($method === 'GET' && $resource === 'vouchers') {
@@ -683,9 +751,24 @@ if ($method === 'DELETE' && $resource === 'live-orders') {
 
 if (in_array($resource, ['kitchen-jobs','bar-jobs'], true)) {
     $prefix=$resource==='kitchen-jobs'?'kitchen':'bar';$jobTable=$prefix.'_print_jobs';$itemTable=$prefix.'_print_job_items';
-    if($method==='GET'){$statement=db()->prepare("SELECT * FROM {$jobTable} WHERE store_id=:store_id AND status='pending' ORDER BY created_at");$statement->execute(['store_id'=>trim((string)($_GET['storeId']??''))]);$rows=$statement->fetchAll();$ids=array_map(static fn(array $r):string=>(string)$r['id'],$rows);$items=pos_job_items($itemTable,$ids);pos_polling_response(array_map(static fn(array $row):array=>['id'=>(string)$row['id'],'storeId'=>(string)$row['store_id'],'orderKey'=>(string)$row['table_number'],'tableNumber'=>(string)$row['table_number'],'sourceBillId'=>$row['bill_id']?:'','items'=>$items[(string)$row['id']]??[],'status'=>(string)$row['status'],'createdAt'=>pos_timestamp($row['created_at']),'printedAt'=>pos_timestamp($row['printed_at']),'printedByTerminal'=>$row['terminal_name']?:''],$rows));}
+    if($prefix==='bar') pos_ensure_bar_workflow_columns();
+    if($method==='GET'){
+        $isBoard=$prefix==='bar'&&trim((string)($_GET['view']??''))==='board';
+        $where=$isBoard?"workflow_status<>'collected'":"status='pending'";
+        $statement=db()->prepare("SELECT * FROM {$jobTable} WHERE store_id=:store_id AND {$where} ORDER BY created_at");$statement->execute(['store_id'=>trim((string)($_GET['storeId']??''))]);$rows=$statement->fetchAll();$ids=array_map(static fn(array $r):string=>(string)$r['id'],$rows);$items=pos_job_items($itemTable,$ids);pos_polling_response(array_map(static fn(array $row):array=>['id'=>(string)$row['id'],'storeId'=>(string)$row['store_id'],'orderKey'=>(string)$row['table_number'],'tableNumber'=>(string)$row['table_number'],'sourceBillId'=>$row['bill_id']?:'','items'=>$items[(string)$row['id']]??[],'status'=>(string)$row['status'],'workflowStatus'=>(string)($row['workflow_status']??'new'),'createdAt'=>pos_timestamp($row['created_at']),'workflowUpdatedAt'=>pos_timestamp($row['workflow_updated_at']??null),'collectedAt'=>pos_timestamp($row['collected_at']??null),'printedAt'=>pos_timestamp($row['printed_at']),'printedByTerminal'=>$row['terminal_name']?:''],$rows));
+    }
     if($method==='POST'){$id=uuidv4();$items=is_array($body['items']??null)?$body['items']:[];db()->beginTransaction();try{db()->prepare("INSERT INTO {$jobTable} (id,store_id,bill_id,table_number,status,note) VALUES (:id,:store_id,:bill_id,:table_number,'pending',:note)")->execute(['id'=>$id,'store_id'=>trim((string)($body['storeId']??'')),'bill_id'=>trim((string)($body['sourceBillId']??''))?:null,'table_number'=>trim((string)($body['tableNumber']??'')),'note'=>trim((string)($body['orderKey']??''))]);$s=db()->prepare("INSERT INTO {$itemTable} (job_id,menu_id,name,quantity,note) VALUES (:job_id,:menu_id,:name,:quantity,:note)");foreach($items as $item)$s->execute(['job_id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}respond_ok(['id'=>$id],201);}
-    if($method==='PATCH'){$id=trim((string)($body['id']??''));pos_assert_record_store($jobTable,$id,$user,$posStoreId);db()->prepare("UPDATE {$jobTable} SET status='printed',printed_at=NOW(),terminal_name=:terminal WHERE id=:id")->execute(['id'=>$id,'terminal'=>trim((string)($body['terminalName']??''))]);respond_ok(['updated'=>true]);}
+    if($method==='PATCH'){
+        $id=trim((string)($body['id']??''));pos_assert_record_store($jobTable,$id,$user,$posStoreId);
+        if($prefix==='bar'&&array_key_exists('workflowStatus',$body)){
+            $workflowStatus=trim((string)$body['workflowStatus']);
+            if(!in_array($workflowStatus,['new','preparing','ready','collected'],true)) respond_error('Trạng thái pha chế không hợp lệ',422);
+            db()->prepare("UPDATE bar_print_jobs SET workflow_status=:workflow_status,workflow_updated_at=NOW(),collected_at=IF(:is_collected=1,NOW(),NULL) WHERE id=:id")->execute(['id'=>$id,'workflow_status'=>$workflowStatus,'is_collected'=>$workflowStatus==='collected'?1:0]);
+        }else{
+            db()->prepare("UPDATE {$jobTable} SET status='printed',printed_at=NOW(),terminal_name=:terminal WHERE id=:id")->execute(['id'=>$id,'terminal'=>trim((string)($body['terminalName']??''))]);
+        }
+        respond_ok(['updated'=>true]);
+    }
 }
 
 respond_error('POS resource not found', 404);

@@ -43,6 +43,7 @@ const ROLE_OPTIONS = [
   { value: "manager", label: "Manager" },
   { value: "user", label: "Thu ngân" },
   { value: "server", label: "Phục vụ" },
+  { value: "bartender", label: "Pha chế" },
 ] as const;
 
 type FormState = {
@@ -82,7 +83,7 @@ const INVENTORY_ACCOUNT_PERMISSIONS = new Set<AppPermission>([
 ]);
 
 function requiresAssignedStore(role: UserRole, permissions: AppPermission[]) {
-  return role !== "admin" && permissions.some((permission) => INVENTORY_ACCOUNT_PERMISSIONS.has(permission));
+  return role === "bartender" || (role !== "admin" && permissions.some((permission) => INVENTORY_ACCOUNT_PERMISSIONS.has(permission)));
 }
 
 function mapRoleLabel(role: ManagedUser["role"]) {
@@ -212,6 +213,9 @@ export default function AccountManagementPage() {
       ...current,
       role: nextRole,
       permissions: getDefaultPermissionsForRole(nextRole),
+      ...(nextRole === "bartender"
+        ? { storeId: "cafe", storeIds: ["cafe"] }
+        : {}),
     }));
   }
 

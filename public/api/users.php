@@ -35,7 +35,7 @@ function users_map_row(array $row): array
 
 function users_normalize_store_ids($value, string $primaryStoreId = ''): array
 {
-    $allowed = ['cafe', 'restaurant', 'farm', 'warehouse'];
+    $allowed = ['cafe', 'restaurant', 'bakery', 'farm', 'warehouse'];
     $source = is_array($value) ? $value : [];
     if ($primaryStoreId !== '') {
         $source[] = $primaryStoreId;
@@ -54,6 +54,10 @@ function users_requires_store_access(string $role, array $permissions): bool
 {
     if (strtolower(trim($role)) === 'admin') {
         return false;
+    }
+
+    if (strtolower(trim($role)) === 'bartender') {
+        return true;
     }
 
     $inventoryPermissions = [
@@ -126,7 +130,7 @@ if ($method === 'POST') {
         respond_error('Email và mật khẩu là bắt buộc.', 422);
     }
 
-    if (!in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
+    if (!in_array($role, ['admin', 'manager', 'user', 'server', 'bartender'], true)) {
         respond_error('Vai trò không hợp lệ.', 422);
     }
     if (users_requires_store_access($role, $permissions) && $storeIds === []) {
@@ -217,7 +221,7 @@ if ($method === 'PATCH') {
             respond_error('Chỉ admin mới được sửa vai trò.', 403);
         }
         $role = trim((string) $body['role']);
-        if (!in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
+        if (!in_array($role, ['admin', 'manager', 'user', 'server', 'bartender'], true)) {
             respond_error('Vai trò không hợp lệ.', 422);
         }
         $fields[] = 'role = :role';

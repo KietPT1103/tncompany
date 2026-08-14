@@ -81,6 +81,21 @@ function auth_ensure_tables(): void
     auth_ensure_column('users', 'store_id', 'VARCHAR(50) NULL AFTER role');
     auth_ensure_column('users', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER store_id');
     auth_ensure_column('users', 'permissions_json', 'LONGTEXT NULL AFTER is_active');
+
+    $roleColumn = db()->query(
+        "SELECT COLUMN_TYPE FROM information_schema.columns
+         WHERE table_schema=DATABASE() AND table_name='users' AND column_name='role' LIMIT 1"
+    )->fetchColumn();
+    if (
+        is_string($roleColumn) &&
+        stripos($roleColumn, 'enum(') === 0 &&
+        stripos($roleColumn, "'bartender'") === false
+    ) {
+        db()->exec(
+            "ALTER TABLE users MODIFY COLUMN role
+             ENUM('admin','manager','user','server','bartender') NOT NULL DEFAULT 'user'"
+        );
+    }
 }
 
 auth_ensure_tables();
@@ -132,7 +147,7 @@ function auth_delete_token(?string $token): void
 function auth_normalize_role(array $row): string
 {
     $role = strtolower(trim((string) ($row['role'] ?? '')));
-    if (in_array($role, ['admin', 'manager', 'user', 'server'], true)) {
+    if (in_array($role, ['admin', 'manager', 'user', 'server', 'bartender'], true)) {
         return $role;
     }
 
@@ -159,6 +174,8 @@ function auth_all_permissions(): array
     return [
         'dashboard.access',
         'bills.access',
+        'bar.access',
+        'bar.checkout',
         'sample_bills.access',
         'payroll_estimate.access',
         'payroll.access',
@@ -201,6 +218,10 @@ function auth_default_permissions_for_role(?string $role): array
 
     if ($normalizedRole === 'user' || $normalizedRole === 'server') {
         return ['bills.access'];
+    }
+
+    if ($normalizedRole === 'bartender') {
+        return ['bar.access', 'bar.checkout'];
     }
 
     return [];
@@ -370,7 +391,7 @@ function auth_find_user_for_login(string $login): ?array
              ELSE 2
            END,
            CASE
-             WHEN LOWER(TRIM(COALESCE(role, ""))) IN ("admin", "manager", "user", "server") THEN 0
+             WHEN LOWER(TRIM(COALESCE(role, ""))) IN ("admin", "manager", "user", "server", "bartender") THEN 0
              ELSE 1
            END,
            CASE

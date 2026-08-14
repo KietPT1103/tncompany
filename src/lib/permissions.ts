@@ -26,6 +26,21 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     path: "/pos",
   },
   {
+    id: "bar.access",
+    label: "Màn hình pha chế",
+    description: "Xem và cập nhật tiến độ các bill pha chế.",
+    category: "Giao dịch",
+    path: "/bar",
+    hidden: true,
+  },
+  {
+    id: "bar.checkout",
+    label: "Pha chế bấm bill",
+    description: "Chọn món, thanh toán và in bill tại quầy pha chế.",
+    category: "Giao dịch",
+    path: "/pos",
+  },
+  {
     id: "virtual_bills.access",
     label: "Tao bill ao",
     description: "Sinh bill ao theo tong doanh thu va so luong bill.",
@@ -236,6 +251,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
   manager: ["payroll_estimate.access"],
   user: ["bills.access"],
   server: ["bills.access"],
+  bartender: ["bar.access", "bar.checkout"],
 };
 
 const PATH_PERMISSION_RULES = [...PERMISSION_DEFINITIONS]
@@ -407,6 +423,10 @@ const DEFAULT_ROUTE_ORDER = [
 export function getDefaultRouteForUser(user: AppUser | null | undefined) {
   if (!user) {
     return "/login";
+  }
+
+  if (user.role === "bartender") {
+    return "/bar";
   }
 
   const matchedPath = DEFAULT_ROUTE_ORDER.find((path) => canAccessPath(user, path));

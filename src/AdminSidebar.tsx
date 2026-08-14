@@ -91,6 +91,12 @@ const navGroups: NavGroup[] = [
         permission: "bills.access",
       },
       {
+        href: "/bar",
+        label: "Màn hình pha chế",
+        icon: Coffee,
+        permission: "bills.access",
+      },
+      {
         href: "/bills",
         label: "Danh sách hóa đơn",
         icon: ReceiptText,
@@ -281,7 +287,7 @@ export default function AdminSidebar({
   const { logout, user, loading } = useAuth();
   const userRole = user?.role || null;
   const { setStoreId, storeId, storeName } = useStore();
-  const isStoreLocked = userRole === "user" || userRole === "server";
+  const isStoreLocked = userRole === "user" || userRole === "server" || userRole === "bartender";
   const [isOpen, setIsOpen] = useState(false);
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);

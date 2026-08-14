@@ -109,7 +109,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 products_inventory_ensure_schema();
 
 if ($method === 'GET') {
-    $user = auth_require_permission(['product.access', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update', 'bills.access']);
+    $user = auth_require_permission(['product.access', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update', 'bills.access', 'bar.checkout']);
 
     $fieldAction = strtolower(trim((string) ($_GET['action'] ?? '')));
     $fieldSearch = trim((string) ($_GET['search'] ?? ''));
