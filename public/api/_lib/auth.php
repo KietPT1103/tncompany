@@ -256,7 +256,11 @@ function auth_effective_permissions(array $row): array
     }
 
     if (array_key_exists('permissions_json', $row) && $row['permissions_json'] !== null && $row['permissions_json'] !== '') {
-        return auth_normalize_permissions($row['permissions_json']);
+        $permissions = auth_normalize_permissions($row['permissions_json']);
+        if (in_array($role, ['user', 'server'], true) && !in_array('bills.access', $permissions, true)) {
+            $permissions[] = 'bills.access';
+        }
+        return $permissions;
     }
 
     return auth_default_permissions_for_role($role);

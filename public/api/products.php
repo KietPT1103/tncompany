@@ -109,7 +109,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 products_inventory_ensure_schema();
 
 if ($method === 'GET') {
-    $user = auth_require_permission(['product.access', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update']);
+    $user = auth_require_permission(['product.access', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update', 'bills.access']);
 
     $fieldAction = strtolower(trim((string) ($_GET['action'] ?? '')));
     $fieldSearch = trim((string) ($_GET['search'] ?? ''));
@@ -224,6 +224,86 @@ if ($method === 'POST') {
     $action = strtolower((string) ($body['action'] ?? 'create'));
     $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? 'cafe'));
     $itemType = products_normalize_item_type((string) ($body['itemType'] ?? 'product'));
+
+    if ($action === 'import-selling-menu') {
+        if (($user['role'] ?? '') !== 'admin') {
+            respond_error('Chỉ quản trị viên được import danh sách món bán', 403);
+        }
+
+        $items = is_array($body['items'] ?? null) ? $body['items'] : [];
+        if ($items === []) {
+            respond_error('Danh sách món import đang trống', 422);
+        }
+
+        $statement = db()->prepare(
+            'INSERT INTO products (
+                id, store_id, product_code, product_name, category_id, cost, price,
+                has_cost, is_selling, stock_quantity, item_type
+             ) VALUES (
+                :id, :store_id, :product_code, :product_name, :category_id, NULL, :price,
+                0, :is_selling, 0, :item_type
+             )
+             ON DUPLICATE KEY UPDATE
+                product_name = VALUES(product_name),
+                category_id = VALUES(category_id),
+                price = VALUES(price),
+                is_selling = VALUES(is_selling),
+                item_type = VALUES(item_type)'
+        );
+
+        $importedCount = 0;
+        $sellingCount = 0;
+        $stoppedCount = 0;
+        db()->beginTransaction();
+
+        try {
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+
+                $productCode = trim((string) ($item['product_code'] ?? ''));
+                $productName = trim((string) ($item['product_name'] ?? ''));
+                $price = $item['price'] ?? null;
+                if ($productCode === '' || $productName === '' || !is_numeric($price)) {
+                    continue;
+                }
+
+                $isSelling = !empty($item['isSelling']) ? 1 : 0;
+                $statement->execute([
+                    'id' => uuidv4(),
+                    'store_id' => $storeId,
+                    'product_code' => $productCode,
+                    'product_name' => $productName,
+                    'category_id' => products_find_category_id($storeId, (string) ($item['category'] ?? '')),
+                    'price' => (float) $price,
+                    'is_selling' => $isSelling,
+                    'item_type' => 'product',
+                ]);
+
+                $importedCount++;
+                if ($isSelling === 1) {
+                    $sellingCount++;
+                } else {
+                    $stoppedCount++;
+                }
+            }
+
+            db()->commit();
+        } catch (Throwable $exception) {
+            if (db()->inTransaction()) {
+                db()->rollBack();
+            }
+            throw $exception;
+        }
+
+        respond_ok([
+            'imported' => true,
+            'importedCount' => $importedCount,
+            'sellingCount' => $sellingCount,
+            'stoppedCount' => $stoppedCount,
+        ]);
+    }
 
     if ($action === 'import') {
         $items = is_array($body['items'] ?? null) ? $body['items'] : [];

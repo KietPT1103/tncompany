@@ -42,17 +42,20 @@ import {
   saveBill,
 } from "@/services/billService";
 import {
+  CashVoucherCategory,
   CashVoucherType,
   createCashVoucher,
+  getCashVoucherCategories,
   getCashVouchers,
 } from "@/services/cashVoucherService";
-import { getAllProducts, Product } from "@/services/products.firebase";
+import { getAllProducts, Product } from "@/services/products";
 import { addTable, CafeTable, getTables } from "@/services/tableService";
 import { Category, getCategories } from "@/services/categoryService";
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import { normalizeSearchText } from "@/lib/utils";
+import { getOrCreatePosDevice, PosDeviceIdentity } from "@/lib/posDevice";
 import {
   CashierShift,
   closeShift,
@@ -95,6 +98,7 @@ const CAFE_STORE_ID = "cafe";
 const TAKEAWAY_ID = "__takeaway";
 const TAKEAWAY_NAME = "Mang về";
 const TABLES_PER_PAGE = 20;
+const MENU_ITEMS_PER_PAGE = 15;
 const HOTPOT_STORE_ID = "restaurant";
 const BAKERY_STORE_ID = "bakery";
 const FARM_STORE_ID = "farm";
@@ -136,6 +140,11 @@ const RECEIPT_STORE_INFO: Record<
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { minimumFractionDigits: 0 });
+const getCashDifferenceInfo = (difference: number) => {
+  if (difference > 0) return { label: "Dư", amount: difference };
+  if (difference < 0) return { label: "Thiếu", amount: Math.abs(difference) };
+  return { label: "Khớp", amount: 0 };
+};
 const PRINT_FONT_FAMILY = "'Tahoma', 'Segoe UI', Arial, sans-serif";
 const PRINT_TAIL_SPACE_MM = 8;
 const PREP_BAR_TAIL_SPACE_MM = 14;
@@ -171,10 +180,23 @@ type ReceiptData = {
   cashReceived?: number;
   changeAmount?: number;
 };
+type SoldBillsSortKey = "time" | "total" | "code" | "table";
+type SortDirection = "asc" | "desc";
 
 export default function CafePosPage() {
   const { role, user, logout } = useAuth();
-  const { storeId } = useStore();
+  const { storeId: selectedStoreId, setStoreId } = useStore();
+  const assignedStoreId =
+    user?.storeId === "cafe" ||
+    user?.storeId === "restaurant" ||
+    user?.storeId === "bakery" ||
+    user?.storeId === "farm"
+      ? user.storeId
+      : null;
+  const storeId =
+    (role === "user" || role === "server") && assignedStoreId
+      ? assignedStoreId
+      : selectedStoreId;
   const isHotpotStore = storeId === HOTPOT_STORE_ID;
   const isBakeryStore = storeId === BAKERY_STORE_ID;
   const isFarmStore = storeId === FARM_STORE_ID;
@@ -195,6 +217,16 @@ export default function CafePosPage() {
     : isFarmStore
     ? "Bán hàng tại Farm"
     : "Bán hàng tại quán";
+
+  useEffect(() => {
+    if (
+      (role === "user" || role === "server") &&
+      assignedStoreId &&
+      selectedStoreId !== assignedStoreId
+    ) {
+      setStoreId(assignedStoreId);
+    }
+  }, [assignedStoreId, role, selectedStoreId, setStoreId]);
   const [products, setProducts] = useState<Product[]>([]);
   const [tables, setTables] = useState<CafeTable[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -214,12 +246,21 @@ export default function CafePosPage() {
   const [newTableName, setNewTableName] = useState("");
   const [newTableArea, setNewTableArea] = useState("");
   const [tablePage, setTablePage] = useState(1);
+  const [menuPage, setMenuPage] = useState(1);
   const [isSeedingTables, setIsSeedingTables] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [showSoldBills, setShowSoldBills] = useState(false);
   const [soldBills, setSoldBills] = useState<Bill[]>([]);
   const [isLoadingSoldBills, setIsLoadingSoldBills] = useState(false);
+  const [soldBillsPaymentTab, setSoldBillsPaymentTab] =
+    useState<PaymentMethod>("cash");
+  const [soldBillsSearch, setSoldBillsSearch] = useState("");
+  const [soldBillsSortKey, setSoldBillsSortKey] =
+    useState<SoldBillsSortKey>("time");
+  const [soldBillsSortDirection, setSoldBillsSortDirection] =
+    useState<SortDirection>("desc");
+  const [expandedSoldBillId, setExpandedSoldBillId] = useState<string | null>(null);
   const [showAddTableModal, setShowAddTableModal] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
@@ -248,6 +289,8 @@ export default function CafePosPage() {
   const [cashReceivedInput, setCashReceivedInput] = useState("");
 
   const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
+  const [deviceIdentity, setDeviceIdentity] = useState<PosDeviceIdentity | null>(null);
+  const [shiftSyncNotice, setShiftSyncNotice] = useState("");
   const [isLoadingShift, setIsLoadingShift] = useState(false);
   const [showOpenShiftModal, setShowOpenShiftModal] = useState(false);
   const [openingCashInput, setOpeningCashInput] = useState("");
@@ -273,7 +316,7 @@ export default function CafePosPage() {
   );
   const [voucherAmountInput, setVoucherAmountInput] = useState("");
   const [voucherCategory, setVoucherCategory] = useState("");
-  const [voucherPersonGroup, setVoucherPersonGroup] = useState("Khác");
+  const [voucherCategories, setVoucherCategories] = useState<CashVoucherCategory[]>([]);
   const [voucherPersonName, setVoucherPersonName] = useState("");
   const [voucherNote, setVoucherNote] = useState("");
   const [voucherIncludeInCashFlow, setVoucherIncludeInCashFlow] = useState(true);
@@ -330,7 +373,6 @@ export default function CafePosPage() {
     setShowVoucherModal(type);
     setVoucherAmountInput("");
     setVoucherCategory("");
-    setVoucherPersonGroup("Khác");
     setVoucherPersonName("");
     setVoucherNote("");
     setVoucherIncludeInCashFlow(true);
@@ -350,9 +392,9 @@ export default function CafePosPage() {
   const resolveShiftType = (): ShiftType => {
     if (!usesThreeShiftByAccount) return "single";
     const prefix = (user?.email?.split("@")[0] || "").toLowerCase();
-    if (prefix.includes("thungan1")) return "shift_1";
-    if (prefix.includes("thungan2")) return "shift_2";
-    if (prefix.includes("thungan3")) return "shift_3";
+    if (prefix.includes("thungan1") || prefix.includes("bep1")) return "shift_1";
+    if (prefix.includes("thungan2") || prefix.includes("bep2")) return "shift_2";
+    if (prefix.includes("thungan3") || prefix.includes("bep3")) return "shift_3";
     return "single";
   };
 
@@ -360,14 +402,16 @@ export default function CafePosPage() {
     async function loadData() {
       if (!storeId) return;
       try {
-        const [productList, tableList, categoryList] = await Promise.all([
+        const [productList, tableList, categoryList, voucherCategoryList] = await Promise.all([
           getAllProducts(storeId),
           getTables(storeId),
           getCategories(storeId),
+          getCashVoucherCategories(storeId),
         ]);
         setProducts(productList);
         setTables(tableList);
         setCategories(categoryList);
+        setVoucherCategories(voucherCategoryList);
         if (isFarmStore) {
           setTableNumber("");
         } else if (
@@ -403,25 +447,66 @@ export default function CafePosPage() {
   }, [storeId]);
 
   useEffect(() => {
+    setDeviceIdentity(getOrCreatePosDevice());
+  }, []);
+
+  useEffect(() => {
+    let stopped = false;
+    let checking = false;
+    let firstLoad = true;
+
     async function loadShiftState() {
       if (!user || !storeId || !isShiftEnabledForUser) {
         setActiveShift(null);
         setShowOpenShiftModal(false);
         return;
       }
-      setIsLoadingShift(true);
+      if (checking) return;
+      checking = true;
+      if (firstLoad) setIsLoadingShift(true);
       try {
         const open = await getOpenShiftByCashier(storeId, user.uid);
-        setActiveShift(open);
+        if (stopped) return;
+        setActiveShift((current) => {
+          if (
+            open &&
+            (!current || current.id !== open.id) &&
+            deviceIdentity?.id &&
+            open.openedByDeviceId &&
+            open.openedByDeviceId !== deviceIdentity.id
+          ) {
+            setShiftSyncNotice(
+              `Ca đã được mở trên ${open.openedByDeviceName || "thiết bị khác"}. Máy này đã tự đồng bộ vào cùng ca.`
+            );
+          }
+          return open;
+        });
         setShowOpenShiftModal(!open);
+        if (open) {
+          setOpeningCashInput("");
+          setOpeningNote("");
+        }
       } catch (error) {
-        console.error("Failed to load shift state", error);
+        if (!stopped) console.error("Failed to load shift state", error);
       } finally {
-        setIsLoadingShift(false);
+        checking = false;
+        if (firstLoad && !stopped) setIsLoadingShift(false);
+        firstLoad = false;
       }
     }
     void loadShiftState();
-  }, [isShiftEnabledForUser, storeId, user]);
+    const timer = window.setInterval(() => void loadShiftState(), 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [deviceIdentity?.id, isShiftEnabledForUser, storeId, user?.uid]);
+
+  useEffect(() => {
+    if (!shiftSyncNotice) return;
+    const timer = window.setTimeout(() => setShiftSyncNotice(""), 7000);
+    return () => window.clearTimeout(timer);
+  }, [shiftSyncNotice]);
 
   useEffect(() => {
     if (!storeId) {
@@ -760,6 +845,20 @@ export default function CafePosPage() {
       return matchCategory && matchText;
     });
   }, [category, products, menuSearch, categories, menuOrderIds, hiddenCategoryKeySet]);
+
+  const totalMenuPages = Math.max(
+    1,
+    Math.ceil(filteredMenu.length / MENU_ITEMS_PER_PAGE)
+  );
+
+  useEffect(() => {
+    setMenuPage((current) => Math.min(current, totalMenuPages));
+  }, [totalMenuPages]);
+
+  const paginatedMenu = useMemo(() => {
+    const start = (menuPage - 1) * MENU_ITEMS_PER_PAGE;
+    return filteredMenu.slice(start, start + MENU_ITEMS_PER_PAGE);
+  }, [filteredMenu, menuPage]);
 
   const formatSurchargeValue = useCallback(
     (surcharge: { type: SurchargeType; value: number }) => {
@@ -1731,7 +1830,7 @@ export default function CafePosPage() {
         })),
       });
 
-      const billCode = `HD${billId.replace(/[^0-9A-Za-z]/g, "").slice(-8).toUpperCase()}`;
+      const billCode = billId;
       const isTakeawayOrder =
         receiptData.table === TAKEAWAY_NAME || receiptData.table === FARM_ORDER_LABEL;
       const orderLabel = isTakeawayOrder ? "Mang về" : receiptData.table;
@@ -1805,7 +1904,7 @@ export default function CafePosPage() {
   };
 
   const handleOpenAddTableModal = () => {
-    if (isFarmStore) return;
+    if (role !== "admin" || isFarmStore) return;
     setShowActionMenu(false);
     setNewTableName("");
     setNewTableArea("");
@@ -1813,6 +1912,10 @@ export default function CafePosPage() {
   };
 
   const handleAddTable = async () => {
+    if (role !== "admin") {
+      alert("Chỉ quản trị viên được thêm bàn mới.");
+      return;
+    }
     if (!newTableName.trim()) {
       alert("Nhập tên/số bàn trước khi lưu.");
       return;
@@ -1836,6 +1939,7 @@ export default function CafePosPage() {
   };
 
   const handleSeedTables = async () => {
+    if (role !== "admin") return;
     if (isSeedingTables) return;
     const seedNames = Array.from(
       { length: 100 },
@@ -1902,9 +2006,13 @@ export default function CafePosPage() {
 
   const handleOpenShift = async () => {
     if (!user || !storeId) return;
+    if (!deviceIdentity?.id) {
+      alert("Chưa nhận diện được thiết bị. Vui lòng tải lại trang.");
+      return;
+    }
     const shiftType = resolveShiftType();
     if (usesThreeShiftByAccount && shiftType === "single") {
-      alert("Mô hình này yêu cầu đăng nhập bằng tài khoản Thungan1/2/3.");
+      alert("Mô hình này yêu cầu đăng nhập bằng tài khoản được gán Ca 1/2/3.");
       return;
     }
     const openingCash = parseMoney(openingCashInput);
@@ -1915,19 +2023,27 @@ export default function CafePosPage() {
 
     setIsOpeningShift(true);
     try {
-      const created = await openShift({
+      const result = await openShift({
         storeId,
         cashierUid: user.uid,
         cashierName,
         shiftType,
         openingCash,
         openNote: openingNote,
+        deviceId: deviceIdentity.id,
+        deviceName: deviceIdentity.name,
       });
-      setActiveShift(created);
+      setActiveShift(result.item);
       setShowOpenShiftModal(false);
       setOpeningCashInput("");
       setOpeningNote("");
-      alert("Mở ca thành công.");
+      if (result.alreadyOpen) {
+        setShiftSyncNotice(
+          `Ca đã được mở trên ${result.item.openedByDeviceName || "thiết bị khác"}. Máy này đã dùng chung ca hiện tại.`
+        );
+      } else {
+        alert("Mở ca thành công.");
+      }
     } catch (error) {
       console.error(error);
       alert("Không thể mở ca. Vui lòng thử lại.");
@@ -1983,6 +2099,7 @@ export default function CafePosPage() {
       });
 
       const diff = closingCash - closeShiftSummary.expectedClosingCash;
+      const diffInfo = getCashDifferenceInfo(diff);
       const openedAtText = activeShift.openedAt?.seconds
         ? new Date(activeShift.openedAt.seconds * 1000).toLocaleString("vi-VN")
         : new Date().toLocaleString("vi-VN");
@@ -2041,7 +2158,9 @@ export default function CafePosPage() {
               <tr><td>Tiền mặt cuối ca</td><td class="right">${formatCurrency(
                 closingCash
               )} đ</td></tr>
-              <tr><td>Chênh lệch</td><td class="right">${formatCurrency(diff)} đ</td></tr>
+              <tr><td>Chênh lệch (${diffInfo.label})</td><td class="right">${formatCurrency(
+                diffInfo.amount
+              )} đ</td></tr>
               <tr><td>Bill hợp lệ</td><td class="right">${
                 closeShiftSummary.completedBills
               }</td></tr>
@@ -2201,7 +2320,6 @@ export default function CafePosPage() {
         type: showVoucherModal,
         amount,
         category: voucherCategory,
-        personGroup: voucherPersonGroup,
         personName: voucherPersonName,
         note: voucherNote,
         includeInCashFlow: voucherIncludeInCashFlow,
@@ -2210,6 +2328,7 @@ export default function CafePosPage() {
         cashierId: user?.uid,
         cashierName,
       });
+      setVoucherCategories(await getCashVoucherCategories(storeId));
       setShowVoucherModal(null);
       alert("Đã lưu phiếu thành công.");
       if (showCloseShiftModal && activeShift) {
@@ -2366,7 +2485,7 @@ export default function CafePosPage() {
 
     setIsLoadingSoldBills(true);
     try {
-      const data = await getRecentBills(storeId, 30);
+      const data = await getRecentBills(storeId, 200);
       setSoldBills(data);
     } catch (error) {
       console.error(error);
@@ -2378,6 +2497,7 @@ export default function CafePosPage() {
 
   const handleOpenSoldBills = () => {
     setShowActionMenu(false);
+    setExpandedSoldBillId(null);
     setShowSoldBills(true);
     void loadSoldBills(true);
   };
@@ -2435,6 +2555,45 @@ export default function CafePosPage() {
     if (!bill.createdAt?.seconds) return "Chưa có thời gian";
     return new Date(bill.createdAt.seconds * 1000).toLocaleString("vi-VN");
   };
+
+  const soldBillCounts = useMemo(
+    () => ({
+      cash: soldBills.filter((bill) => (bill.paymentMethod || "cash") === "cash").length,
+      transfer: soldBills.filter((bill) => bill.paymentMethod === "transfer").length,
+    }),
+    [soldBills]
+  );
+
+  const visibleSoldBills = useMemo(() => {
+    const keyword = normalizeSearchText(soldBillsSearch.trim());
+    const matchedBills = soldBills.filter((bill) => {
+      if ((bill.paymentMethod || "cash") !== soldBillsPaymentTab) return false;
+      if (!keyword) return true;
+      return [
+        bill.id,
+        bill.tableNumber || "",
+        bill.note || "",
+        ...(bill.items || []).map((item) => item.name || ""),
+      ].some((value) => normalizeSearchText(value).includes(keyword));
+    });
+
+    const direction = soldBillsSortDirection === "asc" ? 1 : -1;
+    return [...matchedBills].sort((left, right) => {
+      let compared = 0;
+      if (soldBillsSortKey === "time") {
+        compared = (left.createdAt?.seconds || 0) - (right.createdAt?.seconds || 0);
+      } else if (soldBillsSortKey === "total") {
+        compared = (left.total || 0) - (right.total || 0);
+      } else if (soldBillsSortKey === "code") {
+        compared = left.id.localeCompare(right.id, "vi", { numeric: true });
+      } else {
+        compared = (left.tableNumber || "").localeCompare(right.tableNumber || "", "vi", {
+          numeric: true,
+        });
+      }
+      return compared * direction;
+    });
+  }, [soldBills, soldBillsPaymentTab, soldBillsSearch, soldBillsSortDirection, soldBillsSortKey]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2594,19 +2753,17 @@ export default function CafePosPage() {
                 <ChevronDown className="h-4 w-4" />
               </button>
               {showActionMenu && (
-                <div className="absolute right-0 top-12 z-30 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+                <div className="absolute right-0 top-12 z-[80] max-h-[calc(100vh-5.5rem)] w-64 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl">
                   {!isRestaurantServer && (
                     <>
-                      <button
+                      <Link
+                        href="/bills"
                         className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
-                        onClick={() => {
-                          setShowActionMenu(false);
-                          window.location.href = "/bills";
-                        }}
+                        onClick={() => setShowActionMenu(false)}
                       >
                         <ReceiptText className="h-4 w-4 text-sky-700" />
                         Trang hóa đơn
-                      </button>
+                      </Link>
                       <button
                         className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
                         onClick={() => {
@@ -2617,7 +2774,7 @@ export default function CafePosPage() {
                         <CalendarClock className="h-4 w-4 text-emerald-700" />
                         Đơn đã bán
                       </button>
-                      {!isFarmStore && (
+                      {role === "admin" && !isFarmStore && (
                         <button
                           className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
                           onClick={handleOpenAddTableModal}
@@ -2981,21 +3138,27 @@ export default function CafePosPage() {
                       <Search className="h-4 w-4 text-slate-400" />
                       <Input
                         value={menuSearch}
-                        onChange={(e) => setMenuSearch(e.target.value)}
+                        onChange={(e) => {
+                          setMenuSearch(e.target.value);
+                          setMenuPage(1);
+                        }}
                         placeholder="Tìm món..."
                         className="w-full max-w-xs"
                       />
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="flex flex-wrap items-center gap-2">
                     {categoryOptions.map((c) => {
                       const active = c.id === category;
                       return (
                         <button
                           key={c.id}
-                          onClick={() => setCategory(c.id)}
-                          className={`shrink-0 whitespace-nowrap cursor-pointer rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                          onClick={() => {
+                            setCategory(c.id);
+                            setMenuPage(1);
+                          }}
+                          className={`whitespace-nowrap cursor-pointer rounded-full border px-4 py-2 text-sm font-semibold transition ${
                             active
                               ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
                               : "border-slate-200 bg-white text-slate-600 hover:border-sky-200 hover:text-sky-700"
@@ -3007,8 +3170,8 @@ export default function CafePosPage() {
                     })}
                   </div>
 
-                  <div className="grid max-h-110 grid-cols-3 gap-2 overflow-y-auto pb-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-                    {filteredMenu.map((item) => {
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                    {paginatedMenu.map((item) => {
                       const inCart = cart[item.id]?.quantity ?? 0;
                       const isDraggingThisItem = draggingMenuItemId === item.id;
                       return (
@@ -3064,6 +3227,39 @@ export default function CafePosPage() {
                       </div>
                     )}
                   </div>
+
+                  {filteredMenu.length > 0 && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
+                      <span>
+                        Trang {menuPage}/{totalMenuPages} · Hiển thị{" "}
+                        {(menuPage - 1) * MENU_ITEMS_PER_PAGE + 1}–
+                        {Math.min(menuPage * MENU_ITEMS_PER_PAGE, filteredMenu.length)} trong{" "}
+                        {filteredMenu.length} món
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMenuPage((page) => Math.max(1, page - 1))}
+                          disabled={menuPage === 1}
+                          className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 font-medium transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          Trước
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMenuPage((page) => Math.min(totalMenuPages, page + 1))
+                          }
+                          disabled={menuPage === totalMenuPages}
+                          className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 font-medium transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Sau
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </section>
@@ -3475,7 +3671,7 @@ export default function CafePosPage() {
         </div>
       )}
 
-      {showAddTableModal && (
+      {role === "admin" && showAddTableModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b px-5 py-4">
@@ -3543,14 +3739,14 @@ export default function CafePosPage() {
 
       {showSoldBills && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-lg">
-            <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-lg">
+            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
                   Đơn đã bán
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Danh sách 30 đơn gần nhất
+                  Danh sách 200 đơn gần nhất
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -3580,46 +3776,128 @@ export default function CafePosPage() {
               </div>
             </div>
 
-            <div className="max-h-[75vh] space-y-3 overflow-y-auto px-4 py-3">
-              {!isLoadingSoldBills && soldBills.length === 0 && (
+            <div className="space-y-3 border-b bg-slate-50 px-4 py-3">
+              <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-200 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSoldBillsPaymentTab("cash");
+                    setExpandedSoldBillId(null);
+                  }}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                    soldBillsPaymentTab === "cash"
+                      ? "bg-white text-sky-700 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Tiền mặt ({soldBillCounts.cash})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSoldBillsPaymentTab("transfer");
+                    setExpandedSoldBillId(null);
+                  }}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                    soldBillsPaymentTab === "transfer"
+                      ? "bg-white text-sky-700 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Chuyển khoản ({soldBillCounts.transfer})
+                </button>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <Input
+                    value={soldBillsSearch}
+                    onChange={(event) => setSoldBillsSearch(event.target.value)}
+                    placeholder="Tìm mã bill, bàn, ghi chú hoặc tên món"
+                    className="h-9 bg-white pl-9"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <select
+                    value={soldBillsSortKey}
+                    onChange={(event) =>
+                      setSoldBillsSortKey(event.target.value as SoldBillsSortKey)
+                    }
+                    className="h-9 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 sm:w-36"
+                    aria-label="Sắp xếp đơn đã bán"
+                  >
+                    <option value="time">Thời gian</option>
+                    <option value="total">Tổng tiền</option>
+                    <option value="code">Mã bill</option>
+                    <option value="table">Bàn</option>
+                  </select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 whitespace-nowrap"
+                    onClick={() =>
+                      setSoldBillsSortDirection((current) =>
+                        current === "asc" ? "desc" : "asc"
+                      )
+                    }
+                  >
+                    {soldBillsSortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="max-h-[62vh] space-y-2 overflow-y-auto px-4 py-3">
+              {!isLoadingSoldBills && visibleSoldBills.length === 0 && (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-                  Chưa có đơn nào đã thanh toán.
+                  Không tìm thấy đơn phù hợp trong tab này.
                 </div>
               )}
 
-              {soldBills.map((bill) => (
+              {visibleSoldBills.map((bill) => {
+                const isExpanded = expandedSoldBillId === bill.id;
+                return (
                 <div
                   key={bill.id}
-                  className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                  className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
                 >
-                  <div className="flex flex-col gap-2 border-b border-dashed pb-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-slate-900">
-                        Bàn: {bill.tableNumber || "Không rõ"}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Mã bill: {bill.id}
-                      </p>
-                      <p className="flex items-center gap-1 text-xs text-slate-500">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedSoldBillId(isExpanded ? null : bill.id)}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                  >
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${
+                        isExpanded ? "rotate-180" : ""
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-slate-900">
+                          {bill.tableNumber || "Không rõ bàn"}
+                        </span>
+                        <span className="truncate font-mono text-xs text-slate-500">
+                          {bill.id}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
                         <Clock3 className="h-3.5 w-3.5" />
                         {getBillDateText(bill)}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-slate-500">Tổng tiền</p>
-                      <p className="text-base font-bold text-slate-900">
-                        {formatCurrency(bill.total)} đ
-                      </p>
-                    </div>
-                  </div>
-
-                  {bill.note && (
-                    <p className="mt-2 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
-                      Ghi chú: {bill.note}
+                    <p className="shrink-0 text-base font-bold text-slate-900">
+                      {formatCurrency(bill.total)} đ
                     </p>
-                  )}
+                  </button>
 
-                  <div className="mt-2 divide-y rounded-lg border bg-slate-50">
+                  {isExpanded && (
+                  <div className="border-t bg-slate-50 px-3 py-3">
+                    {bill.note && (
+                      <p className="mb-2 rounded-md bg-white px-2 py-1 text-xs text-slate-600">
+                        Ghi chú: {bill.note}
+                      </p>
+                    )}
+                    <div className="divide-y overflow-hidden rounded-lg border bg-white">
                     {bill.items?.length ? (
                       bill.items.map((item, idx) => (
                         <div
@@ -3652,11 +3930,20 @@ export default function CafePosPage() {
                         Không có chi tiết món.
                       </p>
                     )}
+                    </div>
                   </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
+        </div>
+      )}
+
+      {shiftSyncNotice && (
+        <div className="fixed right-4 top-4 z-[90] max-w-md rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
+          {shiftSyncNotice}
         </div>
       )}
 
@@ -3673,6 +3960,12 @@ export default function CafePosPage() {
               <div className="grid grid-cols-[140px_1fr] items-center gap-2">
                 <p className="text-sm font-semibold text-slate-700">Nhân viên ca</p>
                 <p className="text-sm text-slate-900">{cashierName}</p>
+              </div>
+              <div className="grid grid-cols-[140px_1fr] items-center gap-2">
+                <p className="text-sm font-semibold text-slate-700">Thiết bị</p>
+                <p className="text-sm text-slate-900">
+                  {deviceIdentity?.name || "Đang nhận diện..."}
+                </p>
               </div>
               <div className="grid grid-cols-[140px_1fr] items-center gap-2">
                 <p className="text-sm font-semibold text-slate-700">Giờ bắt đầu</p>
@@ -3715,6 +4008,7 @@ export default function CafePosPage() {
                 className="bg-sky-600 hover:bg-sky-700"
                 onClick={handleOpenShift}
                 isLoading={isOpeningShift || isLoadingShift}
+                disabled={!deviceIdentity?.id}
               >
                 Mở ca
               </Button>
@@ -3812,17 +4106,37 @@ export default function CafePosPage() {
                 onChange={(e) => setClosingCashInput(e.target.value)}
                 placeholder="Nhập tiền mặt thực tế"
               />
-              <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                <span>Chênh lệch</span>
-                <span className="font-bold">
-                  {closingCashInput.trim() === ""
-                    ? "Chưa nhập"
-                    : `${formatCurrency(
-                        parseMoney(closingCashInput) -
-                          closeShiftSummary.expectedClosingCash
-                      )} đ`}
-                </span>
-              </div>
+              {(() => {
+                if (closingCashInput.trim() === "") {
+                  return (
+                    <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                      <span>Chênh lệch</span>
+                      <span className="font-bold">Chưa nhập</span>
+                    </div>
+                  );
+                }
+
+                const difference = getCashDifferenceInfo(
+                  parseMoney(closingCashInput) - closeShiftSummary.expectedClosingCash
+                );
+                const differenceStyle =
+                  difference.label === "Dư"
+                    ? "bg-emerald-50 text-emerald-700"
+                    : difference.label === "Thiếu"
+                      ? "bg-red-50 text-red-700"
+                      : "bg-slate-50 text-slate-700";
+
+                return (
+                  <div
+                    className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${differenceStyle}`}
+                  >
+                    <span>
+                      Chênh lệch: <strong>{difference.label}</strong>
+                    </span>
+                    <span className="font-bold">{formatCurrency(difference.amount)} đ</span>
+                  </div>
+                );
+              })()}
               <Input
                 label="Ghi chú cuối ca"
                 value={closingNote}
@@ -4148,6 +4462,7 @@ export default function CafePosPage() {
               />
               <Input
                 label={showVoucherModal === "income" ? "Loại thu *" : "Loại chi *"}
+                list={`pos-voucher-category-${showVoucherModal}`}
                 value={voucherCategory}
                 onChange={(e) => setVoucherCategory(e.target.value)}
                 placeholder={
@@ -4156,25 +4471,19 @@ export default function CafePosPage() {
                     : "Ví dụ: Chi mua nguyên liệu"
                 }
               />
+              <datalist id={`pos-voucher-category-${showVoucherModal}`}>
+                {voucherCategories
+                  .filter((category) => category.type === showVoucherModal)
+                  .map((category) => (
+                    <option key={category.id} value={category.name} />
+                  ))}
+              </datalist>
               <Input
                 label="Giá trị *"
                 value={formatMoneyInput(voucherAmountInput)}
                 onChange={(e) => setVoucherAmountInput(e.target.value)}
                 placeholder="Nhập số tiền"
               />
-              <div className="space-y-1">
-                <label className="text-sm font-medium leading-none">Nhóm người</label>
-                <select
-                  value={voucherPersonGroup}
-                  onChange={(e) => setVoucherPersonGroup(e.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="Khách hàng">Khách hàng</option>
-                  <option value="Nhân viên">Nhân viên</option>
-                  <option value="Nhà cung cấp">Nhà cung cấp</option>
-                  <option value="Khác">Khác</option>
-                </select>
-              </div>
             </div>
             <div className="space-y-3 px-5 pb-4">
               <Input

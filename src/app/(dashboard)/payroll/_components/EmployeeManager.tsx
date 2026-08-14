@@ -7,7 +7,7 @@ import {
   Employee,
   getEmployees,
   updateEmployee,
-} from "@/services/employees.firebase";
+} from "@/services/employees";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";

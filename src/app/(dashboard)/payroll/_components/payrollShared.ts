@@ -1,5 +1,5 @@
 import type { StoreType } from "@/context/StoreContext";
-import { PayrollEntry } from "@/services/payrolls.firebase";
+import { PayrollEntry } from "@/services/payrolls";
 import type { RoleStartTimeSetting } from "@/services/roleStartTimes";
 
 export const ROLE_GROUPS: Record<string, string[]> = {

@@ -29,11 +29,11 @@ import {
   UserCheck,
   UserPlus,
 } from "lucide-react";
-import { getEmployees, Employee } from "@/services/employees.firebase";
+import { getEmployees, Employee } from "@/services/employees";
 import {
   saveImportedPayroll,
   type PayrollEntry,
-} from "@/services/payrolls.firebase";
+} from "@/services/payrolls";
 import { useStore } from "@/context/StoreContext";
 import { useRouter } from "next/navigation";
 import {

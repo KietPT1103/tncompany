@@ -14,6 +14,9 @@ function products_inventory_ensure_schema(): void
     }
 
     auth_ensure_column('products', 'stock_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER is_selling');
+    auth_ensure_column('products', 'unit', 'VARCHAR(50) NULL AFTER stock_quantity');
+    auth_ensure_column('products', 'description', 'TEXT NULL AFTER unit');
+    auth_ensure_column('products', 'item_type', "ENUM('product','ingredient') NOT NULL DEFAULT 'product' AFTER description");
 
     db()->exec(
         'CREATE TABLE IF NOT EXISTS product_components (

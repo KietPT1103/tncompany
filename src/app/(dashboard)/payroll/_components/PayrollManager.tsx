@@ -8,8 +8,8 @@ import {
   getPayrolls,
   Payroll,
   updatePayroll,
-} from "@/services/payrolls.firebase";
-import { getEmployees } from "@/services/employees.firebase";
+} from "@/services/payrolls";
+import { getEmployees } from "@/services/employees";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Toast, type ToastVariant } from "@/components/ui/Toast";

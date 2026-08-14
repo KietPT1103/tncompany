@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { StoreType } from "@/context/StoreContext";
-import { Employee } from "@/services/employees.firebase";
+import { Employee } from "@/services/employees";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { Check, Search, UserPlus, Users, X } from "lucide-react";

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import AdminSidebar from "@/AdminSidebar";
 import { AdminMobileHeader } from "@/components/admin/AdminMobileHeader";
+import { useAuth } from "@/context/AuthContext";
 
 const SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
 
@@ -16,7 +18,11 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { role } = useAuth();
+  const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
+  const isCashierBillsPage =
+    role === "user" && location.pathname.replace(/\/+$/, "") === "/admin/bills";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -28,14 +34,20 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-[#F8FAFC]">
-      <AdminSidebar
-        collapsed={sidebarCollapsed}
-        onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
-      />
+      {!isCashierBillsPage && (
+        <AdminSidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+        />
+      )}
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <AdminMobileHeader />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC] pt-16 lg:pt-0">
+        {!isCashierBillsPage && <AdminMobileHeader />}
+        <main
+          className={`flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC] ${
+            isCashierBillsPage ? "pt-0" : "pt-16 lg:pt-0"
+          }`}
+        >
           {children}
         </main>
       </div>

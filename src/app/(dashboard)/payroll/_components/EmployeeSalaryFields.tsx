@@ -3,7 +3,7 @@
 import InputMoney from "@/components/InputMoney";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Employee, EmployeeAllowance } from "@/services/employees.firebase";
+import { Employee, EmployeeAllowance } from "@/services/employees";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-full.mjs",
     "vite:dev": "vite",
     "api:dev": "php -S 127.0.0.1:8000 -t public",
     "dev:full": "node scripts/dev-full.mjs",
@@ -26,8 +26,6 @@
     "@fontsource/hurricane": "^5.2.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "firebase": "^12.7.0",
-    "firebase-admin": "^14.2.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.562.0",
     "qrcode.react": "^4.2.0",

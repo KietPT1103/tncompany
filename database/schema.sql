@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS products (
   is_selling TINYINT(1) NOT NULL DEFAULT 1,
   stock_quantity DECIMAL(15,3) NOT NULL DEFAULT 0,
   unit VARCHAR(50) NULL,
+  description TEXT NULL,
+  item_type ENUM('product', 'ingredient') NOT NULL DEFAULT 'product',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_products_store_code (store_id, product_code),
@@ -305,6 +307,15 @@ CREATE TABLE IF NOT EXISTS bills (
   CONSTRAINT fk_bills_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS bill_sequences (
+  store_id VARCHAR(32) PRIMARY KEY,
+  prefix VARCHAR(16) NOT NULL,
+  last_number BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_bill_sequences_prefix (prefix),
+  CONSTRAINT fk_bill_sequences_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS bill_items (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   bill_id VARCHAR(64) NOT NULL,
@@ -341,7 +352,6 @@ CREATE TABLE IF NOT EXISTS cash_vouchers (
   amount DECIMAL(15,2) NOT NULL DEFAULT 0,
   category VARCHAR(255) NOT NULL,
   note TEXT NULL,
-  person_group VARCHAR(100) NULL,
   person_name VARCHAR(255) NULL,
   include_in_cash_flow TINYINT(1) NOT NULL DEFAULT 1,
   happened_at DATETIME NOT NULL,
@@ -352,6 +362,18 @@ CREATE TABLE IF NOT EXISTS cash_vouchers (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_cash_vouchers_store_happened (store_id, happened_at),
   CONSTRAINT fk_cash_vouchers_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS cash_voucher_categories (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  store_id VARCHAR(32) NOT NULL,
+  voucher_type ENUM('income', 'expense') NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_voucher_category (store_id, voucher_type, name),
+  KEY idx_voucher_categories_store_type (store_id, voucher_type),
+  CONSTRAINT fk_voucher_categories_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS invoice_entries (
@@ -514,6 +536,8 @@ CREATE TABLE IF NOT EXISTS cashier_shifts (
   status ENUM('open', 'closed') NOT NULL DEFAULT 'open',
   opening_cash DECIMAL(15,2) NOT NULL DEFAULT 0,
   open_note TEXT NULL,
+  opened_by_device_id VARCHAR(100) NULL,
+  opened_by_device_name VARCHAR(255) NULL,
   closing_cash DECIMAL(15,2) NULL,
   close_note TEXT NULL,
   expected_closing_cash DECIMAL(15,2) NULL,

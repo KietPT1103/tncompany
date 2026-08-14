@@ -12,7 +12,7 @@ import {
   InventoryCheck,
   saveInventoryCheck,
 } from "@/services/inventoryCheckService";
-import { Product } from "@/services/products.firebase";
+import { Product } from "@/services/products";
 import { getIngredients } from "@/services/ingredients";
 import {
   ArrowLeft,

@@ -281,10 +281,25 @@ export default function AdminSidebar({
   const { logout, user, loading } = useAuth();
   const userRole = user?.role || null;
   const { setStoreId, storeId, storeName } = useStore();
+  const isStoreLocked = userRole === "user" || userRole === "server";
   const [isOpen, setIsOpen] = useState(false);
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const storeMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const assignedStoreId = user?.storeId;
+    if (
+      isStoreLocked &&
+      (assignedStoreId === "cafe" ||
+        assignedStoreId === "restaurant" ||
+        assignedStoreId === "bakery" ||
+        assignedStoreId === "farm") &&
+      assignedStoreId !== storeId
+    ) {
+      setStoreId(assignedStoreId);
+    }
+  }, [isStoreLocked, setStoreId, storeId, user?.storeId]);
 
   useEffect(() => {
     if (!showStoreMenu) return;
@@ -440,7 +455,10 @@ export default function AdminSidebar({
           <div ref={storeMenuRef} className="relative mt-3">
             <button
               type="button"
-              onClick={() => setShowStoreMenu((value) => !value)}
+              onClick={() => {
+                if (!isStoreLocked) setShowStoreMenu((value) => !value);
+              }}
+              disabled={isStoreLocked}
               className={cn(
                 "flex h-14 w-full items-center justify-between rounded-lg bg-white/[0.06] px-2.5 text-left ring-1 ring-inset ring-white/15 transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none",
                 collapsed &&
@@ -464,16 +482,16 @@ export default function AdminSidebar({
                   </div>
                 </div>
               </div>
-              <ChevronsUpDown
+              {!isStoreLocked && <ChevronsUpDown
                 className={cn(
                   "h-4 w-4 shrink-0 text-[#F6C85F] transition-transform duration-200 ease-out motion-reduce:transition-none",
                   showStoreMenu && "rotate-180",
                   collapsed && "lg:hidden",
                 )}
-              />
+              />}
             </button>
 
-            {showStoreMenu ? (
+            {showStoreMenu && !isStoreLocked ? (
               <div
                 role="listbox"
                 aria-label="Chọn khu vực"

@@ -2,9 +2,9 @@
 
 Script `scripts/bar-print-agent.cjs` is a small background service that:
 
-- Listens to Firestore collection `bar_print_jobs` with status `pending`
+- Polls pending print jobs from the MySQL-backed POS API
 - Prints each ticket directly to a LAN printer via TCP (`IP:9100`)
-- Marks the job as `printed` after successful printing
+- Marks the MySQL job as `printed` through the API after successful printing
 
 This allows the pha che counter to have only a LAN printer (no browser tab on that counter).
 
@@ -12,7 +12,7 @@ This allows the pha che counter to have only a LAN printer (no browser tab on th
 
 - A machine that can run Node.js continuously (cashier PC, mini PC, server)
 - LAN printer reachable by IP
-- Firebase service account JSON file (default path: `firebase-service-account.json`)
+- A POS account with `bills.access` permission
 
 ## Environment variables
 
@@ -27,7 +27,9 @@ This allows the pha che counter to have only a LAN printer (no browser tab on th
 - `PRINT_AGENT_RETRY_INTERVAL_MS` (optional, default `15000`)
 - `PRINT_AGENT_DRY_RUN=1` (optional, no real print, and does not mark printed)
 - `PRINT_AGENT_TEST_ON_START=1` (optional, print a test ticket on startup)
-- `FIREBASE_SERVICE_ACCOUNT_PATH` (optional, default `firebase-service-account.json`)
+- `PRINT_AGENT_API_BASE_URL` (optional, default `http://127.0.0.1:8000/api`)
+- `PRINT_AGENT_API_LOGIN` and `PRINT_AGENT_API_PASSWORD` (required unless using a token)
+- `PRINT_AGENT_API_TOKEN` (optional alternative to login/password)
 
 ## Commands
 
@@ -49,6 +51,8 @@ npm run print:bar-agent:test
 $env:PRINT_AGENT_PRINTER_HOST="192.168.1.120"
 $env:PRINT_AGENT_STORE_ID="cafe"
 $env:PRINT_AGENT_TERMINAL_NAME="May_Pha_Che_1"
+$env:PRINT_AGENT_API_LOGIN="thungan1"
+$env:PRINT_AGENT_API_PASSWORD="your-password"
 npm run print:bar-agent
 ```
 

@@ -35,7 +35,7 @@ export function normalizeAdminHref(href: string) {
   }
 
   if (href === "/pos") {
-    return `${ADMIN_PREFIX}/pos`;
+    return "/pos";
   }
 
   const queryIndex = href.search(/[?#]/);

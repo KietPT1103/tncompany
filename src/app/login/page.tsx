@@ -13,11 +13,19 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useStore, StoreType } from "@/context/StoreContext";
-import { loginApi, seedDefaultUsersApi, setApiToken } from "@/lib/api";
+import { clearApiToken, loginApi, seedDefaultUsersApi, setApiToken } from "@/lib/api";
 import { getDefaultRouteForUser } from "@/lib/permissions";
 import { AppUser, normalizeUserRole } from "@/types/auth";
 
-const CASHIER_ACCOUNTS = ["thungan1", "thungan2", "thungan3"] as const;
+const CASHIER_ACCOUNTS = [
+  "thungan1",
+  "thungan2",
+  "thungan3",
+  "thunganbep1",
+  "thunganbep2",
+  "thunganbep3",
+  "thunganfarm1",
+] as const;
 const SERVICE_ACCOUNTS = ["phucvu1"] as const;
 const ADMIN_ACCOUNTS = ["admin"] as const;
 const ADMIN_DEFAULT_PASSWORD = "admin123";
@@ -60,6 +68,9 @@ export default function LoginPage() {
   const { refreshUser } = useAuth();
   const { setStoreId } = useStore();
   const [selectedStore, setSelectedStore] = useState<StoreType>("cafe");
+  const normalizedAccountInput = account.trim().toLowerCase();
+  const hasLockedStore =
+    isCashierAccount(normalizedAccountInput) || isServiceAccount(normalizedAccountInput);
 
   const stores: { id: StoreType; label: string; icon: React.ReactNode }[] = [
     {
@@ -160,12 +171,16 @@ export default function LoginPage() {
 
     try {
       const { token, user } = await loginApi(loginEmail, rawPassword);
+      const normalizedRole = normalizeUserRole(user);
+      const isStoreLockedRole = normalizedRole === "user" || normalizedRole === "server";
+      if (isStoreLockedRole && !isValidStoreId(user.storeId)) {
+        clearApiToken();
+        throw new Error("Tài khoản thu ngân/phục vụ chưa được quản trị viên gán quầy.");
+      }
       setApiToken(token);
       await refreshUser();
       setStoreId(
-        serviceLogin
-          ? "restaurant"
-          : isValidStoreId(user.storeId)
+        isStoreLockedRole && isValidStoreId(user.storeId)
           ? user.storeId
           : selectedStore
       );
@@ -206,7 +221,7 @@ export default function LoginPage() {
               {isSeedingAccounts ? "Đang thêm tài khoản..." : "Thêm tài khoản mặc định"}
             </button>
             <p className="px-3 pb-1 pt-2 text-xs text-gray-500 dark:text-slate-400">
-              Bao gồm: thungan1, thungan2, thungan3, phucvu1, admin, manager
+              Bao gồm: thungan1-3, thunganbep1-3, thunganfarm1, phucvu1, admin, manager
             </p>
           </div>
         )}
@@ -222,6 +237,11 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
+            {hasLockedStore ? (
+              <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                Quầy bán hàng được khóa theo tài khoản và không thể thay đổi khi đăng nhập.
+              </div>
+            ) : (
             <div className="mb-6 grid grid-cols-4 gap-2">
               {stores.map((store) => (
                 <div
@@ -240,6 +260,7 @@ export default function LoginPage() {
                 </div>
               ))}
             </div>
+            )}
 
             <div className="space-y-2">
               <label

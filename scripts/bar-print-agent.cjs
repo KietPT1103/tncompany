@@ -1,29 +1,13 @@
 #!/usr/bin/env node
 /* eslint-disable @typescript-eslint/no-require-imports */
 
-const fs = require("node:fs");
 const os = require("node:os");
-const path = require("node:path");
 const net = require("node:net");
+const fs = require("node:fs");
+const path = require("node:path");
 
-let initializeApp;
-let cert;
-let getApps;
-let getFirestore;
-let FieldValue;
-
-try {
-  ({ initializeApp, cert, getApps } = require("firebase-admin/app"));
-  ({ getFirestore, FieldValue } = require("firebase-admin/firestore"));
-} catch {
-  console.error("Missing dependency: firebase-admin");
-  console.error("Install with: npm install firebase-admin --save");
-  process.exit(1);
-}
-
-const BAR_PRINT_JOB_COLLECTION = "bar_print_jobs";
-const DEFAULT_SERVICE_ACCOUNT_FILE = "firebase-service-account.json";
 const DEFAULT_STORE_ID = "cafe";
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api";
 const DEFAULT_PRINTER_PORT = 9100;
 const DEFAULT_SOCKET_TIMEOUT_MS = 12000;
 const DEFAULT_RETRY_INTERVAL_MS = 15000;
@@ -71,32 +55,6 @@ const loadDotEnvLocal = () => {
   });
 };
 
-const resolveServiceAccountPath = () => {
-  const configuredPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim();
-  if (configuredPath) {
-    return path.resolve(process.cwd(), configuredPath);
-  }
-  return path.resolve(process.cwd(), DEFAULT_SERVICE_ACCOUNT_FILE);
-};
-
-const readServiceAccount = (serviceAccountPath) => {
-  if (!fs.existsSync(serviceAccountPath)) {
-    throw new Error(
-      `Service account file not found: ${serviceAccountPath}. Set FIREBASE_SERVICE_ACCOUNT_PATH.`
-    );
-  }
-  return JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
-};
-
-const ensureFirebaseApp = (serviceAccountPath) => {
-  if (getApps().length > 0) return getApps()[0];
-  const serviceAccount = readServiceAccount(serviceAccountPath);
-  return initializeApp({
-    credential: cert(serviceAccount),
-    projectId: serviceAccount.project_id,
-  });
-};
-
 const repeat = (char, count) => new Array(count + 1).join(char);
 
 const wrapText = (text, width) => {
@@ -130,6 +88,8 @@ const formatDateTime = (value, timeZone) => {
   const date =
     value && typeof value.toDate === "function"
       ? value.toDate()
+      : value && Number.isFinite(Number(value.seconds))
+      ? new Date(Number(value.seconds) * 1000)
       : value instanceof Date
       ? value
       : new Date();
@@ -296,7 +256,10 @@ const createConfig = () => {
   const dryRun = isTrue(process.env.PRINT_AGENT_DRY_RUN) || args.has("--dry-run");
   const testOnStart = isTrue(process.env.PRINT_AGENT_TEST_ON_START) || args.has("--test");
   const runOnce = args.has("--once");
-  const serviceAccountPath = resolveServiceAccountPath();
+  const apiBaseUrl = (process.env.PRINT_AGENT_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, "");
+  const apiLogin = (process.env.PRINT_AGENT_API_LOGIN || "").trim();
+  const apiPassword = process.env.PRINT_AGENT_API_PASSWORD || "";
+  const apiToken = (process.env.PRINT_AGENT_API_TOKEN || "").trim();
 
   if (!dryRun && !printerHost) {
     throw new Error("Missing PRINT_AGENT_PRINTER_HOST (IP may in LAN).");
@@ -314,7 +277,10 @@ const createConfig = () => {
     dryRun,
     testOnStart,
     runOnce,
-    serviceAccountPath,
+    apiBaseUrl,
+    apiLogin,
+    apiPassword,
+    apiToken,
   };
 };
 
@@ -341,34 +307,63 @@ const printTestPage = async (config) => {
   console.log("Printed test page.");
 };
 
+const apiFetch = async (config, pathName, options = {}) => {
+  const response = await fetch(`${config.apiBaseUrl}${pathName}`, {
+    ...options,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(config.apiToken ? { Authorization: `Bearer ${config.apiToken}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.error || `API request failed (${response.status})`);
+  }
+  return payload.data;
+};
+
+const authenticateApi = async (config) => {
+  if (config.apiToken) return;
+  if (!config.apiLogin || !config.apiPassword) {
+    throw new Error("Set PRINT_AGENT_API_LOGIN and PRINT_AGENT_API_PASSWORD (or PRINT_AGENT_API_TOKEN).");
+  }
+  const response = await fetch(`${config.apiBaseUrl}/auth.php?action=login`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ login: config.apiLogin, password: config.apiPassword }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok || !payload.data?.token) {
+    throw new Error(payload?.error || `API login failed (${response.status})`);
+  }
+  config.apiToken = payload.data.token;
+};
+
 const run = async () => {
   loadDotEnvLocal();
   const config = createConfig();
-  ensureFirebaseApp(config.serviceAccountPath);
-  const db = getFirestore();
 
-  const pendingCollection = db.collection(BAR_PRINT_JOB_COLLECTION);
+  if (config.testOnStart) {
+    await printTestPage(config);
+    if (config.runOnce) return;
+  }
+
+  await authenticateApi(config);
   const processingJobIds = new Set();
   let queue = Promise.resolve();
 
   const markPrinted = async (jobId) => {
-    await pendingCollection.doc(jobId).update({
-      status: "printed",
-      printedAt: FieldValue.serverTimestamp(),
-      printedByTerminal: config.terminalName,
+    await apiFetch(config, "/pos.php?resource=bar-jobs&_method=PATCH", {
+      method: "POST",
+      body: JSON.stringify({ id: jobId, terminalName: config.terminalName }),
     });
   };
 
-  const processJobById = async (jobId) => {
-    const docRef = pendingCollection.doc(jobId);
-    const snapshot = await docRef.get();
-    if (!snapshot.exists) {
-      console.warn(`[${jobId}] Skipped: job not found.`);
-      return;
-    }
-
-    const rawData = snapshot.data();
-    const job = normalizeJobData(jobId, rawData || {});
+  const processJob = async (rawJob) => {
+    const job = normalizeJobData(rawJob.id, rawJob || {});
+    const jobId = job.id;
     if (job.status !== "pending") {
       console.log(`[${jobId}] Skipped: status is ${job.status}.`);
       return;
@@ -391,12 +386,13 @@ const run = async () => {
     console.log(`[${jobId}] Printed and marked.`);
   };
 
-  const enqueueJob = (jobId) => {
+  const enqueueJob = (job) => {
+    const jobId = job?.id;
     if (!jobId || processingJobIds.has(jobId)) return;
     processingJobIds.add(jobId);
 
     queue = queue
-      .then(() => processJobById(jobId))
+      .then(() => processJob(job))
       .catch((error) => {
         console.error(`[${jobId}] Failed to print.`);
         console.error(error);
@@ -406,19 +402,21 @@ const run = async () => {
       });
   };
 
-  if (config.testOnStart) {
-    await printTestPage(config);
-    if (config.runOnce) return;
-  }
-
-  const queryRef = pendingCollection
-    .where("storeId", "==", config.storeId)
-    .where("status", "==", "pending")
-    .orderBy("createdAt", "asc");
+  const pollPendingJobs = async () => {
+    try {
+      const data = await apiFetch(
+        config,
+        `/pos.php?resource=bar-jobs&storeId=${encodeURIComponent(config.storeId)}`
+      );
+      (data.items || []).forEach(enqueueJob);
+    } catch (error) {
+      console.error("Polling pending jobs failed.");
+      console.error(error);
+    }
+  };
 
   if (config.runOnce) {
-    const snapshot = await queryRef.get();
-    snapshot.docs.forEach((doc) => enqueueJob(doc.id));
+    await pollPendingJobs();
     await queue;
     console.log("Run once completed.");
     return;
@@ -432,32 +430,8 @@ const run = async () => {
       : `Printer: ${config.printerHost}:${config.printerPort}`
   );
   console.log(`Terminal: ${config.terminalName}`);
+  console.log(`API: ${config.apiBaseUrl}`);
   console.log(`Retry poll: ${config.retryIntervalMs}ms`);
-
-  const unsubscribe = queryRef.onSnapshot(
-    (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type !== "added" && change.type !== "modified") return;
-        const data = change.doc.data();
-        if (String(data.status || "") !== "pending") return;
-        enqueueJob(change.doc.id);
-      });
-    },
-    (error) => {
-      console.error("Realtime listener failed.");
-      console.error(error);
-    }
-  );
-
-  const pollPendingJobs = async () => {
-    try {
-      const snapshot = await queryRef.get();
-      snapshot.docs.forEach((doc) => enqueueJob(doc.id));
-    } catch (error) {
-      console.error("Polling pending jobs failed.");
-      console.error(error);
-    }
-  };
 
   const pollTimer = setInterval(() => {
     void pollPendingJobs();
@@ -467,7 +441,6 @@ const run = async () => {
   const shutdown = async (signal) => {
     console.log(`\nReceived ${signal}. Stopping agent...`);
     clearInterval(pollTimer);
-    unsubscribe();
     try {
       await queue;
     } catch {

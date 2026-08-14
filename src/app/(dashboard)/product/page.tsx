@@ -10,8 +10,8 @@ import {
   Product,
   setProductSellingStatus,
   updateProductCost,
-  upsertProductsFromExcel,
-} from "@/services/products.firebase";
+  upsertSellingProductsFromExcel,
+} from "@/services/products";
 import {
   addCategory,
   Category,
@@ -98,7 +98,7 @@ const productActionOptions: readonly SelectBoxOption<
   },
   {
     value: "import",
-    label: "Import Excel",
+    label: "Import món bán",
     icon: Upload,
   },
   {
@@ -956,7 +956,7 @@ export default function ProductsPage() {
         option.value === "import"
           ? {
               ...option,
-              label: importing ? "Đang import..." : "Import Excel",
+              label: importing ? "Đang import..." : "Import món bán",
               disabled: importing,
             }
           : option.value === "normalize"
@@ -1088,7 +1088,7 @@ export default function ProductsPage() {
           const headerIndex = rows.findIndex((row) => {
             if (!Array.isArray(row)) return false;
             return row.some((cell) =>
-              normalizeExcelHeader(cell).includes("ma hang"),
+              normalizeExcelHeader(cell).includes("ma mon"),
             );
           });
 
@@ -1100,29 +1100,28 @@ export default function ProductsPage() {
           const headerRow = rows[headerIndex] || [];
           const dataRows = rows.slice(headerIndex + 1);
           const codeIdx = headerRow.findIndex((cell) =>
-            normalizeExcelHeader(cell).includes("ma hang"),
+            normalizeExcelHeader(cell).includes("ma mon"),
           );
           const nameIdx = headerRow.findIndex((cell) =>
-            normalizeExcelHeader(cell).includes("ten hang"),
+            normalizeExcelHeader(cell).includes("ten mon"),
           );
           const categoryIdx = headerRow.findIndex((cell) =>
-            normalizeExcelHeader(cell).includes("nhom hang"),
+            normalizeExcelHeader(cell).includes("nhom mon"),
           );
           const priceIdx = headerRow.findIndex((cell) =>
             normalizeExcelHeader(cell).includes("gia ban"),
           );
-          const costIdx = headerRow.findIndex((cell) =>
-            normalizeExcelHeader(cell).includes("gia von"),
-          );
-          const stockIdx = headerRow.findIndex((cell) =>
-            normalizeExcelHeader(cell).includes("ton kho"),
-          );
-          const componentsIdx = headerRow.findIndex((cell) =>
-            normalizeExcelHeader(cell).includes("hang thanh phan"),
-          );
           const isSellingIdx = headerRow.findIndex((cell) =>
             normalizeExcelHeader(cell).includes("dang kinh doanh"),
           );
+          const isSaleAllowedIdx = headerRow.findIndex((cell) =>
+            normalizeExcelHeader(cell).includes("cho phep ban"),
+          );
+
+          if (codeIdx < 0 || nameIdx < 0 || priceIdx < 0) {
+            alert("File phải có các cột Mã món, Tên món và Giá bán.");
+            return;
+          }
 
           const mapped = dataRows
             .filter((row) => {
@@ -1137,10 +1136,6 @@ export default function ProductsPage() {
               const categoryName = categoryIdx >= 0 ? row[categoryIdx] : "";
               const parsedPrice =
                 priceIdx >= 0 ? parseExcelNumber(row[priceIdx]) : null;
-              const parsedCost =
-                costIdx >= 0 ? parseExcelNumber(row[costIdx]) : null;
-              const parsedStock =
-                stockIdx >= 0 ? parseExcelNumber(row[stockIdx]) : null;
               const normalizedCategory =
                 typeof categoryName === "string" ? categoryName.trim() : "";
               const matchedCategoryId =
@@ -1158,21 +1153,14 @@ export default function ProductsPage() {
                   nameIdx >= 0 ? row[nameIdx] : row[1],
                 ).trim(),
                 category: matchedCategoryId,
-                cost: Number.isFinite(parsedCost) ? Number(parsedCost) : null,
                 price: Number.isFinite(parsedPrice)
                   ? Number(parsedPrice)
                   : null,
-                stockQuantity: Number.isFinite(parsedStock)
-                  ? Number(parsedStock)
-                  : 0,
                 isSelling:
-                  isSellingIdx >= 0
-                    ? parseExcelBoolean(row[isSellingIdx], true)
-                    : true,
-                components:
-                  componentsIdx >= 0
-                    ? parseComponentCell(row[componentsIdx])
-                    : [],
+                  (isSellingIdx < 0 ||
+                    parseExcelBoolean(row[isSellingIdx], true)) &&
+                  (isSaleAllowedIdx < 0 ||
+                    parseExcelBoolean(row[isSaleAllowedIdx], true)),
               };
             });
 
@@ -1181,10 +1169,12 @@ export default function ProductsPage() {
             return;
           }
 
-          await upsertProductsFromExcel(mapped, storeId);
+          const result = await upsertSellingProductsFromExcel(mapped, storeId);
           setCurrentPage(1);
           await loadProducts();
-          alert(`Import thành công ${mapped.length} hàng hoá.`);
+          alert(
+            `Đã import ${result.importedCount} món: ${result.sellingCount} món được bán và ${result.stoppedCount} món tạm ẩn khỏi POS.`,
+          );
         } catch (error) {
           console.error(error);
           alert("Không thể import file Excel.");

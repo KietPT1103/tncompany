@@ -1,5 +1,5 @@
 import { PRODUCT_COST } from "@/config/productCost";
-import { getAllProducts, updateProductCost } from "@/services/products.firebase";
+import { getAllProducts, updateProductCost } from "@/services/products";
 
 export type ProductCostValues = Record<string, number>;
 

@@ -19,14 +19,14 @@ import {
   getPayrollEntries,
   PayrollEntry,
   updatePayrollEntry,
-} from "@/services/payrolls.firebase";
+} from "@/services/payrolls";
 
 import {
   addEmployee,
   Employee,
   getEmployees,
   updateEmployee,
-} from "@/services/employees.firebase";
+} from "@/services/employees";
 import {
   getRoleStartTimes,
   type RoleStartTimeSetting,

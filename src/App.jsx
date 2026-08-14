@@ -44,9 +44,13 @@ import { useAuth } from "./context/AuthContext";
 import { getDefaultRouteForUser } from "./lib/permissions";
 import { normalizeAdminHref } from "./router/pathUtils";
 
-function ProtectedLayout({ allowedRoles, inferPermission = true }) {
+function ProtectedLayout({ allowedRoles, permission, inferPermission = true }) {
   return (
-    <RoleGuard allowedRoles={allowedRoles} inferPermission={inferPermission}>
+    <RoleGuard
+      allowedRoles={allowedRoles}
+      permission={permission}
+      inferPermission={inferPermission}
+    >
       <Outlet />
     </RoleGuard>
   );
@@ -85,6 +89,18 @@ export function App() {
         <Route path="/" element={<LandingApp />} />
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/bills" element={<Navigate to="/admin/bills" replace />} />
+        <Route
+          element={
+            <ProtectedLayout
+              allowedRoles={["admin", "user", "server"]}
+              permission="bills.access"
+              inferPermission={false}
+            />
+          }
+        >
+          <Route path="/pos" element={<PosPage />} />
+        </Route>
         <Route path="/gesture-studio" element={<GestureStudioPage />} />
         <Route path="/dust-ritual" element={<DustRitualPage />} />
         <Route path="/tai-app" element={<DownloadAppPage />} />
@@ -98,11 +114,11 @@ export function App() {
           }
         >
           <Route path="gesture-studio" element={<Navigate to="/gesture-studio" replace />} />
+          <Route path="pos" element={<Navigate to="/pos" replace />} />
           <Route element={<AdminLayout />}>
             <Route index element={<AdminIndexPage />} />
             <Route element={<ProtectedLayout />}>
               <Route path="bills" element={<BillsPage />} />
-              <Route path="pos" element={<PosPage />} />
               <Route path="payroll-estimate" element={<SalaryEstimatePage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="reports/:id" element={<ReportDetailPage />} />

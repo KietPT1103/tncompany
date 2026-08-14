@@ -1,3 +1,4 @@
+
 import { apiRequest } from "@/lib/api";
 
 export type Product = {
@@ -75,26 +76,25 @@ export async function getNextProductCode(
   return suggestedCode;
 }
 
-export async function upsertProductsFromExcel(
+export async function upsertSellingProductsFromExcel(
   products: {
     product_code: string;
     product_name: string;
-    cost?: number | null;
     price?: number | null;
-    stockQuantity?: number | null;
     category?: string;
     isSelling?: boolean;
-    components?: Array<{
-      productCode: string;
-      quantity: number;
-    }>;
   }[],
   storeId: string
 ) {
-  await apiRequest<{ imported: boolean }>("/products.php", {
+  return apiRequest<{
+    imported: boolean;
+    importedCount: number;
+    sellingCount: number;
+    stoppedCount: number;
+  }>("/products.php", {
     method: "POST",
     body: JSON.stringify({
-      action: "import",
+      action: "import-selling-menu",
       items: products,
       storeId,
     }),

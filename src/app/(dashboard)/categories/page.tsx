@@ -25,7 +25,7 @@ import { paginateItems } from "@/lib/listPagination";
 import {
   getAllProducts,
   replaceProductCategoryName,
-} from "@/services/products.firebase";
+} from "@/services/products";
 import {
   addCategory,
   type Category,

@@ -1,5 +1,6 @@
+
 import { apiRequest } from "@/lib/api";
-import { Employee } from "./employees.firebase";
+import { Employee } from "./employees";
 
 export type Payroll = {
   id?: string;
@@ -189,3 +190,4 @@ export async function deletePayrollEntry(entryId: string) {
     }
   );
 }
+

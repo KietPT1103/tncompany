@@ -12,8 +12,10 @@ import {
 } from "@/services/billService";
 import {
   CashVoucher,
+  CashVoucherCategory,
   CashVoucherType,
   createCashVoucher,
+  getCashVoucherCategories,
   getCashVouchers,
   updateCashVoucherBasic,
 } from "@/services/cashVoucherService";
@@ -23,7 +25,9 @@ import { Input } from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import {
   ArrowDownLeft,
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   ArrowUpRight,
   CalendarRange,
   Clock3,
@@ -55,7 +59,6 @@ type VoucherFormState = {
   happenedAt: string;
   category: string;
   amount: string;
-  personGroup: string;
   personName: string;
   note: string;
   includeInCashFlow: boolean;
@@ -65,6 +68,10 @@ type VoucherEditFormState = {
   category: string;
   amount: string;
 };
+
+type SortDirection = "asc" | "desc";
+type BillSortKey = "time" | "code" | "table" | "total" | "status";
+type VoucherSortKey = "time" | "code" | "type" | "category" | "person" | "amount";
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { minimumFractionDigits: 0 });
@@ -104,21 +111,42 @@ const getVoucherDate = (voucher: CashVoucher) =>
 const getPaymentMethodLabel = (bill: Bill) =>
   bill.paymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt";
 
+const compareText = (left: string, right: string) =>
+  left.localeCompare(right, "vi", { numeric: true, sensitivity: "base" });
+
 export default function BillsPage() {
   const { role, user } = useAuth();
-  const { storeId } = useStore();
+  const { storeId: selectedStoreId } = useStore();
+  const assignedStoreId =
+    user?.storeId === "cafe" ||
+    user?.storeId === "restaurant" ||
+    user?.storeId === "bakery" ||
+    user?.storeId === "farm"
+      ? user.storeId
+      : null;
+  const storeId =
+    (role === "user" || role === "server") && assignedStoreId
+      ? assignedStoreId
+      : selectedStoreId;
 
   const isFarmStore = storeId === "farm";
   const canUseBills = hasPermission(user, "bills.access");
-  const canEditBill = canUseBills;
-  const canCancelBill = canUseBills && (role === "admin" || isFarmStore);
+  const canEditBill = canUseBills && (role === "admin" || role === "user");
+  const canEditBillDetails = role === "admin";
+  const canCancelBill = canUseBills && role === "admin";
   const useSoftCancel = !isFarmStore;
 
   const todayInput = formatDateInput(new Date());
 
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [billSearch, setBillSearch] = useState("");
+  const [voucherSearch, setVoucherSearch] = useState("");
+  const [billSortKey, setBillSortKey] = useState<BillSortKey>("time");
+  const [billSortDirection, setBillSortDirection] = useState<SortDirection>("desc");
+  const [voucherSortKey, setVoucherSortKey] = useState<VoucherSortKey>("time");
+  const [voucherSortDirection, setVoucherSortDirection] =
+    useState<SortDirection>("desc");
   const [startDate, setStartDate] = useState(todayInput);
   const [endDate, setEndDate] = useState(todayInput);
   const [editing, setEditing] = useState<Bill | null>(null);
@@ -133,6 +161,7 @@ export default function BillsPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [vouchers, setVouchers] = useState<CashVoucher[]>([]);
+  const [voucherCategories, setVoucherCategories] = useState<CashVoucherCategory[]>([]);
   const [showVoucherModal, setShowVoucherModal] = useState<CashVoucherType | null>(
     null
   );
@@ -140,7 +169,6 @@ export default function BillsPage() {
     happenedAt: formatDateTimeInput(new Date()),
     category: "",
     amount: "",
-    personGroup: "Khác",
     personName: "",
     note: "",
     includeInCashFlow: true,
@@ -167,7 +195,6 @@ export default function BillsPage() {
       happenedAt: formatDateTimeInput(new Date()),
       category: "",
       amount: "",
-      personGroup: "Khác",
       personName: "",
       note: "",
       includeInCashFlow: true,
@@ -178,7 +205,7 @@ export default function BillsPage() {
     setLoading(true);
     try {
       const { start, end } = getRange();
-      const [billData, voucherData] = await Promise.all([
+      const [billData, voucherData, voucherCategoryData] = await Promise.all([
         getBills({
           startDate: start,
           endDate: end,
@@ -192,9 +219,11 @@ export default function BillsPage() {
           storeId,
           limitCount: 2000,
         }),
+        getCashVoucherCategories(storeId),
       ]);
       setBills(billData);
       setVouchers(voucherData);
+      setVoucherCategories(voucherCategoryData);
     } catch (error) {
       console.error(error);
       alert("Không thể tải dữ liệu hóa đơn và phiếu thu/chi.");
@@ -209,15 +238,31 @@ export default function BillsPage() {
   }, [startDate, endDate, storeId]);
 
   const filteredBills = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return bills;
-    return bills.filter((bill) => {
+    const keyword = billSearch.trim().toLowerCase();
+    const matchedBills = keyword ? bills.filter((bill) => {
       const tableMatch = bill.tableNumber?.toLowerCase().includes(keyword);
       const idMatch = bill.id.toLowerCase().includes(keyword);
       const noteMatch = bill.note?.toLowerCase().includes(keyword);
       return tableMatch || idMatch || noteMatch;
+    }) : bills;
+
+    const direction = billSortDirection === "asc" ? 1 : -1;
+    return [...matchedBills].sort((left, right) => {
+      let compared = 0;
+      if (billSortKey === "time") {
+        compared = (getTimestampDate(left)?.getTime() || 0) - (getTimestampDate(right)?.getTime() || 0);
+      } else if (billSortKey === "code") {
+        compared = compareText(left.id, right.id);
+      } else if (billSortKey === "table") {
+        compared = compareText(left.tableNumber || "", right.tableNumber || "");
+      } else if (billSortKey === "total") {
+        compared = (left.total || 0) - (right.total || 0);
+      } else {
+        compared = compareText(left.status || "", right.status || "");
+      }
+      return compared * direction;
     });
-  }, [bills, search]);
+  }, [billSearch, billSortDirection, billSortKey, bills]);
 
   const activeBills = useMemo(
     () => filteredBills.filter((bill) => bill.status !== "cancelled"),
@@ -226,16 +271,34 @@ export default function BillsPage() {
 
   const totalAmount = activeBills.reduce((sum, bill) => sum + bill.total, 0);
   const filteredVouchers = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return vouchers;
-    return vouchers.filter((voucher) => {
+    const keyword = voucherSearch.trim().toLowerCase();
+    const matchedVouchers = keyword ? vouchers.filter((voucher) => {
       const codeMatch = voucher.code?.toLowerCase().includes(keyword);
       const categoryMatch = voucher.category?.toLowerCase().includes(keyword);
       const personMatch = voucher.personName?.toLowerCase().includes(keyword);
       const noteMatch = voucher.note?.toLowerCase().includes(keyword);
       return codeMatch || categoryMatch || personMatch || noteMatch;
+    }) : vouchers;
+
+    const direction = voucherSortDirection === "asc" ? 1 : -1;
+    return [...matchedVouchers].sort((left, right) => {
+      let compared = 0;
+      if (voucherSortKey === "time") {
+        compared = (getVoucherDate(left)?.getTime() || 0) - (getVoucherDate(right)?.getTime() || 0);
+      } else if (voucherSortKey === "code") {
+        compared = compareText(left.code || left.id, right.code || right.id);
+      } else if (voucherSortKey === "type") {
+        compared = compareText(left.type, right.type);
+      } else if (voucherSortKey === "category") {
+        compared = compareText(left.category || "", right.category || "");
+      } else if (voucherSortKey === "person") {
+        compared = compareText(left.personName || "", right.personName || "");
+      } else {
+        compared = (left.amount || 0) - (right.amount || 0);
+      }
+      return compared * direction;
     });
-  }, [vouchers, search]);
+  }, [voucherSearch, voucherSortDirection, voucherSortKey, vouchers]);
 
   const totalIncomeVouchers = filteredVouchers
     .filter((voucher) => voucher.includeInCashFlow !== false && voucher.type === "income")
@@ -264,6 +327,23 @@ export default function BillsPage() {
 
   const handleSaveEdit = async () => {
     if (!editing) return;
+    if (!canEditBillDetails) {
+      setSaving(true);
+      try {
+        await updateBill(editing.id, {
+          paymentMethod: editForm.paymentMethod,
+        });
+        await loadData();
+        setEditing(null);
+      } catch (error) {
+        console.error(error);
+        alert("Không thể cập nhật phương thức thanh toán.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     const parsedTotal = Number(editForm.total);
     if (Number.isNaN(parsedTotal) || parsedTotal < 0) {
       alert("Tổng tiền không hợp lệ.");
@@ -354,7 +434,6 @@ export default function BillsPage() {
         type: showVoucherModal,
         amount,
         category: voucherForm.category,
-        personGroup: voucherForm.personGroup,
         personName: voucherForm.personName,
         note: voucherForm.note,
         includeInCashFlow: voucherForm.includeInCashFlow,
@@ -491,8 +570,8 @@ export default function BillsPage() {
                       <Input
                         placeholder="Nhập mã bill, bàn hoặc ghi chú"
                         className="pl-9"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        value={billSearch}
+                        onChange={(e) => setBillSearch(e.target.value)}
                       />
                     </div>
                   </div>
@@ -583,11 +662,41 @@ export default function BillsPage() {
 
             <div className="space-y-6">
               <Card className="overflow-hidden">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <ReceiptText className="h-5 w-5 text-sky-700" />
                     Danh sách hóa đơn ({filteredBills.length})
                   </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={billSortKey}
+                      onChange={(event) => setBillSortKey(event.target.value as BillSortKey)}
+                      className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                      aria-label="Sắp xếp hóa đơn"
+                    >
+                      <option value="time">Thời gian</option>
+                      <option value="code">Mã hóa đơn</option>
+                      <option value="table">Bàn</option>
+                      <option value="total">Tổng tiền</option>
+                      <option value="status">Trạng thái</option>
+                    </select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1"
+                      onClick={() =>
+                        setBillSortDirection((current) => current === "asc" ? "desc" : "asc")
+                      }
+                      title={billSortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
+                    >
+                      {billSortDirection === "asc" ? (
+                        <ArrowUp className="h-4 w-4" />
+                      ) : (
+                        <ArrowDown className="h-4 w-4" />
+                      )}
+                      {billSortDirection === "asc" ? "Tăng" : "Giảm"}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-auto">
@@ -703,11 +812,57 @@ export default function BillsPage() {
               </Card>
 
               <Card className="overflow-hidden">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardHeader className="flex flex-col gap-3 space-y-0 xl:flex-row xl:items-center xl:justify-between">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <HandCoins className="h-5 w-5 text-emerald-700" />
                     Phiếu thu/chi ({filteredVouchers.length})
                   </CardTitle>
+                  <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
+                    <div className="relative min-w-0 sm:w-64">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <Input
+                        value={voucherSearch}
+                        onChange={(event) => setVoucherSearch(event.target.value)}
+                        placeholder="Tìm mã phiếu, nội dung, người"
+                        className="h-9 pl-9"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={voucherSortKey}
+                        onChange={(event) =>
+                          setVoucherSortKey(event.target.value as VoucherSortKey)
+                        }
+                        className="h-9 min-w-36 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                        aria-label="Sắp xếp phiếu thu chi"
+                      >
+                        <option value="time">Thời gian</option>
+                        <option value="code">Mã phiếu</option>
+                        <option value="type">Loại phiếu</option>
+                        <option value="category">Nội dung</option>
+                        <option value="person">Người nộp/nhận</option>
+                        <option value="amount">Giá trị</option>
+                      </select>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 gap-1"
+                        onClick={() =>
+                          setVoucherSortDirection((current) =>
+                            current === "asc" ? "desc" : "asc"
+                          )
+                        }
+                        title={voucherSortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
+                      >
+                        {voucherSortDirection === "asc" ? (
+                          <ArrowUp className="h-4 w-4" />
+                        ) : (
+                          <ArrowDown className="h-4 w-4" />
+                        )}
+                        {voucherSortDirection === "asc" ? "Tăng" : "Giảm"}
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-auto">
@@ -777,9 +932,6 @@ export default function BillsPage() {
                                 </td>
                                 <td className="px-4 py-3 text-slate-700">
                                   <p>{voucher.personName || "Khách lẻ"}</p>
-                                  <p className="text-xs text-slate-500">
-                                    {voucher.personGroup || "Khác"}
-                                  </p>
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   {voucher.includeInCashFlow !== false ? (
@@ -839,6 +991,13 @@ export default function BillsPage() {
 
               <div className="space-y-4 px-5 py-4">
                 <div className="grid grid-cols-1 gap-3">
+                  {!canEditBillDetails && (
+                    <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                      Thu ngân chỉ được thay đổi phương thức thanh toán của hóa đơn.
+                    </div>
+                  )}
+                  {canEditBillDetails && (
+                    <>
                   <Input
                     label="Bàn"
                     value={editForm.tableNumber}
@@ -869,6 +1028,8 @@ export default function BillsPage() {
                     }
                     placeholder="Thêm ghi chú nếu cần"
                   />
+                    </>
+                  )}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700">
                       Phương thức thanh toán
@@ -907,6 +1068,7 @@ export default function BillsPage() {
                   </div>
                 </div>
 
+                {canEditBillDetails && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input
                     label="Ngày tạo"
@@ -925,6 +1087,7 @@ export default function BillsPage() {
                     }
                   />
                 </div>
+                )}
 
                 {editing.items?.length ? (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -1002,6 +1165,7 @@ export default function BillsPage() {
                 />
                 <Input
                   label={showVoucherModal === "income" ? "Loại thu *" : "Loại chi *"}
+                  list={`voucher-category-${showVoucherModal}`}
                   value={voucherForm.category}
                   onChange={(e) =>
                     setVoucherForm((prev) => ({ ...prev, category: e.target.value }))
@@ -1012,6 +1176,13 @@ export default function BillsPage() {
                       : "Ví dụ: Chi mua nguyên liệu"
                   }
                 />
+                <datalist id={`voucher-category-${showVoucherModal}`}>
+                  {voucherCategories
+                    .filter((category) => category.type === showVoucherModal)
+                    .map((category) => (
+                      <option key={category.id} value={category.name} />
+                    ))}
+                </datalist>
                 <Input
                   label="Giá trị *"
                   value={formatMoneyInput(voucherForm.amount)}
@@ -1020,21 +1191,6 @@ export default function BillsPage() {
                   }
                   placeholder="Nhập số tiền"
                 />
-                <div className="space-y-1">
-                  <label className="text-sm font-medium leading-none">Nhóm người</label>
-                  <select
-                    value={voucherForm.personGroup}
-                    onChange={(e) =>
-                      setVoucherForm((prev) => ({ ...prev, personGroup: e.target.value }))
-                    }
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    <option value="Khách hàng">Khách hàng</option>
-                    <option value="Nhân viên">Nhân viên</option>
-                    <option value="Nhà cung cấp">Nhà cung cấp</option>
-                    <option value="Khác">Khác</option>
-                  </select>
-                </div>
                 <Input
                   label={showVoucherModal === "income" ? "Tên người nộp" : "Tên người nhận"}
                   value={voucherForm.personName}

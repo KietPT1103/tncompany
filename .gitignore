@@ -9,8 +9,6 @@ dist.zip
 .env.production
 .env.test
 !.env.local.example
-firebase-service-account.json
-*-firebase.json
 public/api/config.local.php
 tmp-opt/
 dist-ssr/

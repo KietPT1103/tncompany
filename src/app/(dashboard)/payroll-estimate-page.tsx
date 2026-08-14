@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
-import { getEmployees, Employee } from "@/services/employees.firebase";
+import { getEmployees, Employee } from "@/services/employees";
 import {
   addPayrollEntry,
   deletePayrollEntry,
@@ -14,7 +14,7 @@ import {
   saveImportedPayroll,
   updatePayroll,
   updatePayrollEntry,
-} from "@/services/payrolls.firebase";
+} from "@/services/payrolls";
 import { resolveEmployeeSalaryType } from "./payroll/_components/EmployeeSalaryFields";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";

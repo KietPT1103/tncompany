@@ -300,6 +300,12 @@ export function getEffectivePermissions(
 
   if (Array.isArray(source.permissions)) {
     const normalized = normalizePermissionList(source.permissions);
+    if (
+      (source.role === "user" || source.role === "server") &&
+      !normalized.includes("bills.access")
+    ) {
+      normalized.push("bills.access");
+    }
     if (normalized.includes("inventory_receipts.access")) {
       const inherited: AppPermission[] = [
         "inventory_receipts.view", "inventory_receipts.create", "inventory_receipts.update",

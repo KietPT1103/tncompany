@@ -52,6 +52,42 @@ function seed_default_users(): array
             'store_id' => 'cafe',
         ],
         [
+            'username' => 'thunganbep1',
+            'email' => 'thunganbep1@cashier.local',
+            'display_name' => 'thunganbep1',
+            'password' => 'thunganbep1',
+            'role' => 'user',
+            'store_id' => 'restaurant',
+            'legacy_username' => 'bep1',
+        ],
+        [
+            'username' => 'thunganbep2',
+            'email' => 'thunganbep2@cashier.local',
+            'display_name' => 'thunganbep2',
+            'password' => 'thunganbep2',
+            'role' => 'user',
+            'store_id' => 'restaurant',
+            'legacy_username' => 'bep2',
+        ],
+        [
+            'username' => 'thunganbep3',
+            'email' => 'thunganbep3@cashier.local',
+            'display_name' => 'thunganbep3',
+            'password' => 'thunganbep3',
+            'role' => 'user',
+            'store_id' => 'restaurant',
+            'legacy_username' => 'bep3',
+        ],
+        [
+            'username' => 'thunganfarm1',
+            'email' => 'thunganfarm1@cashier.local',
+            'display_name' => 'thunganfarm1',
+            'password' => 'thunganfarm1',
+            'role' => 'user',
+            'store_id' => 'farm',
+            'legacy_username' => 'farm1',
+        ],
+        [
             'username' => 'phucvu1',
             'email' => 'phucvu1@service.local',
             'display_name' => 'phucvu1',
@@ -79,6 +115,9 @@ function seed_default_users(): array
 
     foreach ($users as $user) {
         $existing = auth_find_user_for_login($user['username']);
+        if (!$existing && isset($user['legacy_username'])) {
+            $existing = auth_find_user_for_login((string) $user['legacy_username']);
+        }
         $statement->execute([
             'id' => $existing['id'] ?? uuidv4(),
             'email' => $user['email'],
