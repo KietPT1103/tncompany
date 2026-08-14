@@ -2,11 +2,11 @@
 
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BellRing, Check, CheckCircle2, ChefHat, Clock3, Coffee, GripVertical, Loader2, MonitorUp, Printer, RefreshCcw, RotateCcw, Sparkles, Volume2, VolumeX } from "lucide-react";
+import { BellRing, Check, CheckCircle2, ChefHat, Clock3, Coffee, GripVertical, History, Loader2, MonitorUp, Printer, RefreshCcw, RotateCcw, Sparkles, Volume2, VolumeX, X } from "lucide-react";
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
-import { BarPrintJob, BarWorkflowStatus, markBarPrintJobPrinted, subscribeBarBoard, updateBarWorkflowStatus } from "@/services/barPrintJobService";
+import { BarPrintJob, BarWorkflowStatus, markBarPrintJobPrinted, subscribeBarBoard, subscribeBarHistory, updateBarWorkflowStatus } from "@/services/barPrintJobService";
 
 const AUTO_PRINT_KEY = "pos:bar-auto-print";
 const TERMINAL_KEY = "pos:bar-terminal-name";
@@ -20,6 +20,7 @@ const columns: Array<{ id: ActiveStatus; title: string; hint: string; icon: type
 
 const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] || character);
 const getCreatedDate = (job: BarPrintJob) => job.createdAt?.seconds ? new Date(job.createdAt.seconds * 1000) : new Date();
+const getCollectedDate = (job: BarPrintJob) => job.collectedAt?.seconds ? new Date(job.collectedAt.seconds * 1000) : getCreatedDate(job);
 const shortCode = (job: BarPrintJob) => { const value = job.sourceBillId || job.id; return (value.length > 10 ? value.slice(-8) : value).toUpperCase(); };
 const formatQuantity = (quantity: number) => Number.isInteger(quantity) ? String(quantity) : quantity.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
 const elapsedMinutes = (job: BarPrintJob, now: number) => Math.max(0, Math.floor((now - getCreatedDate(job).getTime()) / 60000));
@@ -72,6 +73,10 @@ export default function BarBoardPage() {
   const [dragOver, setDragOver] = useState<BarWorkflowStatus | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoPrint, setAutoPrint] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyJobs, setHistoryJobs] = useState<BarPrintJob[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [now, setNow] = useState(Date.now());
   const knownIds = useRef<Set<string> | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
@@ -101,6 +106,13 @@ export default function BarBoardPage() {
     }, () => { setLoading(false); setSyncError("Mất kết nối dữ liệu. Hệ thống đang thử kết nối lại…"); });
   }, [playAlert, storeId]);
   useEffect(() => {
+    if (!historyOpen) return;
+    setHistoryLoading(true);
+    return subscribeBarHistory(storeId, (nextJobs) => {
+      setHistoryJobs(nextJobs); setHistoryLoading(false); setHistoryError("");
+    }, () => { setHistoryLoading(false); setHistoryError("Không tải được lịch sử. Vui lòng thử lại."); });
+  }, [historyOpen, storeId]);
+  useEffect(() => {
     if (!autoPrint) return;
     jobs.filter((job) => job.status === "pending").forEach(async (job) => {
       if (printingIds.current.has(job.id)) return;
@@ -127,7 +139,7 @@ export default function BarBoardPage() {
   return <RoleGuard permission={role === "bartender" ? "bar.access" : "bills.access"}><main className="min-h-screen bg-[#f4f6f3] text-slate-900">
     <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur md:px-6"><div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-900 text-amber-300"><ChefHat className="h-6 w-6" /></div><div><div className="flex items-center gap-2"><h1 className="text-xl font-black tracking-tight">Màn hình pha chế</h1><span className="hidden rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700 sm:inline">TRỰC TIẾP</span></div><p className="text-xs font-medium text-slate-500">{storeName} · cập nhật mỗi 2 giây</p></div></div>
-      <div className="flex flex-wrap items-center gap-2"><Link href="/pos" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><MonitorUp className="h-4 w-4" />POS</Link><button type="button" onClick={() => { const next = !soundEnabled; setSoundEnabled(next); if (next) window.setTimeout(() => playAlert(true), 0); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition ${soundEnabled ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-500"}`}>{soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}<span className="hidden sm:inline">Âm báo</span></button><button type="button" onClick={toggleAutoPrint} className={`inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-white transition ${autoPrint ? "bg-emerald-700 hover:bg-emerald-800" : "bg-slate-700 hover:bg-slate-800"}`}><Printer className="h-4 w-4" />{autoPrint ? "Đang tự in" : "Bật tự in bill"}</button></div>
+      <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setHistoryOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><History className="h-4 w-4" /><span className="hidden sm:inline">Lịch sử đã lấy</span></button><Link href="/pos" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><MonitorUp className="h-4 w-4" />POS</Link><button type="button" onClick={() => { const next = !soundEnabled; setSoundEnabled(next); if (next) window.setTimeout(() => playAlert(true), 0); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition ${soundEnabled ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-500"}`}>{soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}<span className="hidden sm:inline">Âm báo</span></button><button type="button" onClick={toggleAutoPrint} className={`inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-white transition ${autoPrint ? "bg-emerald-700 hover:bg-emerald-800" : "bg-slate-700 hover:bg-slate-800"}`}><Printer className="h-4 w-4" />{autoPrint ? "Đang tự in" : "Bật tự in bill"}</button></div>
     </div></header>
     <section className="mx-auto max-w-[1800px] overflow-x-auto p-4 md:p-6">
       {syncError ? <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"><RefreshCcw className="h-4 w-4 animate-spin" />{syncError}</div> : null}
@@ -137,5 +149,14 @@ export default function BarBoardPage() {
         <div className="space-y-3">{loading ? Array.from({ length: 2 }).map((_, index) => <div key={index} className="h-44 animate-pulse rounded-2xl bg-white/80" />) : columnJobs.length ? columnJobs.map((job) => <BillCard key={job.id} job={job} now={now} busy={busyIds.has(job.id)} onMove={moveJob} onPrint={printTicket} />) : <div className="flex min-h-44 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/50 p-6 text-center"><Icon className="mb-3 h-8 w-8 text-slate-300" /><p className="font-bold text-slate-500">Chưa có bill</p><p className="mt-1 text-xs text-slate-400">Thả bill vào đây</p></div>}</div>
       </section>; })}</div>
     </section>
+    {historyOpen ? <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) setHistoryOpen(false); }}>
+      <aside className="flex h-full w-full max-w-xl flex-col bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="flex items-center gap-2 text-lg font-black"><History className="h-5 w-5 text-emerald-700" />Lịch sử bill khách đã lấy</h2><p className="mt-1 text-xs font-medium text-slate-500">100 bill gần nhất · cập nhật trực tiếp</p></div><button type="button" onClick={() => setHistoryOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100" aria-label="Đóng lịch sử"><X className="h-5 w-5" /></button></div>
+        <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
+          {historyError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{historyError}</div> : null}
+          {historyLoading ? <div className="flex h-40 items-center justify-center text-slate-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" />Đang tải lịch sử...</div> : historyJobs.length ? <div className="space-y-3">{historyJobs.map((job) => <article key={job.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-slate-900">{job.tableNumber || "Mang về"}</h3><p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">#{shortCode(job)}</p></div><div className="text-right"><span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />Đã lấy</span><p className="mt-1 text-xs font-medium text-slate-500">{getCollectedDate(job).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })}</p></div></div><div className="my-3 border-t border-dashed border-slate-200" /><ul className="space-y-1.5">{job.items.map((item, index) => <li key={`${job.id}-${item.menuId}-${index}`} className="flex justify-between gap-3 text-sm"><span className="font-semibold text-slate-700">{item.name}{item.note ? <span className="ml-1 text-xs text-rose-600">({item.note})</span> : null}</span><span className="shrink-0 font-black text-slate-900">×{formatQuantity(item.quantity)}</span></li>)}</ul></article>)}</div> : <div className="flex h-48 flex-col items-center justify-center text-center text-slate-400"><History className="mb-3 h-9 w-9" /><p className="font-bold text-slate-500">Chưa có lịch sử</p><p className="mt-1 text-xs">Bill sẽ xuất hiện sau khi xác nhận khách đã lấy.</p></div>}
+        </div>
+      </aside>
+    </div> : null}
   </main></RoleGuard>;
 }
