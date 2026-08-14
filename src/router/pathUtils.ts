@@ -35,7 +35,7 @@ export function normalizeAdminHref(href: string) {
   }
 
   if (href === "/pos") {
-    return `${ADMIN_PREFIX}/bills`;
+    return `${ADMIN_PREFIX}/pos`;
   }
 
   const queryIndex = href.search(/[?#]/);
@@ -67,5 +67,5 @@ export function denormalizeAdminPathname(pathname: string) {
   }
 
   const stripped = pathname.slice(ADMIN_PREFIX.length) || "/";
-  return stripped === "/bills" ? "/pos" : stripped;
+  return stripped;
 }

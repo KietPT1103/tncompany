@@ -1,0 +1,4233 @@
+﻿"use client";
+
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgePercent,
+  BadgeDollarSign,
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  Coffee,
+  CreditCard,
+  HandCoins,
+  Landmark,
+  LayoutGrid,
+  Menu,
+  Minus,
+  NotebookTabs,
+  Plus,
+  Printer,
+  ReceiptText,
+  RefreshCcw,
+  Search,
+  ShoppingCart,
+  Trash2,
+  Wallet,
+  LogOut,
+  Pencil,
+} from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import {
+  Bill,
+  BillSurcharge,
+  getBills,
+  getBillsByShift,
+  getRecentBills,
+  PaymentMethod,
+  saveBill,
+} from "@/services/billService";
+import {
+  CashVoucherType,
+  createCashVoucher,
+  getCashVouchers,
+} from "@/services/cashVoucherService";
+import { getAllProducts, Product } from "@/services/products.firebase";
+import { addTable, CafeTable, getTables } from "@/services/tableService";
+import { Category, getCategories } from "@/services/categoryService";
+import RoleGuard from "@/components/RoleGuard";
+import { useAuth } from "@/context/AuthContext";
+import { useStore } from "@/context/StoreContext";
+import { normalizeSearchText } from "@/lib/utils";
+import {
+  CashierShift,
+  closeShift,
+  getOpenShiftByCashier,
+  openShift,
+  ShiftSummary,
+  ShiftType,
+  summarizeBillsForShift,
+} from "@/services/shiftService";
+import {
+  clearLiveOrder,
+  LiveOrderItem,
+  subscribeLiveOrders,
+  upsertLiveOrder,
+} from "@/services/liveOrderService";
+import {
+  createKitchenPrintJob,
+  KitchenPrintJob,
+  markKitchenPrintJobPrinted,
+  subscribePendingKitchenPrintJobs,
+} from "@/services/kitchenPrintJobService";
+import {
+  BarPrintJob,
+  createBarPrintJob,
+  markBarPrintJobPrinted,
+  subscribePendingBarPrintJobs,
+} from "@/services/barPrintJobService";
+import {
+  PosSurcharge,
+  SurchargeType,
+  createSurcharge,
+  deleteSurcharge,
+  subscribeSurcharges,
+  updateSurcharge,
+} from "@/services/surchargeService";
+
+const ALL_CATEGORY = "Tất cả";
+const ALL_CATEGORY_ID = "ALL";
+const CAFE_STORE_ID = "cafe";
+const TAKEAWAY_ID = "__takeaway";
+const TAKEAWAY_NAME = "Mang về";
+const TABLES_PER_PAGE = 20;
+const HOTPOT_STORE_ID = "restaurant";
+const BAKERY_STORE_ID = "bakery";
+const FARM_STORE_ID = "farm";
+const FARM_ORDER_KEY = "__farm_no_table";
+const FARM_ORDER_LABEL = "Farm - no table";
+const SHIFT_ENABLED_STORES = new Set(["cafe", "restaurant", "bakery"]);
+const THREE_SHIFT_STORES = new Set(["cafe", "restaurant"]);
+const CASH_ROUNDING_STEPS = [5000, 10000, 20000, 50000];
+const CASH_NOTE_VALUES = [50000, 100000, 200000, 500000];
+const KITCHEN_AUTO_PRINT_KEY_PREFIX = "pos:kitchen-auto-print";
+const KITCHEN_TERMINAL_NAME_KEY_PREFIX = "pos:kitchen-terminal-name";
+const BAR_AUTO_PRINT_KEY_PREFIX = "pos:bar-auto-print";
+const BAR_TERMINAL_NAME_KEY_PREFIX = "pos:bar-terminal-name";
+const RECEIPT_STORE_INFO: Record<
+  string,
+  { title: string; address: string; phone: string }
+> = {
+  cafe: {
+    title: "TIỆM CÀ PHÊ ỐNG QUAN",
+    address: "ĐC: Cuối hẻm 583, đường 30/4, P. Hưng Lợi, Q. Ninh Kiều, TP. Cần Thơ",
+    phone: "ĐT: 0772.770.789",
+  },
+  bakery: {
+    title: "TIỆM BÁNH ỐNG QUAN",
+    address: "ĐC: Cuối hẻm 583, đường 30/4, P. Hưng Lợi, TP. Cần Thơ",
+    phone: "ĐT: 0772.770.789",
+  },
+  restaurant: {
+    title: "TIỆM LẨU ỐNG QUAN",
+    address: "ĐC: Cuối hẻm 583, đường 30/4, P. Tân An, TP. Cần Thơ",
+    phone: "ĐT: 0939.976.565",
+  },
+  farm: {
+    title: "TIỆM FARM ỐNG QUAN",
+    address: "ĐC: Cuối hẻm 583, đường 30/4, TP. Cần Thơ",
+    phone: "ĐT: 0772.770.789",
+  },
+};
+
+const formatCurrency = (value: number) =>
+  value.toLocaleString("vi-VN", { minimumFractionDigits: 0 });
+const PRINT_FONT_FAMILY = "'Tahoma', 'Segoe UI', Arial, sans-serif";
+const PRINT_TAIL_SPACE_MM = 8;
+const PREP_BAR_TAIL_SPACE_MM = 14;
+
+type MenuItem = {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+};
+
+type CartItem = MenuItem & { quantity: number; note?: string };
+type OrderDraft = {
+  items: Record<string, CartItem>;
+};
+type PendingAddedItems = Record<string, Record<string, number>>;
+type ReceiptItem = Omit<CartItem, "price"> & {
+  price: number;
+  basePrice: number;
+  surchargePerUnit: number;
+  surchargeTotal: number;
+  lineTotal: number;
+};
+type ReceiptData = {
+  table: string;
+  items: ReceiptItem[];
+  subtotal: number;
+  surchargeTotal: number;
+  appliedSurcharges: BillSurcharge[];
+  total: number;
+  time: string;
+  paymentMethod: PaymentMethod;
+  cashReceived?: number;
+  changeAmount?: number;
+};
+
+export default function CafePosPage() {
+  const { role, user, logout } = useAuth();
+  const { storeId } = useStore();
+  const isHotpotStore = storeId === HOTPOT_STORE_ID;
+  const isBakeryStore = storeId === BAKERY_STORE_ID;
+  const isFarmStore = storeId === FARM_STORE_ID;
+  const isShiftEnabledStore = SHIFT_ENABLED_STORES.has(storeId);
+  const isServiceAccountEmail = (user?.email || "")
+    .trim()
+    .toLowerCase()
+    .endsWith("@service.local");
+  const isServerAccount = role === "server" || isServiceAccountEmail;
+  const isCashierAccount = role === "user";
+  const isRestaurantServer = isServerAccount && isHotpotStore;
+  const canUseKitchenAutoPrint = isHotpotStore && !isRestaurantServer;
+  const canUseBarAutoPrint = storeId === CAFE_STORE_ID;
+  const isShiftEnabledForUser = isShiftEnabledStore && isCashierAccount;
+  const usesThreeShiftByAccount = THREE_SHIFT_STORES.has(storeId);
+  const posTitle = isBakeryStore
+    ? "Bán hàng tại tiệm bánh"
+    : isFarmStore
+    ? "Bán hàng tại Farm"
+    : "Bán hàng tại quán";
+  const [products, setProducts] = useState<Product[]>([]);
+  const [tables, setTables] = useState<CafeTable[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [tableNumber, setTableNumber] = useState("");
+  const [menuSearch, setMenuSearch] = useState("");
+  const [category, setCategory] = useState<string>(ALL_CATEGORY_ID);
+  const [activeTab, setActiveTab] = useState<"tables" | "menu">("menu");
+  const [tableSearch, setTableSearch] = useState("");
+  const [autoOpenMenu, setAutoOpenMenu] = useState(true);
+  const [orderDrafts, setOrderDrafts] = useState<Record<string, OrderDraft>>(
+    {}
+  );
+  const [pendingAddedItems, setPendingAddedItems] = useState<PendingAddedItems>(
+    {}
+  );
+  const [isPaying, setIsPaying] = useState(false);
+  const [newTableName, setNewTableName] = useState("");
+  const [newTableArea, setNewTableArea] = useState("");
+  const [tablePage, setTablePage] = useState(1);
+  const [isSeedingTables, setIsSeedingTables] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [showSoldBills, setShowSoldBills] = useState(false);
+  const [soldBills, setSoldBills] = useState<Bill[]>([]);
+  const [isLoadingSoldBills, setIsLoadingSoldBills] = useState(false);
+  const [showAddTableModal, setShowAddTableModal] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const [surcharges, setSurcharges] = useState<PosSurcharge[]>([]);
+  const [showSurchargeModal, setShowSurchargeModal] = useState(false);
+  const [editingSurchargeId, setEditingSurchargeId] = useState<string | null>(null);
+  const [surchargeNameInput, setSurchargeNameInput] = useState("");
+  const [surchargeTypeInput, setSurchargeTypeInput] =
+    useState<SurchargeType>("percent");
+  const [surchargeValueInput, setSurchargeValueInput] = useState("");
+  const [surchargeEnabledInput, setSurchargeEnabledInput] = useState(true);
+  const [isSavingSurcharge, setIsSavingSurcharge] = useState(false);
+  const [updatingSurchargeId, setUpdatingSurchargeId] = useState<string | null>(
+    null
+  );
+  const [deletingSurchargeId, setDeletingSurchargeId] = useState<string | null>(
+    null
+  );
+  const [menuOrderIds, setMenuOrderIds] = useState<string[]>([]);
+  const [draggingMenuItemId, setDraggingMenuItemId] = useState<string | null>(
+    null
+  );
+  const suppressNextMenuClickRef = useRef(false);
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [cashReceivedInput, setCashReceivedInput] = useState("");
+
+  const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
+  const [isLoadingShift, setIsLoadingShift] = useState(false);
+  const [showOpenShiftModal, setShowOpenShiftModal] = useState(false);
+  const [openingCashInput, setOpeningCashInput] = useState("");
+  const [openingNote, setOpeningNote] = useState("");
+  const [isOpeningShift, setIsOpeningShift] = useState(false);
+
+  const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
+  const [isPreparingCloseShift, setIsPreparingCloseShift] = useState(false);
+  const [closeShiftSummary, setCloseShiftSummary] = useState<ShiftSummary | null>(
+    null
+  );
+  const [closingCashInput, setClosingCashInput] = useState("");
+  const [closingNote, setClosingNote] = useState("");
+  const [isClosingShift, setIsClosingShift] = useState(false);
+
+  const [showFarmDailyReport, setShowFarmDailyReport] = useState(false);
+  const [farmDailyReport, setFarmDailyReport] = useState<ShiftSummary | null>(
+    null
+  );
+  const [isLoadingFarmDailyReport, setIsLoadingFarmDailyReport] = useState(false);
+  const [showVoucherModal, setShowVoucherModal] = useState<CashVoucherType | null>(
+    null
+  );
+  const [voucherAmountInput, setVoucherAmountInput] = useState("");
+  const [voucherCategory, setVoucherCategory] = useState("");
+  const [voucherPersonGroup, setVoucherPersonGroup] = useState("Khác");
+  const [voucherPersonName, setVoucherPersonName] = useState("");
+  const [voucherNote, setVoucherNote] = useState("");
+  const [voucherIncludeInCashFlow, setVoucherIncludeInCashFlow] = useState(true);
+  const [voucherDateTime, setVoucherDateTime] = useState("");
+  const [isSavingVoucher, setIsSavingVoucher] = useState(false);
+  const [isKitchenAutoPrintEnabled, setIsKitchenAutoPrintEnabled] = useState(false);
+  const [kitchenTerminalName, setKitchenTerminalName] = useState("May bep chinh");
+  const [kitchenPrintLogs, setKitchenPrintLogs] = useState<string[]>([]);
+  const printingKitchenJobsRef = useRef<Set<string>>(new Set());
+  const [isBarAutoPrintEnabled, setIsBarAutoPrintEnabled] = useState(false);
+  const [barTerminalName, setBarTerminalName] = useState("May pha che");
+  const printingBarJobsRef = useRef<Set<string>>(new Set());
+  const menuOrderStorageKey = useMemo(
+    () => `pos:menu-order:${storeId || "default"}`,
+    [storeId]
+  );
+  const kitchenAutoPrintStorageKey = useMemo(
+    () => `${KITCHEN_AUTO_PRINT_KEY_PREFIX}:${storeId || "default"}`,
+    [storeId]
+  );
+  const kitchenTerminalNameStorageKey = useMemo(
+    () => `${KITCHEN_TERMINAL_NAME_KEY_PREFIX}:${storeId || "default"}`,
+    [storeId]
+  );
+  const barAutoPrintStorageKey = useMemo(
+    () => `${BAR_AUTO_PRINT_KEY_PREFIX}:${storeId || "default"}`,
+    [storeId]
+  );
+  const barTerminalNameStorageKey = useMemo(
+    () => `${BAR_TERMINAL_NAME_KEY_PREFIX}:${storeId || "default"}`,
+    [storeId]
+  );
+  const appendKitchenPrintLog = useCallback((message: string) => {
+    const time = new Date().toLocaleTimeString("vi-VN");
+    setKitchenPrintLogs((prev) => [`[${time}] ${message}`, ...prev].slice(0, 8));
+  }, []);
+
+  const parseMoney = (value: string) => {
+    const numeric = Number(value.replace(/[^\d]/g, ""));
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+
+  const formatMoneyInput = (value: string) => {
+    const amount = parseMoney(value);
+    return amount > 0 ? formatCurrency(amount) : "";
+  };
+
+  const toDateTimeLocalValue = (date: Date) => {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const resetVoucherForm = (type: CashVoucherType) => {
+    setShowVoucherModal(type);
+    setVoucherAmountInput("");
+    setVoucherCategory("");
+    setVoucherPersonGroup("Khác");
+    setVoucherPersonName("");
+    setVoucherNote("");
+    setVoucherIncludeInCashFlow(true);
+    setVoucherDateTime(toDateTimeLocalValue(new Date()));
+  };
+
+  const cashierName = useMemo(() => {
+    const prefix = user?.email?.split("@")[0] || "";
+    if (prefix.toLowerCase().startsWith("thungan")) {
+      return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+    if (user?.displayName) return user.displayName;
+    if (prefix) return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    return "Thu ngân";
+  }, [user?.displayName, user?.email]);
+
+  const resolveShiftType = (): ShiftType => {
+    if (!usesThreeShiftByAccount) return "single";
+    const prefix = (user?.email?.split("@")[0] || "").toLowerCase();
+    if (prefix.includes("thungan1")) return "shift_1";
+    if (prefix.includes("thungan2")) return "shift_2";
+    if (prefix.includes("thungan3")) return "shift_3";
+    return "single";
+  };
+
+  useEffect(() => {
+    async function loadData() {
+      if (!storeId) return;
+      try {
+        const [productList, tableList, categoryList] = await Promise.all([
+          getAllProducts(storeId),
+          getTables(storeId),
+          getCategories(storeId),
+        ]);
+        setProducts(productList);
+        setTables(tableList);
+        setCategories(categoryList);
+        if (isFarmStore) {
+          setTableNumber("");
+        } else if (
+          tableList.length > 0 &&
+          (!tableNumber || !tableList.some((t) => t.name === tableNumber))
+        ) {
+          setTableNumber(tableList[0].name);
+        }
+      } catch (error) {
+        console.error("Failed to load POS data", error);
+      }
+    }
+    loadData();
+  }, [storeId, isFarmStore, tableNumber]);
+
+  useEffect(() => {
+    if (!storeId) {
+      setSurcharges([]);
+      return;
+    }
+
+    const unsubscribe = subscribeSurcharges(
+      storeId,
+      (next) => {
+        setSurcharges(next);
+      },
+      (error) => {
+        console.error("Không đồng bộ được cài đặt phụ thu", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [storeId]);
+
+  useEffect(() => {
+    async function loadShiftState() {
+      if (!user || !storeId || !isShiftEnabledForUser) {
+        setActiveShift(null);
+        setShowOpenShiftModal(false);
+        return;
+      }
+      setIsLoadingShift(true);
+      try {
+        const open = await getOpenShiftByCashier(storeId, user.uid);
+        setActiveShift(open);
+        setShowOpenShiftModal(!open);
+      } catch (error) {
+        console.error("Failed to load shift state", error);
+      } finally {
+        setIsLoadingShift(false);
+      }
+    }
+    void loadShiftState();
+  }, [isShiftEnabledForUser, storeId, user]);
+
+  useEffect(() => {
+    if (!storeId) {
+      setOrderDrafts({});
+      return;
+    }
+
+    const unsubscribe = subscribeLiveOrders(
+      storeId,
+      (orders) => {
+        const next: Record<string, OrderDraft> = {};
+        orders.forEach((order) => {
+          const orderKey = order.orderKey?.trim();
+          if (!orderKey) return;
+          const mappedItems = (order.items || []).reduce<Record<string, CartItem>>(
+            (acc, item) => {
+              if (!item.menuId || !item.quantity) return acc;
+              acc[item.menuId] = {
+                id: item.menuId,
+                name: item.name,
+                price: item.price || 0,
+                quantity: item.quantity,
+                note: item.note || "",
+                category: item.category || "Khác",
+              };
+              return acc;
+            },
+            {}
+          );
+          if (Object.keys(mappedItems).length === 0) return;
+          next[orderKey] = { items: mappedItems };
+        });
+        setOrderDrafts(next);
+      },
+      (error) => {
+        console.error("Không đồng bộ được đơn realtime", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [storeId]);
+
+  useEffect(() => {
+    if (!storeId) {
+      setMenuOrderIds([]);
+      return;
+    }
+
+    const productIds = Array.from(
+      new Set(products.map((product) => product.product_code).filter(Boolean))
+    );
+
+    if (productIds.length === 0) {
+      setMenuOrderIds([]);
+      return;
+    }
+
+    let storedOrder: string[] = [];
+    try {
+      const raw = window.localStorage.getItem(menuOrderStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          storedOrder = parsed.filter(
+            (value): value is string => typeof value === "string"
+          );
+        }
+      }
+    } catch (error) {
+      console.warn("Không đọc được thứ tự món đã lưu", error);
+    }
+
+    const validIds = new Set(productIds);
+    const nextOrder = storedOrder.filter((id) => validIds.has(id));
+    const existing = new Set(nextOrder);
+    productIds.forEach((id) => {
+      if (!existing.has(id)) {
+        nextOrder.push(id);
+      }
+    });
+
+    setMenuOrderIds(nextOrder);
+  }, [menuOrderStorageKey, products, storeId]);
+
+  useEffect(() => {
+    if (!storeId || menuOrderIds.length === 0) return;
+
+    try {
+      window.localStorage.setItem(
+        menuOrderStorageKey,
+        JSON.stringify(menuOrderIds)
+      );
+    } catch (error) {
+      console.warn("Không lưu được thứ tự món", error);
+    }
+  }, [menuOrderIds, menuOrderStorageKey, storeId]);
+
+  useEffect(() => {
+    if (!storeId) {
+      setIsKitchenAutoPrintEnabled(false);
+      setKitchenTerminalName("May bep chinh");
+      setIsBarAutoPrintEnabled(false);
+      setBarTerminalName("May pha che");
+      return;
+    }
+
+    try {
+      const savedEnabled = window.localStorage.getItem(kitchenAutoPrintStorageKey);
+      setIsKitchenAutoPrintEnabled(savedEnabled === "1");
+      const savedName = window.localStorage.getItem(kitchenTerminalNameStorageKey);
+      if (savedName?.trim()) {
+        setKitchenTerminalName(savedName.trim());
+      } else {
+        setKitchenTerminalName("May bep chinh");
+      }
+
+      const savedBarEnabled = window.localStorage.getItem(barAutoPrintStorageKey);
+      setIsBarAutoPrintEnabled(savedBarEnabled === "1");
+      const savedBarName = window.localStorage.getItem(barTerminalNameStorageKey);
+      if (savedBarName?.trim()) {
+        setBarTerminalName(savedBarName.trim());
+      } else {
+        setBarTerminalName("May pha che");
+      }
+    } catch (error) {
+      console.warn("Không đọc được cài đặt auto in bếp", error);
+    }
+  }, [
+    barAutoPrintStorageKey,
+    barTerminalNameStorageKey,
+    kitchenAutoPrintStorageKey,
+    kitchenTerminalNameStorageKey,
+    storeId,
+  ]);
+
+  useEffect(() => {
+    if (!storeId) return;
+    try {
+      window.localStorage.setItem(
+        kitchenAutoPrintStorageKey,
+        isKitchenAutoPrintEnabled ? "1" : "0"
+      );
+      window.localStorage.setItem(
+        kitchenTerminalNameStorageKey,
+        kitchenTerminalName.trim() || "May bep chinh"
+      );
+      window.localStorage.setItem(
+        barAutoPrintStorageKey,
+        isBarAutoPrintEnabled ? "1" : "0"
+      );
+      window.localStorage.setItem(
+        barTerminalNameStorageKey,
+        barTerminalName.trim() || "May pha che"
+      );
+    } catch (error) {
+      console.warn("Không lưu được cài đặt auto in bếp", error);
+    }
+  }, [
+    barAutoPrintStorageKey,
+    barTerminalName,
+    barTerminalNameStorageKey,
+    isBarAutoPrintEnabled,
+    isKitchenAutoPrintEnabled,
+    kitchenAutoPrintStorageKey,
+    kitchenTerminalName,
+    kitchenTerminalNameStorageKey,
+    storeId,
+  ]);
+
+  const hiddenCategoryKeySet = useMemo(() => {
+    const keys = new Set<string>();
+    categories.forEach((categoryItem) => {
+      if (!categoryItem.isHidden) return;
+      const idKey = (categoryItem.id || "").trim().toLowerCase();
+      const nameKey = (categoryItem.name || "").trim().toLowerCase();
+      if (idKey) keys.add(idKey);
+      if (nameKey) keys.add(nameKey);
+    });
+    return keys;
+  }, [categories]);
+
+  const categoryOptions = useMemo(() => {
+    if (categories.length > 0) {
+      return [
+        { id: ALL_CATEGORY_ID, name: ALL_CATEGORY },
+        ...categories
+          .filter((categoryItem) => !categoryItem.isHidden)
+          .map((categoryItem) => ({ id: categoryItem.id, name: categoryItem.name })),
+      ];
+    }
+    const setCat = new Set<string>();
+    products.forEach((p) => setCat.add(p.category || "Khác"));
+    return [
+      { id: ALL_CATEGORY_ID, name: ALL_CATEGORY },
+      ...Array.from(setCat).map((name) => ({ id: name, name })),
+    ];
+  }, [categories, products]);
+
+  useEffect(() => {
+    if (category === ALL_CATEGORY_ID) return;
+    const selectedCategory = categories.find(
+      (categoryItem) =>
+        categoryItem.id === category || categoryItem.name === category
+    );
+    if (selectedCategory?.isHidden) {
+      setCategory(ALL_CATEGORY_ID);
+    }
+  }, [category, categories]);
+
+  const tableOptions = useMemo(() => {
+    if (isFarmStore) return [];
+    if (isHotpotStore) return tables;
+    return [{ id: TAKEAWAY_ID, name: TAKEAWAY_NAME }, ...tables];
+  }, [tables, isFarmStore, isHotpotStore]);
+
+  useEffect(() => {
+    if (isFarmStore) {
+      setActiveTab("menu");
+    }
+  }, [isFarmStore]);
+
+  const activeOrderKey = useMemo(() => {
+    if (isFarmStore) return FARM_ORDER_KEY;
+    return tableNumber.trim();
+  }, [isFarmStore, tableNumber]);
+
+  const activeOrder = activeOrderKey
+    ? orderDrafts[activeOrderKey]
+    : undefined;
+  const cart = activeOrder?.items || {};
+  const activePendingAddedItems = activeOrderKey
+    ? pendingAddedItems[activeOrderKey] || {}
+    : {};
+
+  const filteredTables = useMemo(() => {
+    const keyword = normalizeSearchText(tableSearch);
+    return tableOptions.filter((t) =>
+      normalizeSearchText(t.name).includes(keyword)
+    );
+  }, [tableOptions, tableSearch]);
+
+  const sortedTables = useMemo(() => {
+    const sorted = [...filteredTables].sort((a, b) => {
+      if (a.id === TAKEAWAY_ID) return -1;
+      if (b.id === TAKEAWAY_ID) return 1;
+      return a.name.localeCompare(b.name, "vi", {
+        sensitivity: "base",
+        numeric: true,
+      });
+    });
+    return sorted;
+  }, [filteredTables]);
+
+  const totalTablePages = Math.max(
+    1,
+    Math.ceil(sortedTables.length / TABLES_PER_PAGE)
+  );
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [tableSearch, tableOptions.length]);
+
+  useEffect(() => {
+    setTablePage((prev) => Math.min(prev, totalTablePages));
+  }, [totalTablePages]);
+
+  const paginatedTables = useMemo(() => {
+    const start = (tablePage - 1) * TABLES_PER_PAGE;
+    return sortedTables.slice(start, start + TABLES_PER_PAGE);
+  }, [sortedTables, tablePage]);
+
+  const getCategoryLabel = (cat?: string) => {
+    if (!cat) return "Khác";
+    const found = categories.find((c) => c.id === cat || c.name === cat);
+    return found?.name || cat;
+  };
+
+  const isCategoryMatch = (itemCategory: string, selected: string) => {
+    if (selected === ALL_CATEGORY_ID) return true;
+    if (itemCategory === selected) return true;
+    const itemCat = categories.find(
+      (c) => c.id === itemCategory || c.name === itemCategory
+    );
+    const selectedCat = categories.find(
+      (c) => c.id === selected || c.name === selected
+    );
+    if (
+      itemCat &&
+      selectedCat &&
+      (itemCat.id === selectedCat.id || itemCat.name === selectedCat.name)
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const filteredMenu = useMemo(() => {
+    const orderMap = new Map<string, number>(
+      menuOrderIds.map((id, index) => [id, index])
+    );
+
+    const items: MenuItem[] = products
+      .filter((p) => {
+        if (p.isSelling === false) return false;
+        const categoryKey = (p.category || "").trim().toLowerCase();
+        if (!categoryKey) return true;
+        return !hiddenCategoryKeySet.has(categoryKey);
+      })
+      .map((p) => ({
+        id: p.product_code,
+        name: p.product_name,
+        price: p.price ?? 0,
+        category: p.category || "Khác",
+      }))
+      .sort((a, b) => {
+        const aOrder = orderMap.get(a.id);
+        const bOrder = orderMap.get(b.id);
+
+        if (aOrder !== undefined && bOrder !== undefined) {
+          return aOrder - bOrder;
+        }
+        if (aOrder !== undefined) return -1;
+        if (bOrder !== undefined) return 1;
+
+        return a.name.localeCompare(b.name, "vi", {
+          sensitivity: "base",
+          numeric: true,
+        });
+      });
+
+    return items.filter((item) => {
+      const keyword = normalizeSearchText(menuSearch);
+      const matchCategory = isCategoryMatch(item.category, category);
+      const matchText =
+        !keyword || normalizeSearchText(item.name).includes(keyword);
+      return matchCategory && matchText;
+    });
+  }, [category, products, menuSearch, categories, menuOrderIds, hiddenCategoryKeySet]);
+
+  const formatSurchargeValue = useCallback(
+    (surcharge: { type: SurchargeType; value: number }) => {
+      if (surcharge.type === "percent") {
+        const valueText = Number.isInteger(surcharge.value)
+          ? surcharge.value.toString()
+          : surcharge.value.toString();
+        return `${valueText}%`;
+      }
+      return `${formatCurrency(Math.max(0, Math.round(surcharge.value)))} đ/món`;
+    },
+    []
+  );
+
+  const enabledSurcharges = useMemo(
+    () => surcharges.filter((item) => item.isEnabled && item.value > 0),
+    [surcharges]
+  );
+
+  const calculateOrderPricing = useCallback(
+    (items: CartItem[], appliedSurcharges: PosSurcharge[]) => {
+      const surchargeSummaryMap = new Map<string, BillSurcharge>();
+      appliedSurcharges.forEach((surcharge) => {
+        surchargeSummaryMap.set(surcharge.id, {
+          id: surcharge.id,
+          name: surcharge.name,
+          type: surcharge.type,
+          value: surcharge.value,
+          amount: 0,
+        });
+      });
+
+      let subtotal = 0;
+      let surchargeTotal = 0;
+      const pricedItems: ReceiptItem[] = [];
+
+      items.forEach((item) => {
+        const quantity = Math.max(1, item.quantity || 0);
+        const basePrice = Math.max(0, Math.round(Number(item.price) || 0));
+        let surchargePerUnit = 0;
+
+        appliedSurcharges.forEach((surcharge) => {
+          const rawUnitAmount =
+            surcharge.type === "percent"
+              ? (basePrice * surcharge.value) / 100
+              : surcharge.value;
+          const surchargeUnit = Math.max(0, Math.round(rawUnitAmount));
+          if (surchargeUnit <= 0) return;
+
+          surchargePerUnit += surchargeUnit;
+          const lineSurcharge = surchargeUnit * quantity;
+          surchargeTotal += lineSurcharge;
+
+          const summary = surchargeSummaryMap.get(surcharge.id);
+          if (summary) {
+            summary.amount += lineSurcharge;
+          }
+        });
+
+        const lineBaseTotal = basePrice * quantity;
+        const lineSurchargeTotal = surchargePerUnit * quantity;
+        const finalPrice = basePrice + surchargePerUnit;
+        const lineTotal = lineBaseTotal + lineSurchargeTotal;
+        subtotal += lineBaseTotal;
+
+        pricedItems.push({
+          ...item,
+          quantity,
+          price: finalPrice,
+          basePrice,
+          surchargePerUnit,
+          surchargeTotal: lineSurchargeTotal,
+          lineTotal,
+        });
+      });
+
+      const surchargeSummaries = Array.from(surchargeSummaryMap.values()).filter(
+        (item) => item.amount > 0
+      );
+
+      return {
+        items: pricedItems,
+        subtotal,
+        surchargeTotal,
+        total: subtotal + surchargeTotal,
+        surchargeSummaries,
+      };
+    },
+    []
+  );
+
+  const cartItems = useMemo(() => Object.values(cart), [cart]);
+  const cartPricing = useMemo(
+    () => calculateOrderPricing(cartItems, enabledSurcharges),
+    [calculateOrderPricing, cartItems, enabledSurcharges]
+  );
+  const cartPricingById = useMemo(() => {
+    const mapped: Record<string, ReceiptItem> = {};
+    cartPricing.items.forEach((item) => {
+      mapped[item.id] = item;
+    });
+    return mapped;
+  }, [cartPricing.items]);
+  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotalPrice = cartPricing.subtotal;
+  const totalSurchargeAmount = cartPricing.surchargeTotal;
+  const totalPrice = cartPricing.total;
+  const appliedSurchargeSummaries = cartPricing.surchargeSummaries;
+  const pendingAddedCount = Object.values(activePendingAddedItems).reduce(
+    (sum, qty) => sum + qty,
+    0
+  );
+  const cashReceived = parseMoney(cashReceivedInput);
+  const payableTotal = showReceipt && receiptData ? receiptData.total : totalPrice;
+  const receiptItemCount = useMemo(
+    () =>
+      receiptData
+        ? receiptData.items.reduce((sum, item) => sum + item.quantity, 0)
+        : 0,
+    [receiptData]
+  );
+  const quickCashValues = useMemo(() => {
+    if (payableTotal <= 0) return [];
+    const candidates = new Set<number>();
+    const addAmount = (amount: number) => {
+      if (amount >= payableTotal) candidates.add(amount);
+    };
+    const roundUp = (value: number, step: number) =>
+      Math.ceil(value / step) * step;
+
+    addAmount(payableTotal);
+    CASH_ROUNDING_STEPS.forEach((step) =>
+      addAmount(roundUp(payableTotal, step))
+    );
+    CASH_NOTE_VALUES.forEach((amount) => addAmount(amount));
+
+    return Array.from(candidates).sort((a, b) => a - b);
+  }, [payableTotal]);
+
+  useEffect(() => {
+    if (paymentMethod === "transfer") {
+      setCashReceivedInput("");
+      return;
+    }
+    if (cashReceivedInput.trim() === "" && payableTotal > 0) {
+      setCashReceivedInput(String(payableTotal));
+    }
+  }, [paymentMethod, payableTotal, cashReceivedInput]);
+  const tableDraftCounts = useMemo(() => {
+    const result: Record<string, number> = {};
+    Object.entries(orderDrafts).forEach(([key, draft]) => {
+      if (!key || key === FARM_ORDER_KEY) return;
+      result[key] = Object.values(draft.items).reduce(
+        (sum, item) => sum + item.quantity,
+        0
+      );
+    });
+    return result;
+  }, [orderDrafts]);
+
+  useEffect(() => {
+    if (!isRestaurantServer) return;
+    setPendingAddedItems((prev) => {
+      const next: PendingAddedItems = {};
+      Object.entries(prev).forEach(([orderKey, itemMap]) => {
+        if (!orderDrafts[orderKey]) return;
+        const filtered = Object.entries(itemMap).reduce<Record<string, number>>(
+          (acc, [itemId, qty]) => {
+            if (!orderDrafts[orderKey]?.items[itemId]) return acc;
+            if (qty > 0) acc[itemId] = qty;
+            return acc;
+          },
+          {}
+        );
+        if (Object.keys(filtered).length > 0) {
+          next[orderKey] = filtered;
+        }
+      });
+      return next;
+    });
+  }, [isRestaurantServer, orderDrafts]);
+
+  const toLiveOrderItems = (draft: OrderDraft): LiveOrderItem[] =>
+    Object.values(draft.items)
+      .filter((item) => item.quantity > 0)
+      .map((item) => ({
+        menuId: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        // Keep raw note while typing to avoid stripping trailing spaces mid-input.
+        note: item.note || "",
+        category: item.category || "",
+      }));
+
+  const syncOrderDraft = async (orderKey: string, draft: OrderDraft) => {
+    if (!storeId || !orderKey) return;
+    const items = toLiveOrderItems(draft);
+    if (items.length === 0) {
+      await clearLiveOrder(storeId, orderKey);
+      return;
+    }
+
+    const tableLabel =
+      isFarmStore || orderKey === FARM_ORDER_KEY ? FARM_ORDER_LABEL : orderKey;
+
+    await upsertLiveOrder({
+      storeId,
+      orderKey,
+      tableNumber: tableLabel,
+      items,
+      updatedById: user?.uid,
+      updatedByName: cashierName,
+      updatedByRole: role || "user",
+    });
+  };
+
+  const updateActiveOrder = (updater: (draft: OrderDraft) => OrderDraft) => {
+    if (!activeOrderKey) {
+      alert("Vui lòng chọn bàn trước khi gọi món.");
+      return;
+    }
+
+    setOrderDrafts((prev) => {
+      const current = prev[activeOrderKey] || { items: {} };
+      const updated = updater(current);
+      const normalizedItems = Object.values(updated.items).reduce<
+        Record<string, CartItem>
+      >((acc, item) => {
+        if (!item.id || item.quantity <= 0) return acc;
+        acc[item.id] = {
+          ...item,
+          quantity: Math.max(1, item.quantity),
+          note: item.note || "",
+          category: item.category || "Khác",
+        };
+        return acc;
+      }, {});
+      const normalizedDraft: OrderDraft = { items: normalizedItems };
+
+      const next = { ...prev };
+      if (Object.keys(normalizedItems).length === 0) {
+        delete next[activeOrderKey];
+      } else {
+        next[activeOrderKey] = normalizedDraft;
+      }
+
+      void syncOrderDraft(activeOrderKey, normalizedDraft).catch((error) => {
+        console.error("Không cập nhật được đơn realtime", error);
+      });
+
+      return next;
+    });
+  };
+
+  const handleAddItem = (item: MenuItem) => {
+    updateActiveOrder((draft) => {
+      const current = draft.items[item.id];
+      const quantity = current ? current.quantity + 1 : 1;
+      return {
+        ...draft,
+        items: {
+          ...draft.items,
+          [item.id]: { ...item, quantity, note: current?.note || "" },
+        },
+      };
+    });
+
+    if (isRestaurantServer && activeOrderKey) {
+      setPendingAddedItems((prev) => {
+        const currentByOrder = prev[activeOrderKey] || {};
+        return {
+          ...prev,
+          [activeOrderKey]: {
+            ...currentByOrder,
+            [item.id]: (currentByOrder[item.id] || 0) + 1,
+          },
+        };
+      });
+    }
+  };
+
+  const handleChangeQty = (id: string, delta: number) => {
+    if (isRestaurantServer && delta < 0) {
+      const pendingQty = activePendingAddedItems[id] || 0;
+      if (pendingQty < Math.abs(delta)) return;
+    }
+
+    updateActiveOrder((draft) => {
+      const current = draft.items[id];
+      if (!current) return draft;
+      const quantity = current.quantity + delta;
+      if (quantity <= 0) {
+        const { [id]: _, ...rest } = draft.items;
+        return { ...draft, items: rest };
+      }
+      return {
+        ...draft,
+        items: {
+          ...draft.items,
+          [id]: { ...current, quantity },
+        },
+      };
+    });
+
+    if (isRestaurantServer && activeOrderKey) {
+      setPendingAddedItems((prev) => {
+        const currentByOrder = prev[activeOrderKey] || {};
+        if (delta > 0) {
+          return {
+            ...prev,
+            [activeOrderKey]: {
+              ...currentByOrder,
+              [id]: (currentByOrder[id] || 0) + delta,
+            },
+          };
+        }
+
+        if (delta < 0) {
+          const currentPending = currentByOrder[id] || 0;
+          if (currentPending <= 0) return prev;
+
+          const nextPending = Math.max(currentPending + delta, 0);
+          const nextByOrder = { ...currentByOrder };
+          if (nextPending > 0) {
+            nextByOrder[id] = nextPending;
+          } else {
+            delete nextByOrder[id];
+          }
+
+          const next = { ...prev };
+          if (Object.keys(nextByOrder).length === 0) {
+            delete next[activeOrderKey];
+          } else {
+            next[activeOrderKey] = nextByOrder;
+          }
+          return next;
+        }
+
+        return prev;
+      });
+    }
+  };
+
+  const handleItemNoteChange = (id: string, value: string) => {
+    updateActiveOrder((draft) => {
+      const current = draft.items[id];
+      if (!current) return draft;
+      return {
+        ...draft,
+        items: {
+          ...draft.items,
+          [id]: { ...current, note: value },
+        },
+      };
+    });
+  };
+
+  const handleMenuItemDragStart = (
+    event: DragEvent<HTMLButtonElement>,
+    itemId: string
+  ) => {
+    setDraggingMenuItemId(itemId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", itemId);
+  };
+
+  const handleMenuItemDragOver = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleMenuItemDrop = (
+    event: DragEvent<HTMLButtonElement>,
+    targetId: string
+  ) => {
+    event.preventDefault();
+    const sourceId =
+      draggingMenuItemId || event.dataTransfer.getData("text/plain");
+    if (!sourceId || sourceId === targetId) {
+      setDraggingMenuItemId(null);
+      return;
+    }
+
+    setMenuOrderIds((prev) => {
+      const baseOrder =
+        prev.length > 0
+          ? [...prev]
+          : products.map((product) => product.product_code);
+      const sourceIndex = baseOrder.indexOf(sourceId);
+      const targetIndex = baseOrder.indexOf(targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+
+      const [movedId] = baseOrder.splice(sourceIndex, 1);
+      baseOrder.splice(targetIndex, 0, movedId);
+      return baseOrder;
+    });
+
+    suppressNextMenuClickRef.current = true;
+    window.setTimeout(() => {
+      suppressNextMenuClickRef.current = false;
+    }, 0);
+    setDraggingMenuItemId(null);
+  };
+
+  const handleMenuItemDragEnd = () => {
+    setDraggingMenuItemId(null);
+  };
+
+  const buildReceiptItemsHtml = (items: ReceiptItem[]) =>
+    items
+      .map(
+        (item) => `
+          <tr>
+            <td style="padding:4px 0; vertical-align:top;">
+              ${item.name}
+              ${item.note?.trim() ? `<div style="font-size:11px;color:#666;">- ${item.note.trim()}</div>` : ""}
+            </td>
+            <td style="text-align:right;padding:4px 0; vertical-align:top;">${formatCurrency(
+              item.price
+            )}</td>
+            <td style="text-align:center;padding:4px 0; vertical-align:top;">${
+              item.quantity
+            }</td>
+            <td style="text-align:right;padding:4px 0; vertical-align:top;">${formatCurrency(
+              item.lineTotal
+            )}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+  const printHtmlDocument = (html: string) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      document.body.removeChild(iframe);
+      throw new Error("Không thể tạo tài liệu in.");
+    }
+
+    iframeDoc.open();
+    iframeDoc.write(html);
+    iframeDoc.close();
+    iframe.onload = () => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => document.body.removeChild(iframe), 500);
+    };
+  };
+
+  const printPaymentReceipt = (options: {
+    billCode?: string;
+    title: string;
+    tableLabel: string;
+    createdAtText: string;
+    items: ReceiptItem[];
+    total: number;
+    includePaymentInfo: boolean;
+    paidAmount?: number;
+    changeAmount?: number;
+  }) => {
+    const storeInfo = RECEIPT_STORE_INFO[storeId] || RECEIPT_STORE_INFO.cafe;
+    const printAt = new Date();
+    const printTime = printAt.toLocaleString("vi-VN");
+    const itemRows = buildReceiptItemsHtml(options.items);
+    const discount = 0;
+    const finalAmount = Math.max(options.total - discount, 0);
+
+    const paymentRows = options.includePaymentInfo
+      ? `
+          <div class="line-row"><span>Thanh toán:</span><span>${
+            paymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt"
+          }</span></div>
+          <div class="line-row"><span>Tiền khách đưa:</span><span>${formatCurrency(
+            options.paidAmount || finalAmount
+          )}</span></div>
+          <div class="line-row"><span>Tiền trả lại:</span><span>${formatCurrency(
+            options.changeAmount || 0
+          )}</span></div>
+        `
+      : "";
+
+    const html = `
+      <html lang="vi">
+        <head>
+          <meta charset="UTF-8" />
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+          <title>${options.title} - ${options.tableLabel}</title>
+          <style>
+            @page { size: 80mm auto; margin: 4mm; }
+            body { font-family: ${PRINT_FONT_FAMILY}; width: 80mm; margin: 0 auto; padding: 0; }
+            h1, h2, h3, p { margin: 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            .header { text-align: center; margin-bottom: 6px; }
+            .title { font-size: 24px; font-weight: 800; text-transform: uppercase; }
+            .sub { font-size: 12px; margin-top: 1px; }
+            .section-title { font-size: 24px; font-weight: 800; text-transform: uppercase; text-align:center; margin-top: 8px; margin-bottom: 2px; }
+            .bill-code { font-size: 13px; text-align:center; margin-bottom: 6px; }
+            .line-row { display:flex; justify-content:space-between; gap:8px; margin: 2px 0; font-size: 12px; }
+            .line-row strong { font-size: 14px; }
+            .grid-head td { font-weight: 700; text-transform: uppercase; font-size: 11px; border-bottom: 1px solid #000; padding-bottom: 3px; }
+            hr { border: 0; border-top: 1px dashed #999; margin: 8px 0; }
+            .thanks { margin-top: 8px; text-align:center; font-weight:700; font-size:14px; }
+            .footer { margin-top: 8px; text-align:center; font-size: 12px; }
+            .tail-space { height: ${PRINT_TAIL_SPACE_MM}mm; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <p class="title">${storeInfo.title}</p>
+            <p class="sub">${storeInfo.address}</p>
+            <p class="sub"><strong>${storeInfo.phone}</strong></p>
+          </div>
+          <p class="section-title">${options.title}</p>
+          ${options.billCode ? `<p class="bill-code">${options.billCode}</p>` : ""}
+          <div class="line-row"><span><strong>${options.tableLabel}</strong></span><span>Thu ngân: ${cashierName}</span></div>
+          <div class="line-row"><span>Giờ vào: ${options.createdAtText}</span><span>Giờ in: ${printTime}</span></div>
+          <hr />
+          <table>
+            <thead>
+              <tr class="grid-head">
+                <td>Tên hàng</td>
+                <td style="text-align:right;">Đ.Giá</td>
+                <td style="text-align:center;">SL</td>
+                <td style="text-align:right;">Thành tiền</td>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+          <hr />
+          <div class="line-row"><span>Tổng tiền hàng:</span><span><strong>${formatCurrency(
+            options.total
+          )}</strong></span></div>
+          <div class="line-row"><span>Chiết khấu:</span><span>${formatCurrency(
+            discount
+          )}</span></div>
+          <div class="line-row"><span><strong>Tổng cộng:</strong></span><span><strong>${formatCurrency(
+            finalAmount
+          )}</strong></span></div>
+          ${paymentRows}
+          <p class="thanks">Cảm ơn quý khách và hẹn gặp lại!</p>
+          <div class="footer">
+            <p>Mật khẩu Wifi: ongquanxincamon</p>
+            <p>Quý khách vui lòng phản hồi qua fanpage để quán phục vụ tốt hơn.</p>
+          </div>
+          <div class="tail-space"></div>
+        </body>
+      </html>
+    `;
+    printHtmlDocument(html);
+  };
+
+  const buildPrepItemsHtml = (items: CartItem[]) =>
+    items
+      .map((item) => {
+        const itemLabel = item.id ? `${item.name} (${item.id})` : item.name;
+        return `
+          <tr>
+            <td class="item-name">${itemLabel}</td>
+            <td class="item-unit">&nbsp;</td>
+            <td class="item-qty">${item.quantity}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+  const formatPrepTicketJobCode = (jobId: string) => {
+    const normalized = (jobId || "").replace(/[^0-9A-Za-z]/g, "").slice(-6).toUpperCase();
+    if (normalized.length === 6) {
+      return `${normalized.slice(0, 3)}-${normalized.slice(3)}`;
+    }
+    return normalized || "JOB";
+  };
+
+  const formatPrepTicketDateTime = (date: Date) => {
+    const dateText = date.toLocaleDateString("vi-VN");
+    const timeText = date.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    return `${dateText} ${timeText}`;
+  };
+
+  const printPrepTicket = (options: {
+    tableLabel: string;
+    staffName: string;
+    jobCode: string;
+    printedAtText: string;
+    items: CartItem[];
+    tailSpaceMm?: number;
+  }) => {
+    const tailSpace = Math.max(0, options.tailSpaceMm ?? PRINT_TAIL_SPACE_MM);
+    const itemRows = buildPrepItemsHtml(options.items);
+    const html = `
+      <html lang="vi">
+        <head>
+          <meta charset="UTF-8" />
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+          <title>PHIEU CHE BIEN - ${options.tableLabel}</title>
+          <style>
+            @page { size: 80mm auto; margin: 4mm; }
+            body { font-family: ${PRINT_FONT_FAMILY}; width: 80mm; margin: 0 auto; padding: 0; color: #111; }
+            p, h1, h2 { margin: 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+            th, td { padding: 5px 0; vertical-align: top; }
+            .ticket-title { text-align: center; font-size: 18px; font-weight: 800; text-transform: uppercase; margin-bottom: 6px; }
+            .line { font-size: 16px; font-weight: 700; margin-top: 3px; }
+            .sub-line { font-size: 15px; font-weight: 700; margin-top: 3px; }
+            .meta-line { font-size: 14px; margin-top: 3px; }
+            .head-row th { font-size: 13px; font-weight: 700; border-bottom: 1px solid #000; }
+            .item-row td { border-bottom: 1px solid #000; }
+            .item-name { width: 70%; padding-right: 6px; }
+            .item-unit { width: 10%; text-align: center; }
+            .item-qty { width: 20%; text-align: right; font-weight: 700; }
+            .tail-space { height: ${tailSpace}mm; }
+          </style>
+        </head>
+        <body>
+          <p class="ticket-title">CHẾ BIẾN</p>
+          <p class="line">Bàn: ${options.tableLabel}</p>
+          <p class="sub-line">Phục vụ: ${options.staffName || "-"}</p>
+          <p class="meta-line">${options.jobCode} - ${options.printedAtText}</p>
+          <table>
+            <thead>
+              <tr class="head-row">
+                <th style="text-align:left;">Món</th>
+                <th style="text-align:center;">ĐVT</th>
+                <th style="text-align:right;">SL</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+          <div class="tail-space"></div>
+        </body>
+      </html>
+    `;
+    printHtmlDocument(html);
+  };
+
+  useEffect(() => {
+    if (!storeId || !canUseKitchenAutoPrint || !isKitchenAutoPrintEnabled) return;
+
+    const printKitchenJob = async (job: KitchenPrintJob) => {
+      if (printingKitchenJobsRef.current.has(job.id)) return;
+      printingKitchenJobsRef.current.add(job.id);
+      appendKitchenPrintLog(
+        `Nhan job bếp ${job.id.slice(-6).toUpperCase()} - Ban ${job.tableNumber || job.orderKey}`
+      );
+
+      try {
+        const mappedItems: CartItem[] = (job.items || [])
+          .filter((item) => item.menuId && item.quantity > 0)
+          .map((item) => ({
+            id: item.menuId,
+            name: item.name,
+            price: item.price || 0,
+            quantity: item.quantity,
+            note: item.note || "",
+            category: "Khác",
+          }));
+
+        if (mappedItems.length === 0) {
+          await markKitchenPrintJobPrinted(job.id, kitchenTerminalName);
+          appendKitchenPrintLog(
+            `Bo qua job ${job.id.slice(-6).toUpperCase()} vi khong co mon hop le`
+          );
+          return;
+        }
+
+        printPrepTicket({
+          tableLabel: job.tableNumber || job.orderKey,
+          staffName: job.createdByName || "",
+          jobCode: formatPrepTicketJobCode(job.id),
+          printedAtText: formatPrepTicketDateTime(
+            job.createdAt?.seconds
+              ? new Date(job.createdAt.seconds * 1000)
+              : new Date()
+          ),
+          items: mappedItems,
+          tailSpaceMm: PRINT_TAIL_SPACE_MM,
+        });
+
+        await markKitchenPrintJobPrinted(job.id, kitchenTerminalName);
+        appendKitchenPrintLog(
+          `In xong job ${job.id.slice(-6).toUpperCase()} - ${mappedItems.length} mon`
+        );
+      } catch (error) {
+        console.error("Không in được phiếu món mới", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Khong ro nguyen nhan";
+        appendKitchenPrintLog(
+          `Loi in job ${job.id.slice(-6).toUpperCase()}: ${errorMessage}`
+        );
+      } finally {
+        printingKitchenJobsRef.current.delete(job.id);
+      }
+    };
+
+    const unsubscribe = subscribePendingKitchenPrintJobs(
+      storeId,
+      (jobs) => {
+        jobs.forEach((job) => {
+          void printKitchenJob(job);
+        });
+      },
+      (error) => {
+        console.error("Không đồng bộ được phiếu in bếp", error);
+        appendKitchenPrintLog("Loi dong bo phieu in bep");
+      }
+    );
+
+    return () => unsubscribe();
+  }, [
+    canUseKitchenAutoPrint,
+    isKitchenAutoPrintEnabled,
+    kitchenTerminalName,
+    appendKitchenPrintLog,
+    storeId,
+  ]);
+
+  useEffect(() => {
+    if (!storeId || !canUseBarAutoPrint || !isBarAutoPrintEnabled) return;
+
+    const printBarJob = async (job: BarPrintJob) => {
+      if (printingBarJobsRef.current.has(job.id)) return;
+      printingBarJobsRef.current.add(job.id);
+
+      try {
+        const mappedItems: CartItem[] = (job.items || [])
+          .filter((item) => item.menuId && item.quantity > 0)
+          .map((item) => ({
+            id: item.menuId,
+            name: item.name,
+            price: item.price || 0,
+            quantity: item.quantity,
+            note: item.note || "",
+            category: "Khác",
+          }));
+
+        if (mappedItems.length === 0) {
+          await markBarPrintJobPrinted(job.id, barTerminalName);
+          return;
+        }
+
+        printPrepTicket({
+          tableLabel: job.tableNumber || "Mang về",
+          staffName: job.createdByName || "",
+          jobCode: formatPrepTicketJobCode(job.id),
+          printedAtText: formatPrepTicketDateTime(
+            job.createdAt?.seconds
+              ? new Date(job.createdAt.seconds * 1000)
+              : new Date()
+          ),
+          items: mappedItems,
+          tailSpaceMm: PREP_BAR_TAIL_SPACE_MM,
+        });
+
+        await markBarPrintJobPrinted(job.id, barTerminalName);
+      } catch (error) {
+        console.error("Không in được phiếu pha chế", error);
+      } finally {
+        printingBarJobsRef.current.delete(job.id);
+      }
+    };
+
+    const unsubscribe = subscribePendingBarPrintJobs(
+      storeId,
+      (jobs) => {
+        jobs.forEach((job) => {
+          void printBarJob(job);
+        });
+      },
+      (error) => {
+        console.error("Không đồng bộ được phiếu in pha chế", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [barTerminalName, canUseBarAutoPrint, isBarAutoPrintEnabled, storeId]);
+
+  const handleSubmitKitchenAddedItems = async () => {
+    if (!isRestaurantServer) return;
+    if (!storeId) {
+      alert("Thiếu thông tin cửa hàng. Vui lòng tải lại trang.");
+      return;
+    }
+    if (!activeOrderKey) {
+      alert("Vui lòng chọn bàn trước khi lưu món mới.");
+      return;
+    }
+    if (pendingAddedCount <= 0) {
+      alert("Chưa có món mới để lưu.");
+      return;
+    }
+
+    const pendingMap = pendingAddedItems[activeOrderKey] || {};
+    const incrementalItems = Object.entries(pendingMap)
+      .map(([itemId, qty]) => {
+        const source = cart[itemId];
+        if (!source || qty <= 0) return null;
+        return {
+          ...source,
+          quantity: qty,
+        } as CartItem;
+      })
+      .filter((item): item is CartItem => Boolean(item));
+
+    if (incrementalItems.length === 0) {
+      setPendingAddedItems((prev) => {
+        const next = { ...prev };
+        delete next[activeOrderKey];
+        return next;
+      });
+      alert("Không còn món mới để lưu.");
+      return;
+    }
+
+    try {
+      await createKitchenPrintJob({
+        storeId,
+        orderKey: activeOrderKey,
+        tableNumber: activeOrderKey,
+        createdById: user?.uid,
+        createdByName: cashierName,
+        items: incrementalItems.map((item) => ({
+          menuId: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          note: item.note || "",
+        })),
+      });
+    } catch (error) {
+      console.error("Không tạo được phiếu món mới", error);
+      alert(
+        "Không tạo được phiếu in món mới. Vui lòng kiểm tra mạng và quyền Firestore."
+      );
+      return;
+    }
+
+    setPendingAddedItems((prev) => {
+      const next = { ...prev };
+      delete next[activeOrderKey];
+      return next;
+    });
+    alert("Đã lưu món mới. Máy bếp chính sẽ tự in.");
+  };
+
+  const handlePay = async () => {
+    if (isRestaurantServer) {
+      alert("Tài khoản phục vụ chỉ được thêm món và lưu món mới.");
+      return;
+    }
+    if (!activeOrderKey) {
+      alert("Vui lòng chọn số bàn gọi.");
+      return;
+    }
+    if (cartItems.length === 0) {
+      alert("Chưa có món nào trong giỏ.");
+      return;
+    }
+    if (isShiftEnabledForUser && !activeShift) {
+      setShowOpenShiftModal(true);
+      alert("Vui lòng mở ca làm việc trước khi thanh toán.");
+      return;
+    }
+    openReceiptPreview();
+  };
+
+  const openReceiptPreview = () => {
+    if (!activeOrderKey) {
+      alert("Vui lòng chọn bàn trước khi in.");
+      return;
+    }
+    if (cartItems.length === 0) {
+      alert("Chưa có món nào để in.");
+      return;
+    }
+
+    const pricing = calculateOrderPricing(cartItems, enabledSurcharges);
+    const now = new Date();
+    const formattedDate = now.toLocaleString("vi-VN");
+    const normalizedCashReceived =
+      paymentMethod === "cash" ? Math.max(cashReceived, pricing.total) : 0;
+    if (paymentMethod === "cash" && cashReceived < pricing.total) {
+      setCashReceivedInput(String(normalizedCashReceived));
+    }
+
+    setReceiptData({
+      table: isFarmStore ? FARM_ORDER_LABEL : tableNumber,
+      items: pricing.items,
+      subtotal: pricing.subtotal,
+      surchargeTotal: pricing.surchargeTotal,
+      appliedSurcharges: pricing.surchargeSummaries,
+      total: pricing.total,
+      time: formattedDate,
+      paymentMethod,
+      cashReceived: paymentMethod === "cash" ? normalizedCashReceived : undefined,
+      changeAmount:
+        paymentMethod === "cash"
+          ? Math.max(normalizedCashReceived - pricing.total, 0)
+          : undefined,
+    });
+    setShowReceipt(true);
+  };
+
+  const handlePrintTemporaryReceipt = () => {
+    if (!receiptData) return;
+    const isTakeawayOrder =
+      receiptData.table === TAKEAWAY_NAME || receiptData.table === FARM_ORDER_LABEL;
+    const orderLabel = isTakeawayOrder ? "Mang về" : receiptData.table;
+
+    printPaymentReceipt({
+      title: "PHIẾU TẠM TÍNH",
+      tableLabel: orderLabel,
+      createdAtText: receiptData.time,
+      items: receiptData.items,
+      total: receiptData.total,
+      includePaymentInfo: false,
+    });
+  };
+
+  const handleConfirmPrint = async () => {
+    if (!receiptData || isPaying) return;
+    const currentCashReceived = parseMoney(cashReceivedInput);
+    const currentChangeAmount =
+      paymentMethod === "cash"
+        ? Math.max(currentCashReceived - receiptData.total, 0)
+        : 0;
+    if (paymentMethod === "cash" && currentCashReceived < receiptData.total) {
+      alert("Tiền khách đưa phải lớn hơn hoặc bằng tổng tiền.");
+      return;
+    }
+
+    setIsPaying(true);
+    try {
+      const billId = await saveBill({
+        tableNumber: isFarmStore ? FARM_ORDER_KEY : receiptData.table,
+        subtotalBeforeSurcharge: receiptData.subtotal,
+        surchargeTotal: receiptData.surchargeTotal,
+        appliedSurcharges: receiptData.appliedSurcharges,
+        total: receiptData.total,
+        storeId,
+        paymentMethod,
+        cashReceived: paymentMethod === "cash" ? currentCashReceived : undefined,
+        changeAmount: paymentMethod === "cash" ? currentChangeAmount : undefined,
+        shiftId: activeShift?.id,
+        cashierId: user?.uid,
+        cashierName,
+        items: receiptData.items.map((item) => ({
+          menuId: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          lineTotal: item.lineTotal,
+          basePrice: item.basePrice,
+          surchargePerUnit: item.surchargePerUnit,
+          surchargeTotal: item.surchargeTotal,
+          note: item.note?.trim() || "",
+        })),
+      });
+
+      const billCode = `HD${billId.replace(/[^0-9A-Za-z]/g, "").slice(-8).toUpperCase()}`;
+      const isTakeawayOrder =
+        receiptData.table === TAKEAWAY_NAME || receiptData.table === FARM_ORDER_LABEL;
+      const orderLabel = isTakeawayOrder ? "Mang về" : receiptData.table;
+      const finalAmount = Math.max(receiptData.total, 0);
+      const paidAmount = paymentMethod === "cash" ? currentCashReceived : finalAmount;
+
+      printPaymentReceipt({
+        billCode,
+        title: isBakeryStore ? "HÓA ĐƠN BÁN HÀNG" : "PHIẾU TÍNH TIỀN",
+        tableLabel: orderLabel,
+        createdAtText: receiptData.time,
+        items: receiptData.items,
+        total: receiptData.total,
+        includePaymentInfo: true,
+        paidAmount,
+        changeAmount: paymentMethod === "cash" ? currentChangeAmount : 0,
+      });
+
+      if (storeId === CAFE_STORE_ID) {
+        await createBarPrintJob({
+          storeId,
+          tableNumber: orderLabel,
+          sourceBillId: billId,
+          createdById: user?.uid,
+          createdByName: cashierName,
+          items: receiptData.items.map((item) => ({
+            menuId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            note: item.note?.trim() || "",
+          })),
+        });
+      }
+
+      if (activeOrderKey) {
+        if (storeId) {
+          await clearLiveOrder(storeId, activeOrderKey);
+        }
+        setOrderDrafts((prev) => {
+          const next = { ...prev };
+          delete next[activeOrderKey];
+          return next;
+        });
+        setPendingAddedItems((prev) => {
+          const next = { ...prev };
+          delete next[activeOrderKey];
+          return next;
+        });
+      }
+
+      if (showSoldBills) {
+        void loadSoldBills(true);
+      }
+      setCashReceivedInput("");
+      setPaymentMethod("cash");
+      setShowReceipt(false);
+    } catch (error) {
+      console.error(error);
+      alert("Lỗi khi lưu hoặc in bill. Vui lòng thử lại.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const handleSelectTable = (name: string) => {
+    setTableNumber(name);
+    if (autoOpenMenu) {
+      setActiveTab("menu");
+    }
+  };
+
+  const handleOpenAddTableModal = () => {
+    if (isFarmStore) return;
+    setShowActionMenu(false);
+    setNewTableName("");
+    setNewTableArea("");
+    setShowAddTableModal(true);
+  };
+
+  const handleAddTable = async () => {
+    if (!newTableName.trim()) {
+      alert("Nhập tên/số bàn trước khi lưu.");
+      return;
+    }
+    try {
+      const id = await addTable(newTableName, newTableArea, storeId);
+      if (id) {
+        const refreshed = await getTables(storeId);
+        setTables(refreshed);
+        setTableNumber(newTableName.trim());
+        setNewTableName("");
+        setNewTableArea("");
+        setShowAddTableModal(false);
+        setActiveTab("tables");
+        alert("Đã thêm bàn mới.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Không lưu được số bàn, vui lòng thử lại.");
+    }
+  };
+
+  const handleSeedTables = async () => {
+    if (isSeedingTables) return;
+    const seedNames = Array.from(
+      { length: 100 },
+      (_, i) => `T${String(i + 1).padStart(2, "0")}`
+    );
+    const existingNames = new Set(tables.map((t) => t.name.toLowerCase()));
+    const missing = seedNames.filter(
+      (name) => !existingNames.has(name.toLowerCase())
+    );
+
+    if (missing.length === 0) {
+      alert("Đã có đủ 100 bàn trong hệ thống.");
+      return;
+    }
+
+    const confirmMsg = `Thêm nhanh ${missing.length} bàn mới (T01...T100). Tiếp tục?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsSeedingTables(true);
+    try {
+      await Promise.all(missing.map((name) => addTable(name, "", storeId)));
+      const refreshed = await getTables(storeId);
+      setTables(refreshed);
+      alert(`Đã thêm ${missing.length} bàn.`);
+    } catch (error) {
+      console.error(error);
+      alert("Lỗi khi thêm bàn nhanh. Vui lòng thử lại.");
+    } finally {
+      setIsSeedingTables(false);
+    }
+  };
+
+  const printHtml = (html: string) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      alert("Không thể in, vui lòng kiểm tra trình duyệt.");
+      return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    iframe.onload = () => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => document.body.removeChild(iframe), 500);
+    };
+  };
+
+  const getShiftLabel = (shiftType: ShiftType) => {
+    if (shiftType === "shift_1") return "Ca 1";
+    if (shiftType === "shift_2") return "Ca 2";
+    if (shiftType === "shift_3") return "Ca 3";
+    return "Ca chung";
+  };
+
+  const handleOpenShift = async () => {
+    if (!user || !storeId) return;
+    const shiftType = resolveShiftType();
+    if (usesThreeShiftByAccount && shiftType === "single") {
+      alert("Mô hình này yêu cầu đăng nhập bằng tài khoản Thungan1/2/3.");
+      return;
+    }
+    const openingCash = parseMoney(openingCashInput);
+    if (openingCashInput.trim() === "") {
+      alert("Vui lòng nhập tiền mặt đầu ca.");
+      return;
+    }
+
+    setIsOpeningShift(true);
+    try {
+      const created = await openShift({
+        storeId,
+        cashierUid: user.uid,
+        cashierName,
+        shiftType,
+        openingCash,
+        openNote: openingNote,
+      });
+      setActiveShift(created);
+      setShowOpenShiftModal(false);
+      setOpeningCashInput("");
+      setOpeningNote("");
+      alert("Mở ca thành công.");
+    } catch (error) {
+      console.error(error);
+      alert("Không thể mở ca. Vui lòng thử lại.");
+    } finally {
+      setIsOpeningShift(false);
+    }
+  };
+
+  const handlePrepareCloseShift = async () => {
+    if (!activeShift) {
+      alert("Chưa có ca mở để đóng.");
+      return;
+    }
+    setIsPreparingCloseShift(true);
+    try {
+      const bills = await getBillsByShift(activeShift.id);
+      const vouchers = await getCashVouchers({
+        storeId,
+        shiftId: activeShift.id,
+        limitCount: 1000,
+      });
+      const summary = summarizeBillsForShift(
+        bills,
+        activeShift.openingCash || 0,
+        vouchers
+      );
+      setCloseShiftSummary(summary);
+      setClosingCashInput("");
+      setClosingNote("");
+      setShowCloseShiftModal(true);
+      setShowActionMenu(false);
+    } catch (error) {
+      console.error(error);
+      alert("Không thể tải dữ liệu kết ca.");
+    } finally {
+      setIsPreparingCloseShift(false);
+    }
+  };
+
+  const handleCloseShiftAndPrint = async () => {
+    if (!activeShift || !closeShiftSummary) return;
+    if (closingCashInput.trim() === "") {
+      alert("Vui lòng nhập tiền mặt cuối ca.");
+      return;
+    }
+    const closingCash = parseMoney(closingCashInput);
+    setIsClosingShift(true);
+    try {
+      await closeShift(activeShift.id, {
+        closingCash,
+        closeNote: closingNote,
+        summary: closeShiftSummary,
+      });
+
+      const diff = closingCash - closeShiftSummary.expectedClosingCash;
+      const openedAtText = activeShift.openedAt?.seconds
+        ? new Date(activeShift.openedAt.seconds * 1000).toLocaleString("vi-VN")
+        : new Date().toLocaleString("vi-VN");
+      const closedAtText = new Date().toLocaleString("vi-VN");
+
+      const printHtmlContent = `
+        <html lang="vi">
+          <head>
+            <meta charset="UTF-8" />
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+            <title>Phiếu bàn giao ca</title>
+            <style>
+              @page { size: 80mm auto; margin: 4mm; }
+              body { font-family: ${PRINT_FONT_FAMILY}; width: 80mm; margin: 0 auto; padding: 4mm; font-size: 12px; }
+              h2, h3, p { margin: 0; }
+              table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+              td { padding: 3px 0; vertical-align: top; }
+              .right { text-align: right; }
+              .line { border-top: 1px dashed #999; margin: 8px 0; }
+              .tail-space { height: ${PRINT_TAIL_SPACE_MM}mm; }
+            </style>
+          </head>
+          <body>
+            <h2>Biên bản bàn giao ca</h2>
+            <p>${storeId.toUpperCase()} - ${getShiftLabel(activeShift.shiftType)}</p>
+            <div class="line"></div>
+            <p>Thu ngân: ${activeShift.cashierName}</p>
+            <p>Giờ mở ca: ${openedAtText}</p>
+            <p>Giờ đóng ca: ${closedAtText}</p>
+            <div class="line"></div>
+            <table>
+              <tr><td>Tiền đầu ca</td><td class="right">${formatCurrency(
+                activeShift.openingCash || 0
+              )} đ</td></tr>
+              <tr><td>Doanh thu tiền mặt</td><td class="right">${formatCurrency(
+                closeShiftSummary.cashSales
+              )} đ</td></tr>
+              <tr><td>Doanh thu chuyển khoản</td><td class="right">${formatCurrency(
+                closeShiftSummary.transferSales
+              )} đ</td></tr>
+              <tr><td>Tổng doanh thu</td><td class="right">${formatCurrency(
+                closeShiftSummary.totalSales
+              )} đ</td></tr>
+              <tr><td>Phiếu thu</td><td class="right">${formatCurrency(
+                closeShiftSummary.incomeVouchers
+              )} đ</td></tr>
+              <tr><td>Phiếu chi</td><td class="right">-${formatCurrency(
+                closeShiftSummary.expenseVouchers
+              )} đ</td></tr>
+              <tr><td>Dòng tiền thuần</td><td class="right">${formatCurrency(
+                closeShiftSummary.netCashFlow
+              )} đ</td></tr>
+              <tr><td>Tiền mặt kỳ vọng</td><td class="right">${formatCurrency(
+                closeShiftSummary.expectedClosingCash
+              )} đ</td></tr>
+              <tr><td>Tiền mặt cuối ca</td><td class="right">${formatCurrency(
+                closingCash
+              )} đ</td></tr>
+              <tr><td>Chênh lệch</td><td class="right">${formatCurrency(diff)} đ</td></tr>
+              <tr><td>Bill hợp lệ</td><td class="right">${
+                closeShiftSummary.completedBills
+              }</td></tr>
+              <tr><td>Bill đã hủy</td><td class="right">${
+                closeShiftSummary.cancelledBills
+              }</td></tr>
+            </table>
+            ${
+              closingNote.trim()
+                ? `<div class="line"></div><p>Ghi chú: ${closingNote.trim()}</p>`
+                : ""
+            }
+            <div class="line"></div>
+            <p style="text-align:center">Cảm ơn!</p>
+            <div class="tail-space"></div>
+          </body>
+        </html>
+      `;
+
+      printHtml(printHtmlContent);
+
+      setShowCloseShiftModal(false);
+      setCloseShiftSummary(null);
+      setActiveShift(null);
+      setClosingCashInput("");
+      setClosingNote("");
+      setShowOpenShiftModal(true);
+    } catch (error) {
+      console.error(error);
+      alert("Không thể đóng ca.");
+    } finally {
+      setIsClosingShift(false);
+    }
+  };
+
+  const handleOpenFarmDailyReport = async () => {
+    if (!storeId) return;
+    setShowActionMenu(false);
+    setShowFarmDailyReport(true);
+    setIsLoadingFarmDailyReport(true);
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      const bills = await getBills({
+        storeId,
+        startDate: start,
+        endDate: end,
+        includeCancelled: true,
+        limitCount: 2000,
+      });
+      const vouchers = await getCashVouchers({
+        storeId,
+        startDate: start,
+        endDate: end,
+        limitCount: 2000,
+      });
+      const summary = summarizeBillsForShift(bills, 0, vouchers);
+      setFarmDailyReport(summary);
+    } catch (error) {
+      console.error(error);
+      alert("Không thể tải báo cáo cuối ngày.");
+    } finally {
+      setIsLoadingFarmDailyReport(false);
+    }
+  };
+
+  const handlePrintFarmDailyReport = () => {
+    if (!farmDailyReport) return;
+    const today = new Date().toLocaleDateString("vi-VN");
+    const html = `
+      <html lang="vi">
+        <head>
+          <meta charset="UTF-8" />
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+          <title>Báo cáo cuối ngày</title>
+          <style>
+            @page { size: 80mm auto; margin: 4mm; }
+            body { font-family: ${PRINT_FONT_FAMILY}; width: 80mm; margin: 0 auto; padding: 4mm; font-size: 12px; }
+            h2, p { margin: 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            td { padding: 3px 0; }
+            .right { text-align: right; }
+            .line { border-top: 1px dashed #999; margin: 8px 0; }
+            .tail-space { height: ${PRINT_TAIL_SPACE_MM}mm; }
+          </style>
+        </head>
+        <body>
+          <h2>Báo cáo cuối ngày</h2>
+          <p>Ngày: ${today}</p>
+          <div class="line"></div>
+          <table>
+            <tr><td>Tổng doanh thu</td><td class="right">${formatCurrency(
+              farmDailyReport.totalSales
+            )} đ</td></tr>
+            <tr><td>Phiếu thu</td><td class="right">${formatCurrency(
+              farmDailyReport.incomeVouchers
+            )} đ</td></tr>
+            <tr><td>Phiếu chi</td><td class="right">-${formatCurrency(
+              farmDailyReport.expenseVouchers
+            )} đ</td></tr>
+            <tr><td>Dòng tiền thuần</td><td class="right">${formatCurrency(
+              farmDailyReport.netCashFlow
+            )} đ</td></tr>
+            <tr><td>Tiền mặt</td><td class="right">${formatCurrency(
+              farmDailyReport.cashSales
+            )} đ</td></tr>
+            <tr><td>Chuyển khoản</td><td class="right">${formatCurrency(
+              farmDailyReport.transferSales
+            )} đ</td></tr>
+            <tr><td>Số hóa đơn</td><td class="right">${
+              farmDailyReport.completedBills
+            }</td></tr>
+            <tr><td>Hóa đơn hủy</td><td class="right">${
+              farmDailyReport.cancelledBills
+            }</td></tr>
+            <tr><td>Giá trị hủy</td><td class="right">${formatCurrency(
+              farmDailyReport.cancelledAmount
+            )} đ</td></tr>
+          </table>
+          <div class="line"></div>
+          <p style="text-align:center">Kết thúc báo cáo</p>
+          <div class="tail-space"></div>
+        </body>
+      </html>
+    `;
+    printHtml(html);
+  };
+
+  const handleOpenVoucherModal = (type: CashVoucherType) => {
+    if (isShiftEnabledForUser && !activeShift) {
+      setShowActionMenu(false);
+      setShowOpenShiftModal(true);
+      alert("Vui lòng mở ca làm việc trước khi lập phiếu thu/chi.");
+      return;
+    }
+    setShowActionMenu(false);
+    resetVoucherForm(type);
+  };
+
+  const handleSaveVoucher = async () => {
+    if (!showVoucherModal) return;
+    const amount = parseMoney(voucherAmountInput);
+    if (amount <= 0) {
+      alert("Giá trị phiếu phải lớn hơn 0.");
+      return;
+    }
+    if (!voucherCategory.trim()) {
+      alert("Vui lòng nhập loại thu/chi.");
+      return;
+    }
+    setIsSavingVoucher(true);
+    try {
+      await createCashVoucher({
+        storeId,
+        type: showVoucherModal,
+        amount,
+        category: voucherCategory,
+        personGroup: voucherPersonGroup,
+        personName: voucherPersonName,
+        note: voucherNote,
+        includeInCashFlow: voucherIncludeInCashFlow,
+        happenedAt: voucherDateTime ? new Date(voucherDateTime) : new Date(),
+        shiftId: activeShift?.id,
+        cashierId: user?.uid,
+        cashierName,
+      });
+      setShowVoucherModal(null);
+      alert("Đã lưu phiếu thành công.");
+      if (showCloseShiftModal && activeShift) {
+        void handlePrepareCloseShift();
+      }
+      if (showFarmDailyReport) {
+        void handleOpenFarmDailyReport();
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Không thể lưu phiếu. Vui lòng thử lại.");
+    } finally {
+      setIsSavingVoucher(false);
+    }
+  };
+
+  const resetSurchargeForm = () => {
+    setEditingSurchargeId(null);
+    setSurchargeNameInput("");
+    setSurchargeTypeInput("percent");
+    setSurchargeValueInput("");
+    setSurchargeEnabledInput(true);
+  };
+
+  const handleOpenSurchargeModal = () => {
+    setShowActionMenu(false);
+    resetSurchargeForm();
+    setShowSurchargeModal(true);
+  };
+
+  const handleEditSurcharge = (surcharge: PosSurcharge) => {
+    setEditingSurchargeId(surcharge.id);
+    setSurchargeNameInput(surcharge.name);
+    setSurchargeTypeInput(surcharge.type);
+    setSurchargeValueInput(
+      surcharge.type === "fixed"
+        ? formatCurrency(Math.max(0, Math.round(surcharge.value)))
+        : String(surcharge.value)
+    );
+    setSurchargeEnabledInput(surcharge.isEnabled);
+  };
+
+  const handleSurchargeValueInputChange = (rawValue: string) => {
+    if (surchargeTypeInput === "fixed") {
+      setSurchargeValueInput(formatMoneyInput(rawValue));
+      return;
+    }
+
+    const onlyNumberAndDot = rawValue.replace(",", ".").replace(/[^\d.]/g, "");
+    const firstDotIndex = onlyNumberAndDot.indexOf(".");
+    if (firstDotIndex < 0) {
+      setSurchargeValueInput(onlyNumberAndDot);
+      return;
+    }
+    const normalized = `${onlyNumberAndDot.slice(0, firstDotIndex + 1)}${onlyNumberAndDot
+      .slice(firstDotIndex + 1)
+      .replace(/\./g, "")}`;
+    setSurchargeValueInput(normalized);
+  };
+
+  const handleSaveSurcharge = async () => {
+    if (!storeId) {
+      alert("Thiếu thông tin cửa hàng. Vui lòng tải lại trang.");
+      return;
+    }
+
+    const name = surchargeNameInput.trim();
+    if (!name) {
+      alert("Vui lòng nhập tên phụ thu.");
+      return;
+    }
+
+    const parsedValue =
+      surchargeTypeInput === "fixed"
+        ? parseMoney(surchargeValueInput)
+        : Number(surchargeValueInput.replace(",", "."));
+    const normalizedValue =
+      surchargeTypeInput === "fixed"
+        ? Math.max(0, Math.round(parsedValue))
+        : Math.round(parsedValue * 100) / 100;
+
+    if (!Number.isFinite(normalizedValue) || normalizedValue <= 0) {
+      alert(
+        surchargeTypeInput === "fixed"
+          ? "Giá trị phụ thu tiền phải lớn hơn 0."
+          : "Giá trị phụ thu % phải lớn hơn 0."
+      );
+      return;
+    }
+    if (surchargeTypeInput === "percent" && normalizedValue > 500) {
+      alert("Phụ thu phần trăm quá lớn (tối đa 500%).");
+      return;
+    }
+
+    setIsSavingSurcharge(true);
+    try {
+      if (editingSurchargeId) {
+        await updateSurcharge(editingSurchargeId, {
+          name,
+          type: surchargeTypeInput,
+          value: normalizedValue,
+          isEnabled: surchargeEnabledInput,
+        });
+      } else {
+        await createSurcharge({
+          storeId,
+          name,
+          type: surchargeTypeInput,
+          value: normalizedValue,
+          isEnabled: surchargeEnabledInput,
+        });
+      }
+      resetSurchargeForm();
+    } catch (error) {
+      console.error(error);
+      alert("Không thể lưu phụ thu. Vui lòng thử lại.");
+    } finally {
+      setIsSavingSurcharge(false);
+    }
+  };
+
+  const handleToggleSurcharge = async (surcharge: PosSurcharge) => {
+    setUpdatingSurchargeId(surcharge.id);
+    try {
+      await updateSurcharge(surcharge.id, { isEnabled: !surcharge.isEnabled });
+    } catch (error) {
+      console.error(error);
+      alert("Không thể cập nhật trạng thái phụ thu.");
+    } finally {
+      setUpdatingSurchargeId(null);
+    }
+  };
+
+  const handleDeleteSurcharge = async (surcharge: PosSurcharge) => {
+    if (!window.confirm(`Xóa phụ thu "${surcharge.name}"?`)) return;
+
+    setDeletingSurchargeId(surcharge.id);
+    try {
+      await deleteSurcharge(surcharge.id);
+      if (editingSurchargeId === surcharge.id) {
+        resetSurchargeForm();
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Không thể xóa phụ thu.");
+    } finally {
+      setDeletingSurchargeId(null);
+    }
+  };
+
+  const loadSoldBills = async (forceReload = false) => {
+    if (!storeId || isLoadingSoldBills) return;
+    if (!forceReload && soldBills.length > 0) return;
+
+    setIsLoadingSoldBills(true);
+    try {
+      const data = await getRecentBills(storeId, 30);
+      setSoldBills(data);
+    } catch (error) {
+      console.error(error);
+      alert("Không tải được danh sách đơn đã bán.");
+    } finally {
+      setIsLoadingSoldBills(false);
+    }
+  };
+
+  const handleOpenSoldBills = () => {
+    setShowActionMenu(false);
+    setShowSoldBills(true);
+    void loadSoldBills(true);
+  };
+
+  const handleToggleKitchenAutoPrint = () => {
+    if (!canUseKitchenAutoPrint) return;
+
+    if (isKitchenAutoPrintEnabled) {
+      setIsKitchenAutoPrintEnabled(false);
+      setShowActionMenu(false);
+      alert(`Đã tắt tự in món mới cho máy: ${kitchenTerminalName}`);
+      return;
+    }
+
+    const input = window.prompt(
+      "Nhập tên máy bếp chính để nhận biết phiếu in:",
+      kitchenTerminalName || "May bep chinh"
+    );
+    if (input === null) return;
+    const normalizedName = input.trim() || "May bep chinh";
+    setKitchenTerminalName(normalizedName);
+    setIsKitchenAutoPrintEnabled(true);
+    setShowActionMenu(false);
+    alert(
+      `Đã bật tự in món mới cho cửa hàng hiện tại (${storeId}) trên máy: ${normalizedName}`
+    );
+  };
+
+  const handleToggleBarAutoPrint = () => {
+    if (!canUseBarAutoPrint) return;
+
+    if (isBarAutoPrintEnabled) {
+      setIsBarAutoPrintEnabled(false);
+      setShowActionMenu(false);
+      alert(`Đã tắt tự in pha chế cho máy: ${barTerminalName}`);
+      return;
+    }
+
+    const input = window.prompt(
+      "Nhập tên máy pha chế để nhận biết phiếu in:",
+      barTerminalName || "May pha che"
+    );
+    if (input === null) return;
+
+    const normalizedName = input.trim() || "May pha che";
+    setBarTerminalName(normalizedName);
+    setIsBarAutoPrintEnabled(true);
+    setShowActionMenu(false);
+    alert(
+      `Đã bật tự in pha chế cho cửa hàng hiện tại (${storeId}) trên máy: ${normalizedName}`
+    );
+  };
+
+  const getBillDateText = (bill: Bill) => {
+    if (!bill.createdAt?.seconds) return "Chưa có thời gian";
+    return new Date(bill.createdAt.seconds * 1000).toLocaleString("vi-VN");
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Enter") return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isTyping =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable;
+      if (isTyping) return;
+
+      if (showReceipt && receiptData) {
+        e.preventDefault();
+        handleConfirmPrint();
+        return;
+      }
+
+      if (showSoldBills) {
+        return;
+      }
+      if (
+        showOpenShiftModal ||
+        showCloseShiftModal ||
+        showFarmDailyReport ||
+        showVoucherModal
+      ) {
+        return;
+      }
+
+      if (cartItems.length > 0 && !isPaying && !isRestaurantServer) {
+        e.preventDefault();
+        handlePay();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    showReceipt,
+    receiptData,
+    showSoldBills,
+    showOpenShiftModal,
+    showCloseShiftModal,
+    showFarmDailyReport,
+    showVoucherModal,
+    cartItems.length,
+    isPaying,
+    isRestaurantServer,
+    handlePay,
+    handleConfirmPrint,
+  ]);
+
+  useEffect(() => {
+    if (!showActionMenu) return;
+
+    const handleOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!actionMenuRef.current?.contains(target)) {
+        setShowActionMenu(false);
+      }
+    };
+
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowActionMenu(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
+    document.addEventListener("keydown", handleEsc);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [showActionMenu]);
+
+  return (
+    <RoleGuard allowedRoles={["admin", "user", "server"]}>
+      <main className="min-h-screen bg-slate-50 p-3 sm:p-6">
+        <div className="mx-auto max-w-[1400px] overflow-hidden rounded-2xl border bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b px-4 py-3">
+            <div className="flex items-center gap-3">
+              {role === "admin" && (
+                <Link
+                  href="/"
+                  className="hidden rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 sm:inline-flex"
+                  title="Về trang chủ"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+              )}
+              <div>
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-sky-700">
+                  <Coffee className="h-4 w-4" />
+                  Quầy thu ngân
+                </p>
+                <h1 className="text-xl font-bold leading-tight text-slate-900">
+                  {posTitle}
+                </h1>
+              </div>
+            </div>
+            <div
+              ref={actionMenuRef}
+              className="relative flex items-center gap-2 text-sm text-slate-500"
+            >
+              {isShiftEnabledForUser && (
+                <span className="hidden rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 md:inline-flex">
+                  {activeShift ? "Đang mở ca" : "Chưa mở ca"}
+                </span>
+              )}
+              <CheckCircle2 className="ml-2 hidden h-4 w-4 text-emerald-600 md:inline-flex" />
+              <span className="hidden md:inline-flex">
+                {tables.length} bàn · {filteredMenu.length} món
+              </span>
+              {enabledSurcharges.length > 0 && (
+                <span className="hidden rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 md:inline-flex">
+                  Phụ thu: {enabledSurcharges.length}
+                </span>
+              )}
+              {canUseKitchenAutoPrint && (
+                <span
+                  className={`hidden rounded-full px-2 py-1 text-xs font-semibold md:inline-flex ${
+                    isKitchenAutoPrintEnabled
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {isKitchenAutoPrintEnabled
+                    ? `Auto in: ${storeId} · ${kitchenTerminalName}`
+                    : `Auto in: ${storeId} · tắt`}
+                </span>
+              )}
+              {canUseBarAutoPrint && (
+                <span
+                  className={`hidden rounded-full px-2 py-1 text-xs font-semibold md:inline-flex ${
+                    isBarAutoPrintEnabled
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {isBarAutoPrintEnabled
+                    ? `Auto pha chế: ${storeId} · ${barTerminalName}`
+                    : `Auto pha chế: ${storeId} · tắt`}
+                </span>
+              )}
+              <button
+                onClick={() => setShowActionMenu((prev) => !prev)}
+                className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Menu className="h-4 w-4" />
+                <span className="hidden sm:inline">Menu</span>
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              {showActionMenu && (
+                <div className="absolute right-0 top-12 z-30 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+                  {!isRestaurantServer && (
+                    <>
+                      <button
+                        className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                        onClick={() => {
+                          setShowActionMenu(false);
+                          window.location.href = "/bills";
+                        }}
+                      >
+                        <ReceiptText className="h-4 w-4 text-sky-700" />
+                        Trang hóa đơn
+                      </button>
+                      <button
+                        className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                        onClick={() => {
+                          setShowActionMenu(false);
+                          handleOpenSoldBills();
+                        }}
+                      >
+                        <CalendarClock className="h-4 w-4 text-emerald-700" />
+                        Đơn đã bán
+                      </button>
+                      {!isFarmStore && (
+                        <button
+                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                          onClick={handleOpenAddTableModal}
+                        >
+                          <LayoutGrid className="h-4 w-4 text-indigo-700" />
+                          Thêm bàn
+                        </button>
+                      )}
+                      <button
+                        className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                        onClick={handleOpenSurchargeModal}
+                      >
+                        <BadgePercent className="h-4 w-4 text-amber-700" />
+                        Cài đặt phụ thu
+                      </button>
+                      {canUseKitchenAutoPrint && (
+                        <button
+                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                          onClick={handleToggleKitchenAutoPrint}
+                        >
+                          <Printer
+                            className={`h-4 w-4 ${
+                              isKitchenAutoPrintEnabled
+                                ? "text-emerald-700"
+                                : "text-slate-500"
+                            }`}
+                          />
+                          {isKitchenAutoPrintEnabled
+                            ? `Tắt tự in món mới (${kitchenTerminalName})`
+                            : "Bật tự in món mới cho máy này"}
+                        </button>
+                      )}
+                      {canUseBarAutoPrint && (
+                        <button
+                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                          onClick={handleToggleBarAutoPrint}
+                        >
+                          <Printer
+                            className={`h-4 w-4 ${
+                              isBarAutoPrintEnabled
+                                ? "text-emerald-700"
+                                : "text-slate-500"
+                            }`}
+                          />
+                          {isBarAutoPrintEnabled
+                            ? `Tắt tự in pha chế (${barTerminalName})`
+                            : "Bật tự in pha chế cho máy này"}
+                        </button>
+                      )}
+                      <button
+                        className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                        onClick={() => handleOpenVoucherModal("income")}
+                      >
+                        <HandCoins className="h-4 w-4 text-emerald-700" />
+                        Lập phiếu thu
+                      </button>
+                      <button
+                        className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                        onClick={() => handleOpenVoucherModal("expense")}
+                      >
+                        <HandCoins className="h-4 w-4 text-rose-700" />
+                        Lập phiếu chi
+                      </button>
+                      {isShiftEnabledForUser && (
+                        <button
+                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                          onClick={() => {
+                            if (activeShift) {
+                              void handlePrepareCloseShift();
+                            } else {
+                              setShowOpenShiftModal(true);
+                              setShowActionMenu(false);
+                            }
+                          }}
+                        >
+                          <BadgeDollarSign className="h-4 w-4 text-amber-700" />
+                          {activeShift ? "Đóng ca làm việc" : "Mở ca làm việc"}
+                        </button>
+                      )}
+                      {isFarmStore && (
+                        <button
+                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                          onClick={() => void handleOpenFarmDailyReport()}
+                        >
+                          <CalendarClock className="h-4 w-4 text-indigo-700" />
+                          Báo cáo cuối ngày
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <button
+                    className="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-sm text-rose-600 hover:bg-rose-50"
+                    onClick={logout}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Đăng xuất
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          {canUseKitchenAutoPrint && kitchenPrintLogs.length > 0 && (
+            <div className="border-b bg-amber-50 px-4 py-2">
+              <p className="text-xs font-semibold text-amber-900">
+                Log in bếp: {kitchenPrintLogs[0]}
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.7fr)_minmax(380px,1fr)]">
+            <section className="border-r bg-white">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <div className="flex items-center gap-2">
+                  {!isFarmStore && <button
+                    onClick={() => setActiveTab("tables")}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      activeTab === "tables"
+                        ? "bg-sky-600 text-white shadow-sm"
+                        : "bg-slate-100 text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    Phòng bàn
+                  </button>}
+                  <button
+                    onClick={() => setActiveTab("menu")}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      activeTab === "menu"
+                        ? "bg-sky-600 text-white shadow-sm"
+                        : "bg-slate-100 text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <NotebookTabs className="h-4 w-4" />
+                    Thực đơn
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Search className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    {activeTab === "tables"
+                      ? "Tìm bàn (F3)"
+                      : `Tìm món (F4) - ${filteredMenu.length} món`}
+                  </span>
+                </div>
+              </div>
+
+              {!isFarmStore && activeTab === "tables" && (
+                <div className="space-y-4 px-4 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-sky-700">
+                        <LayoutGrid className="h-4 w-4" />
+                        <span className="text-sm font-semibold">
+                          {tableOptions.length} bàn
+                        </span>
+                      </div>
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                          checked={autoOpenMenu}
+                          onChange={(e) => setAutoOpenMenu(e.target.checked)}
+                        />
+                        Mở thực đơn khi chọn bàn
+                      </label>
+                    </div>
+                    <Input
+                      value={tableSearch}
+                      onChange={(e) => setTableSearch(e.target.value)}
+                      placeholder="Tìm bàn..."
+                      className="w-full max-w-xs"
+                    />
+                  </div>
+                  {/* 
+                <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
+                  <span className="font-semibold text-slate-900">
+                    Tất cả ({tableOptions.length})
+                  </span>
+                  <span>Đang dùng ({tableNumber ? 1 : 0})</span>
+                  <span>
+                    Còn trống (
+                    {Math.max(tableOptions.length - (tableNumber ? 1 : 0), 0)})
+                  </span>
+                </div> */}
+
+                  <div className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto pb-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                    {paginatedTables.map((table) => {
+                      const active = table.name === tableNumber;
+                      const pendingItems = tableDraftCounts[table.name] || 0;
+                      return (
+                        <button
+                          key={table.id}
+                          onClick={() => handleSelectTable(table.name)}
+                          className={`flex h-28 flex-col items-center justify-center rounded-2xl border text-sm font-semibold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                            active
+                              ? "border-sky-600 bg-sky-600 text-white"
+                              : "border-slate-200 bg-slate-50 text-slate-700 hover:border-sky-200"
+                          }`}
+                        >
+                          <div className="flex h-10 w-14 items-center justify-center rounded-xl border-2 border-dashed border-white/70 opacity-80" />
+                          <span className="mt-2 text-base">{table.name}</span>
+                          {active && (
+                            <span className="mt-1 rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-medium">
+                              Đang chọn (máy này)
+                            </span>
+                          )}
+                          {!active && (
+                            <span className="mt-1 text-[11px] font-medium text-slate-500">
+                              Chạm để chọn
+                            </span>
+                          )}
+                          {pendingItems > 0 && (
+                            <span className="mt-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                              {pendingItems} mon tam
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    {paginatedTables.length === 0 && (
+                      <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                        Không tìm thấy bàn phù hợp.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 text-sm text-slate-600">
+                    <span>
+                      Trang {tablePage}/{totalTablePages}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setTablePage((p) => Math.max(p - 1, 1))}
+                        disabled={tablePage === 1}
+                        className="flex items-center gap-1 rounded-full border px-3 py-1 transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Trước
+                      </button>
+                      <button
+                        onClick={() =>
+                          setTablePage((p) => Math.min(p + 1, totalTablePages))
+                        }
+                        disabled={tablePage === totalTablePages}
+                        className="flex items-center gap-1 rounded-full border px-3 py-1 transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Sau
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* {isHotpotStore && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs text-slate-600">
+                          Lưu bàn vào dữ liệu mô hình lẩu
+                        </p>
+                        <Button
+                          variant="outline"
+                          className="border-sky-500 text-sky-700 hover:bg-sky-50"
+                          onClick={handleSeedTables}
+                          disabled={isSeedingTables}
+                        >
+                          {isSeedingTables
+                            ? "Đang thêm bàn..."
+                            : "Thêm nhanh 100 bàn (T01 - T100)"}
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_2fr_auto]">
+                        <Input
+                          value={newTableName}
+                          onChange={(e) => setNewTableName(e.target.value)}
+                          placeholder="Tên/số bàn"
+                        />
+                        <Input
+                          value={newTableArea}
+                          onChange={(e) => setNewTableArea(e.target.value)}
+                          placeholder="Khu vực (tùy chọn)"
+                        />
+                        <Button
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                          onClick={handleAddTable}
+                        >
+                          Lưu bàn
+                        </Button>
+                      </div>
+                    </div>
+                  )} */}
+
+                  {/* <div className="space-y-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3">
+                  <button
+                    className="text-sm font-semibold text-sky-700 hover:text-sky-800"
+                    onClick={() => setShowAddTable((prev) => !prev)}
+                  >
+                    {showAddTable ? "Ẩn thêm bàn nhanh" : "+ Thêm bàn nhanh"}
+                  </button>
+                  {!isFarmStore ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      className="border-sky-500 text-sky-700 hover:bg-sky-50"
+                      onClick={handleSeedTables}
+                      disabled={isSeedingTables}
+                    >
+                      {isSeedingTables
+                        ? "Đang thêm 99 bàn..."
+                        : "Thêm 99 bàn (T01 - T99)"}
+                    </Button>
+                    <span className="text-xs text-slate-500">
+                      Bỏ qua tên đã tồn tại, chỉ thêm bàn còn thiếu.
+                    </span>
+                  </div>
+                  ) : (
+                    <div className="text-sm font-semibold text-slate-700">
+                      Farm mode: khong can chon ban
+                    </div>
+                  )}
+                  {showAddTable && (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_2fr_auto]">
+                      <Input
+                        value={newTableName}
+                        onChange={(e) => setNewTableName(e.target.value)}
+                        placeholder="Tên/số bàn mới"
+                      />
+                      <Input
+                        value={newTableArea}
+                        onChange={(e) => setNewTableArea(e.target.value)}
+                        placeholder="Khu vực (tùy chọn)"
+                      />
+                      <Button
+                        className="bg-emerald-600 hover:bg-emerald-700"
+                        variant="outline"
+                        onClick={handleAddTable}
+                      >
+                        Lưu bàn
+                      </Button>
+                    </div>
+                  )}
+                </div> */}
+                </div>
+              )}
+
+              {activeTab === "menu" && (
+                <div className="space-y-4 px-4 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-sky-700">
+                        <Coffee className="h-4 w-4" />
+                        <span className="text-sm font-semibold">Thực đơn</span>
+                      </div>
+                      <span className="text-sm text-slate-500">
+                        {filteredMenu.length} món khả dụng
+                      </span>
+                      <span className="hidden text-xs text-slate-400 sm:inline">
+                        Kéo thả thẻ món để đổi thứ tự
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Search className="h-4 w-4 text-slate-400" />
+                      <Input
+                        value={menuSearch}
+                        onChange={(e) => setMenuSearch(e.target.value)}
+                        placeholder="Tìm món..."
+                        className="w-full max-w-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {categoryOptions.map((c) => {
+                      const active = c.id === category;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => setCategory(c.id)}
+                          className={`shrink-0 whitespace-nowrap cursor-pointer rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                            active
+                              ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-sky-200 hover:text-sky-700"
+                          }`}
+                        >
+                          {c.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid max-h-110 grid-cols-3 gap-2 overflow-y-auto pb-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                    {filteredMenu.map((item) => {
+                      const inCart = cart[item.id]?.quantity ?? 0;
+                      const isDraggingThisItem = draggingMenuItemId === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          draggable
+                          onDragStart={(event) =>
+                            handleMenuItemDragStart(event, item.id)
+                          }
+                          onDragOver={handleMenuItemDragOver}
+                          onDrop={(event) => handleMenuItemDrop(event, item.id)}
+                          onDragEnd={handleMenuItemDragEnd}
+                          onClick={() => {
+                            if (suppressNextMenuClickRef.current) return;
+                            handleAddItem(item);
+                          }}
+                          className={`group flex cursor-pointer flex-col rounded-xl border border-slate-200 bg-slate-50 p-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 sm:rounded-2xl sm:p-3 ${
+                            isDraggingThisItem
+                              ? "opacity-60 ring-2 ring-sky-300"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1 text-[11px] text-slate-500 sm:gap-2 sm:text-xs">
+                            <span className="truncate font-semibold text-slate-600">
+                              {getCategoryLabel(item.category)}
+                            </span>
+                            {inCart > 0 && (
+                              <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 text-[10px] font-semibold text-emerald-700 sm:px-2 sm:text-[11px]">
+                                {inCart}x
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-2 flex flex-col gap-2 sm:mt-3 sm:gap-3">
+                            <div className="flex h-7 items-center justify-center rounded-lg bg-sky-50 sm:h-8 sm:rounded-xl">
+                              <Coffee className="h-5 w-5 opacity-70 sm:h-8 sm:w-8" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[11px] font-bold text-sky-700 sm:text-xs">
+                                {formatCurrency(item.price)} đ
+                              </p>
+                              <p className="text-xs font-semibold leading-snug text-slate-900 sm:text-sm sm:leading-tight">
+                                {item.name}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+
+                    {filteredMenu.length === 0 && (
+                      <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                        Không tìm thấy món phù hợp.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="flex h-full flex-col bg-slate-50">
+              <div className="border-b bg-white px-4 py-3 space-y-2">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  {!isFarmStore ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-700">
+                      Bàn
+                    </span>
+                    <Input
+                      list="table-options"
+                      value={tableNumber}
+                      onChange={(e) => setTableNumber(e.target.value)}
+                      placeholder="Chọn hoặc nhập bàn"
+                      className="w-full sm:w-[200px]"
+                    />
+                    <datalist id="table-options">
+                      {tables.map((table) => (
+                        <option key={table.id} value={table.name} />
+                      ))}
+                    </datalist>
+                  </div>
+                  ) : (
+                    <div className="text-sm font-semibold text-slate-700">
+                      Farm mode: khong can chon ban
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <ShoppingCart className="h-4 w-4" />
+                    <span>{totalItems} món trong giỏ</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Đơn hiện tại
+                    </h2>
+                  </div>
+                  {isShiftEnabledForUser && activeShift && (
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                      {getShiftLabel(activeShift.shiftType)} · {cashierName}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex-1 max-h-[50vh] space-y-3 overflow-y-auto px-4 pb-4">
+                  {cartItems.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+                      Chưa có món nào. Chọn món từ danh sách bên trái.
+                    </div>
+                  )}
+
+                  {cartItems.map((item) => {
+                    const canDecreaseForCurrentRole =
+                      !isRestaurantServer ||
+                      (activePendingAddedItems[item.id] || 0) > 0;
+                    const pricedItem = cartPricingById[item.id];
+
+                    return (
+                    <div
+                      key={item.id}
+                      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-start sm:justify-between"
+                    >
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="font-semibold text-slate-900">
+                          {item.name}
+                        </p>
+                        <input
+                          value={item.note || ""}
+                          onChange={(e) =>
+                            handleItemNoteChange(item.id, e.target.value)
+                          }
+                          placeholder="Ghi chú..."
+                          className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:border-sky-400 focus:outline-none"
+                        />
+                        {item.note?.trim() && (
+                          <p className="text-[11px] text-slate-500">
+                            Ghi chú: {item.note.trim()}
+                          </p>
+                        )}
+                        <div className="space-y-0.5">
+                          <p className="text-sm text-slate-500">
+                            {formatCurrency(pricedItem?.price ?? item.price)} đ
+                          </p>
+                          {(pricedItem?.surchargePerUnit || 0) > 0 && (
+                            <p className="text-[11px] text-amber-700">
+                              Gốc {formatCurrency(pricedItem?.basePrice || item.price)} + phụ thu{" "}
+                              {formatCurrency(pricedItem?.surchargePerUnit || 0)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => handleChangeQty(item.id, -1)}
+                            disabled={!canDecreaseForCurrentRole}
+                            className="rounded-full cursor-pointer border-slate-200"
+                            title={
+                              !canDecreaseForCurrentRole && isRestaurantServer
+                                ? "Phục vụ chỉ giảm được số lượng vừa thêm"
+                                : undefined
+                            }
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="w-8 text-center font-semibold text-black">
+                            {item.quantity}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => handleChangeQty(item.id, 1)}
+                            className="rounded-full cursor-pointer border-slate-200"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="min-w-[90px] text-right text-base font-semibold text-slate-900">
+                          {formatCurrency(pricedItem?.lineTotal || item.price * item.quantity)} đ
+                        </div>
+                      </div>
+                    </div>
+                  );
+                  })}
+                </div>
+
+                <div className="space-y-3 border-t bg-white px-4 py-4">
+                  <div className="flex items-center justify-between text-sm text-slate-600">
+                    <span>Số món</span>
+                    <span className="font-semibold text-slate-900">
+                      {totalItems}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-slate-600">
+                    <span>Tiền hàng</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatCurrency(subtotalPrice)} đ
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-sm text-slate-600">
+                      <span>Phụ thu</span>
+                      <span
+                        className={`font-semibold ${
+                          totalSurchargeAmount > 0 ? "text-amber-700" : "text-slate-500"
+                        }`}
+                      >
+                        {formatCurrency(totalSurchargeAmount)} đ
+                      </span>
+                    </div>
+                    {appliedSurchargeSummaries.map((surcharge) => (
+                      <div
+                        key={surcharge.id}
+                        className="flex items-center justify-between text-xs text-slate-500"
+                      >
+                        <span>
+                          + {surcharge.name} ({formatSurchargeValue(surcharge)})
+                        </span>
+                        <span>{formatCurrency(surcharge.amount)} đ</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm text-slate-500">Tổng thanh toán</p>
+                      <p className="text-2xl font-bold text-slate-900">
+                        {formatCurrency(totalPrice)} đ
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                      {isRestaurantServer ? (
+                        <Button
+                          className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 sm:w-auto"
+                          onClick={() => void handleSubmitKitchenAddedItems()}
+                          disabled={pendingAddedCount === 0}
+                        >
+                          <Printer className="h-4 w-4" />
+                          Lưu món mới ({pendingAddedCount})
+                        </Button>
+                      ) : (
+                        <Button
+                          className="w-full gap-2 bg-sky-600 hover:bg-sky-700 sm:w-auto"
+                          onClick={handlePay}
+                          disabled={cartItems.length === 0 || isPaying}
+                          isLoading={isPaying}
+                        >
+                          <CreditCard className="h-4 w-4" />
+                          Thanh toán
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      {showReceipt && receiptData && (
+        <div className="fixed inset-0 z-50 bg-black/60 p-0 sm:flex sm:items-center sm:justify-center sm:p-3">
+          <div className="h-full max-h-[100dvh] w-full overflow-y-auto bg-white shadow-2xl sm:h-auto sm:max-h-[94vh] sm:max-w-[1300px] sm:overflow-hidden sm:rounded-2xl">
+            <div className="grid grid-cols-1 lg:min-h-[82vh] lg:grid-cols-[minmax(0,1fr)_430px]">
+              <div className="flex flex-col">
+                <div className="flex items-start justify-between border-b px-4 py-4 sm:px-6 sm:py-5">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900 sm:text-3xl">
+                      Thanh toán · {receiptData.table}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">{receiptData.time}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowReceipt(false)}
+                    className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Đóng"
+                  >
+                    <span className="text-2xl leading-none">×</span>
+                  </button>
+                </div>
+
+                <div className="px-4 py-3 sm:px-6 sm:py-4 lg:flex-1 lg:overflow-auto">
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                    <div className="grid grid-cols-[minmax(0,1fr)_70px_120px_130px] bg-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      <span>Đồ uống</span>
+                      <span className="text-center">SL</span>
+                      <span className="text-right">Đơn giá</span>
+                      <span className="text-right">Thành tiền</span>
+                    </div>
+                    <div className="divide-y">
+                      {receiptData.items.map((item, idx) => (
+                        <div
+                          key={`${item.id}-${idx}`}
+                          className="grid grid-cols-[minmax(0,1fr)_70px_120px_130px] px-4 py-3 text-sm"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900">
+                              {idx + 1}. {item.name}
+                            </p>
+                            {item.note?.trim() && (
+                              <p className="mt-0.5 text-xs text-slate-500">
+                                {item.note.trim()}
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-center text-slate-700">{item.quantity}</p>
+                          <p className="text-right text-slate-700">
+                            {formatCurrency(item.price)}
+                          </p>
+                          <p className="text-right font-semibold text-slate-900">
+                            {formatCurrency(item.lineTotal)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between border-t bg-slate-50 px-4 py-3 sm:px-6 sm:py-4">
+                  <div className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+                    <span>Tổng thanh toán</span>
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-sky-100 px-2 text-sm font-bold text-sky-700">
+                      {receiptItemCount}
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900 sm:text-3xl">
+                    {formatCurrency(receiptData.total)} đ
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col border-t border-slate-200 bg-white lg:border-l lg:border-t-0">
+                <div className="flex items-center justify-between border-b px-4 py-4 sm:px-5">
+                  <h4 className="text-xl font-bold text-slate-900 sm:text-2xl">
+                    Chi tiết giao dịch
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowReceipt(false)}
+                    className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Đóng"
+                  >
+                    <span className="text-2xl leading-none">×</span>
+                  </button>
+                </div>
+
+                <div className="space-y-4 px-4 py-3 text-sm sm:px-5 sm:py-4 lg:flex-1 lg:overflow-auto">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-700">Tổng tiền hàng</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatCurrency(receiptData.total)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Giảm giá</span>
+                    <span className="text-slate-900">0</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t pt-2">
+                    <span className="text-base font-semibold text-slate-700">Khách cần trả</span>
+                    <span className="text-2xl font-bold text-sky-700">
+                      {formatCurrency(receiptData.total)}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-slate-700">Khách thanh toán</p>
+                    <Input
+                      value={
+                        paymentMethod === "cash"
+                          ? formatMoneyInput(cashReceivedInput)
+                          : formatCurrency(receiptData.total)
+                      }
+                      onChange={(e) => setCashReceivedInput(e.target.value)}
+                      disabled={paymentMethod !== "cash"}
+                      className={
+                        paymentMethod === "cash"
+                          ? "h-11 border-slate-200 text-right text-xl font-bold text-sky-700"
+                          : "h-11 border-slate-200 bg-slate-50 text-right text-xl font-bold text-slate-500"
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border border-slate-200 p-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod("cash")}
+                        className={`flex flex-1 items-center justify-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                          paymentMethod === "cash"
+                            ? "border-sky-500 bg-sky-50 text-sky-700"
+                            : "border-slate-200 bg-white text-slate-600"
+                        }`}
+                      >
+                        <Wallet className="h-4 w-4" />
+                        Tiền mặt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod("transfer")}
+                        className={`flex flex-1 items-center justify-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                          paymentMethod === "transfer"
+                            ? "border-sky-500 bg-sky-50 text-sky-700"
+                            : "border-slate-200 bg-white text-slate-600"
+                        }`}
+                      >
+                        <Landmark className="h-4 w-4" />
+                        Chuyển khoản
+                      </button>
+                    </div>
+
+                    {paymentMethod === "cash" && (
+                      <div className="flex flex-wrap gap-2">
+                        {quickCashValues.map((amount) => (
+                          <button
+                            key={amount}
+                            type="button"
+                            onClick={() => setCashReceivedInput(String(amount))}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:border-sky-300 hover:text-sky-700"
+                          >
+                            {formatCurrency(amount)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-base">
+                    <span className="text-slate-700">Tiền thừa trả khách</span>
+                    <span className="font-semibold text-slate-900">
+                      {paymentMethod === "cash"
+                        ? formatCurrency(
+                            Math.max(parseMoney(cashReceivedInput) - receiptData.total, 0)
+                          )
+                        : "0"}{" "}
+                      đ
+                    </span>
+                  </div>
+                </div>
+
+                <div className="sticky bottom-0 border-t bg-slate-50 p-3 sm:p-4">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[170px_minmax(0,1fr)]">
+                    <Button
+                      variant="outline"
+                      onClick={handlePrintTemporaryReceipt}
+                      className="h-12 w-full border-sky-600 text-lg font-semibold text-sky-700 hover:bg-sky-50"
+                    >
+                      In tạm tính
+                    </Button>
+                    <Button
+                      onClick={handleConfirmPrint}
+                      className="h-12 w-full bg-sky-600 text-lg font-semibold hover:bg-sky-700"
+                    >
+                      Thanh toán
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddTableModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Thêm bàn mới</h3>
+                <p className="text-sm text-slate-500">
+                  Tạo bàn để sử dụng ngay tại quầy hiện tại
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowAddTableModal(false)}
+              >
+                Đóng
+              </Button>
+            </div>
+            <div className="space-y-3 px-5 py-4">
+              <Input
+                label="Tên / số bàn *"
+                value={newTableName}
+                onChange={(e) => setNewTableName(e.target.value)}
+                placeholder="Ví dụ: T12 hoặc Bàn VIP 1"
+              />
+              <Input
+                label="Khu vực (tuỳ chọn)"
+                value={newTableArea}
+                onChange={(e) => setNewTableArea(e.target.value)}
+                placeholder="Ví dụ: Tầng 2"
+              />
+              {isHotpotStore && (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-600">
+                    Có thể thêm nhanh danh sách bàn chuẩn cho quán lẩu.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-2 border-sky-500 text-sky-700 hover:bg-sky-50"
+                    onClick={handleSeedTables}
+                    disabled={isSeedingTables}
+                  >
+                    {isSeedingTables
+                      ? "Đang thêm bàn..."
+                      : "Thêm nhanh 100 bàn (T01 - T100)"}
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-5 py-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowAddTableModal(false)}
+              >
+                Huỷ
+              </Button>
+              <Button
+                className="bg-sky-600 hover:bg-sky-700"
+                onClick={handleAddTable}
+              >
+                Lưu bàn
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSoldBills && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-lg">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Đơn đã bán
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Danh sách 30 đơn gần nhất
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link href="/bills">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <ArrowRight className="h-4 w-4" />
+                    Trang hóa đơn
+                  </Button>
+                </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => void loadSoldBills(true)}
+                  isLoading={isLoadingSoldBills}
+                >
+                  <RefreshCcw className="h-4 w-4" />
+                  Tải lại
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSoldBills(false)}
+                >
+                  Đóng
+                </Button>
+              </div>
+            </div>
+
+            <div className="max-h-[75vh] space-y-3 overflow-y-auto px-4 py-3">
+              {!isLoadingSoldBills && soldBills.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                  Chưa có đơn nào đã thanh toán.
+                </div>
+              )}
+
+              {soldBills.map((bill) => (
+                <div
+                  key={bill.id}
+                  className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                >
+                  <div className="flex flex-col gap-2 border-b border-dashed pb-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Bàn: {bill.tableNumber || "Không rõ"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Mã bill: {bill.id}
+                      </p>
+                      <p className="flex items-center gap-1 text-xs text-slate-500">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        {getBillDateText(bill)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Tổng tiền</p>
+                      <p className="text-base font-bold text-slate-900">
+                        {formatCurrency(bill.total)} đ
+                      </p>
+                    </div>
+                  </div>
+
+                  {bill.note && (
+                    <p className="mt-2 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                      Ghi chú: {bill.note}
+                    </p>
+                  )}
+
+                  <div className="mt-2 divide-y rounded-lg border bg-slate-50">
+                    {bill.items?.length ? (
+                      bill.items.map((item, idx) => (
+                        <div
+                          key={`${bill.id}-${item.menuId}-${idx}`}
+                          className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900">
+                              {item.name}
+                            </p>
+                            {item.note?.trim() && (
+                              <p className="text-[11px] text-slate-500">
+                                {item.note.trim()}
+                              </p>
+                            )}
+                            <p className="text-xs text-slate-500">
+                              {item.quantity} x {formatCurrency(item.price)} đ
+                            </p>
+                          </div>
+                          <p className="text-right font-semibold text-slate-900">
+                            {formatCurrency(
+                              item.lineTotal || item.price * item.quantity
+                            )}{" "}
+                            đ
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="px-3 py-2 text-xs text-slate-500">
+                        Không có chi tiết món.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isShiftEnabledForUser && showOpenShiftModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-5 py-4">
+              <h3 className="text-xl font-bold text-slate-900">Mở ca làm việc</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Vui lòng mở ca trước khi thao tác bán hàng.
+              </p>
+            </div>
+            <div className="space-y-3 px-5 py-4">
+              <div className="grid grid-cols-[140px_1fr] items-center gap-2">
+                <p className="text-sm font-semibold text-slate-700">Nhân viên ca</p>
+                <p className="text-sm text-slate-900">{cashierName}</p>
+              </div>
+              <div className="grid grid-cols-[140px_1fr] items-center gap-2">
+                <p className="text-sm font-semibold text-slate-700">Giờ bắt đầu</p>
+                <p className="text-sm text-slate-900">
+                  {new Date().toLocaleString("vi-VN")}
+                </p>
+              </div>
+              {usesThreeShiftByAccount && (
+                <div className="grid grid-cols-[140px_1fr] items-center gap-2">
+                  <p className="text-sm font-semibold text-slate-700">Loại ca</p>
+                  <p className="text-sm text-slate-900">
+                    {getShiftLabel(resolveShiftType())}
+                  </p>
+                </div>
+              )}
+              <Input
+                label="Tiền mặt đầu ca *"
+                value={formatMoneyInput(openingCashInput)}
+                onChange={(e) => setOpeningCashInput(e.target.value)}
+                placeholder="Nhập tiền đầu ca"
+              />
+              <Input
+                label="Ghi chú"
+                value={openingNote}
+                onChange={(e) => setOpeningNote(e.target.value)}
+                placeholder="Ghi chú (tùy chọn)"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-5 py-4">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={logout}
+                disabled={isOpeningShift}
+              >
+                <LogOut className="h-4 w-4" />
+                Đăng xuất
+              </Button>
+              <Button
+                className="bg-sky-600 hover:bg-sky-700"
+                onClick={handleOpenShift}
+                isLoading={isOpeningShift || isLoadingShift}
+              >
+                Mở ca
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCloseShiftModal && closeShiftSummary && activeShift && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Phiếu bàn giao ca</h3>
+                <p className="text-sm text-slate-500">
+                  {getShiftLabel(activeShift.shiftType)} · {activeShift.cashierName}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowCloseShiftModal(false)}
+                disabled={isClosingShift}
+              >
+                Đóng
+              </Button>
+            </div>
+            <div className="space-y-3 px-5 py-4 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-slate-500">Tiền mặt đầu ca</p>
+                  <p className="text-xl font-bold text-slate-900">
+                    {formatCurrency(activeShift.openingCash || 0)} đ
+                  </p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-slate-500">Doanh thu trong ca</p>
+                  <p className="text-xl font-bold text-slate-900">
+                    {formatCurrency(closeShiftSummary.totalSales)} đ
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3">
+                <div className="flex items-center justify-between py-1">
+                  <span>Tiền mặt trong ca</span>
+                  <span className="font-semibold">
+                    {formatCurrency(closeShiftSummary.cashSales)} đ
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span>Chuyển khoản trong ca</span>
+                  <span className="font-semibold">
+                    {formatCurrency(closeShiftSummary.transferSales)} đ
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span>Bill hợp lệ</span>
+                  <span className="font-semibold">{closeShiftSummary.completedBills}</span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span>Bill đã hủy</span>
+                  <span className="font-semibold">{closeShiftSummary.cancelledBills}</span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span>Phiếu thu</span>
+                  <span className="font-semibold">
+                    {formatCurrency(closeShiftSummary.incomeVouchers)} đ
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span>Phiếu chi</span>
+                  <span className="font-semibold">
+                    -{formatCurrency(closeShiftSummary.expenseVouchers)} đ
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span>Dòng tiền thuần</span>
+                  <span className="font-semibold">
+                    {formatCurrency(closeShiftSummary.netCashFlow)} đ
+                  </span>
+                </div>
+                <div className="mt-2 border-t pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-700">Tiền mặt kỳ vọng</span>
+                    <span className="text-lg font-bold text-slate-900">
+                      {formatCurrency(closeShiftSummary.expectedClosingCash)} đ
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <Input
+                label="Tiền mặt cuối ca"
+                value={formatMoneyInput(closingCashInput)}
+                onChange={(e) => setClosingCashInput(e.target.value)}
+                placeholder="Nhập tiền mặt thực tế"
+              />
+              <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <span>Chênh lệch</span>
+                <span className="font-bold">
+                  {closingCashInput.trim() === ""
+                    ? "Chưa nhập"
+                    : `${formatCurrency(
+                        parseMoney(closingCashInput) -
+                          closeShiftSummary.expectedClosingCash
+                      )} đ`}
+                </span>
+              </div>
+              <Input
+                label="Ghi chú cuối ca"
+                value={closingNote}
+                onChange={(e) => setClosingNote(e.target.value)}
+                placeholder="Ghi chú (tùy chọn)"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-5 py-4">
+              <Button
+                className="bg-sky-600 hover:bg-sky-700"
+                onClick={handleCloseShiftAndPrint}
+                isLoading={isClosingShift || isPreparingCloseShift}
+              >
+                Đóng ca và in phiếu bàn giao
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isFarmStore && showFarmDailyReport && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Báo cáo cuối ngày</h3>
+                <p className="text-sm text-slate-500">
+                  {new Date().toLocaleDateString("vi-VN")}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowFarmDailyReport(false)}
+                disabled={isLoadingFarmDailyReport}
+              >
+                Đóng
+              </Button>
+            </div>
+            <div className="space-y-3 px-5 py-4 text-sm">
+              {!farmDailyReport ? (
+                <div className="rounded-xl border border-dashed p-4 text-slate-500">
+                  {isLoadingFarmDailyReport
+                    ? "Đang tải báo cáo..."
+                    : "Chưa có dữ liệu báo cáo."}
+                </div>
+              ) : (
+                <div className="rounded-xl border p-3">
+                  <div className="flex items-center justify-between py-1">
+                    <span>Tổng doanh thu</span>
+                    <span className="font-bold text-slate-900">
+                      {formatCurrency(farmDailyReport.totalSales)} đ
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span>Phiếu thu</span>
+                    <span>{formatCurrency(farmDailyReport.incomeVouchers)} đ</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span>Phiếu chi</span>
+                    <span>-{formatCurrency(farmDailyReport.expenseVouchers)} đ</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span>Dòng tiền thuần</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatCurrency(farmDailyReport.netCashFlow)} đ
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span>Tiền mặt</span>
+                    <span>{formatCurrency(farmDailyReport.cashSales)} đ</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span>Chuyển khoản</span>
+                    <span>{formatCurrency(farmDailyReport.transferSales)} đ</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span>Số hóa đơn</span>
+                    <span>{farmDailyReport.completedBills}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span>Hóa đơn hủy</span>
+                    <span>{farmDailyReport.cancelledBills}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span>Giá trị hủy</span>
+                    <span>{formatCurrency(farmDailyReport.cancelledAmount)} đ</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-5 py-4">
+              <Button
+                className="bg-sky-600 hover:bg-sky-700"
+                onClick={handlePrintFarmDailyReport}
+                disabled={!farmDailyReport || isLoadingFarmDailyReport}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                In báo cáo
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSurchargeModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-5xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Cài đặt phụ thu</h3>
+                <p className="text-sm text-slate-500">
+                  Áp dụng cho toàn bộ quầy của cửa hàng hiện tại ({storeId})
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowSurchargeModal(false)}
+                disabled={isSavingSurcharge}
+              >
+                Đóng
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 px-5 py-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <h4 className="text-sm font-semibold text-slate-800">
+                  {editingSurchargeId ? "Chỉnh sửa phụ thu" : "Tạo phụ thu mới"}
+                </h4>
+                <Input
+                  label="Tên phụ thu *"
+                  value={surchargeNameInput}
+                  onChange={(e) => setSurchargeNameInput(e.target.value)}
+                  placeholder="Ví dụ: Phụ thu lễ"
+                />
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium leading-none">Loại phụ thu</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSurchargeTypeInput("percent");
+                        setSurchargeValueInput("");
+                      }}
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                        surchargeTypeInput === "percent"
+                          ? "border-sky-500 bg-sky-50 text-sky-700"
+                          : "border-slate-200 bg-white text-slate-600"
+                      }`}
+                    >
+                      Theo %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSurchargeTypeInput("fixed");
+                        setSurchargeValueInput("");
+                      }}
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                        surchargeTypeInput === "fixed"
+                          ? "border-sky-500 bg-sky-50 text-sky-700"
+                          : "border-slate-200 bg-white text-slate-600"
+                      }`}
+                    >
+                      Theo tiền
+                    </button>
+                  </div>
+                </div>
+
+                <Input
+                  label={surchargeTypeInput === "percent" ? "Giá trị (%) *" : "Giá trị (đ/món) *"}
+                  value={surchargeValueInput}
+                  onChange={(e) => handleSurchargeValueInputChange(e.target.value)}
+                  placeholder={surchargeTypeInput === "percent" ? "Ví dụ: 20" : "Ví dụ: 3000"}
+                />
+
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                    checked={surchargeEnabledInput}
+                    onChange={(e) => setSurchargeEnabledInput(e.target.checked)}
+                  />
+                  Bật phụ thu ngay sau khi lưu
+                </label>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    onClick={resetSurchargeForm}
+                    disabled={isSavingSurcharge}
+                  >
+                    Làm mới
+                  </Button>
+                  <Button
+                    className="bg-sky-600 hover:bg-sky-700"
+                    onClick={handleSaveSurcharge}
+                    isLoading={isSavingSurcharge}
+                  >
+                    {editingSurchargeId ? "Cập nhật phụ thu" : "Tạo phụ thu"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-xl border border-slate-200 p-3">
+                  <p className="text-sm font-semibold text-slate-800">
+                    Phụ thu đang áp dụng khi tính tiền
+                  </p>
+                  {appliedSurchargeSummaries.length === 0 ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Chưa có phụ thu nào đang bật.
+                    </p>
+                  ) : (
+                    <div className="mt-2 space-y-1">
+                      {appliedSurchargeSummaries.map((surcharge) => (
+                        <p
+                          key={`active-${surcharge.id}`}
+                          className="text-xs text-amber-700"
+                        >
+                          + {surcharge.name} ({formatSurchargeValue(surcharge)})
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="max-h-[380px] space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
+                  {surcharges.length === 0 && (
+                    <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
+                      Chưa có khoản phụ thu nào.
+                    </p>
+                  )}
+
+                  {surcharges.map((surcharge) => (
+                    <div
+                      key={surcharge.id}
+                      className="rounded-lg border border-slate-200 px-3 py-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {surcharge.name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {formatSurchargeValue(surcharge)}
+                          </p>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${
+                            surcharge.isEnabled
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {surcharge.isEnabled ? "Đang bật" : "Đang tắt"}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleSurcharge(surcharge)}
+                          disabled={updatingSurchargeId === surcharge.id}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {surcharge.isEnabled ? "Tắt" : "Bật"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEditSurcharge(surcharge)}
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Sửa
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteSurcharge(surcharge)}
+                          disabled={deletingSurchargeId === surcharge.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Xóa
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVoucherModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  {showVoucherModal === "income"
+                    ? "Lập phiếu thu (tiền mặt)"
+                    : "Lập phiếu chi (tiền mặt)"}
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Mã phiếu tự động tạo sau khi lưu
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowVoucherModal(null)}
+                disabled={isSavingVoucher}
+              >
+                Đóng
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 px-5 py-4 sm:grid-cols-2">
+              <Input
+                type="datetime-local"
+                label="Thời gian"
+                value={voucherDateTime}
+                onChange={(e) => setVoucherDateTime(e.target.value)}
+              />
+              <Input
+                label={showVoucherModal === "income" ? "Loại thu *" : "Loại chi *"}
+                value={voucherCategory}
+                onChange={(e) => setVoucherCategory(e.target.value)}
+                placeholder={
+                  showVoucherModal === "income"
+                    ? "Ví dụ: Thu tiền khách trả"
+                    : "Ví dụ: Chi mua nguyên liệu"
+                }
+              />
+              <Input
+                label="Giá trị *"
+                value={formatMoneyInput(voucherAmountInput)}
+                onChange={(e) => setVoucherAmountInput(e.target.value)}
+                placeholder="Nhập số tiền"
+              />
+              <div className="space-y-1">
+                <label className="text-sm font-medium leading-none">Nhóm người</label>
+                <select
+                  value={voucherPersonGroup}
+                  onChange={(e) => setVoucherPersonGroup(e.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="Khách hàng">Khách hàng</option>
+                  <option value="Nhân viên">Nhân viên</option>
+                  <option value="Nhà cung cấp">Nhà cung cấp</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-3 px-5 pb-4">
+              <Input
+                label={
+                  showVoucherModal === "income" ? "Tên người nộp" : "Tên người nhận"
+                }
+                value={voucherPersonName}
+                onChange={(e) => setVoucherPersonName(e.target.value)}
+                placeholder={
+                  showVoucherModal === "income"
+                    ? "Ví dụ: Khách lẻ"
+                    : "Ví dụ: Nhà cung cấp A"
+                }
+              />
+              <div className="space-y-1">
+                <label className="text-sm font-medium leading-none">Ghi chú</label>
+                <textarea
+                  value={voucherNote}
+                  onChange={(e) => setVoucherNote(e.target.value)}
+                  placeholder="Ghi chú thêm nếu cần"
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                  checked={voucherIncludeInCashFlow}
+                  onChange={(e) => setVoucherIncludeInCashFlow(e.target.checked)}
+                />
+                Hạch toán vào dòng tiền trong ngày
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-5 py-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowVoucherModal(null)}
+                disabled={isSavingVoucher}
+              >
+                Bỏ qua
+              </Button>
+              <Button
+                className="bg-sky-600 hover:bg-sky-700"
+                onClick={handleSaveVoucher}
+                isLoading={isSavingVoucher}
+              >
+                Lưu phiếu
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </RoleGuard>
+  );
+}

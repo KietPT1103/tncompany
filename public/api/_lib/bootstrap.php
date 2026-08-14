@@ -204,7 +204,8 @@ if (!file_exists($configPath)) {
 }
 
 $config = require $configPath;
-if (file_exists($configLocalPath)) {
+$appEnv = strtolower(trim((string) (getenv('APP_ENV') ?: 'production')));
+if ($appEnv === 'local' && file_exists($configLocalPath)) {
     $localConfig = require $configLocalPath;
     if (is_array($localConfig)) {
         $config = array_replace($config, $localConfig);

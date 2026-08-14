@@ -4,6 +4,7 @@ import { pages } from "./data/siteData";
 import LandingApp from "./LandingApp";
 import DashboardLayout from "./app/(dashboard)/layout";
 import BillsPage from "./app/(dashboard)/bills/page";
+import PosPage from "./app/(dashboard)/pos/page";
 import CashFlowPage from "./app/(dashboard)/cash-flow/page";
 import AccountManagementPage from "./app/(dashboard)/accounts-page";
 import ActivityLogsPage from "./app/(dashboard)/activity-logs/page";
@@ -101,7 +102,7 @@ export function App() {
             <Route index element={<AdminIndexPage />} />
             <Route element={<ProtectedLayout />}>
               <Route path="bills" element={<BillsPage />} />
-              <Route path="pos" element={<Navigate to="/admin/bills" replace />} />
+              <Route path="pos" element={<PosPage />} />
               <Route path="payroll-estimate" element={<SalaryEstimatePage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="reports/:id" element={<ReportDetailPage />} />

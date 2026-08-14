@@ -85,7 +85,9 @@ jobs:
             **/.git*
             **/.git*/**
             **/node_modules/**
-            api/config.php
+            api/config.local.php
+            **/.env
+            **/.env.*
             uploads/**
             deploy.php
             webhook.php

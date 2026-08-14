@@ -1,69 +1,45 @@
-# Local dev
+# Local development
 
-## Recommended: full local
+## Chạy toàn bộ code ở local
 
-1. Create `.env.local` from `.env.local.example`
-2. Keep:
+1. Sao chép `.env.local.example` thành `.env.local`.
+2. Khởi động MySQL/MariaDB local.
+3. Điền cấu hình local trong `.env.local`:
 
 ```env
+APP_ENV=local
+APP_DEBUG=true
+DB_DRIVER=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3307
+DB_NAME=tn_company_local
+DB_USER=tn_company_dev
+DB_PASSWORD=tn_company_local_2026
+
 VITE_API_BASE_URL=/api
 VITE_PROXY_TARGET=http://127.0.0.1:8000
 ```
 
-3. Copy `public/api/config.php.example` to `public/api/config.php`
-4. Fill valid local MySQL credentials in `public/api/config.php` hoặc `public/api/config.local.php`
-5. Nếu dùng TikTok social listening, điền `TIKTOK_*` trong `.env.local` hoặc `public/api/config.local.php`
-6. Run:
+4. Chạy:
 
 ```bash
 npm run dev:full
 ```
 
-6. Open:
+5. Mở `http://localhost:5173/login`.
 
-```text
-http://localhost:5173/login
-```
+Lệnh trên khởi động:
 
-This starts:
+- Vite tại `http://127.0.0.1:5173`.
+- PHP API local tại `http://127.0.0.1:8000`.
+- TikTok social-listening worker.
 
-- Vite on `http://127.0.0.1:5173`
-- PHP built-in server on `http://127.0.0.1:8000`
-- TikTok social listening worker daemon
+Vite proxy `/api/*` vào PHP local, vì vậy mọi thay đổi backend trong `public/api` có hiệu lực ngay.
 
-Vite will proxy `/api/*` to the local PHP server, so pages like payroll and employees use the PHP files inside this repo.
+## Cấu hình production
 
-## Frontend local, API on server
+Production dùng file `.env` tại `domains/tnservice.vn/.env`, nằm ngoài `public_html`. Tạo file này dựa trên `.env.server.example`.
 
-1. Create `.env.local` from `.env.local.example`
-2. Keep:
+`public/api/config.php` là code chung đọc biến môi trường. Không tạo hoặc deploy `public/api/config.local.php`.
 
-```env
-VITE_API_BASE_URL=/api
-VITE_PROXY_TARGET=https://tnservice.vn
-```
-
-3. Run:
-
-```bash
-npm run dev
-```
-
-4. Open:
-
-```text
-http://localhost:5173/login
-```
-
-Vite will proxy `/api/*` to `https://tnservice.vn/api/*`, so the browser will not hit CORS.
-
-Note: if a PHP endpoint exists only in this repo and has not been deployed to `tnservice.vn` yet, Vite proxying to the server will still return `404`.
-
-## If you want full local
-
-- run PHP locally with `php -S 127.0.0.1:8000 -t public`
-- náº¿u dÃ¹ng TikTok social listening, cháº¡y thÃªm `php scripts/tiktok-social-listening-worker.php --daemon 5`
-- run MySQL locally
-- point `VITE_PROXY_TARGET` or `VITE_API_BASE_URL` to that local PHP server
-- or simply use `npm run dev:full`
-- PHP API và worker cũng đọc `.env.local`, không chỉ frontend Vite
+Các file `.env` và `.env.local` chứa thông tin bí mật, không được commit.

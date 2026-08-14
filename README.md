@@ -30,7 +30,6 @@ Can cau hinh tren GitHub:
 
 Workflow se giu nguyen cac file/folder chi ton tai tren server:
 
-- `api/config.php`
 - `uploads/`
 - `deploy.php`
 - `webhook.php`
@@ -38,5 +37,7 @@ Workflow se giu nguyen cac file/folder chi ton tai tren server:
 
 Luu y:
 
-- `public/api/config.php` dang bi gitignore, nen can tao san 1 lan tren server tu `public/api/config.php.example`.
+- `public/api/config.php` la code chung doc bien moi truong va duoc deploy binh thuong.
+- Tao file production `.env` tai `domains/tnservice.vn/.env` (nam ngoai `public_html`) dua tren `.env.server.example`.
+- `.env`, `.env.local` va `public/api/config.local.php` khong duoc commit/deploy.
 - Sau khi setup xong, quy trinh se la `git push` -> GitHub Actions build -> file moi duoc day len `public_html`, khong can upload `dist.zip` hay giai nen thu cong nua.

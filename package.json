@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "test:social-listening": "php scripts/social-listening-classification-test.php",
     "report:social-listening": "php scripts/social-listening-report.php",
-    "worker:tiktok-social-listening": "php scripts/tiktok-social-listening-worker.php --daemon 5"
+    "worker:tiktok-social-listening": "php scripts/tiktok-social-listening-worker.php --daemon 5",
+    "print:bar-agent": "node scripts/bar-print-agent.cjs",
+    "print:bar-agent:test": "node scripts/bar-print-agent.cjs --test --once"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -25,6 +27,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^12.7.0",
+    "firebase-admin": "^14.2.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.562.0",
     "qrcode.react": "^4.2.0",

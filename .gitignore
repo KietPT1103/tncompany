@@ -9,7 +9,9 @@ dist.zip
 .env.production
 .env.test
 !.env.local.example
-public/api/config.php
+firebase-service-account.json
+*-firebase.json
+public/api/config.local.php
 tmp-opt/
 dist-ssr/
 agent/windows/CashierMonitor/bin/

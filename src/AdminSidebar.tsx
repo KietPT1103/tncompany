@@ -86,7 +86,13 @@ const navGroups: NavGroup[] = [
     items: [
       {
         href: "/pos",
-        label: "Hóa đơn",
+        label: "Bán hàng POS",
+        icon: ReceiptText,
+        permission: "bills.access",
+      },
+      {
+        href: "/bills",
+        label: "Danh sách hóa đơn",
         icon: ReceiptText,
         permission: "bills.access",
       },
