@@ -19,6 +19,7 @@ Sau khi cai:
 - Agent chay an ngay lap tuc.
 - Agent tu chay khi Windows khoi dong, khong can dang nhap.
 - Agent tu chay lai sau 1 phut neu gap loi.
+- Phieu in ho tro day du tieng Viet co dau (ten mon, ghi chu, nhan vien).
 - Khong dong/xoa thu muc C:\ProgramData\TNCompany\BarPrintAgent.
 
 Xem log:

@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $sourceDirectory = Join-Path $PSScriptRoot "bar-print-agent-windows"
 $agentScript = Join-Path $PSScriptRoot "bar-print-agent.cjs"
+$ticketRenderer = Join-Path $PSScriptRoot "bar-print-ticket-renderer.ps1"
 $nodeExecutable = (Get-Command node.exe -ErrorAction Stop).Source
 $artifactDirectory = Join-Path $repositoryRoot "artifacts"
 $artifactPath = Join-Path $artifactDirectory "tn-company-bar-print-agent-windows-x64.zip"
@@ -18,6 +19,7 @@ New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
 try {
     Copy-Item -LiteralPath $nodeExecutable -Destination (Join-Path $stagingDirectory "node.exe")
     Copy-Item -LiteralPath $agentScript -Destination (Join-Path $stagingDirectory "bar-print-agent.cjs")
+    Copy-Item -LiteralPath $ticketRenderer -Destination (Join-Path $stagingDirectory "bar-print-ticket-renderer.ps1")
     Get-ChildItem -LiteralPath $sourceDirectory -File | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination $stagingDirectory
     }

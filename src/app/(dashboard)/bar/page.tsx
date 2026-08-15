@@ -92,7 +92,7 @@ export default function BarBoardPage() {
     const shouldForce = typeof kindOrForce === "boolean" ? kindOrForce : force;
     if (!soundEnabled && !shouldForce) return;
     try {
-      const fileName = kind === "urgent" ? "bill-bao-do" : "bill-moi";
+      const fileName = kind === "urgent" ? "bill-bao-do" : "mon-moi";
       const audio = alertAudio.current[kind] || new Audio(`/audio/${fileName}.mp3`);
       alertAudio.current[kind] = audio;
       audio.currentTime = 0;
@@ -116,7 +116,7 @@ export default function BarBoardPage() {
   }, [jobs, now, playAlert]);
   useEffect(() => {
     if (!jobs.some((job) => job.workflowStatus === "new")) return;
-    const reminder = window.setInterval(() => playAlert("new"), 20000);
+    const reminder = window.setInterval(() => playAlert("new"), 2000);
     return () => window.clearInterval(reminder);
   }, [jobs, playAlert]);
   useEffect(() => {

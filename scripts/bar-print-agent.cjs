@@ -5,6 +5,8 @@ const os = require("node:os");
 const net = require("node:net");
 const fs = require("node:fs");
 const path = require("node:path");
+const childProcess = require("node:child_process");
+const util = require("node:util");
 
 const DEFAULT_STORE_ID = "cafe";
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api";
@@ -12,9 +14,10 @@ const DEFAULT_PRINTER_PORT = 9100;
 const DEFAULT_SOCKET_TIMEOUT_MS = 12000;
 const DEFAULT_RETRY_INTERVAL_MS = 15000;
 const DEFAULT_TERMINAL_NAME = "May pha che LAN";
-const DEFAULT_STORE_LABEL = "ONG QUAN";
 const DEFAULT_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const PAPER_WIDTH = 42;
+const RASTER_WIDTH_BYTES = 72;
+const execFile = util.promisify(childProcess.execFile);
 
 const args = new Set(process.argv.slice(2));
 const isTrue = (value) => value === "1" || value === "true";
@@ -84,32 +87,10 @@ const wrapText = (text, width) => {
   return lines;
 };
 
-const formatDateTime = (value, timeZone) => {
-  const date =
-    value && typeof value.toDate === "function"
-      ? value.toDate()
-      : value && Number.isFinite(Number(value.seconds))
-      ? new Date(Number(value.seconds) * 1000)
-      : value instanceof Date
-      ? value
-      : new Date();
-
-  return new Intl.DateTimeFormat("vi-VN", {
-    timeZone,
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(date);
-};
-
 const normalizeItem = (item) => {
   if (!item || typeof item !== "object") return null;
-  const quantity = parseInteger(item.quantity, 0);
-  if (!quantity) return null;
+  const quantity = Number(item.quantity || 0);
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
 
   return {
     menuId: String(item.menuId || ""),
@@ -119,60 +100,230 @@ const normalizeItem = (item) => {
   };
 };
 
+const formatQuantity = (quantity) =>
+  Number.isInteger(quantity)
+    ? String(quantity)
+    : quantity.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+
+const formatTicketCode = (job) => {
+  const rawCode = String(job.sourceBillId || job.id || "")
+    .replace(/[^0-9A-Za-z]/g, "")
+    .slice(-6)
+    .toUpperCase();
+  if (rawCode.length === 6) return `${rawCode.slice(0, 3)}-${rawCode.slice(3)}`;
+  return rawCode || "JOB";
+};
+
+const formatTicketDateTime = (value, timeZone) => {
+  const date =
+    value && Number.isFinite(Number(value.seconds))
+      ? new Date(Number(value.seconds) * 1000)
+      : value instanceof Date
+      ? value
+      : new Date();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour12: false,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const getPart = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${getPart("day")}/${getPart("month")}/${getPart("year")} ${getPart("hour")}:${getPart("minute")}`;
+};
+
 const buildTicketLines = (job, config) => {
   const lines = [];
   const items = (job.items || []).map(normalizeItem).filter(Boolean);
-  const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  lines.push(config.storeLabel);
-  lines.push("PHIEU PHA CHE");
-  lines.push(repeat("-", PAPER_WIDTH));
+  lines.push("CHE BIEN");
+  lines.push("");
   lines.push(`Ban: ${toAscii(job.tableNumber || "Mang ve")}`);
-  if (job.sourceBillId) {
-    lines.push(`Bill: ${toAscii(job.sourceBillId)}`);
-  }
-  lines.push(`Tao: ${formatDateTime(job.createdAt, config.timeZone)}`);
-  lines.push(`In : ${formatDateTime(new Date(), config.timeZone)}`);
-  lines.push(`May: ${toAscii(config.terminalName)}`);
+  lines.push(`Phuc vu: ${toAscii(job.createdByName || "-")}`);
+  lines.push(`${formatTicketCode(job)} - ${formatTicketDateTime(job.createdAt, config.timeZone)}`);
+  lines.push("");
+  lines.push(`${"Mon".padEnd(29)}${"DVT".padEnd(6)}${"SL".padStart(7)}`);
   lines.push(repeat("-", PAPER_WIDTH));
 
   if (items.length === 0) {
     lines.push("Khong co mon can in.");
   } else {
-    items.forEach((item, index) => {
-      const itemHeader = `${String(index + 1).padStart(2, "0")}. x${item.quantity} ${item.name}`;
-      const itemLines = wrapText(itemHeader, PAPER_WIDTH);
-      lines.push(...itemLines);
+    items.forEach((item) => {
+      const itemLines = wrapText(item.name, 29);
+      itemLines.forEach((itemLine, lineIndex) => {
+        const quantity = lineIndex === 0 ? formatQuantity(item.quantity) : "";
+        lines.push(`${itemLine.padEnd(29)}${"".padEnd(6)}${quantity.padStart(7)}`);
+      });
       if (item.note) {
-        const noteLines = wrapText(`   + Note: ${item.note}`, PAPER_WIDTH);
+        const noteLines = wrapText(`* ${item.note}`, PAPER_WIDTH);
         lines.push(...noteLines);
       }
+      lines.push(repeat("-", PAPER_WIDTH));
     });
   }
-
-  lines.push(repeat("-", PAPER_WIDTH));
-  lines.push(`Tong so ly: ${totalQty}`);
-  lines.push("Cam on!");
   lines.push("");
   lines.push("");
   return lines;
 };
 
-const buildEscPosPayload = (lines) => {
+const buildTextEscPosPayload = (job, config) => {
   const chunks = [];
+  const items = (job.items || []).map(normalizeItem).filter(Boolean);
+  const command = (...bytes) => chunks.push(Buffer.from(bytes));
+  const text = (value = "") => chunks.push(Buffer.from(`${toAscii(value)}\n`, "ascii"));
+  const setAlign = (alignment) => command(0x1b, 0x61, alignment);
+  const setBold = (enabled) => command(0x1b, 0x45, enabled ? 0x01 : 0x00);
+  const setSize = (size) => command(0x1d, 0x21, size);
 
-  chunks.push(Buffer.from([0x1b, 0x40]));
-  chunks.push(Buffer.from([0x1b, 0x61, 0x01]));
-  chunks.push(Buffer.from(`${toAscii(lines[0] || "")}\n`, "ascii"));
-  chunks.push(Buffer.from(`${toAscii(lines[1] || "")}\n`, "ascii"));
-  chunks.push(Buffer.from([0x1b, 0x61, 0x00]));
+  command(0x1b, 0x40);
+  setAlign(0x01);
+  setBold(true);
+  setSize(0x11);
+  text("CHE BIEN");
+  setSize(0x00);
+  setBold(false);
+  text("");
 
-  const body = lines.slice(2).join("\n");
-  chunks.push(Buffer.from(`${body}\n`, "ascii"));
-  chunks.push(Buffer.from([0x1b, 0x64, 0x03]));
-  chunks.push(Buffer.from([0x1d, 0x56, 0x42, 0x00]));
+  setAlign(0x00);
+  setBold(true);
+  text(`Ban: ${job.tableNumber || "Mang ve"}`);
+  text(`Phuc vu: ${job.createdByName || "-"}`);
+  setBold(false);
+  text(`${formatTicketCode(job)} - ${formatTicketDateTime(job.createdAt, config.timeZone)}`);
+  text("");
+
+  setBold(true);
+  text(`${"Mon".padEnd(29)}${"DVT".padEnd(6)}${"SL".padStart(7)}`);
+  setBold(false);
+  text(repeat("-", PAPER_WIDTH));
+
+  if (items.length === 0) {
+    text("Khong co mon can in.");
+  } else {
+    items.forEach((item) => {
+      const itemLines = wrapText(item.name, 29);
+      setBold(false);
+      setSize(0x01);
+      itemLines.forEach((itemLine, lineIndex) => {
+        const quantity = lineIndex === 0 ? formatQuantity(item.quantity) : "";
+        text(`${itemLine.padEnd(29)}${"".padEnd(6)}${quantity.padStart(7)}`);
+      });
+      setSize(0x00);
+      setBold(false);
+      if (item.note) {
+        wrapText(`* ${item.note}`, PAPER_WIDTH).forEach(text);
+      }
+      text(repeat("-", PAPER_WIDTH));
+    });
+  }
+
+  command(0x1b, 0x64, 0x04);
+  command(0x1d, 0x56, 0x42, 0x00);
 
   return Buffer.concat(chunks);
+};
+
+const findTicketRenderer = () => {
+  const candidates = [
+    path.join(__dirname, "bar-print-ticket-renderer.ps1"),
+    path.join(__dirname, "bar-print-agent-windows", "bar-print-ticket-renderer.ps1"),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || "";
+};
+
+const buildBitmapEscPosPayload = async (job, config) => {
+  const rendererPath = findTicketRenderer();
+  if (process.platform !== "win32" || !rendererPath) return null;
+
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "tn-bar-ticket-"));
+  const inputPath = path.join(temporaryDirectory, "ticket.json");
+  const outputPath = path.join(temporaryDirectory, "ticket.bin");
+  const model = {
+    tableNumber: String(job.tableNumber || "Mang về"),
+    staffName: String(job.createdByName || "-"),
+    code: formatTicketCode(job),
+    dateTime: formatTicketDateTime(job.createdAt, config.timeZone),
+    items: (job.items || [])
+      .map((item) => {
+        const quantity = Number(item.quantity || 0);
+        if (!Number.isFinite(quantity) || quantity <= 0) return null;
+
+        return {
+          name: String(item.name || "Món"),
+          quantity: formatQuantity(quantity),
+          note: String(item.note || ""),
+        };
+      })
+      .filter(Boolean),
+  };
+
+  try {
+    fs.writeFileSync(inputPath, JSON.stringify(model), "utf8");
+    await execFile(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        rendererPath,
+        "-InputPath",
+        inputPath,
+        "-OutputPath",
+        outputPath,
+      ],
+      { windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024 }
+    );
+    const raster = fs.readFileSync(outputPath);
+    if (!raster.length || raster.length % RASTER_WIDTH_BYTES !== 0) {
+      throw new Error("Invalid ticket raster output.");
+    }
+    const height = raster.length / RASTER_WIDTH_BYTES;
+    if (height > 0xffff) throw new Error("Ticket raster is too tall.");
+
+    return Buffer.concat([
+      Buffer.from([0x1b, 0x40]),
+      Buffer.from([
+        0x1d,
+        0x76,
+        0x30,
+        0x00,
+        RASTER_WIDTH_BYTES & 0xff,
+        (RASTER_WIDTH_BYTES >> 8) & 0xff,
+        height & 0xff,
+        (height >> 8) & 0xff,
+      ]),
+      raster,
+      Buffer.from([0x1b, 0x64, 0x04]),
+      Buffer.from([0x1d, 0x56, 0x42, 0x00]),
+    ]);
+  } finally {
+    [inputPath, outputPath].forEach((filePath) => {
+      try {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch {
+        // Temporary cleanup is best effort.
+      }
+    });
+    try {
+      fs.rmdirSync(temporaryDirectory);
+    } catch {
+      // Temporary cleanup is best effort.
+    }
+  }
+};
+
+const buildEscPosPayload = async (job, config) => {
+  try {
+    const bitmapPayload = await buildBitmapEscPosPayload(job, config);
+    if (bitmapPayload) return bitmapPayload;
+  } catch (error) {
+    console.error("Vietnamese bitmap rendering failed; using ASCII fallback.");
+    console.error(error);
+  }
+  return buildTextEscPosPayload(job, config);
 };
 
 const sendToPrinter = (payload, config) =>
@@ -226,6 +377,7 @@ const normalizeJobData = (jobId, rawData) => ({
   storeId: String(rawData.storeId || ""),
   tableNumber: String(rawData.tableNumber || ""),
   sourceBillId: String(rawData.sourceBillId || ""),
+  createdByName: String(rawData.createdByName || ""),
   status: String(rawData.status || ""),
   items: Array.isArray(rawData.items) ? rawData.items : [],
   createdAt: rawData.createdAt,
@@ -251,7 +403,6 @@ const createConfig = () => {
     process.env.PRINT_AGENT_RETRY_INTERVAL_MS,
     DEFAULT_RETRY_INTERVAL_MS
   );
-  const storeLabel = toAscii(process.env.PRINT_AGENT_STORE_LABEL || DEFAULT_STORE_LABEL);
   const timeZone = process.env.PRINT_AGENT_TIME_ZONE || DEFAULT_TIME_ZONE;
   const dryRun = isTrue(process.env.PRINT_AGENT_DRY_RUN) || args.has("--dry-run");
   const testOnStart = isTrue(process.env.PRINT_AGENT_TEST_ON_START) || args.has("--test");
@@ -273,7 +424,6 @@ const createConfig = () => {
     printerPort,
     socketTimeoutMs,
     retryIntervalMs,
-    storeLabel,
     timeZone,
     dryRun,
     testOnStart,
@@ -288,12 +438,14 @@ const createConfig = () => {
 
 const printTestPage = async (config) => {
   const testJob = {
+    id: "test-ticket-70278",
     tableNumber: "TEST",
     sourceBillId: "TEST-PAGE",
+    createdByName: "Thu Ngân 3",
     createdAt: new Date(),
     items: [
-      { quantity: 1, name: "Ket noi LAN OK", note: "" },
-      { quantity: 2, name: "Tra sua tran chau", note: "It da" },
+      { quantity: 1, name: "Kết nối LAN OK", note: "" },
+      { quantity: 2, name: "Trà sữa trân châu", note: "Ít đá" },
     ],
   };
 
@@ -304,7 +456,7 @@ const printTestPage = async (config) => {
     return;
   }
 
-  const payload = buildEscPosPayload(lines);
+  const payload = await buildEscPosPayload(testJob, config);
   await sendToPrinter(payload, config);
   console.log("Printed test page.");
 };
@@ -393,7 +545,7 @@ const run = async () => {
       return;
     }
 
-    const payload = buildEscPosPayload(lines);
+    const payload = await buildEscPosPayload(job, config);
     await sendToPrinter(payload, config);
     await markPrinted(jobId);
     console.log(`[${jobId}] Printed and marked.`);

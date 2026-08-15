@@ -4,6 +4,7 @@ Script `scripts/bar-print-agent.cjs` is a small background service that:
 
 - Polls pending print jobs from the MySQL-backed POS API
 - Prints each ticket directly to a LAN printer via TCP (`IP:9100`)
+- Renders tickets as monochrome bitmaps on Windows so Vietnamese diacritics print correctly
 - Marks the MySQL job as `printed` through the API after successful printing
 
 This allows the pha che counter to have only a LAN printer (no browser tab on that counter).
@@ -24,7 +25,6 @@ for preparation tickets, so printing stays silent as long as this agent is runni
 - `PRINT_AGENT_PRINTER_PORT` (optional, default `9100`)
 - `PRINT_AGENT_STORE_ID` (optional, default `cafe`)
 - `PRINT_AGENT_TERMINAL_NAME` (optional, default machine hostname)
-- `PRINT_AGENT_STORE_LABEL` (optional, default `ONG QUAN`)
 - `PRINT_AGENT_TIME_ZONE` (optional, default `Asia/Ho_Chi_Minh`)
 - `PRINT_AGENT_SOCKET_TIMEOUT_MS` (optional, default `12000`)
 - `PRINT_AGENT_RETRY_INTERVAL_MS` (optional, default `15000`)

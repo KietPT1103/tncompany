@@ -52,7 +52,7 @@ Write-Host "=== CAI DAT TN COMPANY BAR PRINT AGENT ===" -ForegroundColor Cyan
 Write-Host "Agent se chay an khi Windows khoi dong, khong can Node.js hay npm."
 Write-Host ""
 
-$requiredFiles = @("node.exe", "bar-print-agent.cjs", "run-agent.ps1")
+$requiredFiles = @("node.exe", "bar-print-agent.cjs", "bar-print-ticket-renderer.ps1", "run-agent.ps1")
 foreach ($fileName in $requiredFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceDirectory $fileName))) {
         throw "Bo cai thieu file: $fileName"
@@ -63,7 +63,6 @@ $printerHost = Read-WithDefault -Prompt "IP may in KV838/BP-T3" -Default "192.16
 $printerPort = Read-WithDefault -Prompt "Cong RAW cua may in" -Default "9100" -Required
 $storeId = Read-WithDefault -Prompt "Ma cua hang" -Default "cafe" -Required
 $terminalName = Read-WithDefault -Prompt "Ten may pha che" -Default $env:COMPUTERNAME -Required
-$storeLabel = Read-WithDefault -Prompt "Ten in tren phieu" -Default "ONG QUAN" -Required
 $apiBaseUrl = Read-WithDefault -Prompt "Dia chi API" -Default "https://tnservice.vn/api" -Required
 
 if ($apiBaseUrl -notmatch "^https?://") {
@@ -87,7 +86,6 @@ if (-not $apiToken) {
     PRINT_AGENT_PRINTER_PORT = $printerPort
     PRINT_AGENT_STORE_ID = $storeId
     PRINT_AGENT_TERMINAL_NAME = $terminalName
-    PRINT_AGENT_STORE_LABEL = $storeLabel
     PRINT_AGENT_API_BASE_URL = $apiBaseUrl
     PRINT_AGENT_API_TOKEN = $apiToken
     PRINT_AGENT_API_LOGIN = $apiLogin
@@ -99,6 +97,7 @@ if (-not $apiToken) {
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $sourceDirectory "node.exe") -Destination $installDirectory -Force
 Copy-Item -LiteralPath (Join-Path $sourceDirectory "bar-print-agent.cjs") -Destination $installDirectory -Force
+Copy-Item -LiteralPath (Join-Path $sourceDirectory "bar-print-ticket-renderer.ps1") -Destination $installDirectory -Force
 Copy-Item -LiteralPath (Join-Path $sourceDirectory "run-agent.ps1") -Destination $installDirectory -Force
 
 $environmentLines = @(
@@ -106,7 +105,6 @@ $environmentLines = @(
     "PRINT_AGENT_PRINTER_PORT=$printerPort"
     "PRINT_AGENT_STORE_ID=$storeId"
     "PRINT_AGENT_TERMINAL_NAME=$terminalName"
-    "PRINT_AGENT_STORE_LABEL=$storeLabel"
     "PRINT_AGENT_TIME_ZONE=Asia/Ho_Chi_Minh"
     "PRINT_AGENT_SOCKET_TIMEOUT_MS=12000"
     "PRINT_AGENT_RETRY_INTERVAL_MS=15000"
