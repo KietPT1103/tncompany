@@ -6,10 +6,7 @@ import { BellRing, Check, CheckCircle2, ChefHat, ChevronDown, Clock3, Coffee, Gr
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
-import { BarPrintJob, BarWorkflowStatus, markBarPrintJobPrinted, subscribeBarBoard, subscribeBarHistory, updateBarWorkflowStatus } from "@/services/barPrintJobService";
-
-const AUTO_PRINT_KEY = "pos:bar-auto-print";
-const TERMINAL_KEY = "pos:bar-terminal-name";
+import { BarPrintJob, BarWorkflowStatus, subscribeBarBoard, subscribeBarHistory, updateBarWorkflowStatus } from "@/services/barPrintJobService";
 type ActiveStatus = Exclude<BarWorkflowStatus, "collected">;
 type AlertKind = "new" | "urgent";
 
@@ -81,7 +78,6 @@ export default function BarBoardPage() {
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [dragOver, setDragOver] = useState<BarWorkflowStatus | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [autoPrint, setAutoPrint] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyJobs, setHistoryJobs] = useState<BarPrintJob[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -90,10 +86,6 @@ export default function BarBoardPage() {
   const knownIds = useRef<Set<string> | null>(null);
   const alertAudio = useRef<Partial<Record<AlertKind, HTMLAudioElement>>>({});
   const urgentIds = useRef<Set<string> | null>(null);
-  const printingIds = useRef(new Set<string>());
-  const terminalName = "Máy pha chế";
-  const autoPrintKey = `${AUTO_PRINT_KEY}:${storeId}`;
-  const terminalKey = `${TERMINAL_KEY}:${storeId}`;
 
   const playAlert = useCallback((kindOrForce: AlertKind | boolean = "new", force = false) => {
     const kind: AlertKind = typeof kindOrForce === "string" ? kindOrForce : "new";
@@ -109,7 +101,6 @@ export default function BarBoardPage() {
   }, [soundEnabled]);
 
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { try { setAutoPrint(localStorage.getItem(autoPrintKey) === "1"); } catch { setAutoPrint(false); } }, [autoPrintKey]);
   useEffect(() => {
     setLoading(true); knownIds.current = null; urgentIds.current = null;
     return subscribeBarBoard(storeId, (nextJobs) => {
@@ -135,17 +126,6 @@ export default function BarBoardPage() {
       setHistoryJobs(nextJobs); setHistoryLoading(false); setHistoryError("");
     }, () => { setHistoryLoading(false); setHistoryError("Không tải được lịch sử. Vui lòng thử lại."); });
   }, [historyOpen, storeId]);
-  useEffect(() => {
-    if (!autoPrint) return;
-    jobs.filter((job) => job.status === "pending").forEach(async (job) => {
-      if (printingIds.current.has(job.id)) return;
-      printingIds.current.add(job.id);
-      try { if (job.items.length) printTicket(job); await markBarPrintJobPrinted(job.id, localStorage.getItem(terminalKey) || terminalName); }
-      catch (error) { console.error("Không tự in được phiếu pha chế", error); }
-      finally { printingIds.current.delete(job.id); }
-    });
-  }, [autoPrint, jobs, terminalKey]);
-
   const grouped = useMemo(() => Object.fromEntries(columns.map((column) => [column.id, jobs.filter((job) => job.workflowStatus === column.id)])) as Record<ActiveStatus, BarPrintJob[]>, [jobs]);
   const moveJob = async (job: BarPrintJob, status: BarWorkflowStatus) => {
     if (job.workflowStatus === status || busyIds.has(job.id)) return;
@@ -157,12 +137,10 @@ export default function BarBoardPage() {
     finally { setBusyIds((ids) => { const next = new Set(ids); next.delete(job.id); return next; }); }
   };
   const handleDrop = (event: DragEvent, status: BarWorkflowStatus) => { event.preventDefault(); setDragOver(null); const job = jobs.find((item) => item.id === event.dataTransfer.getData("text/bar-job")); if (job) void moveJob(job, status); };
-  const toggleAutoPrint = () => { const next = !autoPrint; setAutoPrint(next); try { localStorage.setItem(autoPrintKey, next ? "1" : "0"); localStorage.setItem(terminalKey, terminalName); } catch { /* localStorage may be unavailable */ } };
-
   return <RoleGuard permission={role === "bartender" ? "bar.access" : "bills.access"}><main className="min-h-screen bg-[#f4f6f3] text-slate-900">
     <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur md:px-6"><div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-900 text-amber-300"><ChefHat className="h-6 w-6" /></div><div><div className="flex items-center gap-2"><h1 className="text-xl font-black tracking-tight">Màn hình pha chế</h1><span className="hidden rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700 sm:inline">TRỰC TIẾP</span></div><p className="text-xs font-medium text-slate-500">{storeName} · cập nhật mỗi 2 giây</p></div></div>
-      <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setHistoryOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><History className="h-4 w-4" /><span className="hidden sm:inline">Lịch sử đã lấy</span></button><Link href="/pos" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><MonitorUp className="h-4 w-4" />POS</Link><button type="button" onClick={() => { const next = !soundEnabled; setSoundEnabled(next); if (next) window.setTimeout(() => playAlert(true), 0); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition ${soundEnabled ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-500"}`}>{soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}<span className="hidden sm:inline">Âm báo</span></button><button type="button" onClick={toggleAutoPrint} className={`inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-white transition ${autoPrint ? "bg-emerald-700 hover:bg-emerald-800" : "bg-slate-700 hover:bg-slate-800"}`}><Printer className="h-4 w-4" />{autoPrint ? "Đang tự in" : "Bật tự in bill"}</button></div>
+      <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setHistoryOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><History className="h-4 w-4" /><span className="hidden sm:inline">Lịch sử đã lấy</span></button><Link href="/pos" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><MonitorUp className="h-4 w-4" />POS</Link><button type="button" onClick={() => { const next = !soundEnabled; setSoundEnabled(next); if (next) window.setTimeout(() => playAlert(true), 0); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition ${soundEnabled ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-500"}`}>{soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}<span className="hidden sm:inline">Âm báo</span></button><span className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-700 px-3 text-sm font-bold text-white" title="Phiếu được Windows Print Agent gửi thẳng tới máy in LAN"><Printer className="h-4 w-4" />In tự động qua agent</span></div>
     </div></header>
     <section className="mx-auto max-w-[1800px] overflow-x-auto p-4 md:p-6">
       {syncError ? <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"><RefreshCcw className="h-4 w-4 animate-spin" />{syncError}</div> : null}
