@@ -192,6 +192,52 @@ function pos_ensure_bar_workflow_columns(): void
     }
 }
 
+function pos_ensure_category_preparation_print_column(): void
+{
+    auth_ensure_column(
+        'categories',
+        'is_preparation_print_enabled',
+        'TINYINT(1) NOT NULL DEFAULT 1 AFTER is_hidden'
+    );
+}
+
+/** @param array<int, mixed> $items */
+function pos_filter_preparation_print_items(string $storeId, array $items): array
+{
+    $menuIds = [];
+    foreach ($items as $item) {
+        if (!is_array($item)) continue;
+        $menuId = trim((string) ($item['menuId'] ?? ''));
+        if ($menuId !== '') $menuIds[strtolower($menuId)] = $menuId;
+    }
+    if ($menuIds === []) return [];
+
+    $values = array_values($menuIds);
+    $placeholders = implode(',', array_fill(0, count($values), '?'));
+    $statement = db()->prepare(
+        "SELECT p.product_code
+         FROM products p
+         INNER JOIN categories c ON c.id = p.category_id
+         WHERE p.store_id = ?
+           AND p.product_code IN ({$placeholders})
+           AND c.is_preparation_print_enabled = 0"
+    );
+    $statement->execute(array_merge([$storeId], $values));
+    $disabledCodes = [];
+    foreach ($statement->fetchAll() as $row) {
+        $disabledCodes[strtolower((string) $row['product_code'])] = true;
+    }
+
+    return array_values(array_filter(
+        $items,
+        static function ($item) use ($disabledCodes): bool {
+            if (!is_array($item)) return false;
+            $menuId = strtolower(trim((string) ($item['menuId'] ?? '')));
+            return $menuId !== '' && !isset($disabledCodes[$menuId]);
+        }
+    ));
+}
+
 function pos_shift_payload(array $row): array
 {
     return [
@@ -410,6 +456,9 @@ $posStoreId = pos_resolve_store_id($user, $requestedStoreId);
 $_GET['storeId'] = $posStoreId;
 $body['storeId'] = $posStoreId;
 if ($resource === 'bills') pos_ensure_bill_order_source_column();
+if ($method === 'POST' && in_array($resource, ['kitchen-jobs', 'bar-jobs'], true)) {
+    pos_ensure_category_preparation_print_column();
+}
 
 if ($method === 'GET' && $resource === 'tables') {
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
@@ -772,7 +821,7 @@ if (in_array($resource, ['kitchen-jobs','bar-jobs'], true)) {
         $limit=$view==='history'?' LIMIT 100':'';
         $statement=db()->prepare("SELECT * FROM {$jobTable} WHERE store_id=:store_id AND {$where} ORDER BY {$order}{$limit}");$statement->execute(['store_id'=>trim((string)($_GET['storeId']??''))]);$rows=$statement->fetchAll();$ids=array_map(static fn(array $r):string=>(string)$r['id'],$rows);$items=pos_job_items($itemTable,$ids);pos_polling_response(array_map(static fn(array $row):array=>['id'=>(string)$row['id'],'storeId'=>(string)$row['store_id'],'orderKey'=>(string)$row['table_number'],'tableNumber'=>(string)$row['table_number'],'sourceBillId'=>$row['bill_id']?:'','items'=>$items[(string)$row['id']]??[],'status'=>(string)$row['status'],'workflowStatus'=>(string)($row['workflow_status']??'new'),'createdAt'=>pos_timestamp($row['created_at']),'workflowUpdatedAt'=>pos_timestamp($row['workflow_updated_at']??null),'collectedAt'=>pos_timestamp($row['collected_at']??null),'printedAt'=>pos_timestamp($row['printed_at']),'printedByTerminal'=>$row['terminal_name']?:''],$rows));
     }
-    if($method==='POST'){$id=uuidv4();$items=is_array($body['items']??null)?$body['items']:[];db()->beginTransaction();try{db()->prepare("INSERT INTO {$jobTable} (id,store_id,bill_id,table_number,status,note) VALUES (:id,:store_id,:bill_id,:table_number,'pending',:note)")->execute(['id'=>$id,'store_id'=>trim((string)($body['storeId']??'')),'bill_id'=>trim((string)($body['sourceBillId']??''))?:null,'table_number'=>trim((string)($body['tableNumber']??'')),'note'=>trim((string)($body['orderKey']??''))]);$s=db()->prepare("INSERT INTO {$itemTable} (job_id,menu_id,name,quantity,note) VALUES (:job_id,:menu_id,:name,:quantity,:note)");foreach($items as $item)$s->execute(['job_id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}realtime_publish($posStoreId,$prefix.'-jobs-updated',['id'=>$id,'action'=>'created']);respond_ok(['id'=>$id],201);}
+    if($method==='POST'){$id=uuidv4();$items=is_array($body['items']??null)?pos_filter_preparation_print_items($posStoreId,$body['items']):[];if($items===[])respond_ok(['id'=>'','skipped'=>true],200);db()->beginTransaction();try{db()->prepare("INSERT INTO {$jobTable} (id,store_id,bill_id,table_number,status,note) VALUES (:id,:store_id,:bill_id,:table_number,'pending',:note)")->execute(['id'=>$id,'store_id'=>trim((string)($body['storeId']??'')),'bill_id'=>trim((string)($body['sourceBillId']??''))?:null,'table_number'=>trim((string)($body['tableNumber']??'')),'note'=>trim((string)($body['orderKey']??''))]);$s=db()->prepare("INSERT INTO {$itemTable} (job_id,menu_id,name,quantity,note) VALUES (:job_id,:menu_id,:name,:quantity,:note)");foreach($items as $item)$s->execute(['job_id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}realtime_publish($posStoreId,$prefix.'-jobs-updated',['id'=>$id,'action'=>'created']);respond_ok(['id'=>$id],201);}
     if($method==='PATCH'){
         $id=trim((string)($body['id']??''));pos_assert_record_store($jobTable,$id,$user,$posStoreId);
         if($prefix==='bar'&&array_key_exists('workflowStatus',$body)){

@@ -796,6 +796,15 @@ export default function CafePosPage() {
     return found?.name || cat;
   };
 
+  const canPrintPreparationItem = (itemCategory?: string) => {
+    if (!itemCategory) return true;
+    const matchedCategory = categories.find(
+      (categoryItem) =>
+        categoryItem.id === itemCategory || categoryItem.name === itemCategory
+    );
+    return matchedCategory?.isPreparationPrintEnabled !== false;
+  };
+
   const isCategoryMatch = (itemCategory: string, selected: string) => {
     if (selected === ALL_CATEGORY_ID) return true;
     if (itemCategory === selected) return true;
@@ -1698,21 +1707,28 @@ export default function CafePosPage() {
       return;
     }
 
+    const printableItems = incrementalItems.filter((item) =>
+      canPrintPreparationItem(item.category)
+    );
+    const skippedItemCount = incrementalItems.length - printableItems.length;
+
     try {
-      await createKitchenPrintJob({
-        storeId,
-        orderKey: activeOrderKey,
-        tableNumber: activeOrderKey,
-        createdById: user?.uid,
-        createdByName: cashierName,
-        items: incrementalItems.map((item) => ({
-          menuId: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          note: item.note || "",
-        })),
-      });
+      if (printableItems.length > 0) {
+        await createKitchenPrintJob({
+          storeId,
+          orderKey: activeOrderKey,
+          tableNumber: activeOrderKey,
+          createdById: user?.uid,
+          createdByName: cashierName,
+          items: printableItems.map((item) => ({
+            menuId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            note: item.note || "",
+          })),
+        });
+      }
     } catch (error) {
       console.error("Không tạo được phiếu món mới", error);
       alert(
@@ -1726,7 +1742,15 @@ export default function CafePosPage() {
       delete next[activeOrderKey];
       return next;
     });
-    alert("Đã lưu món mới. Máy bếp chính sẽ tự in.");
+    if (printableItems.length === 0) {
+      alert("Đã lưu món mới. Các danh mục đã chọn không in bill chế biến.");
+    } else if (skippedItemCount > 0) {
+      alert(
+        `Đã lưu món mới và gửi ${printableItems.length} món để in. ${skippedItemCount} món thuộc danh mục không in bill chế biến.`
+      );
+    } else {
+      alert("Đã lưu món mới. Máy bếp chính sẽ tự in.");
+    }
   };
 
   const handlePay = async () => {
@@ -1863,20 +1887,25 @@ export default function CafePosPage() {
       });
 
       if (storeId === CAFE_STORE_ID) {
-        await createBarPrintJob({
-          storeId,
-          tableNumber: orderLabel,
-          sourceBillId: billId,
-          createdById: user?.uid,
-          createdByName: cashierName,
-          items: receiptData.items.map((item) => ({
-            menuId: item.id,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            note: item.note?.trim() || "",
-          })),
-        });
+        const printableItems = receiptData.items.filter((item) =>
+          canPrintPreparationItem(item.category)
+        );
+        if (printableItems.length > 0) {
+          await createBarPrintJob({
+            storeId,
+            tableNumber: orderLabel,
+            sourceBillId: billId,
+            createdById: user?.uid,
+            createdByName: cashierName,
+            items: printableItems.map((item) => ({
+              menuId: item.id,
+              name: item.name,
+              price: item.price,
+              quantity: item.quantity,
+              note: item.note?.trim() || "",
+            })),
+          });
+        }
       }
 
       if (activeOrderKey) {

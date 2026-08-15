@@ -6,6 +6,7 @@ export type Category = {
   description?: string;
   order?: number | null;
   isHidden?: boolean;
+  isPreparationPrintEnabled?: boolean;
   storeId?: string;
 };
 
@@ -20,7 +21,8 @@ export async function getCategories(storeId = "cafe"): Promise<Category[]> {
 export async function addCategory(
   name: string,
   description?: string,
-  storeId = "cafe"
+  storeId = "cafe",
+  isPreparationPrintEnabled = true
 ) {
   if (!name.trim()) return null;
   const { id } = await apiRequest<{ id: string }>("/categories.php", {
@@ -29,6 +31,7 @@ export async function addCategory(
       name: name.trim(),
       description: description?.trim() || "",
       storeId,
+      isPreparationPrintEnabled,
     }),
   });
   return id;
@@ -36,7 +39,12 @@ export async function addCategory(
 
 export async function updateCategory(
   categoryId: string,
-  data: { name?: string; description?: string; isHidden?: boolean }
+  data: {
+    name?: string;
+    description?: string;
+    isHidden?: boolean;
+    isPreparationPrintEnabled?: boolean;
+  }
 ) {
   const payload: Record<string, unknown> = { id: categoryId };
 
@@ -54,6 +62,10 @@ export async function updateCategory(
 
   if (data.isHidden !== undefined) {
     payload.isHidden = data.isHidden === true;
+  }
+
+  if (data.isPreparationPrintEnabled !== undefined) {
+    payload.isPreparationPrintEnabled = data.isPreparationPrintEnabled === true;
   }
 
   await apiRequest<{ updated: boolean }>("/categories.php", {

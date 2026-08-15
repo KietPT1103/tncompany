@@ -7,12 +7,18 @@ require_once __DIR__ . '/_lib/auth.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+auth_ensure_column(
+    'categories',
+    'is_preparation_print_enabled',
+    'TINYINT(1) NOT NULL DEFAULT 1 AFTER is_hidden'
+);
+
 if ($method === 'GET') {
     auth_require_permission(['categories.access', 'bills.access', 'bar.checkout']);
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
-        'SELECT id, store_id, name, description, sort_order, is_hidden
+        'SELECT id, store_id, name, description, sort_order, is_hidden, is_preparation_print_enabled
          FROM categories
          WHERE store_id = :store_id
          ORDER BY name ASC'
@@ -30,6 +36,7 @@ if ($method === 'GET') {
                 'description' => $row['description'] ?: '',
                 'order' => $row['sort_order'] !== null ? (int) $row['sort_order'] : null,
                 'isHidden' => (bool) $row['is_hidden'],
+                'isPreparationPrintEnabled' => (bool) $row['is_preparation_print_enabled'],
             ];
         },
         $statement->fetchAll()
@@ -47,6 +54,8 @@ if ($method === 'POST') {
     $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
     $name = trim((string) ($body['name'] ?? ''));
     $description = trim((string) ($body['description'] ?? ''));
+    $isPreparationPrintEnabled = !array_key_exists('isPreparationPrintEnabled', $body)
+        || !empty($body['isPreparationPrintEnabled']);
 
     if ($name === '') {
         respond_error('Category name is required', 422);
@@ -54,8 +63,8 @@ if ($method === 'POST') {
 
     $id = uuidv4();
     $statement = db()->prepare(
-        'INSERT INTO categories (id, store_id, name, description, sort_order, is_hidden)
-         VALUES (:id, :store_id, :name, :description, :sort_order, 0)'
+        'INSERT INTO categories (id, store_id, name, description, sort_order, is_hidden, is_preparation_print_enabled)
+         VALUES (:id, :store_id, :name, :description, :sort_order, 0, :is_preparation_print_enabled)'
     );
     $statement->execute([
         'id' => $id,
@@ -63,6 +72,7 @@ if ($method === 'POST') {
         'name' => $name,
         'description' => $description,
         'sort_order' => time(),
+        'is_preparation_print_enabled' => $isPreparationPrintEnabled ? 1 : 0,
     ]);
 
     respond_ok([
@@ -99,6 +109,11 @@ if ($method === 'PATCH') {
     if (array_key_exists('isHidden', $body)) {
         $fields[] = 'is_hidden = :is_hidden';
         $params['is_hidden'] = !empty($body['isHidden']) ? 1 : 0;
+    }
+
+    if (array_key_exists('isPreparationPrintEnabled', $body)) {
+        $fields[] = 'is_preparation_print_enabled = :is_preparation_print_enabled';
+        $params['is_preparation_print_enabled'] = !empty($body['isPreparationPrintEnabled']) ? 1 : 0;
     }
 
     if ($fields === []) {

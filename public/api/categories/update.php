@@ -7,6 +7,12 @@ require_once __DIR__ . '/../_lib/auth.php';
 
 require_admin();
 
+auth_ensure_column(
+    'categories',
+    'is_preparation_print_enabled',
+    'TINYINT(1) NOT NULL DEFAULT 1 AFTER is_hidden'
+);
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     respond_error('Method not allowed', 405);
 }
@@ -16,6 +22,9 @@ $id = trim((string)($body['id'] ?? ''));
 $name = array_key_exists('name', $body) ? trim((string)$body['name']) : null;
 $description = array_key_exists('description', $body) ? trim((string)$body['description']) : null;
 $isHidden = array_key_exists('isHidden', $body) ? (int)(bool)$body['isHidden'] : null;
+$isPreparationPrintEnabled = array_key_exists('isPreparationPrintEnabled', $body)
+    ? (int)(bool)$body['isPreparationPrintEnabled']
+    : null;
 
 if ($id === '') {
     respond_error('Category id is required', 422);
@@ -35,6 +44,10 @@ if ($description !== null) {
 if ($isHidden !== null) {
     $fields[] = 'is_hidden = :is_hidden';
     $params['is_hidden'] = $isHidden;
+}
+if ($isPreparationPrintEnabled !== null) {
+    $fields[] = 'is_preparation_print_enabled = :is_preparation_print_enabled';
+    $params['is_preparation_print_enabled'] = $isPreparationPrintEnabled;
 }
 
 if (!$fields) {

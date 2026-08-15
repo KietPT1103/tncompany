@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS categories (
   description TEXT NULL,
   sort_order INT NULL,
   is_hidden TINYINT(1) NOT NULL DEFAULT 0,
+  is_preparation_print_enabled TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_categories_store_name (store_id, name),

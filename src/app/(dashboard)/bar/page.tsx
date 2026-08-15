@@ -2,7 +2,7 @@
 
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BellRing, Check, CheckCircle2, ChefHat, Clock3, Coffee, GripVertical, History, Loader2, MonitorUp, Printer, RefreshCcw, RotateCcw, Sparkles, Volume2, VolumeX, X } from "lucide-react";
+import { BellRing, Check, CheckCircle2, ChefHat, ChevronDown, Clock3, Coffee, GripVertical, History, Loader2, MonitorUp, Printer, RefreshCcw, RotateCcw, Sparkles, Volume2, VolumeX, X } from "lucide-react";
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
@@ -11,6 +11,7 @@ import { BarPrintJob, BarWorkflowStatus, markBarPrintJobPrinted, subscribeBarBoa
 const AUTO_PRINT_KEY = "pos:bar-auto-print";
 const TERMINAL_KEY = "pos:bar-terminal-name";
 type ActiveStatus = Exclude<BarWorkflowStatus, "collected">;
+type AlertKind = "new" | "urgent";
 
 const columns: Array<{ id: ActiveStatus; title: string; hint: string; icon: typeof BellRing; tone: string; badge: string }> = [
   { id: "new", title: "Bill mới", hint: "Chưa bắt đầu", icon: BellRing, tone: "border-amber-200 bg-amber-50/60", badge: "bg-amber-100 text-amber-800" },
@@ -43,16 +44,24 @@ function BillCard({ job, now, busy, onMove, onPrint }: { job: BarPrintJob; now: 
   const urgent = minutes >= 15;
   const warning = minutes >= 8;
   const nextStatus: BarWorkflowStatus = job.workflowStatus === "new" ? "preparing" : job.workflowStatus === "preparing" ? "ready" : "collected";
+  const totalQuantity = job.items.reduce((total, item) => total + item.quantity, 0);
   const actionLabel = job.workflowStatus === "new" ? "Bắt đầu pha" : job.workflowStatus === "preparing" ? "Đã pha xong" : "Khách đã lấy";
   return (
-    <article draggable={!busy} onDragStart={(event) => { event.dataTransfer.setData("text/bar-job", job.id); event.dataTransfer.effectAllowed = "move"; }} className={`group rounded-2xl border bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${urgent ? "animate-pulse border-rose-400 ring-2 ring-rose-200" : warning ? "border-amber-400 ring-2 ring-amber-100" : "border-slate-200"}`}>
+    <article draggable={!busy} onDragStart={(event) => { event.dataTransfer.setData("text/bar-job", job.id); event.dataTransfer.effectAllowed = "move"; }} className={`group rounded-2xl border bg-white p-3 shadow-sm transition duration-200 hover:shadow-md ${urgent ? "animate-pulse border-rose-400 ring-2 ring-rose-200" : warning ? "border-amber-400 ring-2 ring-amber-100" : "border-slate-200"}`}>
+      <details className="group/details [&_ul]:mt-3">
+        <summary className="cursor-pointer list-none rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0"><div className="flex items-center gap-2"><GripVertical className="h-4 w-4 shrink-0 cursor-grab text-slate-300 active:cursor-grabbing" /><h3 className="truncate text-lg font-black text-slate-900">{job.tableNumber || "Mang về"}</h3></div><p className="mt-1 pl-6 text-xs font-bold uppercase tracking-wider text-slate-400">#{shortCode(job)}</p></div>
         <div className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${urgent ? "bg-rose-100 text-rose-700" : warning ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}><Clock3 className="h-3.5 w-3.5" />{minutes} phút</div>
       </div>
-      <div className="my-3 border-t border-dashed border-slate-200" />
+        <div className="mt-2 flex items-center justify-between border-t border-dashed border-slate-200 pt-2 pl-6 text-xs font-bold text-slate-500 transition hover:text-slate-800">
+          <span>{job.items.length} món · {formatQuantity(totalQuantity)} phần</span>
+          <span className="flex items-center gap-1">Xem chi tiết <ChevronDown className="h-4 w-4 transition-transform group-open/details:rotate-180" /></span>
+        </div>
+        </summary>
       <ul className="space-y-2.5">{job.items.map((item, index) => <li key={`${item.menuId}-${index}`} className="flex gap-3 text-sm"><span className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-slate-900 px-1.5 font-black text-white">{formatQuantity(item.quantity)}</span><div className="min-w-0 pt-0.5"><p className="font-bold leading-5 text-slate-800">{item.name}</p>{item.note ? <p className="mt-0.5 text-xs font-semibold text-rose-600">Ghi chú: {item.note}</p> : null}</div></li>)}</ul>
-      <div className="mt-4 flex gap-2">
+      </details>
+      <div className="mt-3 flex gap-2">
         <button type="button" onClick={() => onPrint(job)} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-100" title="In lại phiếu"><Printer className="h-4 w-4" /></button>
         {job.workflowStatus !== "new" ? <button type="button" disabled={busy} onClick={() => onMove(job, job.workflowStatus === "ready" ? "preparing" : "new")} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:opacity-50" title="Chuyển lại"><RotateCcw className="h-4 w-4" /></button> : null}
         <button type="button" disabled={busy} onClick={() => onMove(job, nextStatus)} className={`inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-sm font-extrabold text-white transition active:scale-[.98] disabled:opacity-60 ${job.workflowStatus === "ready" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-900 hover:bg-slate-800"}`}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{actionLabel}</button>
@@ -79,32 +88,41 @@ export default function BarBoardPage() {
   const [historyError, setHistoryError] = useState("");
   const [now, setNow] = useState(Date.now());
   const knownIds = useRef<Set<string> | null>(null);
-  const audioContext = useRef<AudioContext | null>(null);
+  const alertAudio = useRef<Partial<Record<AlertKind, HTMLAudioElement>>>({});
+  const urgentIds = useRef<Set<string> | null>(null);
   const printingIds = useRef(new Set<string>());
   const terminalName = "Máy pha chế";
   const autoPrintKey = `${AUTO_PRINT_KEY}:${storeId}`;
   const terminalKey = `${TERMINAL_KEY}:${storeId}`;
 
-  const playAlert = useCallback((force = false) => {
-    if (!soundEnabled && !force) return;
+  const playAlert = useCallback((kindOrForce: AlertKind | boolean = "new", force = false) => {
+    const kind: AlertKind = typeof kindOrForce === "string" ? kindOrForce : "new";
+    const shouldForce = typeof kindOrForce === "boolean" ? kindOrForce : force;
+    if (!soundEnabled && !shouldForce) return;
     try {
-      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const context = audioContext.current || new AudioContextClass(); audioContext.current = context; void context.resume();
-      [0, 0.16].forEach((delay) => { const oscillator = context.createOscillator(); const gain = context.createGain(); oscillator.frequency.value = 880; gain.gain.setValueAtTime(0.0001, context.currentTime + delay); gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + delay + 0.01); gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + delay + 0.12); oscillator.connect(gain).connect(context.destination); oscillator.start(context.currentTime + delay); oscillator.stop(context.currentTime + delay + 0.13); });
+      const fileName = kind === "urgent" ? "bill-bao-do" : "bill-moi";
+      const audio = alertAudio.current[kind] || new Audio(`/audio/${fileName}.mp3`);
+      alertAudio.current[kind] = audio;
+      audio.currentTime = 0;
+      void audio.play().catch((error) => console.warn("Trình duyệt đã chặn âm báo", error));
     } catch (error) { console.warn("Không phát được âm báo", error); }
   }, [soundEnabled]);
 
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { try { setAutoPrint(localStorage.getItem(autoPrintKey) === "1"); } catch { setAutoPrint(false); } }, [autoPrintKey]);
   useEffect(() => {
-    setLoading(true); knownIds.current = null;
+    setLoading(true); knownIds.current = null; urgentIds.current = null;
     return subscribeBarBoard(storeId, (nextJobs) => {
       const nextIds = new Set(nextJobs.map((job) => job.id));
       if (knownIds.current && nextJobs.some((job) => job.workflowStatus === "new" && !knownIds.current?.has(job.id))) playAlert();
       knownIds.current = nextIds; setJobs(nextJobs); setLoading(false); setSyncError("");
     }, () => { setLoading(false); setSyncError("Mất kết nối dữ liệu. Hệ thống đang thử kết nối lại…"); });
   }, [playAlert, storeId]);
+  useEffect(() => {
+    const nextUrgentIds = new Set(jobs.filter((job) => elapsedMinutes(job, now) >= 15).map((job) => job.id));
+    if (urgentIds.current && [...nextUrgentIds].some((id) => !urgentIds.current?.has(id))) playAlert("urgent");
+    urgentIds.current = nextUrgentIds;
+  }, [jobs, now, playAlert]);
   useEffect(() => {
     if (!historyOpen) return;
     setHistoryLoading(true);

@@ -37,6 +37,7 @@ import {
 type CategoryFormState = {
   name: string;
   description: string;
+  isPreparationPrintEnabled: boolean;
 };
 
 type ToastState = {
@@ -49,6 +50,7 @@ type ToastState = {
 const emptyForm: CategoryFormState = {
   name: "",
   description: "",
+  isPreparationPrintEnabled: true,
 };
 
 const normalizeText = (value: string) =>
@@ -160,6 +162,26 @@ function CategoryModal({
                   className="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition-[border-color,box-shadow] placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 transition-colors hover:border-emerald-300 hover:bg-emerald-50/50">
+                <input
+                  type="checkbox"
+                  checked={form.isPreparationPrintEnabled}
+                  onChange={(event) =>
+                    onChange({ isPreparationPrintEnabled: event.target.checked })
+                  }
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-500"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-900">
+                    In bill chế biến
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                    Các món thuộc danh mục này sẽ được đưa vào phiếu bếp hoặc
+                    phiếu pha chế khi bán hàng.
+                  </span>
+                </span>
+              </label>
             </div>
           </section>
         </div>
@@ -336,6 +358,8 @@ export default function CategoryManagementPage() {
     setForm({
       name: category.name || "",
       description: category.description || "",
+      isPreparationPrintEnabled:
+        category.isPreparationPrintEnabled !== false,
     });
     setModalOpen(true);
   };
@@ -384,6 +408,7 @@ export default function CategoryManagementPage() {
         await updateCategory(editingCategory.id, {
           name: normalizedName,
           description: form.description.trim(),
+          isPreparationPrintEnabled: form.isPreparationPrintEnabled,
         });
 
         if (normalizeText(oldName) !== normalizeText(normalizedName)) {
@@ -396,7 +421,12 @@ export default function CategoryManagementPage() {
           `${normalizedName} đã được cập nhật thành công.`,
         );
       } else {
-        await addCategory(normalizedName, form.description.trim(), storeId);
+        await addCategory(
+          normalizedName,
+          form.description.trim(),
+          storeId,
+          form.isPreparationPrintEnabled,
+        );
 
         setCurrentPage(1);
 
@@ -585,6 +615,7 @@ export default function CategoryManagementPage() {
                     <th className="px-4 py-3">Tên danh mục</th>
                     <th className="px-4 py-3">Mô tả</th>
                     <th className="px-4 py-3 text-center">Số sản phẩm</th>
+                    <th className="px-4 py-3">In chế biến</th>
                     <th className="px-4 py-3">Trạng thái</th>
                     <th className="w-28 px-4 py-3 text-center">Thao tác</th>
                   </tr>
@@ -594,7 +625,7 @@ export default function CategoryManagementPage() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="px-4 py-14 text-center text-slate-600"
                       >
                         Đang tải danh mục...
@@ -602,7 +633,7 @@ export default function CategoryManagementPage() {
                     </tr>
                   ) : filteredCategories.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-14 text-center">
+                      <td colSpan={6} className="px-4 py-14 text-center">
                         <CircleAlert className="mx-auto h-6 w-6 text-slate-400" />
 
                         <p className="mt-2 font-medium">
@@ -659,6 +690,20 @@ export default function CategoryManagementPage() {
                           <td className="px-4 py-3 text-center">
                             <span className="inline-flex min-w-8 justify-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold tabular-nums text-slate-700">
                               {usageCount}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                                category.isPreparationPrintEnabled !== false
+                                  ? "bg-sky-100 text-sky-800"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {category.isPreparationPrintEnabled !== false
+                                ? "Có in"
+                                : "Không in"}
                             </span>
                           </td>
 
