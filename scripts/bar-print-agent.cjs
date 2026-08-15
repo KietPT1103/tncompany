@@ -338,6 +338,7 @@ const sendToPrinter = (payload, config) =>
       if (done) return;
       done = true;
       socket.removeAllListeners();
+      socket.destroy();
       if (error) {
         reject(error);
       } else {
@@ -348,14 +349,14 @@ const sendToPrinter = (payload, config) =>
     socket.setTimeout(config.socketTimeoutMs);
 
     socket.on("connect", () => {
-      socket.write(payload, (error) => {
-        if (error) {
-          finish(error);
-          return;
-        }
-        socket.end();
-      });
+      socket.setNoDelay(true);
+      socket.end(payload);
     });
+
+    // RAW 9100 printers commonly keep their read side open after receiving a
+    // job. The local `finish` event means every byte has been flushed by Node;
+    // waiting for the printer to close the TCP connection causes false timeouts.
+    socket.on("finish", () => finish());
 
     socket.on("timeout", () => {
       socket.destroy();
@@ -367,9 +368,6 @@ const sendToPrinter = (payload, config) =>
     });
 
     socket.on("error", (error) => finish(error));
-    socket.on("close", (hadError) => {
-      if (!hadError) finish();
-    });
   });
 
 const normalizeJobData = (jobId, rawData) => ({
