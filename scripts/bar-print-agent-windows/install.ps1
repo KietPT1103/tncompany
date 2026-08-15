@@ -170,6 +170,18 @@ if ([string]::IsNullOrWhiteSpace($runTest) -or $runTest -match "^[Yy]") {
     }
 }
 
+Write-Host "Dang kiem tra dang nhap API va quyen doc job pha che..."
+Push-Location $installDirectory
+try {
+    & (Join-Path $installDirectory "node.exe") (Join-Path $installDirectory "bar-print-agent.cjs") --check
+    if ($LASTEXITCODE -ne 0) {
+        throw "Kiem tra API that bai. Kiem tra tai khoan, mat khau va quyen bar.access/bills.access."
+    }
+}
+finally {
+    Pop-Location
+}
+
 Start-ScheduledTask -TaskName $taskName
 Write-Host ""
 Write-Host "CAI DAT THANH CONG" -ForegroundColor Green

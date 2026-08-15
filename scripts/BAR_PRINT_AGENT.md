@@ -48,6 +48,12 @@ npm run print:bar-agent
 npm run print:bar-agent:test
 ```
 
+- Validate API login and bar-job permission without printing:
+
+```bash
+node scripts/bar-print-agent.cjs --check
+```
+
 ## Windows package (no Node.js/npm required on the bar machine)
 
 Build the portable Windows x64 installer package on a development machine:

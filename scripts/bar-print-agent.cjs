@@ -256,6 +256,7 @@ const createConfig = () => {
   const dryRun = isTrue(process.env.PRINT_AGENT_DRY_RUN) || args.has("--dry-run");
   const testOnStart = isTrue(process.env.PRINT_AGENT_TEST_ON_START) || args.has("--test");
   const runOnce = args.has("--once");
+  const checkOnly = args.has("--check");
   const apiBaseUrl = (process.env.PRINT_AGENT_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, "");
   const apiLogin = (process.env.PRINT_AGENT_API_LOGIN || "").trim();
   const apiPassword = process.env.PRINT_AGENT_API_PASSWORD || "";
@@ -277,6 +278,7 @@ const createConfig = () => {
     dryRun,
     testOnStart,
     runOnce,
+    checkOnly,
     apiBaseUrl,
     apiLogin,
     apiPassword,
@@ -351,6 +353,17 @@ const run = async () => {
   }
 
   await authenticateApi(config);
+
+  if (config.checkOnly) {
+    const data = await apiFetch(
+      config,
+      `/pos.php?resource=bar-jobs&storeId=${encodeURIComponent(config.storeId)}`
+    );
+    const pendingCount = Array.isArray(data.items) ? data.items.length : 0;
+    console.log(`API check OK. Pending bar jobs: ${pendingCount}.`);
+    return;
+  }
+
   const processingJobIds = new Set();
   let queue = Promise.resolve();
 
@@ -456,5 +469,6 @@ const run = async () => {
 run().catch((error) => {
   console.error("Failed to start bar print agent.");
   console.error(error);
-  process.exit(1);
+  // Let pending fetch/socket handles close cleanly on Windows before Node exits.
+  process.exitCode = 1;
 });

@@ -12,12 +12,16 @@ Set-Location -LiteralPath $installDirectory
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Add-Content -LiteralPath $logFile -Value "[$timestamp] Starting Bar Print Agent"
 
-try {
-    & $nodeExecutable $agentScript *>> $logFile
-    exit $LASTEXITCODE
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $nodeExecutable $agentScript 2>&1 | ForEach-Object {
+    Add-Content -LiteralPath $logFile -Value $_.ToString()
 }
-catch {
+$agentExitCode = $LASTEXITCODE
+$ErrorActionPreference = $previousErrorActionPreference
+
+if ($agentExitCode -ne 0) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -LiteralPath $logFile -Value "[$timestamp] Agent launcher failed: $($_.Exception.Message)"
-    exit 1
+    Add-Content -LiteralPath $logFile -Value "[$timestamp] Agent stopped with exit code $agentExitCode"
 }
+exit $agentExitCode
