@@ -124,6 +124,11 @@ export default function BarBoardPage() {
     urgentIds.current = nextUrgentIds;
   }, [jobs, now, playAlert]);
   useEffect(() => {
+    if (!jobs.some((job) => job.workflowStatus === "new")) return;
+    const reminder = window.setInterval(() => playAlert("new"), 20000);
+    return () => window.clearInterval(reminder);
+  }, [jobs, playAlert]);
+  useEffect(() => {
     if (!historyOpen) return;
     setHistoryLoading(true);
     return subscribeBarHistory(storeId, (nextJobs) => {
