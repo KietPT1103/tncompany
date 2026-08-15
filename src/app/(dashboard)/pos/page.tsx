@@ -1785,18 +1785,9 @@ export default function CafePosPage() {
       const finalAmount = Math.max(receiptData.total, 0);
       const paidAmount = paymentMethod === "cash" ? currentCashReceived : finalAmount;
 
-      printPaymentReceipt({
-        billCode,
-        title: isBakeryStore ? "HÓA ĐƠN BÁN HÀNG" : "PHIẾU TÍNH TIỀN",
-        tableLabel: orderLabel,
-        createdAtText: receiptData.time,
-        items: receiptData.items,
-        total: receiptData.total,
-        includePaymentInfo: true,
-        paidAmount,
-        changeAmount: paymentMethod === "cash" ? currentChangeAmount : 0,
-      });
-
+      // Queue the preparation ticket before any interactive browser printing.
+      // Bartender terminals rely exclusively on the LAN print agent so checkout
+      // never pauses on the browser print dialog.
       if (storeId === CAFE_STORE_ID) {
         const printableItems = receiptData.items.filter((item) =>
           canPrintPreparationItem(item.category)
@@ -1817,6 +1808,20 @@ export default function CafePosPage() {
             })),
           });
         }
+      }
+
+      if (!isBartenderAccount) {
+        printPaymentReceipt({
+          billCode,
+          title: isBakeryStore ? "HÓA ĐƠN BÁN HÀNG" : "PHIẾU TÍNH TIỀN",
+          tableLabel: orderLabel,
+          createdAtText: receiptData.time,
+          items: receiptData.items,
+          total: receiptData.total,
+          includePaymentInfo: true,
+          paidAmount,
+          changeAmount: paymentMethod === "cash" ? currentChangeAmount : 0,
+        });
       }
 
       if (activeOrderKey) {
