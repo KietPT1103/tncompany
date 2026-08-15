@@ -144,17 +144,17 @@ const buildTicketLines = (job, config) => {
   lines.push(`Phuc vu: ${toAscii(job.createdByName || "-")}`);
   lines.push(`${formatTicketCode(job)} - ${formatTicketDateTime(job.createdAt, config.timeZone)}`);
   lines.push("");
-  lines.push(`${"Mon".padEnd(29)}${"DVT".padEnd(6)}${"SL".padStart(7)}`);
+  lines.push(`${"Mon".padEnd(35)}${"SL".padStart(7)}`);
   lines.push(repeat("-", PAPER_WIDTH));
 
   if (items.length === 0) {
     lines.push("Khong co mon can in.");
   } else {
     items.forEach((item) => {
-      const itemLines = wrapText(item.name, 29);
+      const itemLines = wrapText(item.name, 35);
       itemLines.forEach((itemLine, lineIndex) => {
         const quantity = lineIndex === 0 ? formatQuantity(item.quantity) : "";
-        lines.push(`${itemLine.padEnd(29)}${"".padEnd(6)}${quantity.padStart(7)}`);
+        lines.push(`${itemLine.padEnd(35)}${quantity.padStart(7)}`);
       });
       if (item.note) {
         const noteLines = wrapText(`* ${item.note}`, PAPER_WIDTH);
@@ -195,7 +195,7 @@ const buildTextEscPosPayload = (job, config) => {
   text("");
 
   setBold(true);
-  text(`${"Mon".padEnd(29)}${"DVT".padEnd(6)}${"SL".padStart(7)}`);
+  text(`${"Mon".padEnd(35)}${"SL".padStart(7)}`);
   setBold(false);
   text(repeat("-", PAPER_WIDTH));
 
@@ -203,12 +203,12 @@ const buildTextEscPosPayload = (job, config) => {
     text("Khong co mon can in.");
   } else {
     items.forEach((item) => {
-      const itemLines = wrapText(item.name, 29);
+      const itemLines = wrapText(item.name, 35);
       setBold(false);
       setSize(0x01);
       itemLines.forEach((itemLine, lineIndex) => {
         const quantity = lineIndex === 0 ? formatQuantity(item.quantity) : "";
-        text(`${itemLine.padEnd(29)}${"".padEnd(6)}${quantity.padStart(7)}`);
+        text(`${itemLine.padEnd(35)}${quantity.padStart(7)}`);
       });
       setSize(0x00);
       setBold(false);

@@ -8,23 +8,22 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 
 $model = Get-Content -LiteralPath $InputPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$labels = '{"title":"CH\u1ebe BI\u1ebeN","table":"B\u00e0n:","staff":"Ph\u1ee5c v\u1ee5:","item":"M\u00f3n","unit":"\u0110VT","note":"Ghi ch\u00fa:"}' | ConvertFrom-Json
+$labels = '{"title":"CH\u1ebe BI\u1ebeN","table":"B\u00e0n:","staff":"Ph\u1ee5c v\u1ee5:","item":"M\u00f3n","note":"Ghi ch\u00fa:"}' | ConvertFrom-Json
 $canvasWidth = 576
 $margin = 24
 $contentWidth = $canvasWidth - ($margin * 2)
-$nameColumnWidth = 390
-$unitColumnX = 432
+$nameColumnWidth = 450
 $quantityColumnX = 500
 $quantityColumnWidth = 52
 
-$titleFont = [System.Drawing.Font]::new("Tahoma", 34, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-$metaFont = [System.Drawing.Font]::new("Tahoma", 24, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-$metaBoldFont = [System.Drawing.Font]::new("Tahoma", 24, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-$codeFont = [System.Drawing.Font]::new("Tahoma", 22, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-$headerFont = [System.Drawing.Font]::new("Tahoma", 25, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-$itemFont = [System.Drawing.Font]::new("Tahoma", 26, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-$quantityFont = [System.Drawing.Font]::new("Tahoma", 28, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-$noteFont = [System.Drawing.Font]::new("Tahoma", 21, [System.Drawing.FontStyle]::Italic, [System.Drawing.GraphicsUnit]::Pixel)
+$titleFont = [System.Drawing.Font]::new("Arial", 38, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+$metaFont = [System.Drawing.Font]::new("Arial", 28, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+$metaBoldFont = [System.Drawing.Font]::new("Arial", 28, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+$codeFont = [System.Drawing.Font]::new("Arial", 25, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+$headerFont = [System.Drawing.Font]::new("Arial", 28, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+$itemFont = [System.Drawing.Font]::new("Arial", 32, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+$quantityFont = [System.Drawing.Font]::new("Arial", 32, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+$noteFont = [System.Drawing.Font]::new("Arial", 27, [System.Drawing.FontStyle]::Italic, [System.Drawing.GraphicsUnit]::Pixel)
 $blackBrush = [System.Drawing.Brushes]::Black
 $linePen = [System.Drawing.Pen]::new([System.Drawing.Color]::Black, 1)
 $centerFormat = [System.Drawing.StringFormat]::new()
@@ -42,7 +41,7 @@ function Get-TextHeight {
 
 $measureBitmap = [System.Drawing.Bitmap]::new(1, 1)
 $measureGraphics = [System.Drawing.Graphics]::FromImage($measureBitmap)
-$estimatedHeight = 238
+$estimatedHeight = 270
 foreach ($item in @($model.items)) {
     $estimatedHeight += (Get-TextHeight $measureGraphics ([string]$item.name) $itemFont $nameColumnWidth) + 22
     if (-not [string]::IsNullOrWhiteSpace([string]$item.note)) {
@@ -62,36 +61,35 @@ $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQual
 
 try {
     [float]$y = 16
-    $graphics.DrawString([string]$labels.title, $titleFont, $blackBrush, [System.Drawing.RectangleF]::new(0, $y, $canvasWidth, 50), $centerFormat)
-    $y += 62
+    $graphics.DrawString([string]$labels.title, $titleFont, $blackBrush, [System.Drawing.RectangleF]::new(0, $y, $canvasWidth, 54), $centerFormat)
+    $y += 66
 
     $tableLabel = [string]$labels.table
     $graphics.DrawString($tableLabel, $metaBoldFont, $blackBrush, [float]$margin, $y)
     $tableLabelWidth = $graphics.MeasureString($tableLabel, $metaBoldFont).Width
     $graphics.DrawString([string]$model.tableNumber, $metaFont, $blackBrush, [float]($margin + $tableLabelWidth + 5), $y)
-    $y += 35
+    $y += 40
 
     $staffLabel = [string]$labels.staff
     $graphics.DrawString($staffLabel, $metaBoldFont, $blackBrush, [float]$margin, $y)
     $staffLabelWidth = $graphics.MeasureString($staffLabel, $metaBoldFont).Width
     $graphics.DrawString([string]$model.staffName, $metaFont, $blackBrush, [float]($margin + $staffLabelWidth + 5), $y)
-    $y += 35
+    $y += 40
 
     $graphics.DrawString("$($model.code) - $($model.dateTime)", $codeFont, $blackBrush, [float]$margin, $y)
-    $y += 43
+    $y += 47
 
     $graphics.DrawString([string]$labels.item, $headerFont, $blackBrush, [float]$margin, $y)
-    $graphics.DrawString([string]$labels.unit, $headerFont, $blackBrush, [float]$unitColumnX, $y)
-    $graphics.DrawString("SL", $headerFont, $blackBrush, [System.Drawing.RectangleF]::new($quantityColumnX, $y, $quantityColumnWidth, 34), $rightFormat)
-    $y += 38
+    $graphics.DrawString("SL", $headerFont, $blackBrush, [System.Drawing.RectangleF]::new($quantityColumnX, $y, $quantityColumnWidth, 38), $rightFormat)
+    $y += 42
     $graphics.DrawLine($linePen, $margin, $y, $canvasWidth - $margin, $y)
     $y += 12
 
     foreach ($item in @($model.items)) {
         $name = [string]$item.name
-        $nameHeight = [Math]::Max(38, (Get-TextHeight $graphics $name $itemFont $nameColumnWidth))
+        $nameHeight = [Math]::Max(42, (Get-TextHeight $graphics $name $itemFont $nameColumnWidth))
         $graphics.DrawString($name, $itemFont, $blackBrush, [System.Drawing.RectangleF]::new($margin, $y, $nameColumnWidth, $nameHeight + 4))
-        $graphics.DrawString([string]$item.quantity, $quantityFont, $blackBrush, [System.Drawing.RectangleF]::new($quantityColumnX, $y, $quantityColumnWidth, 40), $rightFormat)
+        $graphics.DrawString([string]$item.quantity, $quantityFont, $blackBrush, [System.Drawing.RectangleF]::new($quantityColumnX, $y, $quantityColumnWidth, 46), $rightFormat)
         $y += $nameHeight + 8
 
         $note = [string]$item.note
@@ -120,6 +118,12 @@ try {
             [Runtime.InteropServices.Marshal]::Copy($bitmapData.Scan0, $sourceBytes, 0, $sourceBytes.Length)
             $widthBytes = [int][Math]::Ceiling($printBitmap.Width / 8)
             $rasterBytes = [byte[]]::new($widthBytes * $printBitmap.Height)
+            $ditherMatrix = @(
+                @(0, 8, 2, 10),
+                @(12, 4, 14, 6),
+                @(3, 11, 1, 9),
+                @(15, 7, 13, 5)
+            )
 
             for ($row = 0; $row -lt $printBitmap.Height; $row++) {
                 for ($column = 0; $column -lt $printBitmap.Width; $column++) {
@@ -128,7 +132,8 @@ try {
                     $green = [int]$sourceBytes[$sourceIndex + 1]
                     $red = [int]$sourceBytes[$sourceIndex + 2]
                     $luminance = (($red * 299) + ($green * 587) + ($blue * 114)) / 1000
-                    if ($luminance -lt 190) {
+                    $threshold = 96 + ($ditherMatrix[$row % 4][$column % 4] * 8)
+                    if ($luminance -lt $threshold) {
                         $targetIndex = ($row * $widthBytes) + [Math]::Floor($column / 8)
                         $rasterBytes[$targetIndex] = $rasterBytes[$targetIndex] -bor (0x80 -shr ($column % 8))
                     }
