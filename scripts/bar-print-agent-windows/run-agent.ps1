@@ -9,19 +9,23 @@ $agentScript = Join-Path $installDirectory "bar-print-agent.cjs"
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 Set-Location -LiteralPath $installDirectory
 
-$timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-Add-Content -LiteralPath $logFile -Value "[$timestamp] Starting Bar Print Agent"
-
 $previousErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-& $nodeExecutable $agentScript 2>&1 | ForEach-Object {
-    Add-Content -LiteralPath $logFile -Value $_.ToString()
-}
-$agentExitCode = $LASTEXITCODE
-$ErrorActionPreference = $previousErrorActionPreference
 
-if ($agentExitCode -ne 0) {
+# Keep supervising the Node process. Windows may launch this task before LAN or
+# Internet connectivity is ready, so a failed startup must not leave the task idle.
+while ($true) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -LiteralPath $logFile -Value "[$timestamp] Agent stopped with exit code $agentExitCode"
+    Add-Content -LiteralPath $logFile -Value "[$timestamp] Starting Bar Print Agent"
+
+    & $nodeExecutable $agentScript 2>&1 | ForEach-Object {
+        Add-Content -LiteralPath $logFile -Value $_.ToString()
+    }
+    $agentExitCode = $LASTEXITCODE
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -LiteralPath $logFile -Value "[$timestamp] Agent stopped with exit code $agentExitCode; restarting in 15 seconds"
+    Start-Sleep -Seconds 15
 }
-exit $agentExitCode
+
+$ErrorActionPreference = $previousErrorActionPreference

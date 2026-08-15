@@ -47,6 +47,26 @@ function Assert-SingleLineValue {
     }
 }
 
+function Read-EnvironmentFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $values = @{}
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $values
+    }
+
+    foreach ($line in [IO.File]::ReadAllLines($Path, [Text.Encoding]::UTF8)) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#")) { continue }
+        $separatorIndex = $trimmed.IndexOf("=")
+        if ($separatorIndex -lt 1) { continue }
+        $key = $trimmed.Substring(0, $separatorIndex).Trim()
+        $value = $trimmed.Substring($separatorIndex + 1)
+        $values[$key] = $value
+    }
+    return $values
+}
+
 Write-Host ""
 Write-Host "=== CAI DAT TN COMPANY BAR PRINT AGENT ===" -ForegroundColor Cyan
 Write-Host "Agent se chay an khi Windows khoi dong, khong can Node.js hay npm."
@@ -59,26 +79,50 @@ foreach ($fileName in $requiredFiles) {
     }
 }
 
-$printerHost = Read-WithDefault -Prompt "IP may in KV838/BP-T3" -Default "192.168.1.118" -Required
-$printerPort = Read-WithDefault -Prompt "Cong RAW cua may in" -Default "9100" -Required
-$storeId = Read-WithDefault -Prompt "Ma cua hang" -Default "cafe" -Required
-$terminalName = Read-WithDefault -Prompt "Ten may pha che" -Default $env:COMPUTERNAME -Required
-$apiBaseUrl = Read-WithDefault -Prompt "Dia chi API" -Default "https://tnservice.vn/api" -Required
+$environmentPath = Join-Path $installDirectory ".env.local"
+$existingConfig = Read-EnvironmentFile -Path $environmentPath
+$hasExistingConnection =
+    $existingConfig["PRINT_AGENT_PRINTER_HOST"] -and
+    $existingConfig["PRINT_AGENT_PRINTER_PORT"] -and
+    $existingConfig["PRINT_AGENT_STORE_ID"] -and
+    $existingConfig["PRINT_AGENT_TERMINAL_NAME"] -and
+    $existingConfig["PRINT_AGENT_API_BASE_URL"]
+$hasExistingCredentials =
+    $existingConfig["PRINT_AGENT_API_TOKEN"] -or
+    ($existingConfig["PRINT_AGENT_API_LOGIN"] -and $existingConfig["PRINT_AGENT_API_PASSWORD"])
+
+if ($hasExistingConnection -and $hasExistingCredentials) {
+    Write-Host "Da tim thay cau hinh cu. Dang giu nguyen thong tin may in va API." -ForegroundColor Green
+    $printerHost = $existingConfig["PRINT_AGENT_PRINTER_HOST"]
+    $printerPort = $existingConfig["PRINT_AGENT_PRINTER_PORT"]
+    $storeId = $existingConfig["PRINT_AGENT_STORE_ID"]
+    $terminalName = $existingConfig["PRINT_AGENT_TERMINAL_NAME"]
+    $apiBaseUrl = $existingConfig["PRINT_AGENT_API_BASE_URL"]
+    $apiToken = $existingConfig["PRINT_AGENT_API_TOKEN"]
+    $apiLogin = $existingConfig["PRINT_AGENT_API_LOGIN"]
+    $apiPassword = $existingConfig["PRINT_AGENT_API_PASSWORD"]
+}
+else {
+    $printerHost = Read-WithDefault -Prompt "IP may in KV838/BP-T3" -Default "192.168.1.118" -Required
+    $printerPort = Read-WithDefault -Prompt "Cong RAW cua may in" -Default "9100" -Required
+    $storeId = Read-WithDefault -Prompt "Ma cua hang" -Default "cafe" -Required
+    $terminalName = Read-WithDefault -Prompt "Ten may pha che" -Default $env:COMPUTERNAME -Required
+    $apiBaseUrl = Read-WithDefault -Prompt "Dia chi API" -Default "https://tnservice.vn/api" -Required
+    $apiToken = Read-WithDefault -Prompt "API token (Enter de dung tai khoan/mat khau)"
+    $apiLogin = ""
+    $apiPassword = ""
+    if (-not $apiToken) {
+        $apiLogin = Read-WithDefault -Prompt "Tai khoan POS co quyen bills.access hoac bar.access" -Required
+        $securePassword = Read-Host "Mat khau POS" -AsSecureString
+        $apiPassword = Convert-SecureStringToPlainText -SecureValue $securePassword
+        if (-not $apiPassword) {
+            throw "Mat khau POS la bat buoc khi khong dung API token."
+        }
+    }
+}
 
 if ($apiBaseUrl -notmatch "^https?://") {
     throw "Dia chi API phai bat dau bang http:// hoac https://"
-}
-
-$apiToken = Read-WithDefault -Prompt "API token (Enter de dung tai khoan/mat khau)"
-$apiLogin = ""
-$apiPassword = ""
-if (-not $apiToken) {
-    $apiLogin = Read-WithDefault -Prompt "Tai khoan POS co quyen bills.access hoac bar.access" -Required
-    $securePassword = Read-Host "Mat khau POS" -AsSecureString
-    $apiPassword = Convert-SecureStringToPlainText -SecureValue $securePassword
-    if (-not $apiPassword) {
-        throw "Mat khau POS la bat buoc khi khong dung API token."
-    }
 }
 
 @{
@@ -113,7 +157,6 @@ $environmentLines = @(
     "PRINT_AGENT_API_PASSWORD=$apiPassword"
     "PRINT_AGENT_API_TOKEN=$apiToken"
 )
-$environmentPath = Join-Path $installDirectory ".env.local"
 [IO.File]::WriteAllLines(
     $environmentPath,
     $environmentLines,
@@ -136,7 +179,9 @@ $action = New-ScheduledTaskAction `
     -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
     -Argument $powerShellArguments `
     -WorkingDirectory $installDirectory
-$trigger = New-ScheduledTaskTrigger -AtStartup
+$startupTrigger = New-ScheduledTaskTrigger -AtStartup
+$startupTrigger.Delay = "PT30S"
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
@@ -149,7 +194,7 @@ Register-ScheduledTask `
     -TaskName $taskName `
     -Description "TN Company silent LAN printing for bar tickets" `
     -Action $action `
-    -Trigger $trigger `
+    -Trigger @($startupTrigger, $logonTrigger) `
     -Principal $principal `
     -Settings $settings | Out-Null
 

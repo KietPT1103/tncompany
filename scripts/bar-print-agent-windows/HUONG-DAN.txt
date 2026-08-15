@@ -15,10 +15,15 @@ Cai dat:
 3. Nhap IP may in, dia chi API va tai khoan POS theo huong dan.
 4. Chon Y de in phieu test.
 
+Cap nhat ban moi:
+- Neu da cai agent truoc do, bo cai tu dong giu nguyen toan bo cau hinh cu.
+- Chi can giai nen ZIP moi va chay lai CAI-DAT.cmd, khong can nhap lai thong tin.
+
 Sau khi cai:
 - Agent chay an ngay lap tuc.
 - Agent tu chay khi Windows khoi dong, khong can dang nhap.
-- Agent tu chay lai sau 1 phut neu gap loi.
+- Agent tu chay lai sau 15 giay neu mang/API chua san sang hoac gap loi.
+- Khi dang nhap Windows, Task Scheduler cung kich hoat lai agent de du phong.
 - Phieu in ho tro day du tieng Viet co dau (ten mon, ghi chu, nhan vien).
 - Khong dong/xoa thu muc C:\ProgramData\TNCompany\BarPrintAgent.
 
