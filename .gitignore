@@ -12,6 +12,7 @@ dist.zip
 public/api/config.local.php
 tmp-opt/
 dist-ssr/
+artifacts/
 agent/windows/CashierMonitor/bin/
 agent/windows/CashierMonitor/obj/
 public/uploads/activity-screenshots/

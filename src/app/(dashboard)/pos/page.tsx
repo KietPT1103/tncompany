@@ -42,6 +42,7 @@ import {
   saveBill,
 } from "@/services/billService";
 import {
+  CashVoucher,
   CashVoucherCategory,
   CashVoucherType,
   createCashVoucher,
@@ -79,10 +80,7 @@ import {
   subscribePendingKitchenPrintJobs,
 } from "@/services/kitchenPrintJobService";
 import {
-  BarPrintJob,
   createBarPrintJob,
-  markBarPrintJobPrinted,
-  subscribePendingBarPrintJobs,
 } from "@/services/barPrintJobService";
 import {
   PosSurcharge,
@@ -112,8 +110,6 @@ const CASH_ROUNDING_STEPS = [5000, 10000, 20000, 50000];
 const CASH_NOTE_VALUES = [50000, 100000, 200000, 500000];
 const KITCHEN_AUTO_PRINT_KEY_PREFIX = "pos:kitchen-auto-print";
 const KITCHEN_TERMINAL_NAME_KEY_PREFIX = "pos:kitchen-terminal-name";
-const BAR_AUTO_PRINT_KEY_PREFIX = "pos:bar-auto-print";
-const BAR_TERMINAL_NAME_KEY_PREFIX = "pos:bar-terminal-name";
 const RECEIPT_STORE_INFO: Record<
   string,
   { title: string; address: string; phone: string }
@@ -142,6 +138,14 @@ const RECEIPT_STORE_INFO: Record<
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { minimumFractionDigits: 0 });
+const escapeHtml = (value: string) =>
+  value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[
+        character
+      ] || character
+  );
 const getCashDifferenceInfo = (difference: number) => {
   if (difference > 0) return { label: "Dư", amount: difference };
   if (difference < 0) return { label: "Thiếu", amount: Math.abs(difference) };
@@ -149,7 +153,6 @@ const getCashDifferenceInfo = (difference: number) => {
 };
 const PRINT_FONT_FAMILY = "'Tahoma', 'Segoe UI', Arial, sans-serif";
 const PRINT_TAIL_SPACE_MM = 8;
-const PREP_BAR_TAIL_SPACE_MM = 14;
 
 type MenuItem = {
   id: string;
@@ -184,6 +187,7 @@ type ReceiptData = {
 };
 type SoldBillsSortKey = "time" | "total" | "code" | "table";
 type SortDirection = "asc" | "desc";
+type DailyReportTab = "overview" | "bills" | "products";
 
 export default function CafePosPage() {
   const { role, user, logout } = useAuth();
@@ -310,11 +314,14 @@ export default function CafePosPage() {
   const [closingNote, setClosingNote] = useState("");
   const [isClosingShift, setIsClosingShift] = useState(false);
 
-  const [showFarmDailyReport, setShowFarmDailyReport] = useState(false);
-  const [farmDailyReport, setFarmDailyReport] = useState<ShiftSummary | null>(
+  const [showDailyReport, setShowDailyReport] = useState(false);
+  const [dailyReport, setDailyReport] = useState<ShiftSummary | null>(
     null
   );
-  const [isLoadingFarmDailyReport, setIsLoadingFarmDailyReport] = useState(false);
+  const [dailyReportBills, setDailyReportBills] = useState<Bill[]>([]);
+  const [dailyReportVouchers, setDailyReportVouchers] = useState<CashVoucher[]>([]);
+  const [dailyReportTab, setDailyReportTab] = useState<DailyReportTab>("overview");
+  const [isLoadingDailyReport, setIsLoadingDailyReport] = useState(false);
   const [showVoucherModal, setShowVoucherModal] = useState<CashVoucherType | null>(
     null
   );
@@ -330,9 +337,6 @@ export default function CafePosPage() {
   const [kitchenTerminalName, setKitchenTerminalName] = useState("May bep chinh");
   const [kitchenPrintLogs, setKitchenPrintLogs] = useState<string[]>([]);
   const printingKitchenJobsRef = useRef<Set<string>>(new Set());
-  const [isBarAutoPrintEnabled, setIsBarAutoPrintEnabled] = useState(false);
-  const [barTerminalName, setBarTerminalName] = useState("May pha che");
-  const printingBarJobsRef = useRef<Set<string>>(new Set());
   const menuOrderStorageKey = useMemo(
     () => `pos:menu-order:${storeId || "default"}`,
     [storeId]
@@ -343,14 +347,6 @@ export default function CafePosPage() {
   );
   const kitchenTerminalNameStorageKey = useMemo(
     () => `${KITCHEN_TERMINAL_NAME_KEY_PREFIX}:${storeId || "default"}`,
-    [storeId]
-  );
-  const barAutoPrintStorageKey = useMemo(
-    () => `${BAR_AUTO_PRINT_KEY_PREFIX}:${storeId || "default"}`,
-    [storeId]
-  );
-  const barTerminalNameStorageKey = useMemo(
-    () => `${BAR_TERMINAL_NAME_KEY_PREFIX}:${storeId || "default"}`,
     [storeId]
   );
   const appendKitchenPrintLog = useCallback((message: string) => {
@@ -616,8 +612,6 @@ export default function CafePosPage() {
     if (!storeId) {
       setIsKitchenAutoPrintEnabled(false);
       setKitchenTerminalName("May bep chinh");
-      setIsBarAutoPrintEnabled(false);
-      setBarTerminalName("May pha che");
       return;
     }
 
@@ -630,21 +624,10 @@ export default function CafePosPage() {
       } else {
         setKitchenTerminalName("May bep chinh");
       }
-
-      const savedBarEnabled = window.localStorage.getItem(barAutoPrintStorageKey);
-      setIsBarAutoPrintEnabled(savedBarEnabled === "1");
-      const savedBarName = window.localStorage.getItem(barTerminalNameStorageKey);
-      if (savedBarName?.trim()) {
-        setBarTerminalName(savedBarName.trim());
-      } else {
-        setBarTerminalName("May pha che");
-      }
     } catch (error) {
       console.warn("Không đọc được cài đặt auto in bếp", error);
     }
   }, [
-    barAutoPrintStorageKey,
-    barTerminalNameStorageKey,
     kitchenAutoPrintStorageKey,
     kitchenTerminalNameStorageKey,
     storeId,
@@ -661,22 +644,10 @@ export default function CafePosPage() {
         kitchenTerminalNameStorageKey,
         kitchenTerminalName.trim() || "May bep chinh"
       );
-      window.localStorage.setItem(
-        barAutoPrintStorageKey,
-        isBarAutoPrintEnabled ? "1" : "0"
-      );
-      window.localStorage.setItem(
-        barTerminalNameStorageKey,
-        barTerminalName.trim() || "May pha che"
-      );
     } catch (error) {
       console.warn("Không lưu được cài đặt auto in bếp", error);
     }
   }, [
-    barAutoPrintStorageKey,
-    barTerminalName,
-    barTerminalNameStorageKey,
-    isBarAutoPrintEnabled,
     isKitchenAutoPrintEnabled,
     kitchenAutoPrintStorageKey,
     kitchenTerminalName,
@@ -1610,66 +1581,6 @@ export default function CafePosPage() {
     storeId,
   ]);
 
-  useEffect(() => {
-    if (!storeId || !canUseBarAutoPrint || !isBarAutoPrintEnabled) return;
-
-    const printBarJob = async (job: BarPrintJob) => {
-      if (printingBarJobsRef.current.has(job.id)) return;
-      printingBarJobsRef.current.add(job.id);
-
-      try {
-        const mappedItems: CartItem[] = (job.items || [])
-          .filter((item) => item.menuId && item.quantity > 0)
-          .map((item) => ({
-            id: item.menuId,
-            name: item.name,
-            price: item.price || 0,
-            quantity: item.quantity,
-            note: item.note || "",
-            category: "Khác",
-          }));
-
-        if (mappedItems.length === 0) {
-          await markBarPrintJobPrinted(job.id, barTerminalName);
-          return;
-        }
-
-        printPrepTicket({
-          tableLabel: job.tableNumber || "Mang về",
-          staffName: job.createdByName || "",
-          jobCode: formatPrepTicketJobCode(job.id),
-          printedAtText: formatPrepTicketDateTime(
-            job.createdAt?.seconds
-              ? new Date(job.createdAt.seconds * 1000)
-              : new Date()
-          ),
-          items: mappedItems,
-          tailSpaceMm: PREP_BAR_TAIL_SPACE_MM,
-        });
-
-        await markBarPrintJobPrinted(job.id, barTerminalName);
-      } catch (error) {
-        console.error("Không in được phiếu pha chế", error);
-      } finally {
-        printingBarJobsRef.current.delete(job.id);
-      }
-    };
-
-    const unsubscribe = subscribePendingBarPrintJobs(
-      storeId,
-      (jobs) => {
-        jobs.forEach((job) => {
-          void printBarJob(job);
-        });
-      },
-      (error) => {
-        console.error("Không đồng bộ được phiếu in pha chế", error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [barTerminalName, canUseBarAutoPrint, isBarAutoPrintEnabled, storeId]);
-
   const handleSubmitKitchenAddedItems = async () => {
     if (!isRestaurantServer) return;
     if (!storeId) {
@@ -2241,11 +2152,15 @@ export default function CafePosPage() {
     }
   };
 
-  const handleOpenFarmDailyReport = async () => {
+  const handleOpenDailyReport = async () => {
     if (!storeId) return;
     setShowActionMenu(false);
-    setShowFarmDailyReport(true);
-    setIsLoadingFarmDailyReport(true);
+    setShowDailyReport(true);
+    setDailyReportTab("overview");
+    setDailyReport(null);
+    setDailyReportBills([]);
+    setDailyReportVouchers([]);
+    setIsLoadingDailyReport(true);
     try {
       const start = new Date();
       start.setHours(0, 0, 0, 0);
@@ -2265,18 +2180,27 @@ export default function CafePosPage() {
         limitCount: 2000,
       });
       const summary = summarizeBillsForShift(bills, 0, vouchers);
-      setFarmDailyReport(summary);
+      setDailyReportBills(bills);
+      setDailyReportVouchers(vouchers);
+      setDailyReport(summary);
     } catch (error) {
       console.error(error);
       alert("Không thể tải báo cáo cuối ngày.");
     } finally {
-      setIsLoadingFarmDailyReport(false);
+      setIsLoadingDailyReport(false);
     }
   };
 
-  const handlePrintFarmDailyReport = () => {
-    if (!farmDailyReport) return;
+  const handlePrintDailyReport = () => {
+    if (!dailyReport) return;
     const today = new Date().toLocaleDateString("vi-VN");
+    const productRows = dailyProductRows
+      .map(
+        (item) => `<tr><td>${escapeHtml(item.name)}</td><td class="right">${formatCurrency(
+          item.quantity
+        )}</td><td class="right">${formatCurrency(item.revenue)} đ</td></tr>`
+      )
+      .join("");
     const html = `
       <html lang="vi">
         <head>
@@ -2300,32 +2224,39 @@ export default function CafePosPage() {
           <div class="line"></div>
           <table>
             <tr><td>Tổng doanh thu</td><td class="right">${formatCurrency(
-              farmDailyReport.totalSales
+              dailyReport.totalSales
             )} đ</td></tr>
+            <tr><td>Số bill</td><td class="right">${dailyReport.completedBills}</td></tr>
+            <tr><td>Số món đã bán</td><td class="right">${formatCurrency(
+              dailyReportTotalItems
+            )}</td></tr>
             <tr><td>Phiếu thu</td><td class="right">${formatCurrency(
-              farmDailyReport.incomeVouchers
+              dailyReport.incomeVouchers
             )} đ</td></tr>
             <tr><td>Phiếu chi</td><td class="right">-${formatCurrency(
-              farmDailyReport.expenseVouchers
+              dailyReport.expenseVouchers
             )} đ</td></tr>
             <tr><td>Dòng tiền thuần</td><td class="right">${formatCurrency(
-              farmDailyReport.netCashFlow
+              dailyReport.netCashFlow
             )} đ</td></tr>
             <tr><td>Tiền mặt</td><td class="right">${formatCurrency(
-              farmDailyReport.cashSales
+              dailyReport.cashSales
             )} đ</td></tr>
             <tr><td>Chuyển khoản</td><td class="right">${formatCurrency(
-              farmDailyReport.transferSales
+              dailyReport.transferSales
             )} đ</td></tr>
-            <tr><td>Số hóa đơn</td><td class="right">${
-              farmDailyReport.completedBills
-            }</td></tr>
             <tr><td>Hóa đơn hủy</td><td class="right">${
-              farmDailyReport.cancelledBills
+              dailyReport.cancelledBills
             }</td></tr>
             <tr><td>Giá trị hủy</td><td class="right">${formatCurrency(
-              farmDailyReport.cancelledAmount
+              dailyReport.cancelledAmount
             )} đ</td></tr>
+          </table>
+          <div class="line"></div>
+          <p><strong>HÀNG HÓA ĐÃ BÁN</strong></p>
+          <table>
+            <thead><tr><td><strong>Món</strong></td><td class="right"><strong>SL</strong></td><td class="right"><strong>Doanh thu</strong></td></tr></thead>
+            <tbody>${productRows || '<tr><td colspan="3">Chưa có hàng hóa bán trong ngày</td></tr>'}</tbody>
           </table>
           <div class="line"></div>
           <p style="text-align:center">Kết thúc báo cáo</p>
@@ -2379,8 +2310,8 @@ export default function CafePosPage() {
       if (showCloseShiftModal && activeShift) {
         void handlePrepareCloseShift();
       }
-      if (showFarmDailyReport) {
-        void handleOpenFarmDailyReport();
+      if (showDailyReport) {
+        void handleOpenDailyReport();
       }
     } catch (error) {
       console.error(error);
@@ -2574,31 +2505,6 @@ export default function CafePosPage() {
     );
   };
 
-  const handleToggleBarAutoPrint = () => {
-    if (!canUseBarAutoPrint) return;
-
-    if (isBarAutoPrintEnabled) {
-      setIsBarAutoPrintEnabled(false);
-      setShowActionMenu(false);
-      alert(`Đã tắt tự in pha chế cho máy: ${barTerminalName}`);
-      return;
-    }
-
-    const input = window.prompt(
-      "Nhập tên máy pha chế để nhận biết phiếu in:",
-      barTerminalName || "May pha che"
-    );
-    if (input === null) return;
-
-    const normalizedName = input.trim() || "May pha che";
-    setBarTerminalName(normalizedName);
-    setIsBarAutoPrintEnabled(true);
-    setShowActionMenu(false);
-    alert(
-      `Đã bật tự in pha chế cho cửa hàng hiện tại (${storeId}) trên máy: ${normalizedName}`
-    );
-  };
-
   const getBillDateText = (bill: Bill) => {
     if (!bill.createdAt?.seconds) return "Chưa có thời gian";
     return new Date(bill.createdAt.seconds * 1000).toLocaleString("vi-VN");
@@ -2643,6 +2549,88 @@ export default function CafePosPage() {
     });
   }, [soldBills, soldBillsPaymentTab, soldBillsSearch, soldBillsSortDirection, soldBillsSortKey]);
 
+  const completedDailyBills = useMemo(
+    () => dailyReportBills.filter((bill) => bill.status !== "cancelled"),
+    [dailyReportBills]
+  );
+
+  const dailyReportTotalItems = useMemo(
+    () =>
+      completedDailyBills.reduce(
+        (total, bill) =>
+          total +
+          (bill.items || []).reduce(
+            (billTotal, item) => billTotal + Number(item.quantity || 0),
+            0
+          ),
+        0
+      ),
+    [completedDailyBills]
+  );
+
+  const dailyProductRows = useMemo(() => {
+    const productsByKey = new Map<
+      string,
+      { key: string; name: string; quantity: number; revenue: number; billIds: Set<string> }
+    >();
+
+    completedDailyBills.forEach((bill) => {
+      (bill.items || []).forEach((item) => {
+        const key = item.menuId || normalizeSearchText(item.name || "mon-khac");
+        const current = productsByKey.get(key) || {
+          key,
+          name: item.name || "Món chưa đặt tên",
+          quantity: 0,
+          revenue: 0,
+          billIds: new Set<string>(),
+        };
+        current.quantity += Number(item.quantity || 0);
+        current.revenue += Number(item.lineTotal || item.price * item.quantity || 0);
+        current.billIds.add(bill.id);
+        productsByKey.set(key, current);
+      });
+    });
+
+    return Array.from(productsByKey.values())
+      .map((item) => ({ ...item, billCount: item.billIds.size }))
+      .sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue);
+  }, [completedDailyBills]);
+
+  const dailyBillHourGroups = useMemo(() => {
+    const groups = new Map<number, Bill[]>();
+    completedDailyBills.forEach((bill) => {
+      const date = bill.createdAt?.seconds
+        ? new Date(bill.createdAt.seconds * 1000)
+        : null;
+      const hour = date ? date.getHours() : -1;
+      groups.set(hour, [...(groups.get(hour) || []), bill]);
+    });
+
+    return Array.from(groups.entries())
+      .sort(([leftHour], [rightHour]) => leftHour - rightHour)
+      .map(([hour, bills]) => ({
+        hour,
+        label:
+          hour < 0
+            ? "Chưa có thời gian"
+            : `${String(hour).padStart(2, "0")}:00 - ${String(hour).padStart(2, "0")}:59`,
+        bills: [...bills].sort(
+          (left, right) =>
+            (left.createdAt?.seconds || 0) - (right.createdAt?.seconds || 0)
+        ),
+        revenue: bills.reduce((total, bill) => total + Number(bill.total || 0), 0),
+        itemCount: bills.reduce(
+          (total, bill) =>
+            total +
+            (bill.items || []).reduce(
+              (billTotal, item) => billTotal + Number(item.quantity || 0),
+              0
+            ),
+          0
+        ),
+      }));
+  }, [completedDailyBills]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return;
@@ -2667,7 +2655,7 @@ export default function CafePosPage() {
       if (
         showOpenShiftModal ||
         showCloseShiftModal ||
-        showFarmDailyReport ||
+        showDailyReport ||
         showVoucherModal
       ) {
         return;
@@ -2687,7 +2675,7 @@ export default function CafePosPage() {
     showSoldBills,
     showOpenShiftModal,
     showCloseShiftModal,
-    showFarmDailyReport,
+    showDailyReport,
     showVoucherModal,
     cartItems.length,
     isPaying,
@@ -2784,15 +2772,10 @@ export default function CafePosPage() {
               )}
               {canUseBarAutoPrint && (
                 <span
-                  className={`hidden rounded-full px-2 py-1 text-xs font-semibold md:inline-flex ${
-                    isBarAutoPrintEnabled
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "bg-slate-100 text-slate-600"
-                  }`}
+                  className="hidden rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800 md:inline-flex"
+                  title="Phiếu pha chế được print agent gửi thẳng tới máy in LAN"
                 >
-                  {isBarAutoPrintEnabled
-                    ? `Auto pha chế: ${storeId} · ${barTerminalName}`
-                    : `Auto pha chế: ${storeId} · tắt`}
+                  Pha chế: tự động qua print agent
                 </span>
               )}
               <button
@@ -2878,23 +2861,6 @@ export default function CafePosPage() {
                             : "Bật tự in món mới cho máy này"}
                         </button>
                       )}
-                      {canUseBarAutoPrint && (
-                        <button
-                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
-                          onClick={handleToggleBarAutoPrint}
-                        >
-                          <Printer
-                            className={`h-4 w-4 ${
-                              isBarAutoPrintEnabled
-                                ? "text-emerald-700"
-                                : "text-slate-500"
-                            }`}
-                          />
-                          {isBarAutoPrintEnabled
-                            ? `Tắt tự in pha chế (${barTerminalName})`
-                            : "Bật tự in pha chế cho máy này"}
-                        </button>
-                      )}
                       <button
                         className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
                         onClick={() => handleOpenVoucherModal("income")}
@@ -2925,15 +2891,13 @@ export default function CafePosPage() {
                           {activeShift ? "Đóng ca làm việc" : "Mở ca làm việc"}
                         </button>
                       )}
-                      {isFarmStore && (
-                        <button
-                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
-                          onClick={() => void handleOpenFarmDailyReport()}
-                        >
-                          <CalendarClock className="h-4 w-4 text-indigo-700" />
-                          Báo cáo cuối ngày
-                        </button>
-                      )}
+                      <button
+                        className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                        onClick={() => void handleOpenDailyReport()}
+                      >
+                        <CalendarClock className="h-4 w-4 text-indigo-700" />
+                        Báo cáo cuối ngày
+                      </button>
                     </>
                   )}
                   <button
@@ -4226,81 +4190,196 @@ export default function CafePosPage() {
         </div>
       )}
 
-      {isFarmStore && showFarmDailyReport && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b px-5 py-4">
+      {showDailyReport && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-2 sm:p-4">
+          <div className="flex h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:h-[90vh]">
+            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Báo cáo cuối ngày</h3>
                 <p className="text-sm text-slate-500">
-                  {new Date().toLocaleDateString("vi-VN")}
+                  {new Date().toLocaleDateString("vi-VN")} · {RECEIPT_STORE_INFO[storeId]?.title || storeId}
                 </p>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => setShowFarmDailyReport(false)}
-                disabled={isLoadingFarmDailyReport}
-              >
-                Đóng
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => void handleOpenDailyReport()}
+                  isLoading={isLoadingDailyReport}
+                >
+                  <RefreshCcw className="h-4 w-4" />
+                  Tải lại
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDailyReport(false)}
+                >
+                  Đóng
+                </Button>
+              </div>
             </div>
-            <div className="space-y-3 px-5 py-4 text-sm">
-              {!farmDailyReport ? (
-                <div className="rounded-xl border border-dashed p-4 text-slate-500">
-                  {isLoadingFarmDailyReport
-                    ? "Đang tải báo cáo..."
-                    : "Chưa có dữ liệu báo cáo."}
+
+            <div className="grid grid-cols-3 gap-1 border-b bg-slate-100 p-1.5 sm:gap-2 sm:px-5 sm:py-3">
+              {([
+                ["overview", "Tổng quan"],
+                ["bills", `Bill theo giờ (${dailyReport?.completedBills || 0})`],
+                ["products", `Hàng hóa (${dailyProductRows.length})`],
+              ] as [DailyReportTab, string][]).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setDailyReportTab(tab)}
+                  className={`rounded-lg px-2 py-2 text-xs font-semibold transition sm:px-4 sm:text-sm ${
+                    dailyReportTab === tab
+                      ? "bg-white text-sky-700 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-3 py-4 sm:px-5">
+              {isLoadingDailyReport && !dailyReport ? (
+                <div className="rounded-xl border border-dashed bg-white p-8 text-center text-sm text-slate-500">
+                  Đang tải báo cáo cuối ngày...
+                </div>
+              ) : !dailyReport ? (
+                <div className="rounded-xl border border-dashed bg-white p-8 text-center text-sm text-slate-500">
+                  Chưa có dữ liệu báo cáo.
+                </div>
+              ) : dailyReportTab === "overview" ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div className="rounded-xl border bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Doanh thu</p>
+                      <p className="mt-1 text-xl font-bold text-sky-700 sm:text-2xl">
+                        {formatCurrency(dailyReport.totalSales)} đ
+                      </p>
+                    </div>
+                    <div className="rounded-xl border bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bill đã bán</p>
+                      <p className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">
+                        {dailyReport.completedBills}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Món đã bán</p>
+                      <p className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">
+                        {formatCurrency(dailyReportTotalItems)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trung bình / bill</p>
+                      <p className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">
+                        {formatCurrency(
+                          dailyReport.completedBills > 0
+                            ? dailyReport.totalSales / dailyReport.completedBills
+                            : 0
+                        )} đ
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-xl border bg-white p-4 shadow-sm">
+                      <h4 className="mb-3 font-bold text-slate-900">Thanh toán và dòng tiền</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between"><span>Tiền mặt</span><strong>{formatCurrency(dailyReport.cashSales)} đ</strong></div>
+                        <div className="flex justify-between"><span>Chuyển khoản</span><strong>{formatCurrency(dailyReport.transferSales)} đ</strong></div>
+                        <div className="border-t pt-2 flex justify-between"><span>Phiếu thu ({dailyReportVouchers.filter((voucher) => voucher.type === "income").length})</span><strong className="text-emerald-700">+{formatCurrency(dailyReport.incomeVouchers)} đ</strong></div>
+                        <div className="flex justify-between"><span>Phiếu chi ({dailyReportVouchers.filter((voucher) => voucher.type === "expense").length})</span><strong className="text-rose-700">-{formatCurrency(dailyReport.expenseVouchers)} đ</strong></div>
+                        <div className="border-t pt-2 flex justify-between"><span>Dòng tiền thuần</span><strong>{formatCurrency(dailyReport.netCashFlow)} đ</strong></div>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border bg-white p-4 shadow-sm">
+                      <h4 className="mb-3 font-bold text-slate-900">Kiểm soát bill</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between"><span>Bill hợp lệ</span><strong>{dailyReport.completedBills}</strong></div>
+                        <div className="flex justify-between"><span>Bill đã hủy</span><strong className="text-rose-700">{dailyReport.cancelledBills}</strong></div>
+                        <div className="flex justify-between"><span>Giá trị bill hủy</span><strong className="text-rose-700">{formatCurrency(dailyReport.cancelledAmount)} đ</strong></div>
+                        <div className="border-t pt-2 flex justify-between"><span>Khung giờ có bán hàng</span><strong>{dailyBillHourGroups.length}</strong></div>
+                        <div className="flex justify-between"><span>Mặt hàng đã bán</span><strong>{dailyProductRows.length}</strong></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : dailyReportTab === "bills" ? (
+                <div className="space-y-4">
+                  {dailyBillHourGroups.length === 0 && (
+                    <div className="rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-500">Chưa có bill hợp lệ trong ngày.</div>
+                  )}
+                  {dailyBillHourGroups.map((group) => (
+                    <section key={group.hour} className="overflow-hidden rounded-xl border bg-white shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 px-4 py-3">
+                        <h4 className="font-bold text-slate-900">{group.label}</h4>
+                        <p className="text-xs text-slate-600 sm:text-sm">
+                          {group.bills.length} bill · {formatCurrency(group.itemCount)} món · <strong>{formatCurrency(group.revenue)} đ</strong>
+                        </p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[680px] text-sm">
+                          <thead className="border-b bg-white text-left text-xs uppercase text-slate-500">
+                            <tr><th className="px-4 py-2">Thời gian</th><th className="px-4 py-2">Mã bill</th><th className="px-4 py-2">Bàn</th><th className="px-4 py-2">Hàng hóa</th><th className="px-4 py-2">Thanh toán</th><th className="px-4 py-2 text-right">Tổng tiền</th></tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {group.bills.map((bill) => (
+                              <tr key={bill.id} className="align-top hover:bg-slate-50">
+                                <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">{bill.createdAt?.seconds ? new Date(bill.createdAt.seconds * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                                <td className="px-4 py-3 font-mono text-xs text-slate-600">{bill.id}</td>
+                                <td className="px-4 py-3">{bill.tableNumber || "Mang về"}</td>
+                                <td className="max-w-xs px-4 py-3 text-xs text-slate-600">{(bill.items || []).map((item) => `${formatCurrency(item.quantity)}× ${item.name}`).join(", ") || "-"}</td>
+                                <td className="px-4 py-3">{bill.paymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt"}</td>
+                                <td className="whitespace-nowrap px-4 py-3 text-right font-bold">{formatCurrency(bill.total)} đ</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  ))}
                 </div>
               ) : (
-                <div className="rounded-xl border p-3">
-                  <div className="flex items-center justify-between py-1">
-                    <span>Tổng doanh thu</span>
-                    <span className="font-bold text-slate-900">
-                      {formatCurrency(farmDailyReport.totalSales)} đ
-                    </span>
+                <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-100 px-4 py-3">
+                    <h4 className="font-bold text-slate-900">Hàng hóa đã bán trong ngày</h4>
+                    <p className="text-sm text-slate-600">{dailyProductRows.length} mặt hàng · {formatCurrency(dailyReportTotalItems)} món</p>
                   </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Phiếu thu</span>
-                    <span>{formatCurrency(farmDailyReport.incomeVouchers)} đ</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Phiếu chi</span>
-                    <span>-{formatCurrency(farmDailyReport.expenseVouchers)} đ</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Dòng tiền thuần</span>
-                    <span className="font-semibold text-slate-900">
-                      {formatCurrency(farmDailyReport.netCashFlow)} đ
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Tiền mặt</span>
-                    <span>{formatCurrency(farmDailyReport.cashSales)} đ</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Chuyển khoản</span>
-                    <span>{formatCurrency(farmDailyReport.transferSales)} đ</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Số hóa đơn</span>
-                    <span>{farmDailyReport.completedBills}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Hóa đơn hủy</span>
-                    <span>{farmDailyReport.cancelledBills}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Giá trị hủy</span>
-                    <span>{formatCurrency(farmDailyReport.cancelledAmount)} đ</span>
-                  </div>
+                  {dailyProductRows.length === 0 ? (
+                    <div className="p-6 text-center text-sm text-slate-500">Chưa có hàng hóa bán trong ngày.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[620px] text-sm">
+                        <thead className="border-b bg-white text-left text-xs uppercase text-slate-500">
+                          <tr><th className="w-14 px-4 py-3 text-center">#</th><th className="px-4 py-3">Tên hàng hóa</th><th className="px-4 py-3 text-right">Số lượng bán</th><th className="px-4 py-3 text-right">Số bill</th><th className="px-4 py-3 text-right">Doanh thu</th></tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {dailyProductRows.map((item, index) => (
+                            <tr key={item.key} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
+                              <td className="px-4 py-3 font-semibold text-slate-900">{item.name}</td>
+                              <td className="px-4 py-3 text-right text-base font-bold text-sky-700">{formatCurrency(item.quantity)}</td>
+                              <td className="px-4 py-3 text-right">{item.billCount}</td>
+                              <td className="px-4 py-3 text-right font-semibold">{formatCurrency(item.revenue)} đ</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-            <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-5 py-4">
+
+            <div className="flex items-center justify-between gap-3 border-t bg-white px-4 py-3 sm:px-5">
+              <p className="hidden text-xs text-slate-500 sm:block">Chỉ tính bill hợp lệ phát sinh từ 00:00 đến 23:59 hôm nay.</p>
               <Button
-                className="bg-sky-600 hover:bg-sky-700"
-                onClick={handlePrintFarmDailyReport}
-                disabled={!farmDailyReport || isLoadingFarmDailyReport}
+                className="ml-auto bg-sky-600 hover:bg-sky-700"
+                onClick={handlePrintDailyReport}
+                disabled={!dailyReport || isLoadingDailyReport}
               >
                 <Printer className="mr-2 h-4 w-4" />
                 In báo cáo

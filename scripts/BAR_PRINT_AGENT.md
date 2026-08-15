@@ -8,6 +8,9 @@ Script `scripts/bar-print-agent.cjs` is a small background service that:
 
 This allows the pha che counter to have only a LAN printer (no browser tab on that counter).
 
+The POS browser only creates `bar_print_jobs`. It does not call the browser print dialog
+for preparation tickets, so printing stays silent as long as this agent is running.
+
 ## Requirements
 
 - A machine that can run Node.js continuously (cashier PC, mini PC, server)
@@ -45,6 +48,24 @@ npm run print:bar-agent
 npm run print:bar-agent:test
 ```
 
+## Windows package (no Node.js/npm required on the bar machine)
+
+Build the portable Windows x64 installer package on a development machine:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-bar-print-agent-windows.ps1
+```
+
+This creates `artifacts/tn-company-bar-print-agent-windows-x64.zip`, including
+its own Node.js runtime. Extract it on the bar Windows machine and double-click
+`CAI-DAT.cmd`. The installer prompts for printer/API settings and registers a
+hidden startup task named `TNCompany-BarPrintAgent` that runs as `SYSTEM`,
+restarts after failures, and does not require a user to sign in.
+
+The installed configuration and logs are under
+`C:\ProgramData\TNCompany\BarPrintAgent`. Double-click `GO-CAI-DAT.cmd` from
+the extracted package to remove the scheduled task and installed files.
+
 ## PowerShell example
 
 ```powershell
@@ -59,5 +80,7 @@ npm run print:bar-agent
 ## Notes
 
 - The POS still creates print jobs at payment time (`bar_print_jobs`).
+- Do not enable a browser auto-print workflow for preparation tickets. Browser `print()`
+  is interactive by design and opens a print dialog; this agent is the silent-print path.
 - This agent can run on cashier machine and print to pha che LAN printer directly.
 - Keep this process running with PM2/Task Scheduler/NSSM for production use.

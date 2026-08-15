@@ -1,0 +1,28 @@
+TN COMPANY - BAR PRINT AGENT CHO WINDOWS
+========================================
+
+May pha che khong can cai Node.js, npm hay mo trinh duyet.
+
+Yeu cau:
+- Windows 10/11 64-bit.
+- May Windows va may in KV838/BP-T3 cung mang LAN.
+- May in co IP co dinh va mo cong RAW 9100.
+- May Windows co Internet de ket noi API TN Company.
+
+Cai dat:
+1. Giai nen toan bo file ZIP.
+2. Bam dup CAI-DAT.cmd va chon Yes khi Windows hoi quyen Administrator.
+3. Nhap IP may in, dia chi API va tai khoan POS theo huong dan.
+4. Chon Y de in phieu test.
+
+Sau khi cai:
+- Agent chay an ngay lap tuc.
+- Agent tu chay khi Windows khoi dong, khong can dang nhap.
+- Agent tu chay lai sau 1 phut neu gap loi.
+- Khong dong/xoa thu muc C:\ProgramData\TNCompany\BarPrintAgent.
+
+Xem log:
+C:\ProgramData\TNCompany\BarPrintAgent\logs\bar-print-agent.log
+
+Go cai dat:
+Bam dup GO-CAI-DAT.cmd va chon Yes.
