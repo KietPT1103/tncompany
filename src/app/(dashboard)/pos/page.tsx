@@ -37,7 +37,6 @@ import {
   BillSurcharge,
   getBills,
   getBillsByShift,
-  getRecentBills,
   PaymentMethod,
   saveBill,
 } from "@/services/billService";
@@ -192,6 +191,18 @@ type SoldBillsSortKey = "time" | "total" | "code" | "table";
 type SortDirection = "asc" | "desc";
 type DailyReportTab = "overview" | "bills" | "products";
 type DailyReportShift = Exclude<ShiftType, "single"> | "all";
+type SoldProductKind = "drink" | "bakery";
+type EndOfDayHandover = {
+  shifts: Record<Exclude<ShiftType, "single">, number>;
+  total: number;
+  expectedTotal: number;
+  difference: number;
+  totalSales: number;
+  cashSales: number;
+  transferSales: number;
+  incomeVouchers: number;
+  expenseVouchers: number;
+};
 
 const toLocalDateInput = (date: Date) => {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -277,6 +288,8 @@ export default function CafePosPage() {
   const [showSoldBills, setShowSoldBills] = useState(false);
   const [soldBills, setSoldBills] = useState<Bill[]>([]);
   const [isLoadingSoldBills, setIsLoadingSoldBills] = useState(false);
+  const [soldBillsDate, setSoldBillsDate] = useState(() => toLocalDateInput(new Date()));
+  const [soldBillsShift, setSoldBillsShift] = useState<DailyReportShift>("all");
   const [soldBillsPaymentTab, setSoldBillsPaymentTab] =
     useState<PaymentMethod>("cash");
   const [soldBillsSearch, setSoldBillsSearch] = useState("");
@@ -326,7 +339,8 @@ export default function CafePosPage() {
   const [closeShiftSummary, setCloseShiftSummary] = useState<ShiftSummary | null>(
     null
   );
-  const [closeShiftTotalItems, setCloseShiftTotalItems] = useState(0);
+  const [closeShiftDrinkItems, setCloseShiftDrinkItems] = useState(0);
+  const [closeShiftBakeryItems, setCloseShiftBakeryItems] = useState(0);
   const [closingCashInput, setClosingCashInput] = useState("");
   const [closingNote, setClosingNote] = useState("");
   const [isClosingShift, setIsClosingShift] = useState(false);
@@ -798,6 +812,40 @@ export default function CafePosPage() {
     );
     return matchedCategory?.isPreparationPrintEnabled !== false;
   };
+
+  const getSoldProductKind = useCallback(
+    (menuId: string, itemName: string): SoldProductKind => {
+      const product = products.find((item) => item.product_code === menuId);
+      const categoryValue = product?.categoryName || product?.category || "";
+      const category = categories.find(
+        (item) =>
+          item.id === product?.category ||
+          normalizeSearchText(item.name) === normalizeSearchText(categoryValue)
+      );
+      const searchableText = normalizeSearchText(
+        [categoryValue, category?.name, product?.product_name, itemName]
+          .filter(Boolean)
+          .join(" ")
+      );
+      const bakeryKeywords = [
+        "banh",
+        "cookie",
+        "donut",
+        "croissant",
+        "tart",
+        "mousse",
+        "cupcake",
+        "macaron",
+        "panna cotta",
+      ];
+
+      return bakeryKeywords.some((keyword) => searchableText.includes(keyword)) ||
+        category?.isPreparationPrintEnabled === false
+        ? "bakery"
+        : "drink";
+    },
+    [categories, products]
+  );
 
   const isCategoryMatch = (itemCategory: string, selected: string) => {
     if (selected === ALL_CATEGORY_ID) return true;
@@ -2065,19 +2113,21 @@ export default function CafePosPage() {
         activeShift.openingCash || 0,
         vouchers
       );
-      const totalItems = bills
+      const itemTotals = bills
         .filter((bill) => bill.status !== "cancelled")
         .reduce(
-          (total, bill) =>
-            total +
-            (bill.items || []).reduce(
-              (billTotal, item) => billTotal + Number(item.quantity || 0),
-              0
-            ),
-          0
+          (totals, bill) => {
+            (bill.items || []).forEach((item) => {
+              const kind = getSoldProductKind(item.menuId, item.name || "");
+              totals[kind] += Number(item.quantity || 0);
+            });
+            return totals;
+          },
+          { drink: 0, bakery: 0 } as Record<SoldProductKind, number>
         );
       setCloseShiftSummary(summary);
-      setCloseShiftTotalItems(totalItems);
+      setCloseShiftDrinkItems(itemTotals.drink);
+      setCloseShiftBakeryItems(itemTotals.bakery);
       setClosingCashInput("");
       setClosingNote("");
       setShowCloseShiftModal(true);
@@ -2101,9 +2151,91 @@ export default function CafePosPage() {
     try {
       const handoverAmount = getShiftHandoverAmount(closeShiftSummary);
       const reconciledClosingCash = (activeShift.openingCash || 0) + handoverAmount;
+      let endOfDayHandover: EndOfDayHandover | null = null;
+      if (activeShift.shiftType === "shift_3") {
+        const shiftDate = activeShift.openedAt?.seconds
+          ? new Date(activeShift.openedAt.seconds * 1000)
+          : new Date();
+        const { start, end } = getLocalDayRange(toLocalDateInput(shiftDate));
+        const shiftTypes: Exclude<ShiftType, "single">[] = [
+          "shift_1",
+          "shift_2",
+          "shift_3",
+        ];
+        const shiftsByType = await Promise.all(
+          shiftTypes.map((shiftType) =>
+            getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType })
+          )
+        );
+        const dayShifts = shiftsByType.flat();
+        const shiftIds = dayShifts.map((shift) => shift.id);
+        const [dayBills, dayVouchers] = shiftIds.length
+          ? await Promise.all([
+              getBills({ storeId, shiftIds, includeCancelled: true, limitCount: 5000 }),
+              getCashVouchers({ storeId, shiftIds, limitCount: 5000 }),
+            ])
+          : [[], []];
+        const handoverByShift = shiftTypes.reduce(
+          (totals, shiftType) => {
+            const ids = new Set(
+              dayShifts.filter((shift) => shift.shiftType === shiftType).map((shift) => shift.id)
+            );
+            const summary = summarizeBillsForShift(
+              dayBills.filter((bill) => ids.has(bill.shiftId || "")),
+              0,
+              dayVouchers.filter((voucher) => ids.has(voucher.shiftId || ""))
+            );
+            totals[shiftType] = getShiftHandoverAmount(summary);
+            return totals;
+          },
+          { shift_1: 0, shift_2: 0, shift_3: 0 } as Record<
+            Exclude<ShiftType, "single">,
+            number
+          >
+        );
+        const totalHandover = Object.values(handoverByShift).reduce(
+          (total, amount) => total + amount,
+          0
+        );
+        const actualHandoverByShift = dayShifts.reduce(
+          (totals, shift) => {
+            const shiftClosingCash =
+              shift.id === activeShift.id ? closingCash : shift.closingCash;
+            if (shiftClosingCash === null || shiftClosingCash === undefined) return totals;
+            totals[shift.shiftType as Exclude<ShiftType, "single">] +=
+              shiftClosingCash - Number(shift.openingCash || 0);
+            return totals;
+          },
+          { shift_1: 0, shift_2: 0, shift_3: 0 } as Record<
+            Exclude<ShiftType, "single">,
+            number
+          >
+        );
+        const totalActualCash = Object.values(actualHandoverByShift).reduce(
+          (total, amount) => total + amount,
+          0
+        );
+        const daySummary = summarizeBillsForShift(dayBills, 0, dayVouchers);
+        endOfDayHandover = {
+          shifts: actualHandoverByShift,
+          total: totalActualCash,
+          expectedTotal: totalHandover,
+          difference: totalActualCash - totalHandover,
+          totalSales: daySummary.totalSales,
+          cashSales: daySummary.cashSales,
+          transferSales: daySummary.transferSales,
+          incomeVouchers: daySummary.incomeVouchers,
+          expenseVouchers: daySummary.expenseVouchers,
+        };
+      }
+      const surplusNote =
+        endOfDayHandover && endOfDayHandover.difference > 0
+          ? `Dư quỹ cả ngày: ${formatCurrency(endOfDayHandover.difference)} đ`
+          : "";
+      const finalClosingNote = [closingNote.trim(), surplusNote].filter(Boolean).join(". ");
       await closeShift(activeShift.id, {
         closingCash,
-        closeNote: closingNote,
+        closeNote: finalClosingNote,
         summary: {
           ...closeShiftSummary,
           expectedClosingCash: reconciledClosingCash,
@@ -2116,6 +2248,28 @@ export default function CafePosPage() {
         ? new Date(activeShift.openedAt.seconds * 1000).toLocaleString("vi-VN")
         : new Date().toLocaleString("vi-VN");
       const closedAtText = new Date().toLocaleString("vi-VN");
+      const endOfDaySection = endOfDayHandover
+        ? `<div class="section">
+            <p class="section-title">Kết ngày - Tổng hợp cả ngày</p>
+            <table>
+              <tr><td>Tổng doanh thu</td><td class="right">${formatCurrency(endOfDayHandover.totalSales)} đ</td></tr>
+              <tr><td>Tiền mặt</td><td class="right">${formatCurrency(endOfDayHandover.cashSales)} đ</td></tr>
+              <tr><td>Chuyển khoản</td><td class="right">${formatCurrency(endOfDayHandover.transferSales)} đ</td></tr>
+              <tr><td>Phiếu thu</td><td class="right">+${formatCurrency(endOfDayHandover.incomeVouchers)} đ</td></tr>
+              <tr><td>Phiếu chi</td><td class="right">-${formatCurrency(endOfDayHandover.expenseVouchers)} đ</td></tr>
+              <tr class="total"><td>Tiền phải bàn giao</td><td class="right">${formatCurrency(endOfDayHandover.expectedTotal)} đ</td></tr>
+            </table>
+          </div>
+          <div class="section">
+            <p class="section-title">Tiền thực tế bàn giao 3 ca</p>
+            <table>
+              <tr><td>Ca 1</td><td class="right">${formatCurrency(endOfDayHandover.shifts.shift_1)} đ</td></tr>
+              <tr><td>Ca 2</td><td class="right">${formatCurrency(endOfDayHandover.shifts.shift_2)} đ</td></tr>
+              <tr><td>Ca 3</td><td class="right">${formatCurrency(endOfDayHandover.shifts.shift_3)} đ</td></tr>
+              <tr class="total"><td>Tổng thực tế cả ngày</td><td class="right">${formatCurrency(endOfDayHandover.total)} đ</td></tr>
+            </table>
+          </div>`
+        : "";
 
       const printHtmlContent = `
         <html lang="vi">
@@ -2165,8 +2319,11 @@ export default function CafePosPage() {
               <tr class="total"><td>Tổng doanh thu</td><td class="right">${formatCurrency(
                 closeShiftSummary.totalSales
               )} đ</td></tr>
-              <tr class="strong"><td>Tổng số ly (món)</td><td class="right">${formatCurrency(
-                closeShiftTotalItems
+              <tr class="strong"><td>Nước đã bán (ly)</td><td class="right">${formatCurrency(
+                closeShiftDrinkItems
+              )}</td></tr>
+              <tr class="strong"><td>Bánh đã bán (món)</td><td class="right">${formatCurrency(
+                closeShiftBakeryItems
               )}</td></tr>
               </table>
             </div>
@@ -2203,9 +2360,10 @@ export default function CafePosPage() {
               )} đ</td></tr>
               </table>
             </div>
+            ${endOfDaySection}
             ${
-              closingNote.trim()
-                ? `<div class="section"><p class="section-title">Ghi chú</p><p>${escapeHtml(closingNote.trim())}</p></div>`
+              finalClosingNote
+                ? `<div class="section"><p class="section-title">Ghi chú</p><p>${escapeHtml(finalClosingNote)}</p></div>`
                 : ""
             }
             <div class="line"></div>
@@ -2219,7 +2377,8 @@ export default function CafePosPage() {
 
       setShowCloseShiftModal(false);
       setCloseShiftSummary(null);
-      setCloseShiftTotalItems(0);
+      setCloseShiftDrinkItems(0);
+      setCloseShiftBakeryItems(0);
       setActiveShift(null);
       setClosingCashInput("");
       setClosingNote("");
@@ -2294,13 +2453,15 @@ export default function CafePosPage() {
   const handlePrintDailyReport = () => {
     if (!dailyReport) return;
     const reportDateText = getLocalDayRange(dailyReportDate).start.toLocaleDateString("vi-VN");
-    const productRows = dailyProductRows
-      .map(
+    const buildProductRows = (rows: typeof dailyProductRows) =>
+      rows.map(
         (item) => `<tr><td>${escapeHtml(item.name)}</td><td class="right">${formatCurrency(
           item.quantity
         )}</td><td class="right">${formatCurrency(item.revenue)} đ</td></tr>`
       )
       .join("");
+    const drinkProductRows = buildProductRows(dailyDrinkRows);
+    const bakeryProductRows = buildProductRows(dailyBakeryRows);
     const html = `
       <html lang="vi">
         <head>
@@ -2327,8 +2488,11 @@ export default function CafePosPage() {
               dailyReport.totalSales
             )} đ</td></tr>
             <tr><td>Số bill</td><td class="right">${dailyReport.completedBills}</td></tr>
-            <tr><td>Số món đã bán</td><td class="right">${formatCurrency(
-              dailyReportTotalItems
+            <tr><td>Nước đã bán (ly)</td><td class="right">${formatCurrency(
+              dailyDrinkTotal
+            )}</td></tr>
+            <tr><td>Bánh đã bán (món)</td><td class="right">${formatCurrency(
+              dailyBakeryTotal
             )}</td></tr>
             <tr><td>Phiếu thu</td><td class="right">${formatCurrency(
               dailyReport.incomeVouchers
@@ -2353,10 +2517,16 @@ export default function CafePosPage() {
             )} đ</td></tr>
           </table>
           <div class="line"></div>
-          <p><strong>HÀNG HÓA ĐÃ BÁN - ${getDailyReportShiftLabel(dailyReportShift).toUpperCase()}</strong></p>
+          <p><strong>NƯỚC ĐÃ BÁN - ${getDailyReportShiftLabel(dailyReportShift).toUpperCase()} (${formatCurrency(dailyDrinkTotal)} LY)</strong></p>
           <table>
             <thead><tr><td><strong>Món</strong></td><td class="right"><strong>SL</strong></td><td class="right"><strong>Doanh thu</strong></td></tr></thead>
-            <tbody>${productRows || `<tr><td colspan="3">Chưa có hàng hóa bán trong ${getDailyReportShiftLabel(dailyReportShift)}</td></tr>`}</tbody>
+            <tbody>${drinkProductRows || `<tr><td colspan="3">Chưa có nước bán trong ${getDailyReportShiftLabel(dailyReportShift)}</td></tr>`}</tbody>
+          </table>
+          <div class="line"></div>
+          <p><strong>BÁNH ĐÃ BÁN - ${getDailyReportShiftLabel(dailyReportShift).toUpperCase()} (${formatCurrency(dailyBakeryTotal)} MÓN)</strong></p>
+          <table>
+            <thead><tr><td><strong>Món</strong></td><td class="right"><strong>SL</strong></td><td class="right"><strong>Doanh thu</strong></td></tr></thead>
+            <tbody>${bakeryProductRows || `<tr><td colspan="3">Chưa có bánh bán trong ${getDailyReportShiftLabel(dailyReportShift)}</td></tr>`}</tbody>
           </table>
           <div class="line"></div>
           <p style="text-align:center">Kết thúc báo cáo</p>
@@ -2558,13 +2728,37 @@ export default function CafePosPage() {
     }
   };
 
-  const loadSoldBills = async (forceReload = false) => {
+  const loadSoldBills = async (
+    forceReload = false,
+    dateValue = soldBillsDate,
+    shiftType = soldBillsShift
+  ) => {
     if (!storeId || isLoadingSoldBills) return;
     if (!forceReload && soldBills.length > 0) return;
 
     setIsLoadingSoldBills(true);
     try {
-      const data = await getRecentBills(storeId, 200);
+      const { start, end } = getLocalDayRange(dateValue);
+      let data: Bill[] = [];
+      if (shiftType === "all") {
+        data = await getBills({
+          storeId,
+          startDate: start,
+          endDate: end,
+          limitCount: 2000,
+        });
+      } else {
+        const shifts = await getShiftsForReport({
+          storeId,
+          startDate: start,
+          endDate: end,
+          shiftType,
+        });
+        const shiftIds = shifts.map((shift) => shift.id);
+        data = shiftIds.length > 0
+          ? await getBills({ storeId, shiftIds, limitCount: 2000 })
+          : [];
+      }
       setSoldBills(data);
     } catch (error) {
       console.error(error);
@@ -2575,10 +2769,22 @@ export default function CafePosPage() {
   };
 
   const handleOpenSoldBills = () => {
+    const activeShiftOpenedAt = activeShift?.openedAt?.seconds
+      ? new Date(activeShift.openedAt.seconds * 1000)
+      : new Date();
+    const currentDate = toLocalDateInput(activeShiftOpenedAt);
+    const accountShift = resolveShiftType();
+    const currentShift: DailyReportShift = activeShift && activeShift.shiftType !== "single"
+      ? activeShift.shiftType
+      : accountShift !== "single"
+        ? accountShift
+        : "all";
     setShowActionMenu(false);
     setExpandedSoldBillId(null);
+    setSoldBillsDate(currentDate);
+    setSoldBillsShift(currentShift);
     setShowSoldBills(true);
-    void loadSoldBills(true);
+    void loadSoldBills(true, currentDate, currentShift);
   };
 
   const handleToggleKitchenAutoPrint = () => {
@@ -2693,24 +2899,10 @@ export default function CafePosPage() {
     [dailyReportBills]
   );
 
-  const dailyReportTotalItems = useMemo(
-    () =>
-      completedDailyBills.reduce(
-        (total, bill) =>
-          total +
-          (bill.items || []).reduce(
-            (billTotal, item) => billTotal + Number(item.quantity || 0),
-            0
-          ),
-        0
-      ),
-    [completedDailyBills]
-  );
-
   const dailyProductRows = useMemo(() => {
     const productsByKey = new Map<
       string,
-      { key: string; name: string; quantity: number; revenue: number; billIds: Set<string> }
+      { key: string; name: string; kind: SoldProductKind; quantity: number; revenue: number; billIds: Set<string> }
     >();
 
     completedDailyBills.forEach((bill) => {
@@ -2719,6 +2911,7 @@ export default function CafePosPage() {
         const current = productsByKey.get(key) || {
           key,
           name: item.name || "Món chưa đặt tên",
+          kind: getSoldProductKind(item.menuId, item.name || ""),
           quantity: 0,
           revenue: 0,
           billIds: new Set<string>(),
@@ -2733,7 +2926,24 @@ export default function CafePosPage() {
     return Array.from(productsByKey.values())
       .map((item) => ({ ...item, billCount: item.billIds.size }))
       .sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue);
-  }, [completedDailyBills]);
+  }, [completedDailyBills, getSoldProductKind]);
+
+  const dailyDrinkRows = useMemo(
+    () => dailyProductRows.filter((item) => item.kind === "drink"),
+    [dailyProductRows]
+  );
+  const dailyBakeryRows = useMemo(
+    () => dailyProductRows.filter((item) => item.kind === "bakery"),
+    [dailyProductRows]
+  );
+  const dailyDrinkTotal = useMemo(
+    () => dailyDrinkRows.reduce((total, item) => total + item.quantity, 0),
+    [dailyDrinkRows]
+  );
+  const dailyBakeryTotal = useMemo(
+    () => dailyBakeryRows.reduce((total, item) => total + item.quantity, 0),
+    [dailyBakeryRows]
+  );
 
   const dailyBillHourGroups = useMemo(() => {
     const groups = new Map<number, Bill[]>();
@@ -3912,7 +4122,7 @@ export default function CafePosPage() {
                   Đơn đã bán
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Danh sách 200 đơn gần nhất
+                  Danh sách đơn theo ngày và ca làm việc
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -3943,6 +4153,49 @@ export default function CafePosPage() {
             </div>
 
             <div className="space-y-3 border-b bg-slate-50 px-4 py-3">
+              <div className="grid grid-cols-2 gap-2">
+                <label>
+                  <span className="mb-1 block text-xs font-semibold text-slate-500">
+                    Ngày bán
+                  </span>
+                  <input
+                    type="date"
+                    value={soldBillsDate}
+                    disabled={isLoadingSoldBills}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (!value) return;
+                      setSoldBillsDate(value);
+                      setExpandedSoldBillId(null);
+                      setSoldBills([]);
+                      void loadSoldBills(true, value, soldBillsShift);
+                    }}
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:opacity-60"
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs font-semibold text-slate-500">
+                    Phạm vi
+                  </span>
+                  <select
+                    value={soldBillsShift}
+                    disabled={isLoadingSoldBills}
+                    onChange={(event) => {
+                      const value = event.target.value as DailyReportShift;
+                      setSoldBillsShift(value);
+                      setExpandedSoldBillId(null);
+                      setSoldBills([]);
+                      void loadSoldBills(true, soldBillsDate, value);
+                    }}
+                    className="h-9 w-full cursor-pointer rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="all">Cả ngày</option>
+                    <option value="shift_1">Ca 1</option>
+                    <option value="shift_2">Ca 2</option>
+                    <option value="shift_3">Ca 3</option>
+                  </select>
+                </label>
+              </div>
               <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-200 p-1">
                 <button
                   type="button"
@@ -4249,8 +4502,12 @@ export default function CafePosPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-1">
-                  <span>Tổng số ly (món)</span>
-                  <span className="font-semibold">{formatCurrency(closeShiftTotalItems)}</span>
+                  <span>Nước đã bán (ly)</span>
+                  <span className="font-semibold">{formatCurrency(closeShiftDrinkItems)}</span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span>Bánh đã bán (món)</span>
+                  <span className="font-semibold">{formatCurrency(closeShiftBakeryItems)}</span>
                 </div>
                 <div className="flex items-center justify-between py-1">
                   <span>Phiếu thu</span>
@@ -4409,7 +4666,7 @@ export default function CafePosPage() {
               {([
                 ["overview", "Tổng quan"],
                 ["bills", `Bill theo giờ (${dailyReport?.completedBills || 0})`],
-                ["products", `Hàng hóa ${getDailyReportShiftLabel(dailyReportShift)} (${dailyProductRows.length})`],
+                ["products", `Nước & bánh ${getDailyReportShiftLabel(dailyReportShift)} (${dailyProductRows.length})`],
               ] as [DailyReportTab, string][]).map(([tab, label]) => (
                 <button
                   key={tab}
@@ -4437,7 +4694,7 @@ export default function CafePosPage() {
                 </div>
               ) : dailyReportTab === "overview" ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                     <div className="rounded-xl border bg-white p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Doanh thu</p>
                       <p className="mt-1 text-xl font-bold text-sky-700 sm:text-2xl">
@@ -4451,9 +4708,15 @@ export default function CafePosPage() {
                       </p>
                     </div>
                     <div className="rounded-xl border bg-white p-4 shadow-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Món đã bán</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nước đã bán (ly)</p>
                       <p className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">
-                        {formatCurrency(dailyReportTotalItems)}
+                        {formatCurrency(dailyDrinkTotal)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bánh đã bán (món)</p>
+                      <p className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">
+                        {formatCurrency(dailyBakeryTotal)}
                       </p>
                     </div>
                     <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -4486,7 +4749,8 @@ export default function CafePosPage() {
                         <div className="flex justify-between"><span>Bill đã hủy</span><strong className="text-rose-700">{dailyReport.cancelledBills}</strong></div>
                         <div className="flex justify-between"><span>Giá trị bill hủy</span><strong className="text-rose-700">{formatCurrency(dailyReport.cancelledAmount)} đ</strong></div>
                         <div className="border-t pt-2 flex justify-between"><span>Khung giờ có bán hàng</span><strong>{dailyBillHourGroups.length}</strong></div>
-                        <div className="flex justify-between"><span>Mặt hàng đã bán</span><strong>{dailyProductRows.length}</strong></div>
+                        <div className="flex justify-between"><span>Mặt hàng nước</span><strong>{dailyDrinkRows.length}</strong></div>
+                        <div className="flex justify-between"><span>Mặt hàng bánh</span><strong>{dailyBakeryRows.length}</strong></div>
                       </div>
                     </div>
                   </div>
@@ -4622,37 +4886,46 @@ export default function CafePosPage() {
                   ))}
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-100 px-4 py-3">
-                    <h4 className="font-bold text-slate-900">
-                      Hàng hóa đã bán · {getDailyReportShiftLabel(dailyReportShift)}
-                    </h4>
-                    <p className="text-sm text-slate-600">{dailyProductRows.length} mặt hàng · {formatCurrency(dailyReportTotalItems)} món</p>
-                  </div>
-                  {dailyProductRows.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-slate-500">
-                      Chưa có hàng hóa bán trong {getDailyReportShiftLabel(dailyReportShift)}.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[620px] text-sm">
-                        <thead className="border-b bg-white text-left text-xs uppercase text-slate-500">
-                          <tr><th className="w-14 px-4 py-3 text-center">#</th><th className="px-4 py-3">Tên hàng hóa</th><th className="px-4 py-3 text-right">Số lượng bán</th><th className="px-4 py-3 text-right">Số bill</th><th className="px-4 py-3 text-right">Doanh thu</th></tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {dailyProductRows.map((item, index) => (
-                            <tr key={item.key} className="hover:bg-slate-50">
-                              <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
-                              <td className="px-4 py-3 font-semibold text-slate-900">{item.name}</td>
-                              <td className="px-4 py-3 text-right text-base font-bold text-sky-700">{formatCurrency(item.quantity)}</td>
-                              <td className="px-4 py-3 text-right">{item.billCount}</td>
-                              <td className="px-4 py-3 text-right font-semibold">{formatCurrency(item.revenue)} đ</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                <div className="space-y-4">
+                  {[
+                    { key: "drink", title: "Nước đã bán", unit: "ly", rows: dailyDrinkRows, total: dailyDrinkTotal },
+                    { key: "bakery", title: "Bánh đã bán", unit: "món", rows: dailyBakeryRows, total: dailyBakeryTotal },
+                  ].map((group) => (
+                    <section key={group.key} className="overflow-hidden rounded-xl border bg-white shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-100 px-4 py-3">
+                        <h4 className="font-bold text-slate-900">
+                          {group.title} · {getDailyReportShiftLabel(dailyReportShift)}
+                        </h4>
+                        <p className="text-sm text-slate-600">
+                          {group.rows.length} mặt hàng · {formatCurrency(group.total)} {group.unit}
+                        </p>
+                      </div>
+                      {group.rows.length === 0 ? (
+                        <div className="p-6 text-center text-sm text-slate-500">
+                          Chưa có {group.key === "drink" ? "nước" : "bánh"} bán trong {getDailyReportShiftLabel(dailyReportShift)}.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[620px] text-sm">
+                            <thead className="border-b bg-white text-left text-xs uppercase text-slate-500">
+                              <tr><th className="w-14 px-4 py-3 text-center">#</th><th className="px-4 py-3">Tên hàng hóa</th><th className="px-4 py-3 text-right">Số lượng bán</th><th className="px-4 py-3 text-right">Số bill</th><th className="px-4 py-3 text-right">Doanh thu</th></tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {group.rows.map((item, index) => (
+                                <tr key={item.key} className="hover:bg-slate-50">
+                                  <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
+                                  <td className="px-4 py-3 font-semibold text-slate-900">{item.name}</td>
+                                  <td className="px-4 py-3 text-right text-base font-bold text-sky-700">{formatCurrency(item.quantity)}</td>
+                                  <td className="px-4 py-3 text-right">{item.billCount}</td>
+                                  <td className="px-4 py-3 text-right font-semibold">{formatCurrency(item.revenue)} đ</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </section>
+                  ))}
                 </div>
               )}
             </div>
