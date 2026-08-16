@@ -61,6 +61,7 @@ import {
   CashierShift,
   closeShift,
   getOpenShiftByCashier,
+  getShiftsForReport,
   openShift,
   ShiftSummary,
   ShiftType,
@@ -188,6 +189,19 @@ type ReceiptData = {
 type SoldBillsSortKey = "time" | "total" | "code" | "table";
 type SortDirection = "asc" | "desc";
 type DailyReportTab = "overview" | "bills" | "products";
+type DailyReportShift = Exclude<ShiftType, "single"> | "all";
+
+const toLocalDateInput = (date: Date) => {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+
+const getLocalDayRange = (dateValue: string) => {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const end = new Date(year, month - 1, day, 23, 59, 59, 999);
+  return { start, end };
+};
 
 export default function CafePosPage() {
   const { role, user, logout } = useAuth();
@@ -310,6 +324,7 @@ export default function CafePosPage() {
   const [closeShiftSummary, setCloseShiftSummary] = useState<ShiftSummary | null>(
     null
   );
+  const [closeShiftTotalItems, setCloseShiftTotalItems] = useState(0);
   const [closingCashInput, setClosingCashInput] = useState("");
   const [closingNote, setClosingNote] = useState("");
   const [isClosingShift, setIsClosingShift] = useState(false);
@@ -321,6 +336,11 @@ export default function CafePosPage() {
   const [dailyReportBills, setDailyReportBills] = useState<Bill[]>([]);
   const [dailyReportVouchers, setDailyReportVouchers] = useState<CashVoucher[]>([]);
   const [dailyReportTab, setDailyReportTab] = useState<DailyReportTab>("overview");
+  const [dailyReportDate, setDailyReportDate] = useState(() => toLocalDateInput(new Date()));
+  const [dailyReportShift, setDailyReportShift] = useState<DailyReportShift>("shift_1");
+  const [expandedDailyBillHours, setExpandedDailyBillHours] = useState<Set<number>>(
+    () => new Set()
+  );
   const [isLoadingDailyReport, setIsLoadingDailyReport] = useState(false);
   const [showVoucherModal, setShowVoucherModal] = useState<CashVoucherType | null>(
     null
@@ -1965,6 +1985,9 @@ export default function CafePosPage() {
     return "Ca chung";
   };
 
+  const getDailyReportShiftLabel = (shiftType: DailyReportShift) =>
+    shiftType === "all" ? "Cả ngày" : getShiftLabel(shiftType);
+
   const handleOpenShift = async () => {
     if (!user || !storeId) return;
     if (!deviceIdentity?.id) {
@@ -2031,7 +2054,19 @@ export default function CafePosPage() {
         activeShift.openingCash || 0,
         vouchers
       );
+      const totalItems = bills
+        .filter((bill) => bill.status !== "cancelled")
+        .reduce(
+          (total, bill) =>
+            total +
+            (bill.items || []).reduce(
+              (billTotal, item) => billTotal + Number(item.quantity || 0),
+              0
+            ),
+          0
+        );
       setCloseShiftSummary(summary);
+      setCloseShiftTotalItems(totalItems);
       setClosingCashInput("");
       setClosingNote("");
       setShowCloseShiftModal(true);
@@ -2076,34 +2111,53 @@ export default function CafePosPage() {
               @page { size: 80mm auto; margin: 4mm; }
               body { font-family: ${PRINT_FONT_FAMILY}; width: 80mm; margin: 0 auto; padding: 4mm; font-size: 12px; }
               h2, h3, p { margin: 0; }
-              table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+              h2 { text-align: center; font-size: 18px; }
+              .subtitle { margin-top: 2px; text-align: center; }
+              .section { margin-top: 8px; border-top: 1px dashed #777; padding-top: 6px; }
+              .section-title { margin-bottom: 3px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+              table { width: 100%; border-collapse: collapse; }
               td { padding: 3px 0; vertical-align: top; }
               .right { text-align: right; }
+              .total td { border-top: 1px solid #555; padding-top: 5px; font-weight: 700; }
+              .strong td { font-weight: 700; }
               .line { border-top: 1px dashed #999; margin: 8px 0; }
               .tail-space { height: ${PRINT_TAIL_SPACE_MM}mm; }
             </style>
           </head>
           <body>
             <h2>Biên bản bàn giao ca</h2>
-            <p>${storeId.toUpperCase()} - ${getShiftLabel(activeShift.shiftType)}</p>
-            <div class="line"></div>
-            <p>Thu ngân: ${activeShift.cashierName}</p>
-            <p>Giờ mở ca: ${openedAtText}</p>
-            <p>Giờ đóng ca: ${closedAtText}</p>
-            <div class="line"></div>
-            <table>
-              <tr><td>Tiền đầu ca</td><td class="right">${formatCurrency(
-                activeShift.openingCash || 0
-              )} đ</td></tr>
-              <tr><td>Doanh thu tiền mặt</td><td class="right">${formatCurrency(
+            <p class="subtitle">${storeId.toUpperCase()} - ${getShiftLabel(activeShift.shiftType)}</p>
+
+            <div class="section">
+              <p class="section-title">Thông tin ca</p>
+              <table>
+                <tr><td>Thu ngân</td><td class="right">${escapeHtml(activeShift.cashierName)}</td></tr>
+                <tr><td>Giờ mở ca</td><td class="right">${openedAtText}</td></tr>
+                <tr><td>Giờ đóng ca</td><td class="right">${closedAtText}</td></tr>
+              </table>
+            </div>
+
+            <div class="section">
+              <p class="section-title">Doanh thu trong ca</p>
+              <table>
+              <tr><td>Tiền mặt</td><td class="right">${formatCurrency(
                 closeShiftSummary.cashSales
               )} đ</td></tr>
-              <tr><td>Doanh thu chuyển khoản</td><td class="right">${formatCurrency(
+              <tr><td>Chuyển khoản</td><td class="right">${formatCurrency(
                 closeShiftSummary.transferSales
               )} đ</td></tr>
-              <tr><td>Tổng doanh thu</td><td class="right">${formatCurrency(
+              <tr class="total"><td>Tổng doanh thu</td><td class="right">${formatCurrency(
                 closeShiftSummary.totalSales
               )} đ</td></tr>
+              <tr class="strong"><td>Tổng số ly (món)</td><td class="right">${formatCurrency(
+                closeShiftTotalItems
+              )}</td></tr>
+              </table>
+            </div>
+
+            <div class="section">
+              <p class="section-title">Thu / chi trong ca</p>
+              <table>
               <tr><td>Phiếu thu</td><td class="right">${formatCurrency(
                 closeShiftSummary.incomeVouchers
               )} đ</td></tr>
@@ -2112,6 +2166,15 @@ export default function CafePosPage() {
               )} đ</td></tr>
               <tr><td>Dòng tiền thuần</td><td class="right">${formatCurrency(
                 closeShiftSummary.netCashFlow
+              )} đ</td></tr>
+              </table>
+            </div>
+
+            <div class="section">
+              <p class="section-title">Bàn giao tiền mặt</p>
+              <table>
+              <tr><td>Tiền đầu ca</td><td class="right">${formatCurrency(
+                activeShift.openingCash || 0
               )} đ</td></tr>
               <tr><td>Tiền mặt kỳ vọng</td><td class="right">${formatCurrency(
                 closeShiftSummary.expectedClosingCash
@@ -2122,16 +2185,11 @@ export default function CafePosPage() {
               <tr><td>Chênh lệch (${diffInfo.label})</td><td class="right">${formatCurrency(
                 diffInfo.amount
               )} đ</td></tr>
-              <tr><td>Bill hợp lệ</td><td class="right">${
-                closeShiftSummary.completedBills
-              }</td></tr>
-              <tr><td>Bill đã hủy</td><td class="right">${
-                closeShiftSummary.cancelledBills
-              }</td></tr>
-            </table>
+              </table>
+            </div>
             ${
               closingNote.trim()
-                ? `<div class="line"></div><p>Ghi chú: ${closingNote.trim()}</p>`
+                ? `<div class="section"><p class="section-title">Ghi chú</p><p>${escapeHtml(closingNote.trim())}</p></div>`
                 : ""
             }
             <div class="line"></div>
@@ -2145,6 +2203,7 @@ export default function CafePosPage() {
 
       setShowCloseShiftModal(false);
       setCloseShiftSummary(null);
+      setCloseShiftTotalItems(0);
       setActiveShift(null);
       setClosingCashInput("");
       setClosingNote("");
@@ -2157,33 +2216,32 @@ export default function CafePosPage() {
     }
   };
 
-  const handleOpenDailyReport = async () => {
+  const loadDailyReport = async (dateValue: string, shiftType: DailyReportShift) => {
     if (!storeId) return;
-    setShowActionMenu(false);
-    setShowDailyReport(true);
-    setDailyReportTab("overview");
+    setExpandedDailyBillHours(new Set());
     setDailyReport(null);
     setDailyReportBills([]);
     setDailyReportVouchers([]);
     setIsLoadingDailyReport(true);
     try {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const end = new Date();
-      end.setHours(23, 59, 59, 999);
-      const bills = await getBills({
-        storeId,
-        startDate: start,
-        endDate: end,
-        includeCancelled: true,
-        limitCount: 2000,
-      });
-      const vouchers = await getCashVouchers({
-        storeId,
-        startDate: start,
-        endDate: end,
-        limitCount: 2000,
-      });
+      const { start, end } = getLocalDayRange(dateValue);
+      let bills: Bill[] = [];
+      let vouchers: CashVoucher[] = [];
+      if (shiftType === "all") {
+        [bills, vouchers] = await Promise.all([
+          getBills({ storeId, startDate: start, endDate: end, includeCancelled: true, limitCount: 2000 }),
+          getCashVouchers({ storeId, startDate: start, endDate: end, limitCount: 2000 }),
+        ]);
+      } else {
+        const shifts = await getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType });
+        const shiftIds = shifts.map((shift) => shift.id);
+        if (shiftIds.length > 0) {
+          [bills, vouchers] = await Promise.all([
+            getBills({ storeId, shiftIds, includeCancelled: true, limitCount: 2000 }),
+            getCashVouchers({ storeId, shiftIds, limitCount: 2000 }),
+          ]);
+        }
+      }
       const summary = summarizeBillsForShift(bills, 0, vouchers);
       setDailyReportBills(bills);
       setDailyReportVouchers(vouchers);
@@ -2196,9 +2254,29 @@ export default function CafePosPage() {
     }
   };
 
+  const handleOpenDailyReport = () => {
+    if (!storeId) return;
+    const activeShiftOpenedAt = activeShift?.openedAt?.seconds
+      ? new Date(activeShift.openedAt.seconds * 1000)
+      : new Date();
+    const currentDate = toLocalDateInput(activeShiftOpenedAt);
+    const accountShift = resolveShiftType();
+    const currentShift: DailyReportShift = activeShift && activeShift.shiftType !== "single"
+      ? activeShift.shiftType
+      : accountShift !== "single"
+        ? accountShift
+        : "shift_1";
+    setShowActionMenu(false);
+    setShowDailyReport(true);
+    setDailyReportTab("overview");
+    setDailyReportDate(currentDate);
+    setDailyReportShift(currentShift);
+    void loadDailyReport(currentDate, currentShift);
+  };
+
   const handlePrintDailyReport = () => {
     if (!dailyReport) return;
-    const today = new Date().toLocaleDateString("vi-VN");
+    const reportDateText = getLocalDayRange(dailyReportDate).start.toLocaleDateString("vi-VN");
     const productRows = dailyProductRows
       .map(
         (item) => `<tr><td>${escapeHtml(item.name)}</td><td class="right">${formatCurrency(
@@ -2225,7 +2303,7 @@ export default function CafePosPage() {
         </head>
         <body>
           <h2>Báo cáo cuối ngày</h2>
-          <p>Ngày: ${today}</p>
+          <p>Ngày: ${reportDateText} - ${getDailyReportShiftLabel(dailyReportShift)}</p>
           <div class="line"></div>
           <table>
             <tr><td>Tổng doanh thu</td><td class="right">${formatCurrency(
@@ -2258,10 +2336,10 @@ export default function CafePosPage() {
             )} đ</td></tr>
           </table>
           <div class="line"></div>
-          <p><strong>HÀNG HÓA ĐÃ BÁN</strong></p>
+          <p><strong>HÀNG HÓA ĐÃ BÁN - ${getDailyReportShiftLabel(dailyReportShift).toUpperCase()}</strong></p>
           <table>
             <thead><tr><td><strong>Món</strong></td><td class="right"><strong>SL</strong></td><td class="right"><strong>Doanh thu</strong></td></tr></thead>
-            <tbody>${productRows || '<tr><td colspan="3">Chưa có hàng hóa bán trong ngày</td></tr>'}</tbody>
+            <tbody>${productRows || `<tr><td colspan="3">Chưa có hàng hóa bán trong ${getDailyReportShiftLabel(dailyReportShift)}</td></tr>`}</tbody>
           </table>
           <div class="line"></div>
           <p style="text-align:center">Kết thúc báo cáo</p>
@@ -2316,7 +2394,7 @@ export default function CafePosPage() {
         void handlePrepareCloseShift();
       }
       if (showDailyReport) {
-        void handleOpenDailyReport();
+        void loadDailyReport(dailyReportDate, dailyReportShift);
       }
     } catch (error) {
       console.error(error);
@@ -2754,15 +2832,15 @@ export default function CafePosPage() {
                 </span>
               )}
               <CheckCircle2 className="ml-2 hidden h-4 w-4 text-emerald-600 md:inline-flex" />
-              <span className="hidden md:inline-flex">
+              {/* <span className="hidden md:inline-flex">
                 {tables.length} bàn · {filteredMenu.length} món
-              </span>
+              </span> */}
               {enabledSurcharges.length > 0 && (
                 <span className="hidden rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 md:inline-flex">
                   Phụ thu: {enabledSurcharges.length}
                 </span>
               )}
-              {canUseKitchenAutoPrint && (
+              {/* {canUseKitchenAutoPrint && (
                 <span
                   className={`hidden rounded-full px-2 py-1 text-xs font-semibold md:inline-flex ${
                     isKitchenAutoPrintEnabled
@@ -2774,15 +2852,15 @@ export default function CafePosPage() {
                     ? `Auto in: ${storeId} · ${kitchenTerminalName}`
                     : `Auto in: ${storeId} · tắt`}
                 </span>
-              )}
-              {canUseBarAutoPrint && (
+              )} */}
+              {/* {canUseBarAutoPrint && (
                 <span
                   className="hidden rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800 md:inline-flex"
                   title="Phiếu pha chế được print agent gửi thẳng tới máy in LAN"
                 >
                   Pha chế: tự động qua print agent
                 </span>
-              )}
+              )} */}
               <button
                 onClick={() => setShowActionMenu((prev) => !prev)}
                 className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -4091,24 +4169,20 @@ export default function CafePosPage() {
 
               <div className="rounded-xl border p-3">
                 <div className="flex items-center justify-between py-1">
-                  <span>Tiền mặt trong ca</span>
+                  <span>Tiền mặt</span>
                   <span className="font-semibold">
                     {formatCurrency(closeShiftSummary.cashSales)} đ
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-1">
-                  <span>Chuyển khoản trong ca</span>
+                  <span>Chuyển khoản</span>
                   <span className="font-semibold">
                     {formatCurrency(closeShiftSummary.transferSales)} đ
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-1">
-                  <span>Bill hợp lệ</span>
-                  <span className="font-semibold">{closeShiftSummary.completedBills}</span>
-                </div>
-                <div className="flex items-center justify-between py-1">
-                  <span>Bill đã hủy</span>
-                  <span className="font-semibold">{closeShiftSummary.cancelledBills}</span>
+                  <span>Tổng số ly (món)</span>
+                  <span className="font-semibold">{formatCurrency(closeShiftTotalItems)}</span>
                 </div>
                 <div className="flex items-center justify-between py-1">
                   <span>Phiếu thu</span>
@@ -4198,19 +4272,52 @@ export default function CafePosPage() {
       {showDailyReport && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-2 sm:p-4">
           <div className="flex h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:h-[90vh]">
-            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
+            <div className="flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between sm:px-5 sm:py-4">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Báo cáo cuối ngày</h3>
                 <p className="text-sm text-slate-500">
-                  {new Date().toLocaleDateString("vi-VN")} · {RECEIPT_STORE_INFO[storeId]?.title || storeId}
+                  {RECEIPT_STORE_INFO[storeId]?.title || storeId}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="min-w-[150px] flex-1 lg:flex-none">
+                  <span className="mb-1 block text-xs font-semibold text-slate-500">Ngày báo cáo</span>
+                  <input
+                    type="date"
+                    value={dailyReportDate}
+                    disabled={isLoadingDailyReport}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (!value) return;
+                      setDailyReportDate(value);
+                      void loadDailyReport(value, dailyReportShift);
+                    }}
+                    className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:opacity-60"
+                  />
+                </label>
+                <label className="min-w-[130px] flex-1 lg:flex-none">
+                  <span className="mb-1 block text-xs font-semibold text-slate-500">Phạm vi báo cáo</span>
+                  <select
+                    value={dailyReportShift}
+                    disabled={isLoadingDailyReport}
+                    onChange={(event) => {
+                      const value = event.target.value as DailyReportShift;
+                      setDailyReportShift(value);
+                      void loadDailyReport(dailyReportDate, value);
+                    }}
+                    className="h-9 w-full cursor-pointer rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="all">Cả ngày</option>
+                    <option value="shift_1">Ca 1</option>
+                    <option value="shift_2">Ca 2</option>
+                    <option value="shift_3">Ca 3</option>
+                  </select>
+                </label>
                 <Button
                   variant="outline"
                   size="sm"
                   className="gap-2"
-                  onClick={() => void handleOpenDailyReport()}
+                  onClick={() => void loadDailyReport(dailyReportDate, dailyReportShift)}
                   isLoading={isLoadingDailyReport}
                 >
                   <RefreshCcw className="h-4 w-4" />
@@ -4230,7 +4337,7 @@ export default function CafePosPage() {
               {([
                 ["overview", "Tổng quan"],
                 ["bills", `Bill theo giờ (${dailyReport?.completedBills || 0})`],
-                ["products", `Hàng hóa (${dailyProductRows.length})`],
+                ["products", `Hàng hóa ${getDailyReportShiftLabel(dailyReportShift)} (${dailyProductRows.length})`],
               ] as [DailyReportTab, string][]).map(([tab, label]) => (
                 <button
                   key={tab}
@@ -4319,42 +4426,67 @@ export default function CafePosPage() {
                   )}
                   {dailyBillHourGroups.map((group) => (
                     <section key={group.hour} className="overflow-hidden rounded-xl border bg-white shadow-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 px-4 py-3">
-                        <h4 className="font-bold text-slate-900">{group.label}</h4>
-                        <p className="text-xs text-slate-600 sm:text-sm">
+                      <button
+                        type="button"
+                        aria-expanded={expandedDailyBillHours.has(group.hour)}
+                        onClick={() => {
+                          setExpandedDailyBillHours((current) => {
+                            const next = new Set(current);
+                            if (next.has(group.hour)) next.delete(group.hour);
+                            else next.add(group.hour);
+                            return next;
+                          });
+                        }}
+                        className="flex w-full cursor-pointer flex-wrap items-center justify-between gap-2 bg-slate-100 px-4 py-3 text-left transition hover:bg-slate-200"
+                      >
+                        <span className="flex items-center gap-2">
+                          <ChevronDown
+                            className={`h-4 w-4 text-slate-500 transition-transform ${
+                              expandedDailyBillHours.has(group.hour) ? "rotate-180" : ""
+                            }`}
+                          />
+                          <span className="font-bold text-slate-900">{group.label}</span>
+                        </span>
+                        <span className="text-xs text-slate-600 sm:text-sm">
                           {group.bills.length} bill · {formatCurrency(group.itemCount)} món · <strong>{formatCurrency(group.revenue)} đ</strong>
-                        </p>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full min-w-[680px] text-sm">
-                          <thead className="border-b bg-white text-left text-xs uppercase text-slate-500">
-                            <tr><th className="px-4 py-2">Thời gian</th><th className="px-4 py-2">Mã bill</th><th className="px-4 py-2">Bàn</th><th className="px-4 py-2">Hàng hóa</th><th className="px-4 py-2">Thanh toán</th><th className="px-4 py-2 text-right">Tổng tiền</th></tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {group.bills.map((bill) => (
-                              <tr key={bill.id} className="align-top hover:bg-slate-50">
-                                <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">{bill.createdAt?.seconds ? new Date(bill.createdAt.seconds * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
-                                <td className="px-4 py-3 font-mono text-xs text-slate-600">{bill.id}</td>
-                                <td className="px-4 py-3">{bill.tableNumber || "Mang về"}</td>
-                                <td className="max-w-xs px-4 py-3 text-xs text-slate-600">{(bill.items || []).map((item) => `${formatCurrency(item.quantity)}× ${item.name}`).join(", ") || "-"}</td>
-                                <td className="px-4 py-3">{bill.paymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt"}</td>
-                                <td className="whitespace-nowrap px-4 py-3 text-right font-bold">{formatCurrency(bill.total)} đ</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                        </span>
+                      </button>
+                      {expandedDailyBillHours.has(group.hour) && (
+                        <div className="overflow-x-auto border-t">
+                          <table className="w-full min-w-[680px] text-sm">
+                            <thead className="border-b bg-white text-left text-xs uppercase text-slate-500">
+                              <tr><th className="px-4 py-2">Thời gian</th><th className="px-4 py-2">Mã bill</th><th className="px-4 py-2">Bàn</th><th className="px-4 py-2">Hàng hóa</th><th className="px-4 py-2">Thanh toán</th><th className="px-4 py-2 text-right">Tổng tiền</th></tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {group.bills.map((bill) => (
+                                <tr key={bill.id} className="align-top hover:bg-slate-50">
+                                  <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">{bill.createdAt?.seconds ? new Date(bill.createdAt.seconds * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                                  <td className="px-4 py-3 font-mono text-xs text-slate-600">{bill.id}</td>
+                                  <td className="px-4 py-3">{bill.tableNumber || "Mang về"}</td>
+                                  <td className="max-w-xs px-4 py-3 text-xs text-slate-600">{(bill.items || []).map((item) => `${formatCurrency(item.quantity)}× ${item.name}`).join(", ") || "-"}</td>
+                                  <td className="px-4 py-3">{bill.paymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt"}</td>
+                                  <td className="whitespace-nowrap px-4 py-3 text-right font-bold">{formatCurrency(bill.total)} đ</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </section>
                   ))}
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-100 px-4 py-3">
-                    <h4 className="font-bold text-slate-900">Hàng hóa đã bán trong ngày</h4>
+                    <h4 className="font-bold text-slate-900">
+                      Hàng hóa đã bán · {getDailyReportShiftLabel(dailyReportShift)}
+                    </h4>
                     <p className="text-sm text-slate-600">{dailyProductRows.length} mặt hàng · {formatCurrency(dailyReportTotalItems)} món</p>
                   </div>
                   {dailyProductRows.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-slate-500">Chưa có hàng hóa bán trong ngày.</div>
+                    <div className="p-6 text-center text-sm text-slate-500">
+                      Chưa có hàng hóa bán trong {getDailyReportShiftLabel(dailyReportShift)}.
+                    </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[620px] text-sm">
@@ -4380,7 +4512,9 @@ export default function CafePosPage() {
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t bg-white px-4 py-3 sm:px-5">
-              <p className="hidden text-xs text-slate-500 sm:block">Chỉ tính bill hợp lệ phát sinh từ 00:00 đến 23:59 hôm nay.</p>
+              <p className="hidden text-xs text-slate-500 sm:block">
+                Đang xem {getDailyReportShiftLabel(dailyReportShift)} ngày {getLocalDayRange(dailyReportDate).start.toLocaleDateString("vi-VN")}.
+              </p>
               <Button
                 className="ml-auto bg-sky-600 hover:bg-sky-700"
                 onClick={handlePrintDailyReport}

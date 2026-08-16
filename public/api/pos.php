@@ -532,6 +532,14 @@ if ($method === 'GET' && $resource === 'bills') {
     if (($user['role'] ?? '') === 'bartender') $where[] = "order_source='bar'";
     if (!pos_bool($_GET['includeCancelled'] ?? false)) $where[] = "status<>'cancelled'";
     if (!empty($_GET['shiftId'])) { $where[] = 'shift_id=:shift_id'; $params['shift_id'] = trim((string) $_GET['shiftId']); }
+    if (!empty($_GET['shiftIds'])) {
+        $shiftIds = array_values(array_filter(array_unique(array_map('trim', explode(',', (string) $_GET['shiftIds'])))));
+        if ($shiftIds !== []) {
+            $placeholders = [];
+            foreach ($shiftIds as $index => $shiftId) { $key = 'shift_id_' . $index; $placeholders[] = ':' . $key; $params[$key] = $shiftId; }
+            $where[] = 'shift_id IN (' . implode(',', $placeholders) . ')';
+        }
+    }
     if (!empty($_GET['startDate'])) { $where[] = 'created_at>=:start_date'; $params['start_date'] = pos_mysql_datetime($_GET['startDate']); }
     if (!empty($_GET['endDate'])) { $where[] = 'created_at<=:end_date'; $params['end_date'] = pos_mysql_datetime($_GET['endDate']); }
     $limit = pos_limit($_GET['limit'] ?? 100);
@@ -667,6 +675,14 @@ if ($method === 'GET' && $resource === 'voucher-categories') {
 if ($method === 'GET' && $resource === 'vouchers') {
     $where = ['store_id=:store_id']; $params = ['store_id' => trim((string) ($_GET['storeId'] ?? 'cafe'))];
     if (!empty($_GET['shiftId'])) { $where[] = 'shift_id=:shift_id'; $params['shift_id'] = trim((string) $_GET['shiftId']); }
+    if (!empty($_GET['shiftIds'])) {
+        $shiftIds = array_values(array_filter(array_unique(array_map('trim', explode(',', (string) $_GET['shiftIds'])))));
+        if ($shiftIds !== []) {
+            $placeholders = [];
+            foreach ($shiftIds as $index => $shiftId) { $key = 'shift_id_' . $index; $placeholders[] = ':' . $key; $params[$key] = $shiftId; }
+            $where[] = 'shift_id IN (' . implode(',', $placeholders) . ')';
+        }
+    }
     if (!empty($_GET['startDate'])) { $where[] = 'happened_at>=:start_date'; $params['start_date'] = pos_mysql_datetime($_GET['startDate']); }
     if (!empty($_GET['endDate'])) { $where[] = 'happened_at<=:end_date'; $params['end_date'] = pos_mysql_datetime($_GET['endDate']); }
     $limit = pos_limit($_GET['limit'] ?? 500, 500);
@@ -703,6 +719,21 @@ if ($method === 'PATCH' && $resource === 'vouchers') {
 }
 
 if ($method === 'GET' && $resource === 'shifts') {
+    if (!empty($_GET['startDate']) && !empty($_GET['endDate']) && in_array($_GET['shiftType'] ?? '', ['shift_1','shift_2','shift_3'], true)) {
+        $statement = db()->prepare(
+            'SELECT * FROM cashier_shifts
+             WHERE store_id=:store_id AND shift_type=:shift_type
+               AND opened_at>=:start_date AND opened_at<=:end_date
+             ORDER BY opened_at ASC'
+        );
+        $statement->execute([
+            'store_id' => $posStoreId,
+            'shift_type' => $_GET['shiftType'],
+            'start_date' => pos_mysql_datetime($_GET['startDate']),
+            'end_date' => pos_mysql_datetime($_GET['endDate']),
+        ]);
+        pos_polling_response(array_map('pos_shift_payload', $statement->fetchAll()));
+    }
     $statement=db()->prepare("SELECT * FROM cashier_shifts WHERE store_id=:store_id AND cashier_uid=:cashier_uid AND status='open' ORDER BY opened_at DESC LIMIT 1");
     $statement->execute(['store_id'=>trim((string)($_GET['storeId']??'')),'cashier_uid'=>trim((string)($_GET['cashierUid']??''))]); $row=$statement->fetch();
     if(!$row) respond_ok(['item'=>null]);

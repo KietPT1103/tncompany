@@ -9,8 +9,8 @@ export type NewBill = { tableNumber: string; note?: string; total: number; items
 export type Bill = NewBill & { id: string; orderSource?: BillOrderSource; createdAt?: ApiTimestamp; cancelledAt?: ApiTimestamp; cancelledBy?: string };
 
 export async function saveBill(data: NewBill) { return (await posRequest<{ id: string }>("bills", { method: "POST", body: JSON.stringify(data) })).id; }
-export async function getBills(options?: { startDate?: Date; endDate?: Date; limitCount?: number; storeId?: string; includeCancelled?: boolean; shiftId?: string }) {
-  return (await posRequest<{ items: Bill[] }>("bills", {}, { storeId: options?.storeId || "cafe", startDate: options?.startDate, endDate: options?.endDate, limit: options?.limitCount || 100, includeCancelled: options?.includeCancelled === true, shiftId: options?.shiftId })).items;
+export async function getBills(options?: { startDate?: Date; endDate?: Date; limitCount?: number; storeId?: string; includeCancelled?: boolean; shiftId?: string; shiftIds?: string[] }) {
+  return (await posRequest<{ items: Bill[] }>("bills", {}, { storeId: options?.storeId || "cafe", startDate: options?.startDate, endDate: options?.endDate, limit: options?.limitCount || 100, includeCancelled: options?.includeCancelled === true, shiftId: options?.shiftId, shiftIds: options?.shiftIds?.join(",") })).items;
 }
 export const getRecentBills = (storeId = "cafe", limitCount = 20, includeCancelled = false) => getBills({ storeId, limitCount, includeCancelled });
 export async function updateBill(id: string, data: Partial<NewBill> & { createdAt?: Date; cancelledAt?: Date }) { await posRequest("bills", { method: "PATCH", body: JSON.stringify({ id, ...data }) }); }
