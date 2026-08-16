@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -116,22 +116,22 @@ const RECEIPT_STORE_INFO: Record<
   { title: string; address: string; phone: string }
 > = {
   cafe: {
-    title: "TIỆM CÀ PHÊ ỐNG QUAN",
+    title: "TIỆM CÀ PHÊ ÔNG QUAN",
     address: "ĐC: Cuối hẻm 583, đường 30/4, P. Hưng Lợi, Q. Ninh Kiều, TP. Cần Thơ",
     phone: "ĐT: 0772.770.789",
   },
   bakery: {
-    title: "TIỆM BÁNH ỐNG QUAN",
+    title: "TIỆM BÁNH ÔNG QUAN",
     address: "ĐC: Cuối hẻm 583, đường 30/4, P. Hưng Lợi, TP. Cần Thơ",
     phone: "ĐT: 0772.770.789",
   },
   restaurant: {
-    title: "TIỆM LẨU ỐNG QUAN",
+    title: "TIỆM LẨU ÔNG QUAN",
     address: "ĐC: Cuối hẻm 583, đường 30/4, P. Tân An, TP. Cần Thơ",
     phone: "ĐT: 0939.976.565",
   },
   farm: {
-    title: "TIỆM FARM ỐNG QUAN",
+    title: "ÔNG QUAN FARM",
     address: "ĐC: Cuối hẻm 583, đường 30/4, TP. Cần Thơ",
     phone: "ĐT: 0772.770.789",
   },
@@ -152,6 +152,8 @@ const getCashDifferenceInfo = (difference: number) => {
   if (difference < 0) return { label: "Thiếu", amount: Math.abs(difference) };
   return { label: "Khớp", amount: 0 };
 };
+const getShiftHandoverAmount = (summary: ShiftSummary) =>
+  summary.totalSales - summary.transferSales - summary.expenseVouchers;
 const PRINT_FONT_FAMILY = "'Tahoma', 'Segoe UI', Arial, sans-serif";
 const PRINT_TAIL_SPACE_MM = 8;
 
@@ -341,6 +343,7 @@ export default function CafePosPage() {
   const [expandedDailyBillHours, setExpandedDailyBillHours] = useState<Set<number>>(
     () => new Set()
   );
+  const [expandedDailyReportBillId, setExpandedDailyReportBillId] = useState<string | null>(null);
   const [isLoadingDailyReport, setIsLoadingDailyReport] = useState(false);
   const [showVoucherModal, setShowVoucherModal] = useState<CashVoucherType | null>(
     null
@@ -1339,6 +1342,9 @@ export default function CafePosPage() {
     includePaymentInfo: boolean;
     paidAmount?: number;
     changeAmount?: number;
+    paymentMethod?: PaymentMethod;
+    cashierName?: string;
+    isBarOrder?: boolean;
   }) => {
     const storeInfo = RECEIPT_STORE_INFO[storeId] || RECEIPT_STORE_INFO.cafe;
     const printAt = new Date();
@@ -1346,11 +1352,14 @@ export default function CafePosPage() {
     const itemRows = buildReceiptItemsHtml(options.items);
     const discount = 0;
     const finalAmount = Math.max(options.total - discount, 0);
+    const receiptPaymentMethod = options.paymentMethod || paymentMethod;
+    const receiptCashierName = options.cashierName || cashierName;
+    const isBarReceipt = options.isBarOrder ?? isBartenderAccount;
 
     const paymentRows = options.includePaymentInfo
       ? `
           <div class="line-row"><span>Thanh toán:</span><span>${
-            paymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt"
+            receiptPaymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt"
           }</span></div>
           <div class="line-row"><span>Tiền khách đưa:</span><span>${formatCurrency(
             options.paidAmount || finalAmount
@@ -1381,6 +1390,7 @@ export default function CafePosPage() {
             .line-row strong { font-size: 14px; }
             .grid-head td { font-weight: 700; text-transform: uppercase; font-size: 11px; border-bottom: 1px solid #000; padding-bottom: 3px; }
             hr { border: 0; border-top: 1px dashed #999; margin: 8px 0; }
+            .vat-note { margin-top: 7px; text-align:center; font-size: 11px; font-style: italic; }
             .thanks { margin-top: 8px; text-align:center; font-weight:700; font-size:14px; }
             .footer { margin-top: 8px; text-align:center; font-size: 12px; }
             .tail-space { height: ${PRINT_TAIL_SPACE_MM}mm; }
@@ -1394,8 +1404,8 @@ export default function CafePosPage() {
           </div>
           <p class="section-title">${options.title}</p>
           ${options.billCode ? `<p class="bill-code">${options.billCode}</p>` : ""}
-          ${isBartenderAccount ? '<p class="bill-code"><strong>ĐƠN DO PHA CHẾ TẠO</strong></p>' : ""}
-          <div class="line-row"><span><strong>${options.tableLabel}</strong></span><span>${isBartenderAccount ? "Pha chế" : "Thu ngân"}: ${cashierName}</span></div>
+          ${isBarReceipt ? '<p class="bill-code"><strong>ĐƠN DO PHA CHẾ TẠO</strong></p>' : ""}
+          <div class="line-row"><span><strong>${options.tableLabel}</strong></span><span>${isBarReceipt ? "Pha chế" : "Thu ngân"}: ${receiptCashierName}</span></div>
           <div class="line-row"><span>Giờ vào: ${options.createdAtText}</span><span>Giờ in: ${printTime}</span></div>
           <hr />
           <table>
@@ -1420,6 +1430,7 @@ export default function CafePosPage() {
             finalAmount
           )}</strong></span></div>
           ${paymentRows}
+          <p class="vat-note">Giá trên chưa bao gồm thuế VAT.</p>
           <p class="thanks">Cảm ơn quý khách và hẹn gặp lại!</p>
           <div class="footer">
             <p>Mật khẩu Wifi: ongquanxincamon</p>
@@ -2088,13 +2099,18 @@ export default function CafePosPage() {
     const closingCash = parseMoney(closingCashInput);
     setIsClosingShift(true);
     try {
+      const handoverAmount = getShiftHandoverAmount(closeShiftSummary);
+      const reconciledClosingCash = (activeShift.openingCash || 0) + handoverAmount;
       await closeShift(activeShift.id, {
         closingCash,
         closeNote: closingNote,
-        summary: closeShiftSummary,
+        summary: {
+          ...closeShiftSummary,
+          expectedClosingCash: reconciledClosingCash,
+        },
       });
 
-      const diff = closingCash - closeShiftSummary.expectedClosingCash;
+      const diff = closingCash - reconciledClosingCash;
       const diffInfo = getCashDifferenceInfo(diff);
       const openedAtText = activeShift.openedAt?.seconds
         ? new Date(activeShift.openedAt.seconds * 1000).toLocaleString("vi-VN")
@@ -2176,11 +2192,11 @@ export default function CafePosPage() {
               <tr><td>Tiền đầu ca</td><td class="right">${formatCurrency(
                 activeShift.openingCash || 0
               )} đ</td></tr>
-              <tr><td>Tiền mặt kỳ vọng</td><td class="right">${formatCurrency(
-                closeShiftSummary.expectedClosingCash
-              )} đ</td></tr>
-              <tr><td>Tiền mặt cuối ca</td><td class="right">${formatCurrency(
+              <tr><td>Tiền cuối ca</td><td class="right">${formatCurrency(
                 closingCash
+              )} đ</td></tr>
+              <tr class="strong"><td>Bàn giao thực tế</td><td class="right">${formatCurrency(
+                handoverAmount
               )} đ</td></tr>
               <tr><td>Chênh lệch (${diffInfo.label})</td><td class="right">${formatCurrency(
                 diffInfo.amount
@@ -2219,6 +2235,7 @@ export default function CafePosPage() {
   const loadDailyReport = async (dateValue: string, shiftType: DailyReportShift) => {
     if (!storeId) return;
     setExpandedDailyBillHours(new Set());
+    setExpandedDailyReportBillId(null);
     setDailyReport(null);
     setDailyReportBills([]);
     setDailyReportVouchers([]);
@@ -2591,6 +2608,45 @@ export default function CafePosPage() {
   const getBillDateText = (bill: Bill) => {
     if (!bill.createdAt?.seconds) return "Chưa có thời gian";
     return new Date(bill.createdAt.seconds * 1000).toLocaleString("vi-VN");
+  };
+
+  const handleReprintBill = (bill: Bill) => {
+    const isTakeawayOrder =
+      !bill.tableNumber ||
+      bill.tableNumber === TAKEAWAY_ID ||
+      bill.tableNumber === TAKEAWAY_NAME ||
+      bill.tableNumber === FARM_ORDER_KEY ||
+      bill.tableNumber === FARM_ORDER_LABEL;
+    const tableLabel = isTakeawayOrder ? "Mang về" : bill.tableNumber;
+    const billPaymentMethod = bill.paymentMethod || "cash";
+    const paidAmount =
+      billPaymentMethod === "cash" ? bill.cashReceived ?? bill.total : bill.total;
+
+    printPaymentReceipt({
+      billCode: bill.id,
+      title: isBakeryStore ? "HÓA ĐƠN BÁN HÀNG" : "PHIẾU TÍNH TIỀN",
+      tableLabel,
+      createdAtText: getBillDateText(bill),
+      items: (bill.items || []).map((item) => ({
+        id: item.menuId,
+        name: item.name,
+        category: "",
+        quantity: Number(item.quantity || 0),
+        note: item.note || "",
+        price: Number(item.price || 0),
+        basePrice: Number(item.basePrice ?? item.price ?? 0),
+        surchargePerUnit: Number(item.surchargePerUnit || 0),
+        surchargeTotal: Number(item.surchargeTotal || 0),
+        lineTotal: Number(item.lineTotal || item.price * item.quantity || 0),
+      })),
+      total: bill.total,
+      includePaymentInfo: true,
+      paidAmount,
+      changeAmount: billPaymentMethod === "cash" ? bill.changeAmount || 0 : 0,
+      paymentMethod: billPaymentMethod,
+      cashierName: bill.cashierName || cashierName,
+      isBarOrder: bill.orderSource === "bar",
+    });
   };
 
   const soldBillCounts = useMemo(
@@ -4046,6 +4102,18 @@ export default function CafePosPage() {
                       </p>
                     )}
                     </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 border-sky-300 bg-white text-sky-700 hover:bg-sky-50"
+                        onClick={() => handleReprintBill(bill)}
+                      >
+                        <Printer className="h-4 w-4" />
+                        In lại
+                      </Button>
+                    </div>
                   </div>
                   )}
                 </div>
@@ -4204,16 +4272,19 @@ export default function CafePosPage() {
                 </div>
                 <div className="mt-2 border-t pt-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-700">Tiền mặt kỳ vọng</span>
+                    <span className="font-semibold text-slate-700">Bàn giao thực tế</span>
                     <span className="text-lg font-bold text-slate-900">
-                      {formatCurrency(closeShiftSummary.expectedClosingCash)} đ
+                      {formatCurrency(getShiftHandoverAmount(closeShiftSummary))} đ
                     </span>
                   </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Tổng doanh thu − Chuyển khoản − Phiếu chi
+                  </p>
                 </div>
               </div>
 
               <Input
-                label="Tiền mặt cuối ca"
+                label="Tiền cuối ca"
                 value={formatMoneyInput(closingCashInput)}
                 onChange={(e) => setClosingCashInput(e.target.value)}
                 placeholder="Nhập tiền mặt thực tế"
@@ -4229,7 +4300,8 @@ export default function CafePosPage() {
                 }
 
                 const difference = getCashDifferenceInfo(
-                  parseMoney(closingCashInput) - closeShiftSummary.expectedClosingCash
+                  parseMoney(closingCashInput) -
+                    ((activeShift.openingCash || 0) + getShiftHandoverAmount(closeShiftSummary))
                 );
                 const differenceStyle =
                   difference.label === "Dư"
@@ -4458,16 +4530,90 @@ export default function CafePosPage() {
                               <tr><th className="px-4 py-2">Thời gian</th><th className="px-4 py-2">Mã bill</th><th className="px-4 py-2">Bàn</th><th className="px-4 py-2">Hàng hóa</th><th className="px-4 py-2">Thanh toán</th><th className="px-4 py-2 text-right">Tổng tiền</th></tr>
                             </thead>
                             <tbody className="divide-y">
-                              {group.bills.map((bill) => (
-                                <tr key={bill.id} className="align-top hover:bg-slate-50">
-                                  <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">{bill.createdAt?.seconds ? new Date(bill.createdAt.seconds * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
-                                  <td className="px-4 py-3 font-mono text-xs text-slate-600">{bill.id}</td>
-                                  <td className="px-4 py-3">{bill.tableNumber || "Mang về"}</td>
-                                  <td className="max-w-xs px-4 py-3 text-xs text-slate-600">{(bill.items || []).map((item) => `${formatCurrency(item.quantity)}× ${item.name}`).join(", ") || "-"}</td>
-                                  <td className="px-4 py-3">{bill.paymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt"}</td>
-                                  <td className="whitespace-nowrap px-4 py-3 text-right font-bold">{formatCurrency(bill.total)} đ</td>
-                                </tr>
-                              ))}
+                              {group.bills.map((bill) => {
+                                const isBillExpanded = expandedDailyReportBillId === bill.id;
+                                return (
+                                  <Fragment key={bill.id}>
+                                    <tr
+                                      role="button"
+                                      tabIndex={0}
+                                      aria-expanded={isBillExpanded}
+                                      onClick={() =>
+                                        setExpandedDailyReportBillId(isBillExpanded ? null : bill.id)
+                                      }
+                                      onKeyDown={(event) => {
+                                        if (event.key !== "Enter" && event.key !== " ") return;
+                                        event.preventDefault();
+                                        setExpandedDailyReportBillId(isBillExpanded ? null : bill.id);
+                                      }}
+                                      className="cursor-pointer align-top transition hover:bg-sky-50"
+                                    >
+                                      <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
+                                        <span className="flex items-center gap-2">
+                                          <ChevronDown
+                                            className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${
+                                              isBillExpanded ? "rotate-180" : ""
+                                            }`}
+                                          />
+                                          {bill.createdAt?.seconds ? new Date(bill.createdAt.seconds * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 font-mono text-xs text-slate-600">{bill.id}</td>
+                                      <td className="px-4 py-3">{bill.tableNumber || "Mang về"}</td>
+                                      <td className="max-w-xs px-4 py-3 text-xs text-slate-600">{(bill.items || []).map((item) => `${formatCurrency(item.quantity)}× ${item.name}`).join(", ") || "-"}</td>
+                                      <td className="px-4 py-3">{bill.paymentMethod === "transfer" ? "Chuyển khoản" : "Tiền mặt"}</td>
+                                      <td className="whitespace-nowrap px-4 py-3 text-right font-bold">{formatCurrency(bill.total)} đ</td>
+                                    </tr>
+                                    {isBillExpanded && (
+                                      <tr>
+                                        <td colSpan={6} className="bg-slate-50 px-4 py-3">
+                                          <div className="rounded-lg border bg-white p-3">
+                                            {bill.note?.trim() && (
+                                              <p className="mb-2 text-xs text-slate-600">
+                                                Ghi chú: {bill.note.trim()}
+                                              </p>
+                                            )}
+                                            <div className="divide-y">
+                                              {(bill.items || []).map((item, index) => (
+                                                <div
+                                                  key={`${bill.id}-detail-${item.menuId}-${index}`}
+                                                  className="flex items-start justify-between gap-4 py-2 first:pt-0 last:pb-0"
+                                                >
+                                                  <div>
+                                                    <p className="font-semibold text-slate-900">{item.name}</p>
+                                                    <p className="text-xs text-slate-500">
+                                                      {formatCurrency(item.quantity)} × {formatCurrency(item.price)} đ
+                                                      {item.note?.trim() ? ` · ${item.note.trim()}` : ""}
+                                                    </p>
+                                                  </div>
+                                                  <p className="whitespace-nowrap font-semibold text-slate-900">
+                                                    {formatCurrency(item.lineTotal || item.price * item.quantity)} đ
+                                                  </p>
+                                                </div>
+                                              ))}
+                                            </div>
+                                            <div className="mt-3 flex items-center justify-between border-t pt-3">
+                                              <p className="font-bold text-slate-900">
+                                                Tổng: {formatCurrency(bill.total)} đ
+                                              </p>
+                                              <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="gap-2 border-sky-300 text-sky-700 hover:bg-sky-50"
+                                                onClick={() => handleReprintBill(bill)}
+                                              >
+                                                <Printer className="h-4 w-4" />
+                                                In lại
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </Fragment>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
