@@ -9,7 +9,7 @@ const load=async(storeId:string)=>(await posRequest<{items:BarPrintJob[]}>("bar-
 const loadBoard=async(storeId:string)=>(await posRequest<{items:BarPrintJob[]}>("bar-jobs",{},{storeId,view:"board"})).items;
 const loadHistory=async(storeId:string)=>(await posRequest<{items:BarPrintJob[]}>("bar-jobs",{},{storeId,view:"history"})).items;
 export const subscribePendingBarPrintJobs=(storeId:string,onChange:(jobs:BarPrintJob[])=>void,onError?:(error:Error)=>void)=>subscribeRealtimeResource({storeId,events:["bar-jobs-updated"],loader:()=>load(storeId),onChange,onError});
-export const subscribeBarBoard=(storeId:string,onChange:(jobs:BarPrintJob[])=>void,onError?:(error:Error)=>void)=>subscribeRealtimeResource({storeId,events:["bar-jobs-updated"],loader:()=>loadBoard(storeId),onChange,onError});
+export const subscribeBarBoard=(storeId:string,onChange:(jobs:BarPrintJob[])=>void,onError?:(error:Error)=>void)=>subscribeRealtimeResource({storeId,events:["bar-jobs-updated"],loader:()=>loadBoard(storeId),onChange,onError,fallbackMs:10000});
 export const subscribeBarHistory=(storeId:string,onChange:(jobs:BarPrintJob[])=>void,onError?:(error:Error)=>void)=>subscribeRealtimeResource({storeId,events:["bar-jobs-updated"],loader:()=>loadHistory(storeId),onChange,onError});
 export async function createBarPrintJob(data:NewBarPrintJob){return(await posRequest<{id:string}>("bar-jobs",{method:"POST",body:JSON.stringify(data)})).id;}
 export async function markBarPrintJobPrinted(id:string,terminalName?:string){await posRequest("bar-jobs",{method:"PATCH",body:JSON.stringify({id,terminalName})});}

@@ -460,24 +460,40 @@ const printTestPage = async (config) => {
 };
 
 const apiFetch = async (config, pathName, options = {}) => {
-  const response = await fetch(`${config.apiBaseUrl}${pathName}`, {
-    ...options,
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      ...(config.apiToken ? { Authorization: `Bearer ${config.apiToken}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || !payload?.ok) {
-    throw new Error(payload?.error || `API request failed (${response.status})`);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(`${config.apiBaseUrl}${pathName}`, {
+      ...options,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(config.apiToken ? { Authorization: `Bearer ${config.apiToken}` } : {}),
+        ...(options.headers || {}),
+      },
+    });
+
+    if (
+      response.status === 401 &&
+      attempt === 0 &&
+      config.apiLogin &&
+      config.apiPassword
+    ) {
+      await response.text().catch(() => "");
+      await authenticateApi(config, true);
+      console.log("API token refreshed after an unauthorized response.");
+      continue;
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `API request failed (${response.status})`);
+    }
+    return payload.data;
   }
-  return payload.data;
+  throw new Error("API authentication retry failed.");
 };
 
-const authenticateApi = async (config) => {
-  if (config.apiToken) return;
+const authenticateApi = async (config, force = false) => {
+  if (config.apiToken && !force) return;
   if (!config.apiLogin || !config.apiPassword) {
     throw new Error("Set PRINT_AGENT_API_LOGIN and PRINT_AGENT_API_PASSWORD (or PRINT_AGENT_API_TOKEN).");
   }
@@ -553,9 +569,15 @@ const run = async () => {
     const jobId = job?.id;
     if (!jobId || processingJobIds.has(jobId)) return;
     processingJobIds.add(jobId);
+    console.log(
+      `[${jobId}] Queued for printing (${Math.max(0, processingJobIds.size - 1)} ahead).`
+    );
 
     queue = queue
-      .then(() => processJob(job))
+      .then(() => {
+        console.log(`[${jobId}] Printing started.`);
+        return processJob(job);
+      })
       .catch((error) => {
         console.error(`[${jobId}] Failed to print.`);
         console.error(error);

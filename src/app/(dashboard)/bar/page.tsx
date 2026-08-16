@@ -36,7 +36,6 @@ import { useStore } from "@/context/StoreContext";
 import {
   BarPrintJob,
   BarWorkflowStatus,
-  markBarPrintJobPrinted,
   subscribeBarBoard,
   subscribeBarHistory,
   updateBarWorkflowStatus,
@@ -55,8 +54,6 @@ import {
   getBarWaitState,
 } from "./barWaitState";
 
-const AUTO_PRINT_KEY = "pos:bar-auto-print";
-const TERMINAL_KEY = "pos:bar-terminal-name";
 const ADMIN_SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
 type ActiveStatus = Exclude<BarWorkflowStatus, "collected">;
 type AlertKind = "new" | "urgent";
@@ -95,14 +92,6 @@ const columns: Array<{
   },
 ];
 
-const escapeHtml = (value: string) =>
-  value.replace(
-    /[&<>'"]/g,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[
-        character
-      ] || character,
-  );
 const getCreatedDate = (job: BarPrintJob) =>
   job.createdAt?.seconds ? new Date(job.createdAt.seconds * 1000) : new Date();
 const getCollectedDate = (job: BarPrintJob) =>
@@ -128,50 +117,12 @@ const getInitialAdminSidebarCollapsed = () => {
   }
 };
 
-const printTicket = (job: BarPrintJob) => {
-  const rows = job.items
-    .map(
-      (item) =>
-        `<tr><td><strong>${escapeHtml(item.name)}</strong>${item.note ? `<div class="note">• ${escapeHtml(item.note)}</div>` : ""}</td><td>${formatQuantity(item.quantity)}</td></tr>`,
-    )
-    .join("");
-  const created = getCreatedDate(job).toLocaleString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-  const html = `<html lang="vi"><head><meta charset="UTF-8"><title>Phiếu pha chế</title><style>@page{size:80mm auto;margin:4mm}body{font-family:Tahoma,Arial,sans-serif;width:72mm;margin:0;color:#111}h1{text-align:center;font-size:19px;margin:0 0 8px}p{margin:3px 0;font-size:14px}table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}th,td{padding:6px 0;border-bottom:1px solid #111;text-align:left;vertical-align:top}th:last-child,td:last-child{text-align:right;width:18%;font-weight:700}.note{font-size:12px;margin-top:3px}.tail{height:14mm}</style></head><body><h1>PHIẾU PHA CHẾ</h1><p><strong>${escapeHtml(job.tableNumber || "Mang về")}</strong></p><p>Mã: ${escapeHtml(shortCode(job))}</p><p>${created}</p><table><thead><tr><th>Món</th><th>SL</th></tr></thead><tbody>${rows}</tbody></table><div class="tail"></div></body></html>`;
-  const iframe = document.createElement("iframe");
-  Object.assign(iframe.style, {
-    position: "fixed",
-    right: "0",
-    bottom: "0",
-    width: "0",
-    height: "0",
-    border: "0",
-  });
-  document.body.appendChild(iframe);
-  const printDocument = iframe.contentWindow?.document;
-  if (!printDocument) throw new Error("Không thể tạo phiếu in.");
-  printDocument.open();
-  printDocument.write(html);
-  printDocument.close();
-  iframe.onload = () => {
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
-    window.setTimeout(() => iframe.remove(), 700);
-  };
-};
-
 function BillCard({
   job,
   now,
   busy,
   urgentPulseActive,
   onMove,
-  onPrint,
   onShowDetails,
 }: {
   job: BarPrintJob;
@@ -179,7 +130,6 @@ function BillCard({
   busy: boolean;
   urgentPulseActive: boolean;
   onMove: (job: BarPrintJob, status: BarWorkflowStatus) => void;
-  onPrint: (job: BarPrintJob) => void;
   onShowDetails: (job: BarPrintJob) => void;
 }) {
   const dragPreviewRef = useRef<HTMLElement | null>(null);
@@ -372,18 +322,6 @@ function BillCard({
         </div>
       </div>
       <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          draggable={false}
-          onClick={(event) => {
-            event.stopPropagation();
-            onPrint(job);
-          }}
-          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${urgent ? "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500" : isNew ? "bg-[#FFF3D2] text-slate-900 hover:bg-[#FFE7A3] focus-visible:ring-[#F6C85F]" : isPreparing ? "border border-[#B9D5FA] bg-white text-[#1265D6] hover:bg-[#EEF5FF] focus-visible:ring-[#1265D6]" : isReady ? "border border-[#B8D8CC] bg-white text-[#064E3B] hover:bg-[#FFF8E5] focus-visible:ring-[#F6C85F]" : "border border-slate-200 text-slate-600 hover:bg-slate-100 focus-visible:ring-slate-400"}`}
-          title="In lại phiếu"
-        >
-          <Printer className="h-4 w-4" />
-        </button>
         {job.workflowStatus !== "new" ? (
           <button
             type="button"
@@ -444,7 +382,6 @@ export default function BarBoardPage() {
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [dragOver, setDragOver] = useState<BarWorkflowStatus | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [autoPrint, setAutoPrint] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyJobs, setHistoryJobs] = useState<BarPrintJob[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -463,10 +400,6 @@ export default function BarBoardPage() {
   const knownIds = useRef<Set<string> | null>(null);
   const alertAudio = useRef<Partial<Record<AlertKind, HTMLAudioElement>>>({});
   const urgentIds = useRef<Set<string> | null>(null);
-  const printingIds = useRef(new Set<string>());
-  const terminalName = "Máy pha chế";
-  const autoPrintKey = `${AUTO_PRINT_KEY}:${storeId}`;
-  const terminalKey = `${TERMINAL_KEY}:${storeId}`;
   const sidebarVariant = getBarSidebarVariant(role);
 
   const playAlert = useCallback(
@@ -477,7 +410,7 @@ export default function BarBoardPage() {
         typeof kindOrForce === "boolean" ? kindOrForce : force;
       if (!soundEnabled && !shouldForce) return;
       try {
-        const fileName = kind === "urgent" ? "bill-bao-do" : "bill-moi";
+        const fileName = kind === "urgent" ? "bill-bao-do" : "mon-moi";
         const audio =
           alertAudio.current[kind] || new Audio(`/audio/${fileName}.mp3`);
         alertAudio.current[kind] = audio;
@@ -522,11 +455,12 @@ export default function BarBoardPage() {
   }, [adminSidebarCollapsed, sidebarVariant]);
   useEffect(() => {
     try {
-      setAutoPrint(localStorage.getItem(autoPrintKey) === "1");
+      localStorage.removeItem(`pos:bar-auto-print:${storeId}`);
+      localStorage.removeItem(`pos:bar-terminal-name:${storeId}`);
     } catch {
-      setAutoPrint(false);
+      /* Ignore unavailable browser storage. */
     }
-  }, [autoPrintKey]);
+  }, [storeId]);
   useEffect(() => {
     setLoading(true);
     knownIds.current = null;
@@ -571,7 +505,7 @@ export default function BarBoardPage() {
   }, [jobs, now, playAlert]);
   useEffect(() => {
     if (!jobs.some((job) => job.workflowStatus === "new")) return;
-    const reminder = window.setInterval(() => playAlert("new"), 20000);
+    const reminder = window.setInterval(() => playAlert("new"), 2000);
     return () => window.clearInterval(reminder);
   }, [jobs, playAlert]);
   useEffect(() => {
@@ -590,27 +524,6 @@ export default function BarBoardPage() {
       },
     );
   }, [historyOpen, storeId]);
-  useEffect(() => {
-    if (!autoPrint) return;
-    jobs
-      .filter((job) => job.status === "pending")
-      .forEach(async (job) => {
-        if (printingIds.current.has(job.id)) return;
-        printingIds.current.add(job.id);
-        try {
-          if (job.items.length) printTicket(job);
-          await markBarPrintJobPrinted(
-            job.id,
-            localStorage.getItem(terminalKey) || terminalName,
-          );
-        } catch (error) {
-          console.error("Không tự in được phiếu pha chế", error);
-        } finally {
-          printingIds.current.delete(job.id);
-        }
-      });
-  }, [autoPrint, jobs, terminalKey]);
-
   const grouped = useMemo(
     () =>
       Object.fromEntries(
@@ -665,17 +578,6 @@ export default function BarBoardPage() {
     );
     if (job) void moveJob(job, status);
   };
-  const toggleAutoPrint = () => {
-    const next = !autoPrint;
-    setAutoPrint(next);
-    try {
-      localStorage.setItem(autoPrintKey, next ? "1" : "0");
-      localStorage.setItem(terminalKey, terminalName);
-    } catch {
-      /* localStorage may be unavailable */
-    }
-  };
-
   return (
     <RoleGuard
       permission={role === "bartender" ? "bar.access" : "bills.access"}
@@ -742,14 +644,13 @@ export default function BarBoardPage() {
                   )}
                   <span className="hidden sm:inline">Âm báo</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={toggleAutoPrint}
-                  className={`inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-bold text-white transition ${autoPrint ? "bg-[#176A57] hover:bg-[#125847]" : "bg-[#2F3A4F] hover:bg-[#253047]"}`}
+                <span
+                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#176A57] px-3 text-sm font-bold text-white"
+                  title="Windows Print Agent gửi phiếu thẳng tới máy in LAN"
                 >
                   <Printer className="h-4 w-4" />
-                  {autoPrint ? "Đang tự in" : "Bật tự in bill"}
-                </button>
+                  In tự động qua agent
+                </span>
               </div>
             </div>
           </header>
@@ -850,7 +751,6 @@ export default function BarBoardPage() {
                             busy={busyIds.has(job.id)}
                             urgentPulseActive={urgentPulseActive}
                             onMove={moveJob}
-                            onPrint={printTicket}
                             onShowDetails={(selectedJob) =>
                               dispatchDetailJob({
                                 type: "open",

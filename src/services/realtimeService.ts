@@ -167,9 +167,28 @@ export function subscribeRealtimeResource<T>(options: {
     }
   }, 10000);
 
+  const refreshWhenActive = () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    lastFallbackAt = Date.now();
+    void load();
+  };
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "visible") refreshWhenActive();
+  };
+  if (typeof window !== "undefined") {
+    window.addEventListener("focus", refreshWhenActive);
+    window.addEventListener("online", refreshWhenActive);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+  }
+
   return () => {
     stopped = true;
     unsubscribe();
     globalThis.clearInterval(fallbackTimer);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("focus", refreshWhenActive);
+      window.removeEventListener("online", refreshWhenActive);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }
   };
 }
