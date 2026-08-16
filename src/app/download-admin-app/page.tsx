@@ -1,0 +1,77 @@
+import { useState } from "react";
+import { Check, Copy, Download, ShieldCheck, Smartphone, TrendingUp } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+
+const APK_URL = "https://tnservice.vn/api/download-admin-app.php";
+
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  document.execCommand("copy");
+  input.remove();
+}
+
+export default function DownloadAdminAppPage() {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await copyText(APK_URL);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-[#043f32] px-3 py-8 text-slate-950 sm:px-4 sm:py-12">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,.18),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,.38),transparent_42%)]" />
+      <div className="relative w-full max-w-4xl overflow-hidden rounded-[1.5rem] bg-white shadow-2xl shadow-black/30 sm:rounded-[2rem]">
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
+          <section className="min-w-0 p-6 sm:p-10 md:p-12">
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-extrabold uppercase tracking-[.16em] text-emerald-700">
+              <Smartphone className="h-4 w-4" /> Ứng dụng Android dành cho Admin
+            </div>
+            <h1 className="mt-6 text-3xl font-black tracking-tight sm:text-4xl">TN Company Admin</h1>
+            <p className="mt-4 max-w-lg leading-7 text-slate-600">
+              Theo dõi doanh thu ngày, tuần, tháng, doanh thu theo 3 ca và hiệu suất từng máy bán hàng ngay trên điện thoại.
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-3 text-xs font-bold text-slate-600">
+              <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-3"><TrendingUp className="h-4 w-4 text-emerald-600" /> Doanh thu tức thời</div>
+              <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-3"><ShieldCheck className="h-4 w-4 text-emerald-600" /> Chỉ tài khoản admin</div>
+            </div>
+            <a href={APK_URL} download className="mt-8 flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-700 px-5 py-4 font-extrabold text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800 sm:w-fit sm:min-w-64">
+              <Download className="h-5 w-5" /> Tải TN Admin APK
+            </a>
+            <div className="mt-7">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Liên kết tải trực tiếp</label>
+              <div className="mt-2 flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-2 pl-3 sm:pl-4">
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-600">{APK_URL}</span>
+                <button type="button" onClick={handleCopy} className="flex shrink-0 items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-emerald-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-emerald-50">
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? "Đã sao chép" : "Sao chép"}
+                </button>
+              </div>
+            </div>
+            <div className="mt-6 flex items-start gap-3 text-sm text-slate-500">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+              <p>APK nội bộ chính thức. Android có thể yêu cầu cho phép cài ứng dụng từ trình duyệt.</p>
+            </div>
+          </section>
+          <aside className="flex min-w-0 flex-col items-center justify-center bg-emerald-50 px-5 py-9 text-center sm:p-10">
+            <div className="w-full max-w-[264px] rounded-[1.5rem] bg-white p-4 shadow-xl shadow-emerald-900/10 ring-1 ring-emerald-100 sm:rounded-[1.75rem] sm:p-5">
+              <QRCodeSVG value={APK_URL} size={224} className="h-auto w-full max-w-full" level="H" marginSize={1} fgColor="#064e3b" bgColor="#ffffff" title="QR tải ứng dụng TN Company Admin" />
+            </div>
+            <h2 className="mt-6 text-xl font-black text-emerald-950">Quét để tải TN Admin</h2>
+            <p className="mt-2 max-w-xs text-sm leading-6 text-emerald-900/65">Mở camera trên điện thoại Android và quét mã QR để tải file APK.</p>
+          </aside>
+        </div>
+      </div>
+    </main>
+  );
+}

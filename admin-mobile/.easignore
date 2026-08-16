@@ -1,0 +1,9 @@
+# Local dependencies and generated files are recreated by EAS Build.
+node_modules/
+.expo/
+dist/
+.eas-archive-inspect/
+*.log
+
+# The public API base URL is supplied by eas.json build profiles.
+.env
