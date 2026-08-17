@@ -170,6 +170,13 @@ function pos_ensure_bill_order_source_column(): void
     auth_ensure_column('bills', 'order_source', "ENUM('pos','bar') NOT NULL DEFAULT 'pos' AFTER cashier_name");
 }
 
+function pos_ensure_bill_discount_columns(): void
+{
+    auth_ensure_column('bills', 'discount_type', "ENUM('percent','fixed') NULL AFTER surcharge_total");
+    auth_ensure_column('bills', 'discount_value', 'DECIMAL(15,2) NULL AFTER discount_type');
+    auth_ensure_column('bills', 'discount_amount', 'DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_value');
+}
+
 function pos_ensure_bar_workflow_columns(): void
 {
     $columnStatement = db()->prepare(
@@ -373,6 +380,9 @@ function pos_map_bills(array $rows): array
             'subtotalBeforeSurcharge' => $row['subtotal_before_surcharge'] !== null ? (float) $row['subtotal_before_surcharge'] : null,
             'surchargeTotal' => $row['surcharge_total'] !== null ? (float) $row['surcharge_total'] : null,
             'appliedSurcharges' => $surcharges[$id] ?? [],
+            'discountType' => in_array(($row['discount_type'] ?? null), ['percent', 'fixed'], true) ? (string) $row['discount_type'] : null,
+            'discountValue' => $row['discount_value'] !== null ? (float) $row['discount_value'] : null,
+            'discountAmount' => isset($row['discount_amount']) ? (float) $row['discount_amount'] : 0,
             'status' => (string) $row['status'],
             'paymentMethod' => (string) $row['payment_method'],
             'cashReceived' => $row['cash_received'] !== null ? (float) $row['cash_received'] : null,
@@ -456,6 +466,7 @@ $posStoreId = pos_resolve_store_id($user, $requestedStoreId);
 $_GET['storeId'] = $posStoreId;
 $body['storeId'] = $posStoreId;
 if ($resource === 'bills') pos_ensure_bill_order_source_column();
+if ($resource === 'bills') pos_ensure_bill_discount_columns();
 if ($method === 'POST' && in_array($resource, ['kitchen-jobs', 'bar-jobs'], true)) {
     pos_ensure_category_preparation_print_column();
 }
@@ -556,13 +567,16 @@ if ($method === 'POST' && $resource === 'bills') {
     try {
         $id = pos_next_bill_id($posStoreId);
         db()->prepare(
-            'INSERT INTO bills (id,store_id,table_number,note,total,subtotal_before_surcharge,surcharge_total,status,payment_method,cash_received,change_amount,shift_id,cashier_id,cashier_name,order_source)
-             VALUES (:id,:store_id,:table_number,:note,:total,:subtotal,:surcharge_total,:status,:payment_method,:cash_received,:change_amount,:shift_id,:cashier_id,:cashier_name,:order_source)'
+            'INSERT INTO bills (id,store_id,table_number,note,total,subtotal_before_surcharge,surcharge_total,discount_type,discount_value,discount_amount,status,payment_method,cash_received,change_amount,shift_id,cashier_id,cashier_name,order_source)
+             VALUES (:id,:store_id,:table_number,:note,:total,:subtotal,:surcharge_total,:discount_type,:discount_value,:discount_amount,:status,:payment_method,:cash_received,:change_amount,:shift_id,:cashier_id,:cashier_name,:order_source)'
         )->execute([
             'id' => $id, 'store_id' => trim((string) ($body['storeId'] ?? 'cafe')), 'table_number' => trim((string) ($body['tableNumber'] ?? '')),
             'note' => trim((string) ($body['note'] ?? '')), 'total' => (float) ($body['total'] ?? 0),
             'subtotal' => isset($body['subtotalBeforeSurcharge']) ? (float) $body['subtotalBeforeSurcharge'] : null,
             'surcharge_total' => isset($body['surchargeTotal']) ? (float) $body['surchargeTotal'] : null,
+            'discount_type' => in_array(($body['discountType'] ?? null), ['percent', 'fixed'], true) ? $body['discountType'] : null,
+            'discount_value' => isset($body['discountValue']) ? max(0, (float) $body['discountValue']) : null,
+            'discount_amount' => isset($body['discountAmount']) ? max(0, (float) $body['discountAmount']) : 0,
             'status' => ($body['status'] ?? '') === 'cancelled' ? 'cancelled' : 'completed',
             'payment_method' => ($body['paymentMethod'] ?? '') === 'transfer' ? 'transfer' : 'cash',
             'cash_received' => isset($body['cashReceived']) ? (float) $body['cashReceived'] : null,
@@ -597,7 +611,7 @@ if ($method === 'PATCH' && $resource === 'bills') {
         }
     }
     $fields = []; $params = ['id' => $id];
-    $map = ['tableNumber'=>'table_number','note'=>'note','total'=>'total','subtotalBeforeSurcharge'=>'subtotal_before_surcharge','surchargeTotal'=>'surcharge_total','status'=>'status','paymentMethod'=>'payment_method','cashReceived'=>'cash_received','changeAmount'=>'change_amount','shiftId'=>'shift_id','cashierId'=>'cashier_id','cashierName'=>'cashier_name'];
+    $map = ['tableNumber'=>'table_number','note'=>'note','total'=>'total','subtotalBeforeSurcharge'=>'subtotal_before_surcharge','surchargeTotal'=>'surcharge_total','discountType'=>'discount_type','discountValue'=>'discount_value','discountAmount'=>'discount_amount','status'=>'status','paymentMethod'=>'payment_method','cashReceived'=>'cash_received','changeAmount'=>'change_amount','shiftId'=>'shift_id','cashierId'=>'cashier_id','cashierName'=>'cashier_name'];
     foreach ($map as $key => $column) if (array_key_exists($key, $body)) { $fields[] = "$column=:$key"; $params[$key] = $body[$key] === '' ? null : $body[$key]; }
     if (!empty($body['createdAt'])) { $fields[] = 'created_at=:createdAt'; $params['createdAt'] = pos_mysql_datetime($body['createdAt']); }
     if (($body['action'] ?? '') === 'cancel') { $fields[] = "status='cancelled'"; $fields[] = 'cancelled_at=NOW()'; $fields[] = 'cancelled_by=:cancelledBy'; $params['cancelledBy'] = trim((string) ($body['cancelledBy'] ?? '')); }
@@ -835,7 +849,7 @@ if ($method === 'GET' && $resource === 'live-orders') {
 
 if ($method === 'PUT' && $resource === 'live-orders') {
     $storeId=trim((string)($body['storeId']??''));$orderKey=trim((string)($body['orderKey']??''));$id=$storeId.'__'.hash('sha256',strtolower($orderKey));$items=is_array($body['items']??null)?$body['items']:[];
-    db()->beginTransaction();try{db()->prepare("INSERT INTO live_orders (id,store_id,order_key,status) VALUES (:id,:store_id,:order_key,'open') ON DUPLICATE KEY UPDATE order_key=VALUES(order_key),status='open',updated_at=NOW()")->execute(['id'=>$id,'store_id'=>$storeId,'order_key'=>$orderKey]);db()->prepare('DELETE FROM live_order_items WHERE live_order_id=:id')->execute(['id'=>$id]);$s=db()->prepare('INSERT INTO live_order_items (live_order_id,menu_id,name,price,quantity,note,category) VALUES (:id,:menu_id,:name,:price,:quantity,:note,:category)');foreach($items as $item)$s->execute(['id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'price'=>(float)($item['price']??0),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??'')),'category'=>trim((string)($item['category']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}realtime_publish($storeId,'live-orders-updated',['id'=>$id,'orderKey'=>$orderKey,'action'=>'updated']);respond_ok(['id'=>$id]);
+    db()->beginTransaction();try{db()->prepare("INSERT INTO live_orders (id,store_id,order_key,status) VALUES (:id,:store_id,:order_key,'open') ON DUPLICATE KEY UPDATE order_key=VALUES(order_key),status='open',updated_at=NOW()")->execute(['id'=>$id,'store_id'=>$storeId,'order_key'=>$orderKey]);db()->prepare('DELETE FROM live_order_items WHERE live_order_id=:id')->execute(['id'=>$id]);$s=db()->prepare('INSERT INTO live_order_items (live_order_id,menu_id,name,price,quantity,note,category) VALUES (:id,:menu_id,:name,:price,:quantity,:note,:category)');foreach($items as $item)$s->execute(['id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'price'=>(float)($item['price']??0),'quantity'=>(float)($item['quantity']??0),'note'=>(string)($item['note']??''),'category'=>trim((string)($item['category']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}realtime_publish($storeId,'live-orders-updated',['id'=>$id,'orderKey'=>$orderKey,'action'=>'updated']);respond_ok(['id'=>$id]);
 }
 
 if ($method === 'DELETE' && $resource === 'live-orders') {

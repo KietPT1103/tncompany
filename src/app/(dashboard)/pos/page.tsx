@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/Input";
 import {
   Bill,
   BillSurcharge,
+  DiscountType,
   getBills,
   getBillsByShift,
   PaymentMethod,
@@ -324,6 +325,8 @@ export default function CafePosPage() {
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [cashReceivedInput, setCashReceivedInput] = useState("");
+  const [discountType, setDiscountType] = useState<DiscountType>("percent");
+  const [discountInput, setDiscountInput] = useState("");
 
   const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
   const [deviceIdentity, setDeviceIdentity] = useState<PosDeviceIdentity | null>(null);
@@ -374,6 +377,7 @@ export default function CafePosPage() {
   const [kitchenTerminalName, setKitchenTerminalName] = useState("May bep chinh");
   const [kitchenPrintLogs, setKitchenPrintLogs] = useState<string[]>([]);
   const printingKitchenJobsRef = useRef<Set<string>>(new Set());
+  const orderSyncTimersRef = useRef<Map<string, number>>(new Map());
   const menuOrderStorageKey = useMemo(
     () => `pos:menu-order:${storeId || "default"}`,
     [storeId]
@@ -1035,7 +1039,6 @@ export default function CafePosPage() {
     0
   );
   const cashReceived = parseMoney(cashReceivedInput);
-  const payableTotal = showReceipt && receiptData ? receiptData.total : totalPrice;
   const receiptItemCount = useMemo(
     () =>
       receiptData
@@ -1043,6 +1046,19 @@ export default function CafePosPage() {
         : 0,
     [receiptData]
   );
+  const receiptGrossTotal = receiptData?.total || 0;
+  const enteredDiscountValue =
+    discountType === "percent"
+      ? Math.max(0, Math.min(100, Number(discountInput.replace(",", ".")) || 0))
+      : parseMoney(discountInput);
+  const receiptDiscountAmount = Math.min(
+    receiptGrossTotal,
+    discountType === "percent"
+      ? Math.round((receiptGrossTotal * enteredDiscountValue) / 100)
+      : enteredDiscountValue
+  );
+  const receiptPayableTotal = Math.max(receiptGrossTotal - receiptDiscountAmount, 0);
+  const payableTotal = showReceipt && receiptData ? receiptPayableTotal : totalPrice;
   const quickCashValues = useMemo(() => {
     if (payableTotal <= 0) return [];
     const candidates = new Set<number>();
@@ -1070,6 +1086,19 @@ export default function CafePosPage() {
       setCashReceivedInput(String(payableTotal));
     }
   }, [paymentMethod, payableTotal, cashReceivedInput]);
+
+  useEffect(() => {
+    if (!showReceipt || !receiptData || paymentMethod !== "cash") return;
+    setCashReceivedInput(String(receiptPayableTotal));
+  }, [discountInput, discountType, paymentMethod, receiptData, receiptPayableTotal, showReceipt]);
+
+  useEffect(
+    () => () => {
+      orderSyncTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      orderSyncTimersRef.current.clear();
+    },
+    []
+  );
   const tableDraftCounts = useMemo(() => {
     const result: Record<string, number> = {};
     Object.entries(orderDrafts).forEach(([key, draft]) => {
@@ -1139,6 +1168,18 @@ export default function CafePosPage() {
     });
   };
 
+  const scheduleOrderDraftSync = (orderKey: string, draft: OrderDraft) => {
+    const existingTimer = orderSyncTimersRef.current.get(orderKey);
+    if (existingTimer) window.clearTimeout(existingTimer);
+    const timer = window.setTimeout(() => {
+      orderSyncTimersRef.current.delete(orderKey);
+      void syncOrderDraft(orderKey, draft).catch((error) => {
+        console.error("Không cập nhật được đơn realtime", error);
+      });
+    }, 300);
+    orderSyncTimersRef.current.set(orderKey, timer);
+  };
+
   const updateActiveOrder = (updater: (draft: OrderDraft) => OrderDraft) => {
     if (!activeOrderKey) {
       alert("Vui lòng chọn bàn trước khi gọi món.");
@@ -1169,9 +1210,7 @@ export default function CafePosPage() {
         next[activeOrderKey] = normalizedDraft;
       }
 
-      void syncOrderDraft(activeOrderKey, normalizedDraft).catch((error) => {
-        console.error("Không cập nhật được đơn realtime", error);
-      });
+      scheduleOrderDraftSync(activeOrderKey, normalizedDraft);
 
       return next;
     });
@@ -1337,8 +1376,8 @@ export default function CafePosPage() {
         (item) => `
           <tr>
             <td style="padding:4px 0; vertical-align:top;">
-              ${item.name}
-              ${item.note?.trim() ? `<div style="font-size:11px;color:#666;">- ${item.note.trim()}</div>` : ""}
+              <div class="receipt-item-name">${escapeHtml(item.name)}</div>
+              ${item.note?.trim() ? `<div class="receipt-item-note">- ${escapeHtml(item.note.trim())}</div>` : ""}
             </td>
             <td style="text-align:right;padding:4px 0; vertical-align:top;">${formatCurrency(
               item.price
@@ -1387,6 +1426,9 @@ export default function CafePosPage() {
     createdAtText: string;
     items: ReceiptItem[];
     total: number;
+    discountType?: DiscountType;
+    discountValue?: number;
+    discountAmount?: number;
     includePaymentInfo: boolean;
     paidAmount?: number;
     changeAmount?: number;
@@ -1398,7 +1440,7 @@ export default function CafePosPage() {
     const printAt = new Date();
     const printTime = printAt.toLocaleString("vi-VN");
     const itemRows = buildReceiptItemsHtml(options.items);
-    const discount = 0;
+    const discount = Math.max(0, Math.min(options.discountAmount || 0, options.total));
     const finalAmount = Math.max(options.total - discount, 0);
     const receiptPaymentMethod = options.paymentMethod || paymentMethod;
     const receiptCashierName = options.cashierName || cashierName;
@@ -1437,6 +1479,8 @@ export default function CafePosPage() {
             .line-row { display:flex; justify-content:space-between; gap:8px; margin: 2px 0; font-size: 12px; }
             .line-row strong { font-size: 14px; }
             .grid-head td { font-weight: 700; text-transform: uppercase; font-size: 11px; border-bottom: 1px solid #000; padding-bottom: 3px; }
+            .receipt-item-name { font-size: 13px; font-weight: 500; line-height: 1.25; }
+            .receipt-item-note { margin-top: 2px; font-size: 12px; font-weight: 700; line-height: 1.25; color: #222; }
             hr { border: 0; border-top: 1px dashed #999; margin: 8px 0; }
             .vat-note { margin-top: 7px; text-align:center; font-size: 11px; font-style: italic; }
             .thanks { margin-top: 8px; text-align:center; font-weight:700; font-size:14px; }
@@ -1471,9 +1515,11 @@ export default function CafePosPage() {
           <div class="line-row"><span>Tổng tiền hàng:</span><span><strong>${formatCurrency(
             options.total
           )}</strong></span></div>
-          <div class="line-row"><span>Chiết khấu:</span><span>${formatCurrency(
-            discount
-          )}</span></div>
+          <div class="line-row"><span>Chiết khấu${
+            options.discountType === "percent" && (options.discountValue || 0) > 0
+              ? ` (${options.discountValue}%)`
+              : ""
+          }:</span><span>${formatCurrency(discount)}</span></div>
           <div class="line-row"><span><strong>Tổng cộng:</strong></span><span><strong>${formatCurrency(
             finalAmount
           )}</strong></span></div>
@@ -1783,6 +1829,8 @@ export default function CafePosPage() {
       setCashReceivedInput(String(normalizedCashReceived));
     }
 
+    setDiscountType("percent");
+    setDiscountInput("");
     setReceiptData({
       table: isFarmStore ? FARM_ORDER_LABEL : tableNumber,
       items: pricing.items,
@@ -1813,6 +1861,9 @@ export default function CafePosPage() {
       createdAtText: receiptData.time,
       items: receiptData.items,
       total: receiptData.total,
+      discountType,
+      discountValue: enteredDiscountValue,
+      discountAmount: receiptDiscountAmount,
       includePaymentInfo: false,
     });
   };
@@ -1822,9 +1873,9 @@ export default function CafePosPage() {
     const currentCashReceived = parseMoney(cashReceivedInput);
     const currentChangeAmount =
       paymentMethod === "cash"
-        ? Math.max(currentCashReceived - receiptData.total, 0)
+        ? Math.max(currentCashReceived - receiptPayableTotal, 0)
         : 0;
-    if (paymentMethod === "cash" && currentCashReceived < receiptData.total) {
+    if (paymentMethod === "cash" && currentCashReceived < receiptPayableTotal) {
       alert("Tiền khách đưa phải lớn hơn hoặc bằng tổng tiền.");
       return;
     }
@@ -1836,7 +1887,10 @@ export default function CafePosPage() {
         subtotalBeforeSurcharge: receiptData.subtotal,
         surchargeTotal: receiptData.surchargeTotal,
         appliedSurcharges: receiptData.appliedSurcharges,
-        total: receiptData.total,
+        discountType,
+        discountValue: enteredDiscountValue,
+        discountAmount: receiptDiscountAmount,
+        total: receiptPayableTotal,
         storeId,
         paymentMethod,
         cashReceived: paymentMethod === "cash" ? currentCashReceived : undefined,
@@ -1861,7 +1915,7 @@ export default function CafePosPage() {
       const isTakeawayOrder =
         receiptData.table === TAKEAWAY_NAME || receiptData.table === FARM_ORDER_LABEL;
       const orderLabel = isTakeawayOrder ? "Mang về" : receiptData.table;
-      const finalAmount = Math.max(receiptData.total, 0);
+      const finalAmount = receiptPayableTotal;
       const paidAmount = paymentMethod === "cash" ? currentCashReceived : finalAmount;
 
       // Queue the preparation ticket before any interactive browser printing.
@@ -1897,6 +1951,9 @@ export default function CafePosPage() {
           createdAtText: receiptData.time,
           items: receiptData.items,
           total: receiptData.total,
+          discountType,
+          discountValue: enteredDiscountValue,
+          discountAmount: receiptDiscountAmount,
           includePaymentInfo: true,
           paidAmount,
           changeAmount: paymentMethod === "cash" ? currentChangeAmount : 0,
@@ -1904,6 +1961,11 @@ export default function CafePosPage() {
       }
 
       if (activeOrderKey) {
+        const pendingSyncTimer = orderSyncTimersRef.current.get(activeOrderKey);
+        if (pendingSyncTimer) {
+          window.clearTimeout(pendingSyncTimer);
+          orderSyncTimersRef.current.delete(activeOrderKey);
+        }
         if (storeId) {
           await clearLiveOrder(storeId, activeOrderKey);
         }
@@ -2845,7 +2907,10 @@ export default function CafePosPage() {
         surchargeTotal: Number(item.surchargeTotal || 0),
         lineTotal: Number(item.lineTotal || item.price * item.quantity || 0),
       })),
-      total: bill.total,
+      total: bill.total + Number(bill.discountAmount || 0),
+      discountType: bill.discountType,
+      discountValue: bill.discountValue,
+      discountAmount: bill.discountAmount,
       includePaymentInfo: true,
       paidAmount,
       changeAmount: billPaymentMethod === "cash" ? bill.changeAmount || 0 : 0,
@@ -3885,7 +3950,7 @@ export default function CafePosPage() {
                               {idx + 1}. {item.name}
                             </p>
                             {item.note?.trim() && (
-                              <p className="mt-0.5 text-xs text-slate-500">
+                              <p className="mt-1 text-[13px] font-bold leading-snug text-slate-700">
                                 {item.note.trim()}
                               </p>
                             )}
@@ -3911,7 +3976,7 @@ export default function CafePosPage() {
                     </span>
                   </div>
                   <p className="text-xl font-bold text-slate-900 sm:text-3xl">
-                    {formatCurrency(receiptData.total)} đ
+                    {formatCurrency(receiptPayableTotal)} đ
                   </p>
                 </div>
               </div>
@@ -3935,17 +4000,72 @@ export default function CafePosPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-700">Tổng tiền hàng</span>
                     <span className="font-semibold text-slate-900">
-                      {formatCurrency(receiptData.total)}
+                      {formatCurrency(receiptGrossTotal)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">Giảm giá</span>
-                    <span className="text-slate-900">0</span>
+                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="font-semibold text-slate-700" htmlFor="receipt-discount">
+                        Giảm giá
+                      </label>
+                      <div className="flex overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDiscountType("percent");
+                            setDiscountInput("");
+                          }}
+                          className={`px-3 py-2 text-sm font-semibold ${discountType === "percent" ? "bg-sky-600 text-white" : "text-slate-600"}`}
+                        >
+                          Theo %
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDiscountType("fixed");
+                            setDiscountInput("");
+                          }}
+                          className={`px-3 py-2 text-sm font-semibold ${discountType === "fixed" ? "bg-sky-600 text-white" : "text-slate-600"}`}
+                        >
+                          Theo giá
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="receipt-discount"
+                        inputMode={discountType === "percent" ? "decimal" : "numeric"}
+                        value={discountType === "fixed" ? formatMoneyInput(discountInput) : discountInput}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (discountType === "percent") {
+                            const numericValue = Number(value.replace(",", "."));
+                            if (
+                              /^\d{0,3}([.,]\d{0,2})?$/.test(value) &&
+                              (value === "" || numericValue <= 100)
+                            ) {
+                              setDiscountInput(value);
+                            }
+                          } else {
+                            setDiscountInput(value.replace(/\D/g, ""));
+                          }
+                        }}
+                        placeholder={discountType === "percent" ? "Nhập % giảm" : "Nhập số tiền giảm"}
+                        className="h-11 pr-12 text-right text-lg font-semibold"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-semibold text-slate-500">
+                        {discountType === "percent" ? "%" : "đ"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Số tiền được giảm</span>
+                      <span className="font-bold text-emerald-700">-{formatCurrency(receiptDiscountAmount)} đ</span>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between border-t pt-2">
                     <span className="text-base font-semibold text-slate-700">Khách cần trả</span>
                     <span className="text-2xl font-bold text-sky-700">
-                      {formatCurrency(receiptData.total)}
+                      {formatCurrency(receiptPayableTotal)}
                     </span>
                   </div>
 
@@ -3955,7 +4075,7 @@ export default function CafePosPage() {
                       value={
                         paymentMethod === "cash"
                           ? formatMoneyInput(cashReceivedInput)
-                          : formatCurrency(receiptData.total)
+                          : formatCurrency(receiptPayableTotal)
                       }
                       onChange={(e) => setCashReceivedInput(e.target.value)}
                       disabled={paymentMethod !== "cash"}
@@ -4016,7 +4136,7 @@ export default function CafePosPage() {
                     <span className="font-semibold text-slate-900">
                       {paymentMethod === "cash"
                         ? formatCurrency(
-                            Math.max(parseMoney(cashReceivedInput) - receiptData.total, 0)
+                            Math.max(parseMoney(cashReceivedInput) - receiptPayableTotal, 0)
                           )
                         : "0"}{" "}
                       đ
