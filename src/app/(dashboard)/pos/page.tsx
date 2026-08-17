@@ -192,6 +192,7 @@ type SoldBillsSortKey = "time" | "total" | "code" | "table";
 type SortDirection = "asc" | "desc";
 type DailyReportTab = "overview" | "bills" | "products";
 type DailyReportShift = Exclude<ShiftType, "single"> | "all";
+type DailyReportPaymentFilter = "all" | PaymentMethod;
 type SoldProductKind = "drink" | "bakery";
 type EndOfDayHandover = {
   shifts: Record<Exclude<ShiftType, "single">, number>;
@@ -354,7 +355,10 @@ export default function CafePosPage() {
   );
   const [dailyReportBills, setDailyReportBills] = useState<Bill[]>([]);
   const [dailyReportVouchers, setDailyReportVouchers] = useState<CashVoucher[]>([]);
+  const [dailyReportShifts, setDailyReportShifts] = useState<CashierShift[]>([]);
   const [dailyReportTab, setDailyReportTab] = useState<DailyReportTab>("overview");
+  const [dailyReportPaymentFilter, setDailyReportPaymentFilter] =
+    useState<DailyReportPaymentFilter>("all");
   const [dailyReportDate, setDailyReportDate] = useState(() => toLocalDateInput(new Date()));
   const [dailyReportShift, setDailyReportShift] = useState<DailyReportShift>("shift_1");
   const [expandedDailyBillHours, setExpandedDailyBillHours] = useState<Set<number>>(
@@ -818,7 +822,7 @@ export default function CafePosPage() {
   };
 
   const getSoldProductKind = useCallback(
-    (menuId: string, itemName: string): SoldProductKind => {
+    (menuId: string, _itemName: string): SoldProductKind => {
       const product = products.find((item) => item.product_code === menuId);
       const categoryValue = product?.categoryName || product?.category || "";
       const category = categories.find(
@@ -826,27 +830,8 @@ export default function CafePosPage() {
           item.id === product?.category ||
           normalizeSearchText(item.name) === normalizeSearchText(categoryValue)
       );
-      const searchableText = normalizeSearchText(
-        [categoryValue, category?.name, product?.product_name, itemName]
-          .filter(Boolean)
-          .join(" ")
-      );
-      const bakeryKeywords = [
-        "banh",
-        "cookie",
-        "donut",
-        "croissant",
-        "tart",
-        "mousse",
-        "cupcake",
-        "macaron",
-        "panna cotta",
-      ];
-
-      return bakeryKeywords.some((keyword) => searchableText.includes(keyword)) ||
-        category?.isPreparationPrintEnabled === false
-        ? "bakery"
-        : "drink";
+      const categoryName = category?.name || product?.categoryName || "";
+      return normalizeSearchText(categoryName) === "banh" ? "bakery" : "drink";
     },
     [categories, products]
   );
@@ -2157,7 +2142,7 @@ export default function CafePosPage() {
     }
   };
 
-  const handlePrepareCloseShift = async () => {
+  const handlePrepareCloseShift = async (resetForm = true) => {
     if (!activeShift) {
       alert("Chưa có ca mở để đóng.");
       return;
@@ -2190,8 +2175,10 @@ export default function CafePosPage() {
       setCloseShiftSummary(summary);
       setCloseShiftDrinkItems(itemTotals.drink);
       setCloseShiftBakeryItems(itemTotals.bakery);
-      setClosingCashInput("");
-      setClosingNote("");
+      if (resetForm) {
+        setClosingCashInput("");
+        setClosingNote("");
+      }
       setShowCloseShiftModal(true);
       setShowActionMenu(false);
     } catch (error) {
@@ -2460,18 +2447,27 @@ export default function CafePosPage() {
     setDailyReport(null);
     setDailyReportBills([]);
     setDailyReportVouchers([]);
+    setDailyReportShifts([]);
     setIsLoadingDailyReport(true);
     try {
       const { start, end } = getLocalDayRange(dateValue);
       let bills: Bill[] = [];
       let vouchers: CashVoucher[] = [];
+      let reportShifts: CashierShift[] = [];
       if (shiftType === "all") {
-        [bills, vouchers] = await Promise.all([
+        const [loadedBills, loadedVouchers, ...shiftsByType] = await Promise.all([
           getBills({ storeId, startDate: start, endDate: end, includeCancelled: true, limitCount: 2000 }),
           getCashVouchers({ storeId, startDate: start, endDate: end, limitCount: 2000 }),
+          getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_1" }),
+          getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_2" }),
+          getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_3" }),
         ]);
+        bills = loadedBills;
+        vouchers = loadedVouchers;
+        reportShifts = shiftsByType.flat();
       } else {
         const shifts = await getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType });
+        reportShifts = shifts;
         const shiftIds = shifts.map((shift) => shift.id);
         if (shiftIds.length > 0) {
           [bills, vouchers] = await Promise.all([
@@ -2483,6 +2479,7 @@ export default function CafePosPage() {
       const summary = summarizeBillsForShift(bills, 0, vouchers);
       setDailyReportBills(bills);
       setDailyReportVouchers(vouchers);
+      setDailyReportShifts(reportShifts);
       setDailyReport(summary);
     } catch (error) {
       console.error(error);
@@ -2507,6 +2504,7 @@ export default function CafePosPage() {
     setShowActionMenu(false);
     setShowDailyReport(true);
     setDailyReportTab("overview");
+    setDailyReportPaymentFilter("all");
     setDailyReportDate(currentDate);
     setDailyReportShift(currentShift);
     void loadDailyReport(currentDate, currentShift);
@@ -2567,6 +2565,18 @@ export default function CafePosPage() {
             )} đ</td></tr>
             <tr><td>Tiền mặt</td><td class="right">${formatCurrency(
               dailyReport.cashSales
+            )} đ</td></tr>
+            <tr><td>Tiền đầu ca</td><td class="right">${formatCurrency(
+              dailyOpeningCash
+            )} đ</td></tr>
+            <tr><td>Doanh thu két</td><td class="right">${formatCurrency(
+              dailyTillRevenue
+            )} đ</td></tr>
+            <tr><td>Tiền dư</td><td class="right">+${formatCurrency(
+              dailyCashSurplus
+            )} đ</td></tr>
+            <tr><td>Tiền mặt cuối ca</td><td class="right">${formatCurrency(
+              dailyEndingCash
             )} đ</td></tr>
             <tr><td>Chuyển khoản</td><td class="right">${formatCurrency(
               dailyReport.transferSales
@@ -2640,7 +2650,7 @@ export default function CafePosPage() {
       setShowVoucherModal(null);
       alert("Đã lưu phiếu thành công.");
       if (showCloseShiftModal && activeShift) {
-        void handlePrepareCloseShift();
+        void handlePrepareCloseShift(false);
       }
       if (showDailyReport) {
         void loadDailyReport(dailyReportDate, dailyReportShift);
@@ -3010,9 +3020,48 @@ export default function CafePosPage() {
     [dailyBakeryRows]
   );
 
+  const dailyOpeningCash = useMemo(
+    () => dailyReportShifts.reduce((total, shift) => total + Number(shift.openingCash || 0), 0),
+    [dailyReportShifts]
+  );
+  const dailyCashSurplus = useMemo(
+    () =>
+      dailyReportShifts.reduce((total, shift) => {
+        if (shift.closingCash === null || shift.closingCash === undefined) return total;
+        const expectedClosingCash = Number(
+          shift.expectedClosingCash ??
+            (Number(shift.openingCash || 0) + Number(shift.cashSales || 0))
+        );
+        return total + Math.max(0, Number(shift.closingCash) - expectedClosingCash);
+      }, 0),
+    [dailyReportShifts]
+  );
+  const dailyTillRevenue = (dailyReport?.cashSales || 0) + dailyOpeningCash;
+  const dailyEndingCash = dailyTillRevenue + dailyCashSurplus;
+
+  const filteredDailyBills = useMemo(
+    () =>
+      dailyReportPaymentFilter === "all"
+        ? completedDailyBills
+        : completedDailyBills.filter(
+            (bill) => (bill.paymentMethod || "cash") === dailyReportPaymentFilter
+          ),
+    [completedDailyBills, dailyReportPaymentFilter]
+  );
+
+  const dailyAllBillHourCount = useMemo(
+    () =>
+      new Set(
+        completedDailyBills.map((bill) =>
+          bill.createdAt?.seconds ? new Date(bill.createdAt.seconds * 1000).getHours() : -1
+        )
+      ).size,
+    [completedDailyBills]
+  );
+
   const dailyBillHourGroups = useMemo(() => {
     const groups = new Map<number, Bill[]>();
-    completedDailyBills.forEach((bill) => {
+    filteredDailyBills.forEach((bill) => {
       const date = bill.createdAt?.seconds
         ? new Date(bill.createdAt.seconds * 1000)
         : null;
@@ -3043,7 +3092,7 @@ export default function CafePosPage() {
           0
         ),
       }));
-  }, [completedDailyBills]);
+  }, [filteredDailyBills]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -4584,13 +4633,26 @@ export default function CafePosPage() {
                   {getShiftLabel(activeShift.shiftType)} · {activeShift.cashierName}
                 </p>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => setShowCloseShiftModal(false)}
-                disabled={isClosingShift}
-              >
-                Đóng
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => void handlePrepareCloseShift(false)}
+                  isLoading={isPreparingCloseShift}
+                  disabled={isClosingShift}
+                >
+                  <RefreshCcw className="h-4 w-4" />
+                  Reload nhanh
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCloseShiftModal(false)}
+                  disabled={isClosingShift || isPreparingCloseShift}
+                >
+                  Đóng
+                </Button>
+              </div>
             </div>
             <div className="space-y-3 px-5 py-4 text-sm">
               <div className="grid grid-cols-2 gap-3">
@@ -4857,6 +4919,10 @@ export default function CafePosPage() {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between"><span>Tiền mặt</span><strong>{formatCurrency(dailyReport.cashSales)} đ</strong></div>
                         <div className="flex justify-between"><span>Chuyển khoản</span><strong>{formatCurrency(dailyReport.transferSales)} đ</strong></div>
+                        <div className="border-t pt-2 flex justify-between"><span>Tiền đầu ca</span><strong>{formatCurrency(dailyOpeningCash)} đ</strong></div>
+                        <div className="flex justify-between"><span>Doanh thu két</span><strong>{formatCurrency(dailyTillRevenue)} đ</strong></div>
+                        <div className="flex justify-between"><span>Tiền dư</span><strong className="text-emerald-700">+{formatCurrency(dailyCashSurplus)} đ</strong></div>
+                        <div className="flex justify-between"><span>Tiền mặt cuối ca</span><strong>{formatCurrency(dailyEndingCash)} đ</strong></div>
                         <div className="border-t pt-2 flex justify-between"><span>Phiếu thu ({dailyReportVouchers.filter((voucher) => voucher.type === "income").length})</span><strong className="text-emerald-700">+{formatCurrency(dailyReport.incomeVouchers)} đ</strong></div>
                         <div className="flex justify-between"><span>Phiếu chi ({dailyReportVouchers.filter((voucher) => voucher.type === "expense").length})</span><strong className="text-rose-700">-{formatCurrency(dailyReport.expenseVouchers)} đ</strong></div>
                         <div className="border-t pt-2 flex justify-between"><span>Dòng tiền thuần</span><strong>{formatCurrency(dailyReport.netCashFlow)} đ</strong></div>
@@ -4868,7 +4934,7 @@ export default function CafePosPage() {
                         <div className="flex justify-between"><span>Bill hợp lệ</span><strong>{dailyReport.completedBills}</strong></div>
                         <div className="flex justify-between"><span>Bill đã hủy</span><strong className="text-rose-700">{dailyReport.cancelledBills}</strong></div>
                         <div className="flex justify-between"><span>Giá trị bill hủy</span><strong className="text-rose-700">{formatCurrency(dailyReport.cancelledAmount)} đ</strong></div>
-                        <div className="border-t pt-2 flex justify-between"><span>Khung giờ có bán hàng</span><strong>{dailyBillHourGroups.length}</strong></div>
+                        <div className="border-t pt-2 flex justify-between"><span>Khung giờ có bán hàng</span><strong>{dailyAllBillHourCount}</strong></div>
                         <div className="flex justify-between"><span>Mặt hàng nước</span><strong>{dailyDrinkRows.length}</strong></div>
                         <div className="flex justify-between"><span>Mặt hàng bánh</span><strong>{dailyBakeryRows.length}</strong></div>
                       </div>
@@ -4877,8 +4943,33 @@ export default function CafePosPage() {
                 </div>
               ) : dailyReportTab === "bills" ? (
                 <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-white p-3 shadow-sm">
+                    <span className="mr-1 text-sm font-semibold text-slate-600">Lọc thanh toán:</span>
+                    {([
+                      ["all", "Tất cả", completedDailyBills.length],
+                      ["cash", "Tiền mặt", completedDailyBills.filter((bill) => (bill.paymentMethod || "cash") === "cash").length],
+                      ["transfer", "Chuyển khoản", completedDailyBills.filter((bill) => bill.paymentMethod === "transfer").length],
+                    ] as [DailyReportPaymentFilter, string, number][]).map(([value, label, count]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => {
+                          setDailyReportPaymentFilter(value);
+                          setExpandedDailyBillHours(new Set());
+                          setExpandedDailyReportBillId(null);
+                        }}
+                        className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                          dailyReportPaymentFilter === value
+                            ? "border-sky-600 bg-sky-600 text-white"
+                            : "border-slate-300 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50"
+                        }`}
+                      >
+                        {label} ({count})
+                      </button>
+                    ))}
+                  </div>
                   {dailyBillHourGroups.length === 0 && (
-                    <div className="rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-500">Chưa có bill hợp lệ trong ngày.</div>
+                    <div className="rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-500">Không có bill phù hợp với phương thức thanh toán đã chọn.</div>
                   )}
                   {dailyBillHourGroups.map((group) => (
                     <section key={group.hour} className="overflow-hidden rounded-xl border bg-white shadow-sm">

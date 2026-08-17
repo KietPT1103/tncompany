@@ -261,6 +261,13 @@ function pos_shift_payload(array $row): array
         'openedAt' => pos_timestamp($row['opened_at']),
         'closedAt' => pos_timestamp($row['closed_at']),
         'closingCash' => $row['closing_cash'] !== null ? (float) $row['closing_cash'] : null,
+        'expectedClosingCash' => $row['expected_closing_cash'] !== null ? (float) $row['expected_closing_cash'] : null,
+        'cashSales' => (float) ($row['cash_sales'] ?? 0),
+        'transferSales' => (float) ($row['transfer_sales'] ?? 0),
+        'totalSales' => (float) ($row['total_sales'] ?? 0),
+        'completedBills' => (int) ($row['completed_bills'] ?? 0),
+        'cancelledBills' => (int) ($row['cancelled_bills'] ?? 0),
+        'cancelledAmount' => (float) ($row['cancelled_amount'] ?? 0),
     ];
 }
 
