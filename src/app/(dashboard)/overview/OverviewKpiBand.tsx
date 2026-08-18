@@ -59,28 +59,40 @@ export default function OverviewKpiBand({
           <div className="mt-2"><ChangeLabel value={revenueChange} /></div>
         </div>
 
-        <div className="min-w-0 px-5 py-5">
+        <div className="relative min-w-0 overflow-hidden bg-gradient-to-b from-emerald-100 via-emerald-50 to-white px-5 py-5">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-5 left-0 w-1.5 rounded-r-full bg-emerald-600"
+          />
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-slate-600">Số đơn hoàn tất</p>
-            <ClipboardList className="h-5 w-5 shrink-0 text-sky-700" aria-hidden="true" />
+            <ClipboardList className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
           </div>
           <p className="mt-3 text-2xl font-bold tabular-nums text-slate-950">{formatNumber(snapshot.orderCount)}</p>
           <div className="mt-2"><ChangeLabel value={orderChange} /></div>
         </div>
 
-        <div className="min-w-0 px-5 py-5">
+        <div className="relative min-w-0 overflow-hidden bg-gradient-to-b from-orange-100 via-orange-50 to-white px-5 py-5">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-5 left-0 w-1.5 rounded-r-full bg-orange-500"
+          />
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-slate-600">Giá trị đơn trung bình</p>
-            <PackageCheck className="h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+            <PackageCheck className="h-5 w-5 shrink-0 text-orange-500" aria-hidden="true" />
           </div>
           <p className="mt-3 truncate text-2xl font-bold tabular-nums text-slate-950">{formatMoney(snapshot.averageOrder)}</p>
           <p className="mt-2 text-xs text-slate-500">{formatNumber(snapshot.itemsSold)} món đã bán</p>
         </div>
 
-        <div className="min-w-0 px-5 py-5">
+        <div className="relative min-w-0 overflow-hidden bg-gradient-to-b from-red-100 via-red-50 to-white px-5 py-5">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-5 left-0 w-1.5 rounded-r-full bg-red-500"
+          />
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-slate-600">Đơn đã hủy</p>
-            <XCircle className="h-5 w-5 shrink-0 text-rose-600" aria-hidden="true" />
+            <XCircle className="h-5 w-5 shrink-0 text-red-500" aria-hidden="true" />
           </div>
           <p className="mt-3 text-2xl font-bold tabular-nums text-slate-950">{formatNumber(snapshot.cancelledCount)}</p>
           <p className="mt-2 text-xs text-slate-500">Không tính vào doanh thu</p>

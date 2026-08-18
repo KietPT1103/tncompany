@@ -18,12 +18,14 @@ import {
   Coffee,
   FileText,
   FileSpreadsheet,
+  FileChartColumn,
   Gauge,
   KeyRound,
   LogOut,
   Menu,
   MessageSquareText,
   Package,
+  PackageSearch,
   PanelLeftClose,
   PanelLeftOpen,
   ReceiptText,
@@ -97,6 +99,26 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    key: "reports",
+    label: "Báo cáo",
+    icon: FileChartColumn,
+    items: [
+      {
+        href: "/reports/products",
+        label: "Hàng hoá",
+        icon: PackageSearch,
+        permission: "reports.access",
+      },
+      {
+        href: "/reports",
+        label: "Báo cáo cost",
+        icon: FileText,
+        permission: "reports.access",
+        exact: true,
+      },
+    ],
+  },
+  {
     key: "billing",
     label: "Hóa đơn",
     icon: ReceiptText,
@@ -118,12 +140,6 @@ const navGroups: NavGroup[] = [
         label: "Danh sách hóa đơn",
         icon: ReceiptText,
         permission: "bills.access",
-      },
-      {
-        href: "/reports",
-        label: "Báo cáo",
-        icon: FileText,
-        permission: "reports.access",
       },
       {
         href: "/cash-flow",
@@ -697,10 +713,7 @@ export default function AdminSidebar({
                     <div className="min-h-0 overflow-hidden">
                       <div className="space-y-0.5 pb-0.5 pl-3 pt-1">
                         {group.items.map((item) => {
-                          const isActive =
-                            pathname === item.href ||
-                            (item.href !== "/" &&
-                              pathname.startsWith(item.href + "/"));
+                          const isActive = isNavItemActive(pathname, item);
 
                           return (
                             <Link

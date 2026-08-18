@@ -22,6 +22,7 @@ import { getOpenShiftByCashier } from "@/services/shiftService";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
@@ -94,6 +95,29 @@ const BILL_DATE_PRESET_OPTIONS: readonly SelectBoxOption<
   { value: "thisMonth", label: "Tháng này" },
   { value: "previousMonth", label: "Tháng trước" },
 ];
+
+const BILL_SORT_OPTIONS: readonly SelectBoxOption<BillSortKey>[] = [
+  { value: "time", label: "Thời gian" },
+  { value: "code", label: "Mã hóa đơn" },
+  { value: "table", label: "Bàn" },
+  { value: "total", label: "Tổng tiền" },
+  { value: "status", label: "Trạng thái" },
+];
+
+const VOUCHER_SORT_OPTIONS: readonly SelectBoxOption<VoucherSortKey>[] = [
+  { value: "time", label: "Thời gian" },
+  { value: "code", label: "Mã phiếu" },
+  { value: "type", label: "Loại phiếu" },
+  { value: "category", label: "Nội dung" },
+  { value: "person", label: "Người nộp/nhận" },
+  { value: "amount", label: "Giá trị" },
+];
+
+const SORT_TRIGGER_CLASS =
+  "h-10 min-w-36 border-slate-300 bg-white font-semibold text-emerald-900 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 focus-visible:ring-emerald-600 sm:h-9 [&>svg]:text-emerald-700";
+
+const SORT_DIRECTION_CLASS =
+  "h-10 gap-1.5 border-slate-300 bg-white px-3 text-sm font-semibold text-emerald-900 shadow-sm transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-[0_2px_5px_rgba(6,78,59,0.12)] focus-visible:ring-emerald-600 active:scale-[0.98] sm:h-9 motion-reduce:transition-none";
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { minimumFractionDigits: 0 });
@@ -773,26 +797,16 @@ export default function BillsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Input
-                      type="date"
-                      label="Từ ngày"
-                      value={startDate}
-                      onChange={(event) => {
-                        setDatePreset("custom");
-                        setStartDate(event.target.value);
-                      }}
-                    />
-                    <Input
-                      type="date"
-                      label="Đến ngày"
-                      value={endDate}
-                      onChange={(event) => {
-                        setDatePreset("custom");
-                        setEndDate(event.target.value);
-                      }}
-                    />
-                  </div>
+                  <DateRangePicker
+                    label="Khoảng thời gian"
+                    startDate={startDate}
+                    endDate={endDate}
+                    onChange={(nextStartDate, nextEndDate) => {
+                      setDatePreset("custom");
+                      setStartDate(nextStartDate);
+                      setEndDate(nextEndDate);
+                    }}
+                  />
                 </CardContent>
               </Card>
 
@@ -805,32 +819,28 @@ export default function BillsPage() {
                     <ReceiptText className="h-5 w-5 text-sky-700" />
                     Danh sách hóa đơn ({filteredBills.length})
                   </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <select
+                  <div className="flex w-full items-center gap-2 sm:w-auto">
+                    <SelectBox<BillSortKey>
                       value={billSortKey}
-                      onChange={(event) => setBillSortKey(event.target.value as BillSortKey)}
-                      className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                      aria-label="Sắp xếp hóa đơn"
-                    >
-                      <option value="time">Thời gian</option>
-                      <option value="code">Mã hóa đơn</option>
-                      <option value="table">Bàn</option>
-                      <option value="total">Tổng tiền</option>
-                      <option value="status">Trạng thái</option>
-                    </select>
+                      options={BILL_SORT_OPTIONS}
+                      onValueChange={setBillSortKey}
+                      ariaLabel="Sắp xếp hóa đơn theo"
+                      className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+                      triggerClassName={SORT_TRIGGER_CLASS}
+                    />
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-1"
+                      className={SORT_DIRECTION_CLASS}
                       onClick={() =>
                         setBillSortDirection((current) => current === "asc" ? "desc" : "asc")
                       }
                       title={billSortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
                     >
                       {billSortDirection === "asc" ? (
-                        <ArrowUp className="h-4 w-4" />
+                        <ArrowUp className="h-4 w-4 text-emerald-700" aria-hidden="true" />
                       ) : (
-                        <ArrowDown className="h-4 w-4" />
+                        <ArrowDown className="h-4 w-4 text-emerald-700" aria-hidden="true" />
                       )}
                       {billSortDirection === "asc" ? "Tăng" : "Giảm"}
                     </Button>
@@ -1131,26 +1141,19 @@ export default function BillsPage() {
                         className="h-9 pl-9"
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <select
+                    <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+                      <SelectBox<VoucherSortKey>
                         value={voucherSortKey}
-                        onChange={(event) =>
-                          setVoucherSortKey(event.target.value as VoucherSortKey)
-                        }
-                        className="h-9 min-w-36 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                        aria-label="Sắp xếp phiếu thu chi"
-                      >
-                        <option value="time">Thời gian</option>
-                        <option value="code">Mã phiếu</option>
-                        <option value="type">Loại phiếu</option>
-                        <option value="category">Nội dung</option>
-                        <option value="person">Người nộp/nhận</option>
-                        <option value="amount">Giá trị</option>
-                      </select>
+                        options={VOUCHER_SORT_OPTIONS}
+                        onValueChange={setVoucherSortKey}
+                        ariaLabel="Sắp xếp phiếu thu chi theo"
+                        className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+                        triggerClassName={SORT_TRIGGER_CLASS}
+                      />
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 gap-1"
+                        className={SORT_DIRECTION_CLASS}
                         onClick={() =>
                           setVoucherSortDirection((current) =>
                             current === "asc" ? "desc" : "asc"
@@ -1159,9 +1162,9 @@ export default function BillsPage() {
                         title={voucherSortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
                       >
                         {voucherSortDirection === "asc" ? (
-                          <ArrowUp className="h-4 w-4" />
+                          <ArrowUp className="h-4 w-4 text-emerald-700" aria-hidden="true" />
                         ) : (
-                          <ArrowDown className="h-4 w-4" />
+                          <ArrowDown className="h-4 w-4 text-emerald-700" aria-hidden="true" />
                         )}
                         {voucherSortDirection === "asc" ? "Tăng" : "Giảm"}
                       </Button>
