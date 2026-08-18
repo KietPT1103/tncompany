@@ -6,7 +6,7 @@ export type DiscountType = "percent" | "fixed";
 export type BillOrderSource = "pos" | "bar";
 export type BillItemInput = { menuId: string; name: string; price: number; quantity: number; lineTotal: number; note?: string; basePrice?: number; surchargePerUnit?: number; surchargeTotal?: number };
 export type BillSurcharge = { id: string; name: string; type: "percent" | "fixed"; value: number; amount: number };
-export type NewBill = { tableNumber: string; note?: string; total: number; items: BillItemInput[]; subtotalBeforeSurcharge?: number; surchargeTotal?: number; appliedSurcharges?: BillSurcharge[]; discountType?: DiscountType; discountValue?: number; discountAmount?: number; storeId?: string; status?: BillStatus; paymentMethod?: PaymentMethod; cashReceived?: number; changeAmount?: number; shiftId?: string; cashierId?: string; cashierName?: string };
+export type NewBill = { tableNumber: string; note?: string; total: number; items: BillItemInput[]; subtotalBeforeSurcharge?: number; surchargeTotal?: number; appliedSurcharges?: BillSurcharge[]; discountType?: DiscountType; discountValue?: number; discountAmount?: number; storeId?: string; status?: BillStatus; paymentMethod?: PaymentMethod; cashReceived?: number; changeAmount?: number; shiftId?: string; cashierId?: string; cashierName?: string; checkoutRequestId?: string };
 export type Bill = NewBill & { id: string; orderSource?: BillOrderSource; createdAt?: ApiTimestamp; cancelledAt?: ApiTimestamp; cancelledBy?: string };
 
 export async function saveBill(data: NewBill) { return (await posRequest<{ id: string }>("bills", { method: "POST", body: JSON.stringify(data) })).id; }

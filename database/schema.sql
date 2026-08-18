@@ -303,12 +303,14 @@ CREATE TABLE IF NOT EXISTS bills (
   cashier_id VARCHAR(64) NULL,
   cashier_name VARCHAR(255) NULL,
   order_source ENUM('pos', 'bar') NOT NULL DEFAULT 'pos',
+  checkout_request_id VARCHAR(100) NULL,
   cancelled_at DATETIME NULL,
   cancelled_by VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_bills_store_created (store_id, created_at),
   KEY idx_bills_shift (shift_id),
+  UNIQUE KEY uniq_bills_store_checkout_request (store_id, checkout_request_id),
   CONSTRAINT fk_bills_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
 );
 

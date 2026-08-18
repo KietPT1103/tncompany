@@ -17,6 +17,10 @@ const DEFAULT_TERMINAL_NAME = "May pha che LAN";
 const DEFAULT_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const PAPER_WIDTH = 42;
 const RASTER_WIDTH_BYTES = 72;
+// Keep each GS v 0 command small. Several inexpensive ESC/POS firmwares lose
+// raster state when one image is larger than their receive/print buffer and
+// then print the remaining bitmap bytes as text.
+const RASTER_CHUNK_HEIGHT = 96;
 const execFile = util.promisify(childProcess.execFile);
 
 const args = new Set(process.argv.slice(2));
@@ -233,6 +237,45 @@ const findTicketRenderer = () => {
   return candidates.find((candidate) => fs.existsSync(candidate)) || "";
 };
 
+const buildRasterEscPosPayload = (
+  raster,
+  widthBytes = RASTER_WIDTH_BYTES,
+  chunkHeightLimit = RASTER_CHUNK_HEIGHT
+) => {
+  if (!Buffer.isBuffer(raster) || !raster.length || raster.length % widthBytes !== 0) {
+    throw new Error("Invalid ticket raster output.");
+  }
+  if (!Number.isInteger(chunkHeightLimit) || chunkHeightLimit < 1 || chunkHeightLimit > 0xffff) {
+    throw new Error("Invalid raster chunk height.");
+  }
+
+  const height = raster.length / widthBytes;
+  const chunks = [Buffer.from([0x1b, 0x40])];
+  for (let startRow = 0; startRow < height; startRow += chunkHeightLimit) {
+    const chunkHeight = Math.min(chunkHeightLimit, height - startRow);
+    const startOffset = startRow * widthBytes;
+    const endOffset = startOffset + chunkHeight * widthBytes;
+    chunks.push(
+      Buffer.from([
+        0x1d,
+        0x76,
+        0x30,
+        0x00,
+        widthBytes & 0xff,
+        (widthBytes >> 8) & 0xff,
+        chunkHeight & 0xff,
+        (chunkHeight >> 8) & 0xff,
+      ]),
+      raster.subarray(startOffset, endOffset)
+    );
+  }
+  chunks.push(
+    Buffer.from([0x1b, 0x64, 0x04]),
+    Buffer.from([0x1d, 0x56, 0x42, 0x00])
+  );
+  return Buffer.concat(chunks);
+};
+
 const buildBitmapEscPosPayload = async (job, config) => {
   const rendererPath = findTicketRenderer();
   if (process.platform !== "win32" || !rendererPath) return null;
@@ -277,28 +320,7 @@ const buildBitmapEscPosPayload = async (job, config) => {
       { windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024 }
     );
     const raster = fs.readFileSync(outputPath);
-    if (!raster.length || raster.length % RASTER_WIDTH_BYTES !== 0) {
-      throw new Error("Invalid ticket raster output.");
-    }
-    const height = raster.length / RASTER_WIDTH_BYTES;
-    if (height > 0xffff) throw new Error("Ticket raster is too tall.");
-
-    return Buffer.concat([
-      Buffer.from([0x1b, 0x40]),
-      Buffer.from([
-        0x1d,
-        0x76,
-        0x30,
-        0x00,
-        RASTER_WIDTH_BYTES & 0xff,
-        (RASTER_WIDTH_BYTES >> 8) & 0xff,
-        height & 0xff,
-        (height >> 8) & 0xff,
-      ]),
-      raster,
-      Buffer.from([0x1b, 0x64, 0x04]),
-      Buffer.from([0x1d, 0x56, 0x42, 0x00]),
-    ]);
+    return buildRasterEscPosPayload(raster);
   } finally {
     [inputPath, outputPath].forEach((filePath) => {
       try {
@@ -638,9 +660,13 @@ const run = async () => {
   process.once("SIGTERM", () => void shutdown("SIGTERM"));
 };
 
-run().catch((error) => {
-  console.error("Failed to start bar print agent.");
-  console.error(error);
-  // Let pending fetch/socket handles close cleanly on Windows before Node exits.
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  run().catch((error) => {
+    console.error("Failed to start bar print agent.");
+    console.error(error);
+    // Let pending fetch/socket handles close cleanly on Windows before Node exits.
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { buildRasterEscPosPayload };

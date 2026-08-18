@@ -280,6 +280,8 @@ export default function CafePosPage() {
     {}
   );
   const [isPaying, setIsPaying] = useState(false);
+  const paymentInFlightRef = useRef(false);
+  const checkoutRequestIdRef = useRef<string | null>(null);
   const [newTableName, setNewTableName] = useState("");
   const [newTableArea, setNewTableArea] = useState("");
   const [tablePage, setTablePage] = useState(1);
@@ -1806,6 +1808,10 @@ export default function CafePosPage() {
     }
 
     const pricing = calculateOrderPricing(cartItems, enabledSurcharges);
+    checkoutRequestIdRef.current =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const now = new Date();
     const formattedDate = now.toLocaleString("vi-VN");
     const normalizedCashReceived =
@@ -1854,7 +1860,7 @@ export default function CafePosPage() {
   };
 
   const handleConfirmPrint = async () => {
-    if (!receiptData || isPaying) return;
+    if (!receiptData || paymentInFlightRef.current) return;
     const currentCashReceived = parseMoney(cashReceivedInput);
     const currentChangeAmount =
       paymentMethod === "cash"
@@ -1865,8 +1871,15 @@ export default function CafePosPage() {
       return;
     }
 
+    paymentInFlightRef.current = true;
     setIsPaying(true);
     try {
+      const checkoutRequestId =
+        checkoutRequestIdRef.current ||
+        (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      checkoutRequestIdRef.current = checkoutRequestId;
       const billId = await saveBill({
         tableNumber: isFarmStore ? FARM_ORDER_KEY : receiptData.table,
         subtotalBeforeSurcharge: receiptData.subtotal,
@@ -1883,6 +1896,7 @@ export default function CafePosPage() {
         shiftId: activeShift?.id,
         cashierId: user?.uid,
         cashierName,
+        checkoutRequestId,
         items: receiptData.items.map((item) => ({
           menuId: item.id,
           name: item.name,
@@ -1972,6 +1986,7 @@ export default function CafePosPage() {
       setCashReceivedInput("");
       setPaymentMethod("cash");
       setShowReceipt(false);
+      checkoutRequestIdRef.current = null;
       if (!isFarmStore) {
         setTableNumber("");
         setTableSearch("");
@@ -1981,6 +1996,7 @@ export default function CafePosPage() {
       console.error(error);
       alert("Lỗi khi lưu hoặc in bill. Vui lòng thử lại.");
     } finally {
+      paymentInFlightRef.current = false;
       setIsPaying(false);
     }
   };
@@ -3097,6 +3113,7 @@ export default function CafePosPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return;
+      if (e.repeat) return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       const isTyping =
@@ -3973,6 +3990,7 @@ export default function CafePosPage() {
                   <button
                     type="button"
                     onClick={() => setShowReceipt(false)}
+                    disabled={isPaying}
                     className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                     aria-label="Đóng"
                   >
@@ -4038,6 +4056,7 @@ export default function CafePosPage() {
                   <button
                     type="button"
                     onClick={() => setShowReceipt(false)}
+                    disabled={isPaying}
                     className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                     aria-label="Đóng"
                   >
@@ -4204,6 +4223,8 @@ export default function CafePosPage() {
                     </Button>
                     <Button
                       onClick={handleConfirmPrint}
+                      disabled={isPaying}
+                      isLoading={isPaying}
                       className="h-12 w-full bg-sky-600 text-lg font-semibold hover:bg-sky-700"
                     >
                       Thanh toán

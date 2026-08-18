@@ -177,6 +177,40 @@ function pos_ensure_bill_discount_columns(): void
     auth_ensure_column('bills', 'discount_amount', 'DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_value');
 }
 
+function pos_ensure_bill_checkout_request_column(): void
+{
+    auth_ensure_column('bills', 'checkout_request_id', 'VARCHAR(100) NULL AFTER order_source');
+
+    $statement = db()->prepare(
+        'SELECT INDEX_NAME FROM information_schema.statistics
+         WHERE table_schema = DATABASE() AND table_name = :table_name AND index_name = :index_name
+         LIMIT 1'
+    );
+    $statement->execute([
+        'table_name' => 'bills',
+        'index_name' => 'uniq_bills_store_checkout_request',
+    ]);
+    if (!$statement->fetch()) {
+        db()->exec(
+            'ALTER TABLE bills ADD UNIQUE INDEX uniq_bills_store_checkout_request (store_id, checkout_request_id)'
+        );
+    }
+}
+
+function pos_find_bill_by_checkout_request(string $storeId, string $checkoutRequestId): ?string
+{
+    if ($checkoutRequestId === '') return null;
+    $statement = db()->prepare(
+        'SELECT id FROM bills WHERE store_id=:store_id AND checkout_request_id=:checkout_request_id LIMIT 1'
+    );
+    $statement->execute([
+        'store_id' => $storeId,
+        'checkout_request_id' => $checkoutRequestId,
+    ]);
+    $id = $statement->fetchColumn();
+    return $id === false ? null : (string) $id;
+}
+
 function pos_ensure_bar_workflow_columns(): void
 {
     $columnStatement = db()->prepare(
@@ -474,6 +508,7 @@ $_GET['storeId'] = $posStoreId;
 $body['storeId'] = $posStoreId;
 if ($resource === 'bills') pos_ensure_bill_order_source_column();
 if ($resource === 'bills') pos_ensure_bill_discount_columns();
+if ($resource === 'bills') pos_ensure_bill_checkout_request_column();
 if ($method === 'POST' && in_array($resource, ['kitchen-jobs', 'bar-jobs'], true)) {
     pos_ensure_category_preparation_print_column();
 }
@@ -570,12 +605,21 @@ if ($method === 'POST' && $resource === 'bills') {
     if (($user['role'] ?? '') === 'bartender' && !auth_has_permission($user, 'bar.checkout')) {
         respond_error('Tài khoản pha chế chưa được cấp quyền bấm bill', 403);
     }
+    $checkoutRequestId = trim((string) ($body['checkoutRequestId'] ?? ''));
+    if ($checkoutRequestId !== '' && !preg_match('/^[A-Za-z0-9_-]{16,100}$/', $checkoutRequestId)) {
+        respond_error('Mã yêu cầu thanh toán không hợp lệ', 422);
+    }
+    $existingBillId = pos_find_bill_by_checkout_request($posStoreId, $checkoutRequestId);
+    if ($existingBillId !== null) {
+        respond_ok(['id' => $existingBillId, 'idempotent' => true], 200);
+    }
+
     db()->beginTransaction();
     try {
         $id = pos_next_bill_id($posStoreId);
         db()->prepare(
-            'INSERT INTO bills (id,store_id,table_number,note,total,subtotal_before_surcharge,surcharge_total,discount_type,discount_value,discount_amount,status,payment_method,cash_received,change_amount,shift_id,cashier_id,cashier_name,order_source)
-             VALUES (:id,:store_id,:table_number,:note,:total,:subtotal,:surcharge_total,:discount_type,:discount_value,:discount_amount,:status,:payment_method,:cash_received,:change_amount,:shift_id,:cashier_id,:cashier_name,:order_source)'
+            'INSERT INTO bills (id,store_id,table_number,note,total,subtotal_before_surcharge,surcharge_total,discount_type,discount_value,discount_amount,status,payment_method,cash_received,change_amount,shift_id,cashier_id,cashier_name,order_source,checkout_request_id)
+             VALUES (:id,:store_id,:table_number,:note,:total,:subtotal,:surcharge_total,:discount_type,:discount_value,:discount_amount,:status,:payment_method,:cash_received,:change_amount,:shift_id,:cashier_id,:cashier_name,:order_source,:checkout_request_id)'
         )->execute([
             'id' => $id, 'store_id' => trim((string) ($body['storeId'] ?? 'cafe')), 'table_number' => trim((string) ($body['tableNumber'] ?? '')),
             'note' => trim((string) ($body['note'] ?? '')), 'total' => (float) ($body['total'] ?? 0),
@@ -591,10 +635,18 @@ if ($method === 'POST' && $resource === 'bills') {
             'shift_id' => trim((string) ($body['shiftId'] ?? '')) ?: null, 'cashier_id' => trim((string) ($body['cashierId'] ?? '')) ?: null,
             'cashier_name' => trim((string) ($body['cashierName'] ?? '')) ?: null,
             'order_source' => ($user['role'] ?? '') === 'bartender' ? 'bar' : 'pos',
+            'checkout_request_id' => $checkoutRequestId !== '' ? $checkoutRequestId : null,
         ]);
         pos_replace_bill_children($id, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
         db()->commit();
-    } catch (Throwable $exception) { if (db()->inTransaction()) db()->rollBack(); throw $exception; }
+    } catch (Throwable $exception) {
+        if (db()->inTransaction()) db()->rollBack();
+        $existingBillId = pos_find_bill_by_checkout_request($posStoreId, $checkoutRequestId);
+        if ($existingBillId !== null) {
+            respond_ok(['id' => $existingBillId, 'idempotent' => true], 200);
+        }
+        throw $exception;
+    }
     realtime_publish($posStoreId, 'bill-created', ['id' => $id]);
     respond_ok(['id' => $id], 201);
 }
@@ -874,7 +926,36 @@ if (in_array($resource, ['kitchen-jobs','bar-jobs'], true)) {
         $select=$prefix==='bar'?"{$jobTable}.*,COALESCE((SELECT cashier_name FROM bills WHERE bills.id={$jobTable}.bill_id LIMIT 1),'') AS created_by_name":"{$jobTable}.*";
         $statement=db()->prepare("SELECT {$select} FROM {$jobTable} WHERE store_id=:store_id AND {$where} ORDER BY {$order},id{$limit}");$statement->execute(['store_id'=>trim((string)($_GET['storeId']??''))]);$rows=$statement->fetchAll();$ids=array_map(static fn(array $r):string=>(string)$r['id'],$rows);$items=pos_job_items($itemTable,$ids);pos_polling_response(array_map(static fn(array $row):array=>['id'=>(string)$row['id'],'storeId'=>(string)$row['store_id'],'orderKey'=>(string)$row['table_number'],'tableNumber'=>(string)$row['table_number'],'sourceBillId'=>$row['bill_id']?:'','createdByName'=>(string)($row['created_by_name']??''),'items'=>$items[(string)$row['id']]??[],'status'=>(string)$row['status'],'workflowStatus'=>(string)($row['workflow_status']??'new'),'createdAt'=>pos_timestamp($row['created_at']),'workflowUpdatedAt'=>pos_timestamp($row['workflow_updated_at']??null),'collectedAt'=>pos_timestamp($row['collected_at']??null),'printedAt'=>pos_timestamp($row['printed_at']),'printedByTerminal'=>$row['terminal_name']?:''],$rows));
     }
-    if($method==='POST'){$id=uuidv4();$items=is_array($body['items']??null)?pos_filter_preparation_print_items($posStoreId,$body['items']):[];if($items===[])respond_ok(['id'=>'','skipped'=>true],200);db()->beginTransaction();try{db()->prepare("INSERT INTO {$jobTable} (id,store_id,bill_id,table_number,status,note) VALUES (:id,:store_id,:bill_id,:table_number,'pending',:note)")->execute(['id'=>$id,'store_id'=>trim((string)($body['storeId']??'')),'bill_id'=>trim((string)($body['sourceBillId']??''))?:null,'table_number'=>trim((string)($body['tableNumber']??'')),'note'=>trim((string)($body['orderKey']??''))]);$s=db()->prepare("INSERT INTO {$itemTable} (job_id,menu_id,name,quantity,note) VALUES (:job_id,:menu_id,:name,:quantity,:note)");foreach($items as $item)$s->execute(['job_id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??''))]);db()->commit();}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}realtime_publish($posStoreId,$prefix.'-jobs-updated',['id'=>$id,'action'=>'created']);respond_ok(['id'=>$id],201);}
+    if($method==='POST'){
+        $sourceBillId=trim((string)($body['sourceBillId']??''));
+        if($prefix==='bar'&&$sourceBillId!==''){
+            $existing=db()->prepare('SELECT id FROM bar_print_jobs WHERE store_id=:store_id AND bill_id=:bill_id LIMIT 1');
+            $existing->execute(['store_id'=>$posStoreId,'bill_id'=>$sourceBillId]);
+            $existingId=$existing->fetchColumn();
+            if($existingId!==false) respond_ok(['id'=>(string)$existingId,'idempotent'=>true],200);
+        }
+        $id=uuidv4();
+        $items=is_array($body['items']??null)?pos_filter_preparation_print_items($posStoreId,$body['items']):[];
+        if($items===[]) respond_ok(['id'=>'','skipped'=>true],200);
+        db()->beginTransaction();
+        try{
+            db()->prepare("INSERT INTO {$jobTable} (id,store_id,bill_id,table_number,status,note) VALUES (:id,:store_id,:bill_id,:table_number,'pending',:note)")->execute([
+                'id'=>$id,
+                'store_id'=>trim((string)($body['storeId']??'')),
+                'bill_id'=>$sourceBillId?:null,
+                'table_number'=>trim((string)($body['tableNumber']??'')),
+                'note'=>trim((string)($body['orderKey']??'')),
+            ]);
+            $s=db()->prepare("INSERT INTO {$itemTable} (job_id,menu_id,name,quantity,note) VALUES (:job_id,:menu_id,:name,:quantity,:note)");
+            foreach($items as $item)$s->execute(['job_id'=>$id,'menu_id'=>trim((string)($item['menuId']??'')),'name'=>trim((string)($item['name']??'')),'quantity'=>(float)($item['quantity']??0),'note'=>trim((string)($item['note']??''))]);
+            db()->commit();
+        }catch(Throwable $e){
+            if(db()->inTransaction()) db()->rollBack();
+            throw $e;
+        }
+        realtime_publish($posStoreId,$prefix.'-jobs-updated',['id'=>$id,'action'=>'created']);
+        respond_ok(['id'=>$id],201);
+    }
     if($method==='PATCH'){
         $id=trim((string)($body['id']??''));pos_assert_record_store($jobTable,$id,$user,$posStoreId);
         if($prefix==='bar'&&array_key_exists('workflowStatus',$body)){

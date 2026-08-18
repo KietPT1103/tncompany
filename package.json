@@ -14,7 +14,8 @@
     "report:social-listening": "php scripts/social-listening-report.php",
     "worker:tiktok-social-listening": "php scripts/tiktok-social-listening-worker.php --daemon 5",
     "print:bar-agent": "node scripts/bar-print-agent.cjs",
-    "print:bar-agent:test": "node scripts/bar-print-agent.cjs --test --once"
+    "print:bar-agent:test": "node scripts/bar-print-agent.cjs --test --once",
+    "test:bar-print-agent": "node --test scripts/bar-print-agent.test.cjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
