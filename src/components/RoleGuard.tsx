@@ -51,14 +51,14 @@ export default function RoleGuard({
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600"></div>
       </div>
     );
   }
 
   if (!user) return null;
 
-  if ((!requiresPermission && !passesRoleCheck) || !passesPermissionCheck) {
+  if (!passesRoleCheck || !passesPermissionCheck) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center p-8 bg-white rounded-lg shadow-md">

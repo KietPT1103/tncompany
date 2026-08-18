@@ -18,6 +18,7 @@ import {
   Coffee,
   FileText,
   FileSpreadsheet,
+  Gauge,
   KeyRound,
   LogOut,
   Menu,
@@ -59,10 +60,11 @@ const isNavItemActive = (pathname: string, item: NavItem) =>
 
 const standaloneNavItems: NavItem[] = [
   {
-    href: "/",
-    label: "Dashboard",
-    icon: Calculator,
+    href: "/overview",
+    label: "Tổng quan",
+    icon: Gauge,
     permission: "dashboard.access",
+    roles: ["admin"],
   },
   {
     href: "/activity-logs",
@@ -79,6 +81,21 @@ const standaloneNavItems: NavItem[] = [
 ];
 
 const navGroups: NavGroup[] = [
+  {
+    key: "dashboard",
+    label: "Sổ quỹ",
+    icon: Gauge,
+    items: [
+      {
+        href: "/cost",
+        label: "Tính cost",
+        icon: Calculator,
+        permission: "dashboard.access",
+        roles: ["admin"],
+        exact: true,
+      },
+    ],
+  },
   {
     key: "billing",
     label: "Hóa đơn",

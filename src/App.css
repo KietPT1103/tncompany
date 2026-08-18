@@ -33,7 +33,51 @@ a {
     #055844 48%,
     var(--sidebar-emerald-deep) 100%
   );
-  scrollbar-color: rgba(246, 200, 95, 0.42) transparent;
+}
+
+@supports (-moz-appearance: none) {
+  .admin-sidebar > nav {
+    scrollbar-color: rgba(246, 200, 95, 0.42) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+.admin-sidebar > nav::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.admin-sidebar > nav::-webkit-scrollbar-button,
+.admin-sidebar > nav::-webkit-scrollbar-button:single-button,
+.admin-sidebar > nav::-webkit-scrollbar-button:vertical:decrement,
+.admin-sidebar > nav::-webkit-scrollbar-button:vertical:increment,
+.admin-sidebar > nav::-webkit-scrollbar-button:horizontal:decrement,
+.admin-sidebar > nav::-webkit-scrollbar-button:horizontal:increment {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  border: 0;
+  background: transparent;
+  -webkit-appearance: none;
+}
+
+.admin-sidebar > nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-sidebar > nav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(246, 200, 95, 0.42);
+}
+
+.admin-sidebar > nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(246, 200, 95, 0.68);
+}
+
+.admin-sidebar > nav::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .admin-sidebar__gold-action {

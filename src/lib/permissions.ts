@@ -12,10 +12,10 @@ type PermissionDefinition = {
 export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   {
     id: "dashboard.access",
-    label: "Dashboard",
-    description: "Xem trang dashboard tong hop.",
+    label: "Sổ quỹ",
+    description: "Xem trang sổ quỹ và nhập báo cáo.",
     category: "Tong quan",
-    path: "/",
+    path: "/cost",
     hidden: true,
   },
   {
@@ -398,7 +398,6 @@ export function canAccessPath(
 }
 
 const DEFAULT_ROUTE_ORDER = [
-  "/",
   "/pos",
   "/sample-bills/products",
   "/payroll-estimate",
@@ -427,6 +426,10 @@ export function getDefaultRouteForUser(user: AppUser | null | undefined) {
 
   if (user.role === "bartender") {
     return "/bar";
+  }
+
+  if (user.role === "admin") {
+    return "/admin/overview";
   }
 
   const matchedPath = DEFAULT_ROUTE_ORDER.find((path) => canAccessPath(user, path));

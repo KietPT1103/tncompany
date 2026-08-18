@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   Bill,
   cancelBill,
@@ -23,17 +22,20 @@ import { getOpenShiftByCashier } from "@/services/shiftService";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
+import { Tooltip } from "@/components/ui/Tooltip";
 import {
   ArrowDownLeft,
   ArrowDown,
-  ArrowLeft,
   ArrowUp,
   ArrowUpRight,
-  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Edit3,
   Filter,
   HandCoins,
+  Loader2,
   Plus,
   RefreshCcw,
   ReceiptText,
@@ -45,6 +47,15 @@ import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import { hasPermission } from "@/lib/permissions";
+import {
+  BillDatePreset,
+  getBillDatePresetRange,
+} from "./billDatePresets";
+import { paginateItems } from "./billPagination";
+import {
+  getBillActionVisibility,
+  shouldActivateBillRow,
+} from "./billRowInteraction";
 
 type EditFormState = {
   tableNumber: string;
@@ -72,6 +83,17 @@ type VoucherEditFormState = {
 type SortDirection = "asc" | "desc";
 type BillSortKey = "time" | "code" | "table" | "total" | "status";
 type VoucherSortKey = "time" | "code" | "type" | "category" | "person" | "amount";
+
+const BILL_PAGE_SIZES = [10, 20, 50] as const;
+const BILL_DATE_PRESET_OPTIONS: readonly SelectBoxOption<
+  BillDatePreset | "custom"
+>[] = [
+  { value: "today", label: "Hôm nay" },
+  { value: "yesterday", label: "Hôm qua" },
+  { value: "last7Days", label: "7 ngày qua" },
+  { value: "thisMonth", label: "Tháng này" },
+  { value: "previousMonth", label: "Tháng trước" },
+];
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { minimumFractionDigits: 0 });
@@ -114,6 +136,75 @@ const getPaymentMethodLabel = (bill: Bill) =>
 const compareText = (left: string, right: string) =>
   left.localeCompare(right, "vi", { numeric: true, sensitivity: "base" });
 
+function BillActionButtons({
+  bill,
+  canEdit,
+  canCancel,
+  useSoftCancel,
+  deletingId,
+  onEdit,
+  onCancel,
+}: {
+  bill: Bill;
+  canEdit: boolean;
+  canCancel: boolean;
+  useSoftCancel: boolean;
+  deletingId: string | null;
+  onEdit: (bill: Bill) => void;
+  onCancel: (bill: Bill) => void;
+}) {
+  const isCancelled = bill.status === "cancelled";
+  const isDeleting = deletingId === bill.id;
+  const cancelLabel = useSoftCancel ? "Hủy" : "Xóa";
+  const { showEdit, showCancel, showColumn } = getBillActionVisibility(
+    canEdit,
+    canCancel,
+    isCancelled,
+  );
+
+  if (!showColumn) return null;
+
+  return (
+    <div className="flex items-center justify-center gap-2">
+      {showEdit && (
+        <Button
+          variant="outline"
+          size="icon"
+          className="relative z-20 h-11 w-11 border-blue-200 bg-white text-blue-700 shadow-none transition-[background-color,border-color,color,transform] duration-150 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-600 focus-visible:ring-blue-500 active:bg-blue-100 xl:h-9 xl:w-9"
+          onClick={(event) => {
+            event.stopPropagation();
+            onEdit(bill);
+          }}
+          title={`Sửa hóa đơn ${bill.id}`}
+          aria-label={`Sửa hóa đơn ${bill.id}`}
+        >
+          <Edit3 className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
+      {showCancel && (
+        <Button
+          variant="outline"
+          size="icon"
+          className="relative z-20 h-11 w-11 border-blue-200 bg-white text-blue-700 shadow-none transition-[background-color,border-color,color,transform] duration-150 hover:border-red-500 hover:bg-red-500 hover:text-white focus-visible:ring-red-500 active:bg-red-600 xl:h-9 xl:w-9"
+          onClick={(event) => {
+            event.stopPropagation();
+            onCancel(bill);
+          }}
+          disabled={isDeleting}
+          title={`${cancelLabel} hóa đơn ${bill.id}`}
+          aria-label={`${cancelLabel} hóa đơn ${bill.id}`}
+        >
+          {isDeleting ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          )}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function BillsPage() {
   const { role, user } = useAuth();
   const { storeId: selectedStoreId } = useStore();
@@ -144,9 +235,12 @@ export default function BillsPage() {
   const [voucherSearch, setVoucherSearch] = useState("");
   const [billSortKey, setBillSortKey] = useState<BillSortKey>("time");
   const [billSortDirection, setBillSortDirection] = useState<SortDirection>("desc");
+  const [billPage, setBillPage] = useState(1);
+  const [billPageSize, setBillPageSize] = useState(10);
   const [voucherSortKey, setVoucherSortKey] = useState<VoucherSortKey>("time");
   const [voucherSortDirection, setVoucherSortDirection] =
     useState<SortDirection>("desc");
+  const [datePreset, setDatePreset] = useState<BillDatePreset | "custom">("today");
   const [startDate, setStartDate] = useState(todayInput);
   const [endDate, setEndDate] = useState(todayInput);
   const [editing, setEditing] = useState<Bill | null>(null);
@@ -263,6 +357,21 @@ export default function BillsPage() {
       return compared * direction;
     });
   }, [billSearch, billSortDirection, billSortKey, bills]);
+
+  const billPagination = useMemo(
+    () => paginateItems(filteredBills, billPage, billPageSize),
+    [billPage, billPageSize, filteredBills],
+  );
+
+  useEffect(() => {
+    setBillPage(1);
+  }, [billPageSize, billSearch, billSortDirection, billSortKey, endDate, startDate, storeId]);
+
+  useEffect(() => {
+    if (billPage !== billPagination.page) {
+      setBillPage(billPagination.page);
+    }
+  }, [billPage, billPagination.page]);
 
   const activeBills = useMemo(
     () => filteredBills.filter((bill) => bill.status !== "cancelled"),
@@ -495,25 +604,19 @@ export default function BillsPage() {
     }
   };
 
-  const resetToday = () => {
-    const today = formatDateInput(new Date());
-    setStartDate(today);
-    setEndDate(today);
+  const applyDatePreset = (preset: BillDatePreset) => {
+    const range = getBillDatePresetRange(preset);
+    setDatePreset(preset);
+    setStartDate(formatDateInput(range.start));
+    setEndDate(formatDateInput(range.end));
   };
 
   return (
     <RoleGuard permission="bills.access">
-      <main className="min-h-screen bg-slate-50 p-6 md:p-10">
-        <div className="mx-auto max-w-7xl space-y-6">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <Link
-                href="/"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
-                title="Trang chủ"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
+      <main className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-[1600px] space-y-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
               <div>
                 <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-sky-700">
                   <ReceiptText className="h-4 w-4" />
@@ -525,89 +628,78 @@ export default function BillsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => resetVoucherForm("income")}
-              >
-                <Plus className="h-4 w-4" />
-                Lập phiếu thu
-              </Button>
-              <Button
-                className="gap-2 bg-rose-600 hover:bg-rose-700"
-                onClick={() => resetVoucherForm("expense")}
-              >
-                <Plus className="h-4 w-4" />
-                Lập phiếu chi
-              </Button>
-              <Button variant="outline" className="gap-2" onClick={resetToday}>
-                <CalendarRange className="h-4 w-4" />
-                Hôm nay
-              </Button>
-              <Button className="gap-2" onClick={loadData} isLoading={loading}>
-                <RefreshCcw className="h-4 w-4" />
-                Tải lại
-              </Button>
+            <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[auto_auto] xl:flex xl:items-center">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  size="sm"
+                  className="h-10 w-full gap-1.5 bg-emerald-800 px-3 text-sm font-semibold text-white shadow-[0_2px_5px_rgba(6,78,59,0.22)] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-emerald-700 hover:shadow-[0_3px_8px_rgba(6,78,59,0.28)] focus-visible:ring-emerald-700 active:scale-[0.98] sm:h-9 motion-reduce:transition-none"
+                  onClick={() => resetVoucherForm("income")}
+                >
+                  <Plus className="h-4 w-4 text-[#F6C85F]" aria-hidden="true" />
+                  Lập phiếu thu
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-10 w-full gap-1.5 bg-red-600 px-3 text-sm font-semibold text-white shadow-[0_2px_5px_rgba(185,28,28,0.22)] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-red-700 hover:shadow-[0_3px_8px_rgba(185,28,28,0.28)] focus-visible:ring-red-600 active:scale-[0.98] sm:h-9 motion-reduce:transition-none"
+                  onClick={() => resetVoucherForm("expense")}
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Lập phiếu chi
+                </Button>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] gap-2 sm:grid-cols-[auto_2.25rem]">
+                <SelectBox<BillDatePreset | "custom">
+                  value={datePreset}
+                  options={BILL_DATE_PRESET_OPTIONS}
+                  onValueChange={(preset) => {
+                    if (preset !== "custom") applyDatePreset(preset);
+                  }}
+                  ariaLabel="Lọc hóa đơn theo thời gian"
+                  placeholder="Tùy chỉnh"
+                  className="w-full sm:w-32"
+                  triggerClassName="h-10 min-w-32 border-emerald-700 bg-white text-emerald-900 shadow-[0_2px_5px_rgba(6,78,59,0.12)] hover:border-emerald-800 hover:bg-emerald-50 hover:text-emerald-950 focus-visible:ring-emerald-600 sm:h-9 [&>svg]:text-emerald-700"
+                />
+                <Tooltip content="Tải lại dữ liệu" side="bottom" className="h-10 w-10 sm:h-9 sm:w-9">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 border-slate-200 bg-white text-emerald-800 shadow-none transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-emerald-300 hover:bg-emerald-50 focus-visible:ring-emerald-600 active:scale-[0.96] sm:h-9 sm:w-9 motion-reduce:transition-none"
+                    onClick={loadData}
+                    disabled={loading}
+                    aria-label="Tải lại dữ liệu"
+                  >
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </Button>
+                </Tooltip>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                    <Filter className="h-5 w-5 text-sky-600" />
-                    Lọc
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Tìm theo bàn / mã
-                    </label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                      <Input
-                        placeholder="Nhập mã bill, bàn hoặc ghi chú"
-                        className="pl-9"
-                        value={billSearch}
-                        onChange={(e) => setBillSearch(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3">
-                    <Input
-                      type="date"
-                      label="Từ ngày"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                    <Input
-                      type="date"
-                      label="Đến ngày"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
+          <div className="space-y-5">
+            <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+              <Card className="h-full">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg">Tổng quan</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-emerald-700">
+                <CardContent className="grid gap-3 sm:grid-cols-2">
+                  <div className="relative flex items-center justify-between overflow-hidden rounded-lg border border-blue-100 bg-gradient-to-b from-blue-100 via-blue-50 to-white px-5 py-4">
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-y-4 left-0 w-1.5 rounded-r-full bg-blue-600"
+                    />
+                    <div className="min-w-0 pl-1">
+                      <p className="text-xs font-semibold uppercase text-blue-700">
                         Tổng thu (không tính bill hủy)
                       </p>
-                      <p className="text-xl font-bold text-emerald-800">
+                      <p className="mt-2 text-2xl font-extrabold tabular-nums text-blue-900">
                         {formatCurrency(totalAmount)} VND
                       </p>
                     </div>
-                    <ReceiptText className="h-6 w-6 text-emerald-600" />
+                    <ReceiptText className="h-6 w-6 shrink-0 text-blue-600" />
                   </div>
                   <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 text-sm">
                     <div className="flex items-center justify-between text-emerald-700">
@@ -629,7 +721,7 @@ export default function BillsPage() {
                       <span className="text-base font-bold">{formatCurrency(netDailyCashFlow)} VND</span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm text-slate-600">
+                  <div className="grid grid-cols-2 gap-3 text-sm text-slate-600 sm:col-span-2 sm:grid-cols-4">
                     <div className="rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm">
                       <p className="text-xs font-semibold text-slate-500">Số bill hợp lệ</p>
                       <p className="text-lg font-bold text-slate-900">{activeBills.length}</p>
@@ -658,9 +750,55 @@ export default function BillsPage() {
                 </CardContent>
               </Card>
 
+              <Card className="h-full">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                    <Filter className="h-5 w-5 text-sky-600" />
+                    Lọc
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Tìm theo bàn / mã
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <Input
+                        placeholder="Nhập mã bill, bàn hoặc ghi chú"
+                        className="pl-9"
+                        value={billSearch}
+                        onChange={(e) => setBillSearch(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input
+                      type="date"
+                      label="Từ ngày"
+                      value={startDate}
+                      onChange={(event) => {
+                        setDatePreset("custom");
+                        setStartDate(event.target.value);
+                      }}
+                    />
+                    <Input
+                      type="date"
+                      label="Đến ngày"
+                      value={endDate}
+                      onChange={(event) => {
+                        setDatePreset("custom");
+                        setEndDate(event.target.value);
+                      }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
               <Card className="overflow-hidden">
                 <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
                   <CardTitle className="flex items-center gap-2 text-lg">
@@ -699,9 +837,12 @@ export default function BillsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-100 text-slate-600">
+                  <div
+                    key={`bill-table-${billPagination.page}`}
+                    className="admin-list-scrollbar hidden max-h-[min(74vh,880px)] overflow-auto xl:block"
+                  >
+                    <table className="w-full min-w-[960px] text-sm">
+                      <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-sm">
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold">Mã</th>
                           <th className="px-4 py-3 text-left font-semibold">Thời gian</th>
@@ -710,7 +851,9 @@ export default function BillsPage() {
                           <th className="px-4 py-3 text-right font-semibold">Tổng tiền</th>
                           <th className="px-4 py-3 text-center font-semibold">Trạng thái</th>
                           {(canEditBill || canCancelBill) && (
-                            <th className="px-4 py-3 text-center font-semibold">Hành động</th>
+                            <th className="sticky right-0 z-20 w-28 min-w-28 border-l border-slate-200 bg-slate-100 px-3 py-3 text-center font-semibold shadow-[-8px_0_14px_-14px_rgba(15,23,42,0.45)]">
+                              Hành động
+                            </th>
                           )}
                         </tr>
                       </thead>
@@ -718,7 +861,7 @@ export default function BillsPage() {
                         {loading ? (
                           <tr>
                             <td
-                              colSpan={(canEditBill || canCancelBill) ? 7 : 6}
+                              colSpan={canEditBill || canCancelBill ? 7 : 6}
                               className="px-4 py-8 text-center"
                             >
                               Đang tải danh sách...
@@ -727,25 +870,43 @@ export default function BillsPage() {
                         ) : filteredBills.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={(canEditBill || canCancelBill) ? 7 : 6}
+                              colSpan={canEditBill || canCancelBill ? 7 : 6}
                               className="px-4 py-8 text-center text-slate-500"
                             >
                               Không có hóa đơn nào trong khoảng này.
                             </td>
                           </tr>
                         ) : (
-                          filteredBills.map((bill) => {
+                          billPagination.items.map((bill) => {
                             const created = getTimestampDate(bill);
                             const isCancelled = bill.status === "cancelled";
 
                             return (
                               <tr
                                 key={bill.id}
-                                className={
-                                  isCancelled
-                                    ? "bg-rose-50/30 text-slate-500"
-                                    : "hover:bg-slate-50"
-                                }
+                                className={`group ${
+                                  isCancelled ? "bg-rose-50/30 text-rose-950" : ""
+                                } ${
+                                  canEditBill
+                                    ? "cursor-pointer transition-colors hover:bg-emerald-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600"
+                                    : !isCancelled
+                                      ? "hover:bg-slate-50"
+                                      : ""
+                                }`}
+                                onClick={canEditBill ? () => openEdit(bill) : undefined}
+                                onKeyDown={canEditBill ? (event) => {
+                                  if (
+                                    shouldActivateBillRow(
+                                      event.key,
+                                      event.target === event.currentTarget,
+                                    )
+                                  ) {
+                                    event.preventDefault();
+                                    openEdit(bill);
+                                  }
+                                } : undefined}
+                                tabIndex={canEditBill ? 0 : undefined}
+                                aria-label={canEditBill ? `Chỉnh sửa hóa đơn ${bill.id}` : undefined}
                               >
                                 <td className="px-4 py-3 font-mono text-xs">
                                   <div>{bill.id}</div>
@@ -780,32 +941,22 @@ export default function BillsPage() {
                                 </td>
 
                                 {(canEditBill || canCancelBill) && (
-                                  <td className="px-4 py-3 text-center">
-                                    <div className="flex items-center justify-center gap-2">
-                                      {canEditBill && (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="gap-1"
-                                          onClick={() => openEdit(bill)}
-                                        >
-                                          <Edit3 className="h-4 w-4" />
-                                          Sửa
-                                        </Button>
-                                      )}
-                                      {canCancelBill && !isCancelled && (
-                                        <Button
-                                          variant="destructive"
-                                          size="sm"
-                                          className="gap-1"
-                                          onClick={() => handleCancelBill(bill)}
-                                          isLoading={deletingId === bill.id}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                          {useSoftCancel ? "Hủy" : "Xóa"}
-                                        </Button>
-                                      )}
-                                    </div>
+                                  <td
+                                    className={`sticky right-0 z-[5] w-28 min-w-28 border-l px-3 py-3 text-center shadow-[-8px_0_14px_-14px_rgba(15,23,42,0.35)] transition-colors ${
+                                      isCancelled
+                                        ? "border-rose-100 bg-rose-50 group-hover:bg-rose-50"
+                                        : "border-slate-100 bg-white group-hover:bg-emerald-50"
+                                    }`}
+                                  >
+                                    <BillActionButtons
+                                      bill={bill}
+                                      canEdit={canEditBill}
+                                      canCancel={canCancelBill}
+                                      useSoftCancel={useSoftCancel}
+                                      deletingId={deletingId}
+                                      onEdit={openEdit}
+                                      onCancel={handleCancelBill}
+                                    />
                                   </td>
                                 )}
                               </tr>
@@ -814,6 +965,152 @@ export default function BillsPage() {
                         )}
                       </tbody>
                     </table>
+                  </div>
+                  <div
+                    key={`bill-cards-${billPagination.page}`}
+                    className="admin-list-scrollbar max-h-[min(74vh,880px)] space-y-3 overflow-y-auto p-3 xl:hidden"
+                  >
+                    {loading ? (
+                      <p className="py-8 text-center text-sm text-slate-500">Đang tải danh sách...</p>
+                    ) : filteredBills.length === 0 ? (
+                      <p className="py-8 text-center text-sm text-slate-500">
+                        Không có hóa đơn nào trong khoảng này.
+                      </p>
+                    ) : (
+                      billPagination.items.map((bill) => {
+                        const created = getTimestampDate(bill);
+                        const isCancelled = bill.status === "cancelled";
+
+                        return (
+                          <article
+                            key={bill.id}
+                            className={`group relative rounded-md border-b px-3 py-3 transition-colors last:border-b-0 ${
+                              isCancelled
+                                ? "border-rose-100 hover:bg-rose-50/60"
+                                : canEditBill
+                                  ? "border-slate-200 hover:bg-emerald-50/60"
+                                  : "border-slate-200"
+                            }`}
+                          >
+                            {canEditBill && (
+                              <button
+                                type="button"
+                                className="absolute inset-0 z-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600"
+                                onClick={() => openEdit(bill)}
+                                aria-label={`Chỉnh sửa hóa đơn ${bill.id}`}
+                              />
+                            )}
+                            <div className="pointer-events-none relative z-10 flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate font-mono text-xs font-semibold text-slate-900">
+                                  {bill.id}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {created ? created.toLocaleString("vi-VN") : "Chưa có"}
+                                </p>
+                              </div>
+                              {isCancelled ? (
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">
+                                  <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                                  Đã hủy
+                                </span>
+                              ) : (
+                                <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                                  Hợp lệ
+                                </span>
+                              )}
+                            </div>
+                            {bill.orderSource === "bar" ? (
+                              <span className="pointer-events-none relative z-10 mt-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                                Pha chế tạo
+                              </span>
+                            ) : null}
+                            <dl className="pointer-events-none relative z-10 mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <dt className="text-xs text-slate-500">Bàn</dt>
+                                <dd className="mt-0.5 font-semibold text-slate-900">
+                                  {bill.tableNumber || "Không rõ"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs text-slate-500">Thanh toán</dt>
+                                <dd className="mt-0.5 text-slate-700">{getPaymentMethodLabel(bill)}</dd>
+                              </div>
+                            </dl>
+                            <div className="pointer-events-none relative z-10 mt-3 flex items-center justify-between gap-3">
+                              <p className="text-base font-bold tabular-nums text-slate-900">
+                                {formatCurrency(bill.total)} VND
+                              </p>
+                              <div className="pointer-events-auto">
+                                <BillActionButtons
+                                  bill={bill}
+                                  canEdit={canEditBill}
+                                  canCancel={canCancelBill}
+                                  useSoftCancel={useSoftCancel}
+                                  deletingId={deletingId}
+                                  onEdit={openEdit}
+                                  onCancel={handleCancelBill}
+                                />
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                      <span aria-live="polite">
+                        {filteredBills.length > 0
+                          ? `Hiển thị ${billPagination.from}-${billPagination.to} trên ${filteredBills.length} hóa đơn`
+                          : "Không có hóa đơn"}
+                      </span>
+                      <label className="inline-flex items-center gap-2">
+                        <span>Số dòng</span>
+                        <select
+                          value={billPageSize}
+                          onChange={(event) => setBillPageSize(Number(event.target.value))}
+                          className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
+                          aria-label="Số hóa đơn mỗi trang"
+                        >
+                          {BILL_PAGE_SIZES.map((pageSize) => (
+                            <option key={pageSize} value={pageSize}>
+                              {pageSize}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <nav
+                      aria-label="Phân trang danh sách hóa đơn"
+                      className="flex items-center justify-between gap-2 sm:justify-end"
+                    >
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-11 w-11 sm:h-9 sm:w-9"
+                        onClick={() => setBillPage(billPagination.page - 1)}
+                        disabled={billPagination.page <= 1}
+                        title="Trang trước"
+                        aria-label="Trang hóa đơn trước"
+                      >
+                        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                      <span className="min-w-24 text-center text-sm font-medium tabular-nums text-slate-700">
+                        Trang {billPagination.page}/{billPagination.totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-11 w-11 sm:h-9 sm:w-9"
+                        onClick={() => setBillPage(billPagination.page + 1)}
+                        disabled={billPagination.page >= billPagination.totalPages}
+                        title="Trang sau"
+                        aria-label="Trang hóa đơn sau"
+                      >
+                        <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </nav>
                   </div>
                 </CardContent>
               </Card>
@@ -872,9 +1169,9 @@ export default function BillsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-100 text-slate-600">
+                  <div className="admin-list-scrollbar hidden max-h-[min(74vh,880px)] overflow-auto xl:block">
+                    <table className="min-w-[1080px] w-full text-sm">
+                      <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-sm">
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold">Mã phiếu</th>
                           <th className="px-4 py-3 text-left font-semibold">Thời gian</th>
@@ -962,12 +1259,13 @@ export default function BillsPage() {
                                 <td className="px-4 py-3 text-center">
                                   <Button
                                     variant="outline"
-                                    size="sm"
-                                    className="gap-1"
+                                    size="icon"
+                                    className="h-9 w-9 text-sky-800 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
                                     onClick={() => openEditVoucher(voucher)}
+                                    title={`Sửa phiếu ${voucher.code || voucher.id}`}
+                                    aria-label={`Sửa phiếu ${voucher.code || voucher.id}`}
                                   >
-                                    <Edit3 className="h-4 w-4" />
-                                    Sửa
+                                    <Edit3 className="h-4 w-4" aria-hidden="true" />
                                   </Button>
                                 </td>
                               </tr>
@@ -976,6 +1274,98 @@ export default function BillsPage() {
                         )}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="admin-list-scrollbar max-h-[min(74vh,880px)] space-y-3 overflow-y-auto p-3 xl:hidden">
+                    {loading ? (
+                      <p className="py-8 text-center text-sm text-slate-500">
+                        Đang tải danh sách phiếu...
+                      </p>
+                    ) : filteredVouchers.length === 0 ? (
+                      <p className="py-8 text-center text-sm text-slate-500">
+                        Chưa có phiếu thu/chi trong khoảng này.
+                      </p>
+                    ) : (
+                      filteredVouchers.map((voucher) => {
+                        const happenedAt = getVoucherDate(voucher);
+                        const isIncome = voucher.type === "income";
+
+                        return (
+                          <article key={voucher.id} className="border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate font-mono text-xs font-semibold text-slate-900">
+                                  {voucher.code || voucher.id}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {happenedAt ? happenedAt.toLocaleString("vi-VN") : "Chưa có"}
+                                </p>
+                              </div>
+                              <span
+                                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
+                                  isIncome
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-rose-100 text-rose-700"
+                                }`}
+                              >
+                                {isIncome ? (
+                                  <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                ) : (
+                                  <ArrowDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                                )}
+                                {isIncome ? "Phiếu thu" : "Phiếu chi"}
+                              </span>
+                            </div>
+                            <dl className="mt-3 space-y-2 text-sm">
+                              <div className="flex items-start justify-between gap-3">
+                                <dt className="text-slate-500">Nội dung</dt>
+                                <dd className="max-w-[65%] text-right font-semibold text-slate-900">
+                                  {voucher.category || "Không rõ"}
+                                  {voucher.note ? (
+                                    <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                                      {voucher.note}
+                                    </span>
+                                  ) : null}
+                                </dd>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <dt className="text-slate-500">Người nộp/nhận</dt>
+                                <dd className="text-right text-slate-700">{voucher.personName || "Khách lẻ"}</dd>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <dt className="text-slate-500">Dòng tiền</dt>
+                                <dd>
+                                  {voucher.includeInCashFlow !== false ? (
+                                    <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-700">
+                                      Có
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                                      Không
+                                    </span>
+                                  )}
+                                </dd>
+                              </div>
+                            </dl>
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              <p className={`text-base font-bold tabular-nums ${isIncome ? "text-emerald-700" : "text-rose-700"}`}>
+                                {isIncome ? "+" : "-"}
+                                {formatCurrency(voucher.amount || 0)} VND
+                              </p>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-11 w-11 text-sky-800 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                                onClick={() => openEditVoucher(voucher)}
+                                title={`Sửa phiếu ${voucher.code || voucher.id}`}
+                                aria-label={`Sửa phiếu ${voucher.code || voucher.id}`}
+                              >
+                                <Edit3 className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
                   </div>
                 </CardContent>
               </Card>

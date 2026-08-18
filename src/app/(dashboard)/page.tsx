@@ -292,15 +292,15 @@ export default function HomePage() {
   };
 
   return (
-    <div className="p-4 font-sans text-slate-800 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="px-4 py-5 font-sans text-slate-800 sm:px-6 lg:px-6 lg:py-6 2xl:px-8">
+      <div className="mx-auto max-w-[1440px] space-y-5 2xl:max-w-[1680px]">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
             <h1 className="font-smooch text-6xl text-emerald-800 font-bold tracking-tight">
-              Dashboard
+              Tính Cost &amp; Lợi nhuận
             </h1>
             <p className="mt-1 font-firasans text-slate-500">
-              Hiệu quả kinh doanh tại{" "}
+              Tổng hợp doanh thu, giá vốn và chi phí vận hành tại{" "}
               <span className="font-semibold text-[#d6ba5d]">
                 {storeName}
               </span>
@@ -446,8 +446,8 @@ export default function HomePage() {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-          <div className="space-y-6 xl:col-span-8">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12 2xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)]">
+          <div className="space-y-5 xl:col-span-8 2xl:col-span-1">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Card className="relative overflow-visible rounded-xl border border-slate-200 bg-white shadow-[6px_8px_14px_rgba(6,78,59,0.22)]">
                 <CardHeader className="border-b border-slate-100 px-5 py-4">
@@ -814,7 +814,7 @@ export default function HomePage() {
             ) : null}
           </div>
 
-          <div className="space-y-6 xl:col-span-4">
+          <div className="space-y-5 xl:col-span-4 2xl:col-span-1">
             <OperatingCostPanel
               revenue={revenue}
               materialCost={materialCost}

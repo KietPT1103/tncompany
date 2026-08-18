@@ -280,3 +280,54 @@ button:disabled {
     }
   }
 }
+
+.admin-list-scrollbar {
+  scrollbar-gutter: stable;
+}
+
+@supports (-moz-appearance: none) {
+  .admin-list-scrollbar {
+    scrollbar-color: #065f46 #ecfdf5;
+    scrollbar-width: thin;
+  }
+}
+
+.admin-list-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.admin-list-scrollbar::-webkit-scrollbar-button,
+.admin-list-scrollbar::-webkit-scrollbar-button:single-button,
+.admin-list-scrollbar::-webkit-scrollbar-button:vertical:decrement,
+.admin-list-scrollbar::-webkit-scrollbar-button:vertical:increment,
+.admin-list-scrollbar::-webkit-scrollbar-button:horizontal:decrement,
+.admin-list-scrollbar::-webkit-scrollbar-button:horizontal:increment {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  border: 0;
+  background: transparent;
+  -webkit-appearance: none;
+}
+
+.admin-list-scrollbar::-webkit-scrollbar-track {
+  border-left: 1px solid #d1fae5;
+  background: #ecfdf5;
+}
+
+.admin-list-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid #ecfdf5;
+  border-radius: 999px;
+  background: #065f46;
+}
+
+.admin-list-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #064e3b;
+}
+
+.admin-list-scrollbar::-webkit-scrollbar-corner {
+  background: #ecfdf5;
+}

@@ -11,6 +11,7 @@ import AccountManagementPage from "./app/(dashboard)/accounts-page";
 import ActivityLogsPage from "./app/(dashboard)/activity-logs/page";
 import CategoryManagementPage from "./app/(dashboard)/categories/page";
 import DashboardPage from "./app/(dashboard)/page";
+import OverviewPage from "./app/(dashboard)/overview/page";
 import InternalInvoicesPage from "./app/(dashboard)/internal-invoices/page";
 import PayrollPage from "./app/(dashboard)/payroll/page";
 import SalaryEstimatePage from "./app/(dashboard)/payroll-estimate-page";
@@ -122,6 +123,10 @@ export function App() {
           <Route element={<AdminLayout />}>
             <Route index element={<AdminIndexPage />} />
             <Route element={<ProtectedLayout />}>
+              <Route element={<ProtectedLayout allowedRoles={["admin"]} permission="dashboard.access" />}>
+                <Route path="cost" element={<DashboardPage />} />
+                <Route path="overview" element={<OverviewPage />} />
+              </Route>
               <Route path="bills" element={<BillsPage />} />
               <Route path="payroll-estimate" element={<SalaryEstimatePage />} />
               <Route path="reports" element={<ReportsPage />} />

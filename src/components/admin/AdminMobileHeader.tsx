@@ -22,7 +22,7 @@ export function AdminMobileHeader() {
     >
       <Link
         href="/"
-        aria-label="Về Dashboard"
+        aria-label="Về Tổng quan kinh doanh"
         className="flex h-12 w-[156px] items-center justify-center overflow-hidden rounded-md transition-[opacity,transform] duration-150 ease-out hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064E3B] active:scale-[0.96] motion-reduce:transition-none"
       >
         <img

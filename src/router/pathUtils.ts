@@ -1,6 +1,8 @@
 const ADMIN_PREFIX = "/admin";
 const ADMIN_PATHS = [
   "/",
+  "/cost",
+  "/overview",
   "/reports",
   "/cash-flow",
   "/bills",
