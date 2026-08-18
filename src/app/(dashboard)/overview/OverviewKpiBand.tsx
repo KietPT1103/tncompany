@@ -46,10 +46,14 @@ export default function OverviewKpiBand({
       </div>
 
       <div className="grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
-        <div className="min-w-0 px-5 py-5">
+        <div className="relative min-w-0 overflow-hidden bg-gradient-to-b from-blue-100 via-blue-50 to-white px-5 py-5">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-5 left-0 w-1.5 rounded-r-full bg-blue-600"
+          />
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-slate-600">Doanh thu thuần</p>
-            <CircleDollarSign className="h-5 w-5 shrink-0 text-emerald-700" aria-hidden="true" />
+            <CircleDollarSign className="h-5 w-5 shrink-0 text-blue-600" aria-hidden="true" />
           </div>
           <p className="mt-3 truncate text-3xl font-black leading-none tabular-nums text-[#B8860B]">{formatMoney(snapshot.totalRevenue)}</p>
           <div className="mt-2"><ChangeLabel value={revenueChange} /></div>
