@@ -92,7 +92,7 @@ export default function OverviewPage() {
               <Store className="h-4 w-4" aria-hidden="true" />
               <span>{storeName}</span>
             </div>
-            <h1 className="mt-2 text-2xl font-bold text-slate-950">Tổng quan kinh doanh</h1>
+            <h1 className="mt-2 font-smooch text-4xl font-bold leading-none text-emerald-800 sm:text-6xl">Tổng quan kinh doanh</h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-500">
               Theo dõi doanh thu, đơn hàng và hiệu quả bán món từ dữ liệu POS thực tế.
             </p>
