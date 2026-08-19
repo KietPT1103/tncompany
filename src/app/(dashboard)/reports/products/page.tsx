@@ -8,7 +8,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import * as XLSX from "xlsx";
 import {
   ChevronLeft,
   ChevronRight,
@@ -34,8 +33,9 @@ import { getAllProducts } from "@/services/products";
 import {
   aggregateProductSales,
   calculateProductSalesTotals,
-  createProductSalesWorkbook,
+  createProductSalesExportBytes,
   normalizeReportText,
+  PRODUCT_SALES_EXPORT_FILENAME,
   type ProductSalesRow,
 } from "./productSalesReport";
 
@@ -378,13 +378,21 @@ export default function ProductSalesReportPage() {
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
 
   const exportExcel = () => {
-    const workbook = createProductSalesWorkbook({
+    const bytes = createProductSalesExportBytes({
       rows: filteredRows,
       startDate: parseInputDate(startDate),
       endDate: parseInputDate(endDate),
       storeName,
     });
-    XLSX.writeFile(workbook, `BigProductBySaleByCat_${startDate}_${endDate}.xls`, { bookType: "biff8" });
+    const blob = new Blob([bytes], { type: "application/vnd.ms-excel" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = PRODUCT_SALES_EXPORT_FILENAME;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const exportPdf = () => window.print();

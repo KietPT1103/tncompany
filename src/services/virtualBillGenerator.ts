@@ -40,6 +40,7 @@ export type GenerateVirtualBillsInput = {
   minQuantity?: number;
   maxQuantity?: number;
   productRules?: Record<string, VirtualBillProductRule>;
+  fixedQuantities?: Record<string, number>;
 };
 
 export type VirtualBillFeasibility = {
@@ -82,6 +83,24 @@ const gcd = (a: number, b: number): number => {
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
+
+const normalizeFixedQuantity = (value: number | undefined) =>
+  Math.max(0, Math.round(Number(value) || 0));
+
+export function calculateFixedQuantityRevenue(
+  products: VirtualBillProduct[],
+  fixedQuantities: Record<string, number>,
+) {
+  return products.reduce((total, product) => {
+    if (product.isSelling === false) return total;
+
+    const productCode = product.product_code?.trim();
+    const price = Math.round(product.price || 0);
+    if (!productCode || price <= 0) return total;
+
+    return total + normalizeFixedQuantity(fixedQuantities[productCode]) * price;
+  }, 0);
+}
 
 const normalizeToStep = (value: number, step: number, mode: "down" | "up") => {
   if (step <= 1) return value;
@@ -426,9 +445,94 @@ const estimateBillCountFromOptions = (
   );
 };
 
+const analyzeFixedQuantityFeasibility = (
+  input: Omit<GenerateVirtualBillsInput, "date"> & {
+    fixedQuantities: Record<string, number>;
+  },
+): VirtualBillFeasibility => {
+  const normalizedRevenue = Math.round(input.totalRevenue);
+  const maxBillTotal = Math.max(
+    1,
+    Math.round(input.maxBillTotal ?? DEFAULT_MAX_BILL_TOTAL),
+  );
+  const selectedProducts = input.products.filter(
+    (product) => normalizeFixedQuantity(input.fixedQuantities[product.product_code]) > 0,
+  );
+  const pricedProducts = selectedProducts.filter(
+    (product) => Math.round(product.price || 0) > 0,
+  );
+  const expectedRevenue = calculateFixedQuantityRevenue(
+    input.products,
+    input.fixedQuantities,
+  );
+  const priceStep = pricedProducts.reduce(
+    (step, product) => gcd(step, Math.round(product.price || 0)),
+    0,
+  ) || 1;
+  const estimatedBillCount = expectedRevenue > 0
+    ? Math.max(1, Math.ceil(expectedRevenue / maxBillTotal))
+    : 0;
+  const hasOversizedTicket = pricedProducts.some(
+    (product) => Math.round(product.price || 0) > maxBillTotal,
+  );
+
+  if (expectedRevenue <= 0) {
+    return {
+      exact: false,
+      nearestTotal: null,
+      delta: 0,
+      estimatedBillCount: 0,
+      selectedProductCount: selectedProducts.length,
+      priceStep,
+      reason: "Hãy nhập số lượng vé có doanh thu.",
+    };
+  }
+
+  if (hasOversizedTicket) {
+    return {
+      exact: false,
+      nearestTotal: expectedRevenue,
+      delta: expectedRevenue - normalizedRevenue,
+      estimatedBillCount,
+      selectedProductCount: selectedProducts.length,
+      priceStep,
+      reason: "Có vé có đơn giá lớn hơn giới hạn tối đa của một bill.",
+    };
+  }
+
+  if (expectedRevenue !== normalizedRevenue) {
+    return {
+      exact: false,
+      nearestTotal: expectedRevenue,
+      delta: expectedRevenue - normalizedRevenue,
+      estimatedBillCount,
+      selectedProductCount: selectedProducts.length,
+      priceStep,
+      reason: "Tổng số lượng vé không khớp doanh thu mục tiêu.",
+    };
+  }
+
+  return {
+    exact: true,
+    nearestTotal: expectedRevenue,
+    delta: 0,
+    estimatedBillCount,
+    selectedProductCount: selectedProducts.length,
+    priceStep,
+    reason: "Doanh thu được tính đúng từ số lượng vé đã nhập.",
+  };
+};
+
 export function analyzeVirtualBillFeasibility(
   input: Omit<GenerateVirtualBillsInput, "date">
 ): VirtualBillFeasibility {
+  if (input.fixedQuantities) {
+    return analyzeFixedQuantityFeasibility({
+      ...input,
+      fixedQuantities: input.fixedQuantities,
+    });
+  }
+
   const normalizedRevenue = Math.round(input.totalRevenue);
   const { options, step } = createLineOptions(input);
   const selectedProductCount = new Set(
@@ -806,6 +910,131 @@ const attachZeroPriceItems = (
   });
 };
 
+type FixedQuantityLine = {
+  productCode: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+const generateFixedQuantityBills = (
+  input: GenerateVirtualBillsInput,
+  maxBillTotal: number,
+): VirtualBill[] => {
+  const fixedQuantities = input.fixedQuantities || {};
+  const normalizedRevenue = Math.round(input.totalRevenue);
+
+  if (!input.date) {
+    throw new VirtualBillGenerationError("Vui lòng chọn ngày tạo bill mẫu.");
+  }
+
+  const expectedRevenue = calculateFixedQuantityRevenue(
+    input.products,
+    fixedQuantities,
+  );
+  if (expectedRevenue <= 0) {
+    throw new VirtualBillGenerationError("Hãy nhập số lượng vé có doanh thu.");
+  }
+  if (expectedRevenue !== normalizedRevenue) {
+    throw new VirtualBillGenerationError(
+      "Tổng số lượng vé không khớp doanh thu mục tiêu.",
+      expectedRevenue,
+    );
+  }
+
+  const lines: FixedQuantityLine[] = [];
+  const freeLines: FixedQuantityLine[] = [];
+
+  input.products.forEach((product) => {
+    if (product.isSelling === false) return;
+
+    const productCode = product.product_code?.trim();
+    const productName = product.product_name?.trim();
+    const unitPrice = Math.round(product.price || 0);
+    const quantity = normalizeFixedQuantity(fixedQuantities[productCode]);
+    if (!productCode || !productName || quantity <= 0) return;
+
+    if (unitPrice === 0) {
+      freeLines.push({
+        productCode,
+        productName,
+        quantity,
+        unitPrice,
+        lineTotal: 0,
+      });
+      return;
+    }
+
+    const maxQuantityPerBill = Math.floor(maxBillTotal / unitPrice);
+    if (maxQuantityPerBill < 1) {
+      throw new VirtualBillGenerationError(
+        `Vé ${productName} có đơn giá vượt giới hạn một bill.`,
+      );
+    }
+
+    let remainingQuantity = quantity;
+    while (remainingQuantity > 0) {
+      const lineQuantity = Math.min(remainingQuantity, maxQuantityPerBill);
+      lines.push({
+        productCode,
+        productName,
+        quantity: lineQuantity,
+        unitPrice,
+        lineTotal: lineQuantity * unitPrice,
+      });
+      remainingQuantity -= lineQuantity;
+    }
+  });
+
+  const drafts: Array<{ total: number; items: VirtualBillItem[] }> = [];
+  [...lines]
+    .sort((left, right) => right.lineTotal - left.lineTotal)
+    .forEach((line) => {
+      const draft = drafts
+        .filter((candidate) => candidate.total + line.lineTotal <= maxBillTotal)
+        .sort((left, right) => right.total - left.total)[0];
+
+      if (draft) {
+        draft.total += line.lineTotal;
+        draft.items.push(line);
+        return;
+      }
+
+      drafts.push({
+        total: line.lineTotal,
+        items: [line],
+      });
+    });
+
+  if (drafts.length === 0) {
+    throw new VirtualBillGenerationError("Không có vé có doanh thu để tạo bill.");
+  }
+
+  freeLines.forEach((line) => {
+    const draft = drafts.sort((left, right) => left.total - right.total)[0];
+    draft.items.push(line);
+  });
+
+  const bills = drafts.map((draft, billIndex) => ({
+    billCode: String(billIndex + 1),
+    createdAt: buildBillTime(input.date, billIndex, drafts.length),
+    total: draft.total,
+    items: draft.items.sort((left, right) =>
+      left.productName.localeCompare(right.productName, "vi"),
+    ),
+  }));
+
+  const generatedTotal = bills.reduce((sum, bill) => sum + bill.total, 0);
+  if (generatedTotal !== normalizedRevenue) {
+    throw new VirtualBillGenerationError(
+      "Tổng bill tạo ra không khớp doanh thu đã chọn.",
+    );
+  }
+
+  return bills;
+};
+
 export function generateSampleBills(
   input: GenerateVirtualBillsInput
 ): VirtualBill[] {
@@ -814,6 +1043,10 @@ export function generateSampleBills(
     1,
     Math.round(input.maxBillTotal ?? DEFAULT_MAX_BILL_TOTAL)
   );
+
+  if (input.fixedQuantities) {
+    return generateFixedQuantityBills(input, maxBillTotal);
+  }
 
   if (!input.date) {
     throw new VirtualBillGenerationError("Vui lòng chọn ngày tạo bill mẫu.");

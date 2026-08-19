@@ -11,6 +11,7 @@ import {
 
 import {
   analyzeVirtualBillFeasibility,
+  calculateFixedQuantityRevenue,
   DEFAULT_MAX_BILL_TOTAL,
   generateSampleBills,
   type VirtualBill,
@@ -165,6 +166,9 @@ export default function SampleBillGeneratorPage({
 
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
+  const [farmQuantities, setFarmQuantities] = useState<Record<string, number>>(
+    {},
+  );
   const [rules, setRules] = useState<Record<string, VirtualBillProductRule>>(
     {},
   );
@@ -219,10 +223,15 @@ export default function SampleBillGeneratorPage({
             ]),
           ),
         );
+        setFarmQuantities(
+          Object.fromEntries(mapped.map((product) => [product.product_code, 0])),
+        );
         setSelectedCodes(
-          mapped
-            .filter((product) => product.isSelling !== false)
-            .map((product) => product.product_code),
+          billType === "farm"
+            ? []
+            : mapped
+                .filter((product) => product.isSelling !== false)
+                .map((product) => product.product_code),
         );
       } catch (error) {
         console.error(error);
@@ -271,35 +280,48 @@ export default function SampleBillGeneratorPage({
     );
     setSelectedCodes((current) => {
       const kept = current.filter((code) => eligibleCodes.includes(code));
+      if (billType === "farm") return kept;
       return kept.length > 0 ? kept : eligibleCodes;
     });
     setBills([]);
     setActiveBill("all");
-  }, [eligibleKey]);
+  }, [billType, eligibleKey]);
 
   const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes]);
   const selectedProducts = useMemo(
     () =>
       eligibleCatalog.filter((product) =>
-        selectedSet.has(product.product_code),
+        billType === "farm"
+          ? (farmQuantities[product.product_code] || 0) > 0
+          : selectedSet.has(product.product_code),
       ),
-    [eligibleCatalog, selectedSet],
+    [billType, eligibleCatalog, farmQuantities, selectedSet],
   );
   const minQuantity = Math.max(1, Number(form.minQuantity) || 4);
   const maxQuantity = Math.max(minQuantity, Number(form.maxQuantity) || 10);
-  const targetRevenue = parseMoney(form.totalRevenue);
+  const farmRevenue = useMemo(
+    () => calculateFixedQuantityRevenue(eligibleCatalog, farmQuantities),
+    [eligibleCatalog, farmQuantities],
+  );
+  const targetRevenue =
+    billType === "farm" ? farmRevenue : parseMoney(form.totalRevenue);
   const selectedRules = useMemo(
     () =>
       Object.fromEntries(
         selectedProducts.map((product) => [
           product.product_code,
-          rules[product.product_code] || {
-            minQuantity,
-            maxQuantity,
-          },
+          billType === "farm"
+            ? {
+                minQuantity: farmQuantities[product.product_code] || 0,
+                maxQuantity: farmQuantities[product.product_code] || 0,
+              }
+            : rules[product.product_code] || {
+                minQuantity,
+                maxQuantity,
+              },
         ]),
       ),
-    [maxQuantity, minQuantity, rules, selectedProducts],
+    [billType, farmQuantities, maxQuantity, minQuantity, rules, selectedProducts],
   );
   const feasibility = useMemo(
     () =>
@@ -310,8 +332,17 @@ export default function SampleBillGeneratorPage({
         maxQuantity,
         productRules: selectedRules,
         maxBillTotal: DEFAULT_MAX_BILL_TOTAL,
+        fixedQuantities: billType === "farm" ? farmQuantities : undefined,
       }),
-    [maxQuantity, minQuantity, selectedProducts, selectedRules, targetRevenue],
+    [
+      billType,
+      farmQuantities,
+      maxQuantity,
+      minQuantity,
+      selectedProducts,
+      selectedRules,
+      targetRevenue,
+    ],
   );
   const rows = useMemo(() => buildBillRows(bills), [bills]);
   const generatedTotal = useMemo(
@@ -346,15 +377,18 @@ export default function SampleBillGeneratorPage({
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("vi");
     return eligibleCatalog.filter((product) => {
-      const matchesFilter =
-        filter === "all" || selectedSet.has(product.product_code);
+      const productSelected =
+        billType === "farm"
+          ? (farmQuantities[product.product_code] || 0) > 0
+          : selectedSet.has(product.product_code);
+      const matchesFilter = filter === "all" || productSelected;
       const matchesSearch =
         !query ||
         product.product_code.toLocaleLowerCase("vi").includes(query) ||
         product.product_name.toLocaleLowerCase("vi").includes(query);
       return matchesFilter && matchesSearch;
     });
-  }, [eligibleCatalog, filter, search, selectedSet]);
+  }, [billType, eligibleCatalog, farmQuantities, filter, search, selectedSet]);
 
   const visibleRows = useMemo(
     () =>
@@ -388,7 +422,29 @@ export default function SampleBillGeneratorPage({
     clearResults();
   };
 
+  const updateFarmQuantity = (productCode: string, value: number) => {
+    const normalized = Math.max(0, Math.min(9999, Math.round(value || 0)));
+    setFarmQuantities((current) => ({
+      ...current,
+      [productCode]: normalized,
+    }));
+    setSelectedCodes((current) => {
+      if (normalized > 0) {
+        return current.includes(productCode)
+          ? current
+          : [...current, productCode];
+      }
+      return current.filter((code) => code !== productCode);
+    });
+    clearResults();
+  };
+
   const toggleProduct = (productCode: string) => {
+    if (billType === "farm") {
+      updateFarmQuantity(productCode, farmQuantities[productCode] ? 0 : 1);
+      return;
+    }
+
     setSelectedCodes((current) =>
       current.includes(productCode)
         ? current.filter((code) => code !== productCode)
@@ -398,6 +454,25 @@ export default function SampleBillGeneratorPage({
   };
 
   const toggleAllProducts = () => {
+    if (billType === "farm") {
+      const allSelected = selectedProducts.length === eligibleCatalog.length;
+      setFarmQuantities(
+        Object.fromEntries(
+          eligibleCatalog.map((product) => [
+            product.product_code,
+            allSelected ? 0 : 1,
+          ]),
+        ),
+      );
+      setSelectedCodes(
+        allSelected
+          ? []
+          : eligibleCatalog.map((product) => product.product_code),
+      );
+      clearResults();
+      return;
+    }
+
     setSelectedCodes(
       selectedCodes.length === eligibleCatalog.length
         ? []
@@ -430,6 +505,7 @@ export default function SampleBillGeneratorPage({
         maxQuantity,
         productRules: selectedRules,
         maxBillTotal: DEFAULT_MAX_BILL_TOTAL,
+        fixedQuantities: billType === "farm" ? farmQuantities : undefined,
       });
       setBills(generated);
       setActiveBill("all");
@@ -458,7 +534,10 @@ export default function SampleBillGeneratorPage({
     if (targetRevenue <= 0) {
       setNotice({
         tone: "error",
-        title: "Doanh thu mục tiêu phải lớn hơn 0",
+        title:
+          billType === "farm"
+            ? "Nhập số lượng vé có doanh thu"
+            : "Doanh thu mục tiêu phải lớn hơn 0",
       });
       return;
     }
@@ -534,7 +613,14 @@ export default function SampleBillGeneratorPage({
         ]),
       ),
     );
-    setSelectedCodes(eligibleCatalog.map((product) => product.product_code));
+    setFarmQuantities(
+      Object.fromEntries(catalog.map((product) => [product.product_code, 0])),
+    );
+    setSelectedCodes(
+      billType === "farm"
+        ? []
+        : eligibleCatalog.map((product) => product.product_code),
+    );
     setTab("products");
     setNotice(null);
     clearResults();
@@ -543,7 +629,7 @@ export default function SampleBillGeneratorPage({
   return (
     <RoleGuard allowedRoles={["admin"]} permission="sample_bills.access">
       <main className="min-h-screen bg-slate-50 text-slate-950 antialiased">
-        <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <div className="mx-auto w-full max-w-[1760px] px-3 py-4 sm:px-6 lg:px-8 lg:py-7 2xl:max-w-[1920px] 2xl:px-10">
           <header className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-700 text-[#d6ba5d]">
@@ -551,7 +637,7 @@ export default function SampleBillGeneratorPage({
               </div>
               <div className="min-w-0">
                 <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <h1 className="text-balance font-smooch text-4xl text-emerald-800 font-bold">
+                  <h1 className="text-balance font-smooch text-2xl font-bold text-emerald-800 sm:text-3xl lg:text-4xl">
                     {config.title}
                   </h1>
                   <span className="font-firasans rounded-full bg-slate-200 px-2.5 py-1 text-sm font-bold text-slate-700">
@@ -566,7 +652,7 @@ export default function SampleBillGeneratorPage({
 
             <Button
               variant="outline"
-              className="h-9 gap-1.5 self-start rounded-[3px] border border-emerald-600 bg-white px-3 text-sm font-medium text-emerald-800 shadow-sm transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out hover:border-emerald-700 hover:bg-emerald-700 hover:text-white hover:shadow-[0_2px_6px_rgba(15,23,42,0.08)] active:scale-[0.97] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none disabled:opacity-100 sm:self-auto"
+              className="h-9 w-full gap-1.5 self-start rounded-[3px] border border-emerald-600 bg-white px-3 text-sm font-medium text-emerald-800 shadow-sm transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out hover:border-emerald-700 hover:bg-emerald-700 hover:text-white hover:shadow-[0_2px_6px_rgba(15,23,42,0.08)] active:scale-[0.97] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none disabled:opacity-100 sm:w-auto sm:self-auto"
               disabled={
                 exporting ||
                 rows.length === 0 ||
@@ -583,7 +669,7 @@ export default function SampleBillGeneratorPage({
             </Button>
           </header>
 
-          <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-stretch">
+          <div className="grid gap-4 xl:grid-cols-[minmax(320px,360px)_minmax(0,1fr)] xl:items-stretch 2xl:grid-cols-[400px_minmax(0,1fr)] 2xl:gap-5">
             <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white">
               <div className="border-b border-slate-200 px-5 py-4">
                 <div className="flex items-center gap-2">
@@ -676,7 +762,9 @@ export default function SampleBillGeneratorPage({
                       htmlFor="target-revenue"
                       className="text-sm font-medium"
                     >
-                      Tổng doanh thu mục tiêu
+                      {billType === "farm"
+                        ? "Doanh thu thuần dự kiến"
+                        : "Tổng doanh thu mục tiêu"}
                     </label>
                     <div className="relative">
                       <input
@@ -684,74 +772,101 @@ export default function SampleBillGeneratorPage({
                         type="text"
                         inputMode="numeric"
                         placeholder="0"
-                        value={formatMoneyInput(form.totalRevenue)}
-                        onChange={(event) => {
-                          setForm((current) => ({
-                            ...current,
-                            totalRevenue: event.target.value.replace(
-                              /[^\d]/g,
-                              "",
-                            ),
-                          }));
-                          clearResults();
-                        }}
-                        className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 pr-12 text-sm font-semibold tabular-nums outline-none transition-[border-color,box-shadow] placeholder:font-normal placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                        readOnly={billType === "farm"}
+                        value={
+                          billType === "farm"
+                            ? targetRevenue > 0
+                              ? formatCurrency(targetRevenue)
+                              : ""
+                            : formatMoneyInput(form.totalRevenue)
+                        }
+                        onChange={
+                          billType === "farm"
+                            ? undefined
+                            : (event) => {
+                                setForm((current) => ({
+                                  ...current,
+                                  totalRevenue: event.target.value.replace(
+                                    /[^\d]/g,
+                                    "",
+                                  ),
+                                }));
+                                clearResults();
+                              }
+                        }
+                        className={`h-11 w-full rounded-md border border-slate-300 px-3 pr-12 text-sm font-semibold tabular-nums outline-none transition-[border-color,box-shadow] placeholder:font-normal placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 ${
+                          billType === "farm"
+                            ? "cursor-default bg-slate-100 text-slate-700"
+                            : "bg-white"
+                        }`}
                       />
                       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">
                         VND
                       </span>
                     </div>
+                    {billType === "farm" ? (
+                      <p className="text-xs leading-5 text-slate-500">
+                        Tự động tính từ số lượng vé nhân với đơn giá.
+                      </p>
+                    ) : null}
                   </div>
 
-                  <div>
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <label className="text-sm font-medium">
-                        Số lượng mỗi món
-                      </label>
-                      <span className="text-right text-xs text-slate-500">
-                        Chỉnh riêng trong bảng
-                      </span>
+                  {billType !== "farm" ? (
+                    <div>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <label className="text-sm font-medium">
+                          Số lượng mỗi món
+                        </label>
+                        <span className="text-right text-xs text-slate-500">
+                          Chỉnh riêng trong bảng
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                        <Input
+                          label="Tối thiểu"
+                          type="number"
+                          min={1}
+                          max={99}
+                          value={form.minQuantity}
+                          className="tabular-nums"
+                          onChange={(event) => {
+                            setForm((current) => ({
+                              ...current,
+                              minQuantity: event.target.value.replace(
+                                /[^\d]/g,
+                                "",
+                              ),
+                            }));
+                            clearResults();
+                          }}
+                        />
+                        <span className="pb-3 text-slate-400">–</span>
+                        <Input
+                          label="Tối đa"
+                          type="number"
+                          min={1}
+                          max={99}
+                          value={form.maxQuantity}
+                          className="tabular-nums"
+                          onChange={(event) => {
+                            setForm((current) => ({
+                              ...current,
+                              maxQuantity: event.target.value.replace(
+                                /[^\d]/g,
+                                "",
+                              ),
+                            }));
+                            clearResults();
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                      <Input
-                        label="Tối thiểu"
-                        type="number"
-                        min={1}
-                        max={99}
-                        value={form.minQuantity}
-                        className="tabular-nums"
-                        onChange={(event) => {
-                          setForm((current) => ({
-                            ...current,
-                            minQuantity: event.target.value.replace(
-                              /[^\d]/g,
-                              "",
-                            ),
-                          }));
-                          clearResults();
-                        }}
-                      />
-                      <span className="pb-3 text-slate-400">–</span>
-                      <Input
-                        label="Tối đa"
-                        type="number"
-                        min={1}
-                        max={99}
-                        value={form.maxQuantity}
-                        className="tabular-nums"
-                        onChange={(event) => {
-                          setForm((current) => ({
-                            ...current,
-                            maxQuantity: event.target.value.replace(
-                              /[^\d]/g,
-                              "",
-                            ),
-                          }));
-                          clearResults();
-                        }}
-                      />
+                  ) : (
+                    <div className="rounded-md border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-xs leading-5 text-emerald-900">
+                      Nhập số lượng thực tế cho từng loại vé ở bảng bên phải.
+                      Vé có số lượng 0 sẽ không được tạo bill.
                     </div>
-                  </div>
+                  )}
                 </section>
 
                 <div
@@ -781,7 +896,9 @@ export default function SampleBillGeneratorPage({
                       </p>
                       <p className="mt-1 text-xs leading-5 text-slate-600">
                         {targetRevenue <= 0
-                          ? "Số bill sẽ xuất hiện sau khi nhập doanh thu."
+                          ? billType === "farm"
+                            ? "Số bill sẽ xuất hiện sau khi nhập số lượng vé có doanh thu."
+                            : "Số bill sẽ xuất hiện sau khi nhập doanh thu."
                           : `Ước tính ${feasibility.estimatedBillCount} bill từ ${feasibility.selectedProductCount} sản phẩm đã chọn.`}
                       </p>
                     </div>
@@ -824,7 +941,7 @@ export default function SampleBillGeneratorPage({
               </div>
             </aside>
 
-            <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white xl:h-0 xl:min-h-full">
+            <section className="flex min-h-[620px] min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white xl:min-h-[680px] 2xl:h-[calc(100dvh-14rem)] 2xl:min-h-[680px]">
               <div className="grid grid-cols-2 border-b border-slate-200 lg:grid-cols-4">
                 {[
                   ["Mục tiêu", `${formatCurrency(targetRevenue)} VND`],
@@ -891,7 +1008,7 @@ export default function SampleBillGeneratorPage({
                       }`}
                     >
                       {item === "products"
-                        ? `Sản phẩm (${selectedCodes.length})`
+                        ? `Sản phẩm (${selectedProducts.length})`
                         : `Bill xem trước (${bills.length})`}
                       {active ? (
                         <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-emerald-600" />
@@ -926,17 +1043,25 @@ export default function SampleBillGeneratorPage({
                       className="h-10 border-slate-300 bg-white transition-[transform,background-color] active:scale-[0.96]"
                       onClick={toggleAllProducts}
                     >
-                      {selectedCodes.length === eligibleCatalog.length
+                      {selectedProducts.length === eligibleCatalog.length
                         ? "Bỏ chọn tất cả"
                         : "Chọn tất cả"}
                     </Button>
                   </div>
 
-                  <div className="hidden grid-cols-[44px_minmax(220px,1fr)_120px_184px] bg-slate-100 px-4 py-3 text-xs font-semibold text-slate-600 sm:grid">
+                  <div
+                    className={`hidden bg-slate-100 px-4 py-3 text-xs font-semibold text-slate-600 sm:grid ${
+                      billType === "farm"
+                        ? "grid-cols-[44px_minmax(220px,1fr)_120px_140px]"
+                        : "grid-cols-[44px_minmax(220px,1fr)_120px_184px]"
+                    }`}
+                  >
                     <span className="text-center">Chọn</span>
                     <span>Sản phẩm</span>
                     <span className="text-right">Đơn giá</span>
-                    <span className="text-center">Số lượng mỗi bill</span>
+                    <span className="text-center">
+                      {billType === "farm" ? "Số lượng vé" : "Số lượng mỗi bill"}
+                    </span>
                   </div>
 
                   {catalogLoading ? (
@@ -962,13 +1087,20 @@ export default function SampleBillGeneratorPage({
                     //max:620px
                     <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
                       {filteredProducts.map((product) => {
-                        const selected = selectedSet.has(product.product_code);
+                        const selected =
+                          billType === "farm"
+                            ? (farmQuantities[product.product_code] || 0) > 0
+                            : selectedSet.has(product.product_code);
                         const rule = getRule(product.product_code);
 
                         return (
                           <div
                             key={product.product_code}
-                            className={`grid grid-cols-[44px_minmax(0,1fr)] gap-y-3 px-4 py-3 transition-colors sm:grid-cols-[44px_minmax(220px,1fr)_120px_184px] sm:items-center ${
+                            className={`grid grid-cols-[44px_minmax(0,1fr)] gap-y-3 px-3 py-3 transition-colors sm:items-center sm:px-4 ${
+                              billType === "farm"
+                                ? "sm:grid-cols-[44px_minmax(220px,1fr)_120px_140px]"
+                                : "sm:grid-cols-[44px_minmax(220px,1fr)_120px_184px]"
+                            } ${
                               selected
                                 ? "bg-white hover:bg-emerald-50/40"
                                 : "bg-slate-50/60"
@@ -986,7 +1118,7 @@ export default function SampleBillGeneratorPage({
                               />
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate font-semibold">
+                              <p className="break-words font-semibold leading-5">
                                 {product.product_name}
                               </p>
                               <p className="mt-0.5 font-mono text-xs text-slate-500">
@@ -996,41 +1128,60 @@ export default function SampleBillGeneratorPage({
                             <p className="col-start-2 text-sm font-semibold tabular-nums text-slate-700 sm:col-start-auto sm:text-right">
                               {formatCurrency(Number(product.price || 0))} VND
                             </p>
-                            <div className="col-start-2 flex items-center gap-2 sm:col-start-auto sm:justify-center">
-                              <input
-                                type="number"
-                                min={1}
-                                max={99}
-                                disabled={!selected}
-                                value={rule.minQuantity}
-                                aria-label={`Số lượng tối thiểu của ${product.product_name}`}
-                                onChange={(event) =>
-                                  updateRule(
-                                    product.product_code,
-                                    "minQuantity",
-                                    Number(event.target.value),
-                                  )
-                                }
-                                className="h-10 w-16 rounded-md border border-slate-300 bg-white text-center text-sm tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-                              />
-                              <span className="text-slate-400">–</span>
-                              <input
-                                type="number"
-                                min={1}
-                                max={99}
-                                disabled={!selected}
-                                value={rule.maxQuantity}
-                                aria-label={`Số lượng tối đa của ${product.product_name}`}
-                                onChange={(event) =>
-                                  updateRule(
-                                    product.product_code,
-                                    "maxQuantity",
-                                    Number(event.target.value),
-                                  )
-                                }
-                                className="h-10 w-16 rounded-md border border-slate-300 bg-white text-center text-sm tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-                              />
-                            </div>
+                            {billType === "farm" ? (
+                              <div className="col-start-2 flex items-center sm:col-start-auto sm:justify-center">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={9999}
+                                  value={farmQuantities[product.product_code] || 0}
+                                  aria-label={`Số lượng vé ${product.product_name}`}
+                                  onChange={(event) =>
+                                    updateFarmQuantity(
+                                      product.product_code,
+                                      Number(event.target.value),
+                                    )
+                                  }
+                                  className="h-10 w-24 rounded-md border border-slate-300 bg-white px-2 text-center text-sm font-semibold tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                />
+                              </div>
+                            ) : (
+                              <div className="col-start-2 flex items-center gap-2 sm:col-start-auto sm:justify-center">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={99}
+                                  disabled={!selected}
+                                  value={rule.minQuantity}
+                                  aria-label={`Số lượng tối thiểu của ${product.product_name}`}
+                                  onChange={(event) =>
+                                    updateRule(
+                                      product.product_code,
+                                      "minQuantity",
+                                      Number(event.target.value),
+                                    )
+                                  }
+                                  className="h-10 w-16 rounded-md border border-slate-300 bg-white text-center text-sm tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                                />
+                                <span className="text-slate-400">–</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={99}
+                                  disabled={!selected}
+                                  value={rule.maxQuantity}
+                                  aria-label={`Số lượng tối đa của ${product.product_name}`}
+                                  onChange={(event) =>
+                                    updateRule(
+                                      product.product_code,
+                                      "maxQuantity",
+                                      Number(event.target.value),
+                                    )
+                                  }
+                                  className="h-10 w-16 rounded-md border border-slate-300 bg-white text-center text-sm tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                                />
+                              </div>
+                            )}
                           </div>
                         );
                       })}

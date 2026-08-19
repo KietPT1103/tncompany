@@ -1,4 +1,5 @@
 import { apiDownload, apiRequest } from "@/lib/api";
+import { resolveSampleBillExportFileName } from "./sampleBillExport";
 
 export type SampleBillType = "coffee" | "hotpot" | "farm";
 export type FarmPriceSchedule =
@@ -109,7 +110,11 @@ export async function exportSampleBills(input: {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = fileName;
+  anchor.download = resolveSampleBillExportFileName(
+    fileName,
+    input.billType,
+    input.date,
+  );
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
