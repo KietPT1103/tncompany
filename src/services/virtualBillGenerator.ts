@@ -41,6 +41,7 @@ export type GenerateVirtualBillsInput = {
   maxQuantity?: number;
   productRules?: Record<string, VirtualBillProductRule>;
   fixedQuantities?: Record<string, number>;
+  requiredProductCodes?: string[];
 };
 
 export type VirtualBillFeasibility = {
@@ -60,6 +61,7 @@ type LineOption = {
   scaledTotal: number;
 };
 export const DEFAULT_MAX_BILL_TOTAL = 7_000_000;
+const MAX_FIXED_TICKET_QUANTITY_PER_BILL = 15;
 
 const DEFAULT_MIN_QUANTITY = 4;
 const DEFAULT_MAX_QUANTITY = 10;
@@ -469,8 +471,24 @@ const analyzeFixedQuantityFeasibility = (
     (step, product) => gcd(step, Math.round(product.price || 0)),
     0,
   ) || 1;
+  const quantityLimitedBillCount =
+    (input.requiredProductCodes?.length || 0) > 0
+      ? selectedProducts.reduce((count, product) => {
+          const quantity = normalizeFixedQuantity(
+            input.fixedQuantities[product.product_code],
+          );
+          return Math.max(
+            count,
+            Math.ceil(quantity / MAX_FIXED_TICKET_QUANTITY_PER_BILL),
+          );
+        }, 1)
+      : 1;
   const estimatedBillCount = expectedRevenue > 0
-    ? Math.max(1, Math.ceil(expectedRevenue / maxBillTotal))
+    ? Math.max(
+        1,
+        Math.ceil(expectedRevenue / maxBillTotal),
+        quantityLimitedBillCount,
+      )
     : 0;
   const hasOversizedTicket = pricedProducts.some(
     (product) => Math.round(product.price || 0) > maxBillTotal,
@@ -918,6 +936,116 @@ type FixedQuantityLine = {
   lineTotal: number;
 };
 
+type FixedQuantityDraft = {
+  total: number;
+  items: VirtualBillItem[];
+};
+
+const appendFixedQuantity = (
+  draft: FixedQuantityDraft,
+  product: VirtualBillProduct,
+  quantity: number,
+) => {
+  if (quantity <= 0) return;
+
+  const productCode = product.product_code.trim();
+  const unitPrice = Math.round(product.price || 0);
+  const item = draft.items.find((entry) => entry.productCode === productCode);
+  if (item) {
+    item.quantity += quantity;
+    item.lineTotal += quantity * unitPrice;
+  } else {
+    draft.items.push({
+      productCode,
+      productName: product.product_name.trim(),
+      quantity,
+      unitPrice,
+      lineTotal: quantity * unitPrice,
+    });
+  }
+  draft.total += quantity * unitPrice;
+};
+
+const buildRequiredProductDrafts = (
+  products: VirtualBillProduct[],
+  fixedQuantities: Record<string, number>,
+  requiredProductCodes: string[],
+  draftCount: number,
+  maxBillTotal: number,
+) => {
+  const requiredSet = new Set(requiredProductCodes);
+  const productByCode = new Map(
+    products
+      .map((product) => [product.product_code.trim(), product] as const)
+      .filter(([code, product]) => code && product.isSelling !== false),
+  );
+  const requiredProducts = requiredProductCodes.map((code) => {
+    const product = productByCode.get(code);
+    const quantity = normalizeFixedQuantity(fixedQuantities[code]);
+    if (!product || quantity < draftCount) {
+      throw new VirtualBillGenerationError(
+        "Số lượng vé bắt buộc không đủ để có mặt trong mỗi bill.",
+      );
+    }
+    return { product, quantity };
+  });
+  const requiredTotal = requiredProducts.reduce(
+    (total, { product }) => total + Math.round(product.price || 0),
+    0,
+  );
+  if (requiredTotal > maxBillTotal) {
+    throw new VirtualBillGenerationError(
+      "Không thể giữ đủ vé Farm bắt buộc trong mọi bill dưới giới hạn doanh thu.",
+    );
+  }
+
+  const drafts = Array.from({ length: draftCount }, () => ({
+    total: 0,
+    items: [],
+  } as FixedQuantityDraft));
+  requiredProducts.forEach(({ product }) => {
+    drafts.forEach((draft) => appendFixedQuantity(draft, product, 1));
+  });
+
+  const remainingProducts = products
+    .filter((product) => product.isSelling !== false)
+    .map((product) => ({
+      product,
+      quantity:
+        normalizeFixedQuantity(fixedQuantities[product.product_code.trim()]) -
+        (requiredSet.has(product.product_code.trim()) ? draftCount : 0),
+      unitPrice: Math.round(product.price || 0),
+    }))
+    .filter(({ quantity, unitPrice }) => quantity > 0 && unitPrice > 0)
+    .sort((left, right) => right.unitPrice - left.unitPrice);
+
+  remainingProducts.forEach(({ product, quantity, unitPrice }) => {
+    let remaining = quantity;
+    while (remaining > 0) {
+      const draft = drafts
+        .filter((candidate) => {
+          const existing = candidate.items.find(
+            (item) => item.productCode === product.product_code.trim(),
+          );
+          return (
+            candidate.total + unitPrice <= maxBillTotal &&
+            (existing?.quantity || 0) < MAX_FIXED_TICKET_QUANTITY_PER_BILL
+          );
+        })
+        .sort((left, right) => right.total - left.total)[0];
+      if (!draft) {
+        throw new VirtualBillGenerationError(
+          "Không thể giữ đủ vé Farm bắt buộc trong mọi bill dưới giới hạn doanh thu.",
+        );
+      }
+      appendFixedQuantity(draft, product, 1);
+      remaining -= 1;
+    }
+  });
+
+  return drafts;
+};
+
 const generateFixedQuantityBills = (
   input: GenerateVirtualBillsInput,
   maxBillTotal: number,
@@ -987,7 +1115,7 @@ const generateFixedQuantityBills = (
     }
   });
 
-  const drafts: Array<{ total: number; items: VirtualBillItem[] }> = [];
+  let drafts: FixedQuantityDraft[] = [];
   [...lines]
     .sort((left, right) => right.lineTotal - left.lineTotal)
     .forEach((line) => {
@@ -1011,9 +1139,63 @@ const generateFixedQuantityBills = (
     throw new VirtualBillGenerationError("Không có vé có doanh thu để tạo bill.");
   }
 
+  const minimumDraftCount = input.products.reduce((count, product) => {
+    if (product.isSelling === false) return count;
+    const productCode = product.product_code?.trim();
+    const quantity = normalizeFixedQuantity(fixedQuantities[productCode]);
+    return Math.max(
+      count,
+      Math.ceil(quantity / MAX_FIXED_TICKET_QUANTITY_PER_BILL),
+    );
+  }, 1);
+
+  const requiredProductCodes = (input.requiredProductCodes || [])
+    .map((code) => code?.trim())
+    .filter((code, index, codes): code is string =>
+      Boolean(code) && codes.indexOf(code) === index,
+    );
+  const requiredProductCodeSet = new Set(requiredProductCodes);
+  if (requiredProductCodes.length > 0) {
+    drafts = buildRequiredProductDrafts(
+      input.products,
+      fixedQuantities,
+      requiredProductCodes,
+      Math.max(drafts.length, minimumDraftCount),
+      maxBillTotal,
+    );
+  }
+
   freeLines.forEach((line) => {
-    const draft = drafts.sort((left, right) => left.total - right.total)[0];
-    draft.items.push(line);
+    const remainingQuantity = requiredProductCodeSet.has(line.productCode)
+      ? Math.max(0, line.quantity - drafts.length)
+      : line.quantity;
+    if (remainingQuantity === 0) return;
+    let remaining = remainingQuantity;
+    while (remaining > 0) {
+      const draft = drafts
+        .filter((candidate) => {
+          const existing = candidate.items.find(
+            (item) => item.productCode === line.productCode,
+          );
+          return (existing?.quantity || 0) < MAX_FIXED_TICKET_QUANTITY_PER_BILL;
+        })
+        .sort((left, right) => left.total - right.total)[0];
+      if (!draft) {
+        throw new VirtualBillGenerationError(
+          "Không thể chia số lượng vé thành các bill tối đa 15 vé mỗi mã.",
+        );
+      }
+      appendFixedQuantity(
+        draft,
+        {
+          product_code: line.productCode,
+          product_name: line.productName,
+          price: line.unitPrice,
+        },
+        1,
+      );
+      remaining -= 1;
+    }
   });
 
   const bills = drafts.map((draft, billIndex) => ({

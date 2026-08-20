@@ -53,6 +53,7 @@ test("farm bill generation preserves entered quantities, including free tickets"
     totalRevenue: 6860,
     products: farmProducts,
     fixedQuantities: quantities,
+    requiredProductCodes: ["FARM_TOP", "FARM_BOTTOM"],
     maxBillTotal: 1000,
   });
 
@@ -66,6 +67,61 @@ test("farm bill generation preserves entered quantities, including free tickets"
 
   assert.deepEqual(Object.fromEntries(totals), quantities);
   assert.equal(bills.reduce((sum, bill) => sum + bill.total, 0), 6860);
+  assert.ok(
+    bills.every((bill) =>
+      ["FARM_TOP", "FARM_BOTTOM"].every((code) =>
+        bill.items.some((item) => item.productCode === code),
+      ),
+    ),
+  );
+});
+
+test("farm bill generation limits each product line to 15 tickets per bill", () => {
+  const quantities = {
+    FARM_TOP: 113,
+    FARM_BOTTOM: 29,
+    HORSE_FREE: 20,
+  };
+  const feasibility = analyzeVirtualBillFeasibility({
+    totalRevenue: 6_520,
+    products: farmProducts,
+    fixedQuantities: quantities,
+    requiredProductCodes: ["FARM_TOP", "FARM_BOTTOM"],
+    maxBillTotal: 1_000,
+  });
+  const bills = generateSampleBills({
+    date: "2026-08-19",
+    totalRevenue: 6_520,
+    products: farmProducts,
+    fixedQuantities: quantities,
+    requiredProductCodes: ["FARM_TOP", "FARM_BOTTOM"],
+    maxBillTotal: 1_000,
+  });
+
+  assert.equal(feasibility.estimatedBillCount, 8);
+  assert.equal(bills.length, 8);
+  bills.forEach((bill) => {
+    bill.items.forEach((item) => assert.ok(item.quantity <= 15));
+  });
+  assert.equal(
+    bills.reduce((total, bill) => total + bill.total, 0),
+    6_520,
+  );
+});
+
+test("farm bill generation rejects required tickets with too few entries", () => {
+  assert.throws(
+    () =>
+      generateSampleBills({
+        date: "2026-08-18",
+        totalRevenue: 80,
+        products: farmProducts,
+        fixedQuantities: { FARM_TOP: 1, FARM_BOTTOM: 1 },
+        requiredProductCodes: ["FARM_TOP", "FARM_BOTTOM"],
+        maxBillTotal: 50,
+      }),
+    /không đủ.*mỗi bill/i,
+  );
 });
 
 test("farm fixed quantities reject a target revenue that does not match the entered tickets", () => {

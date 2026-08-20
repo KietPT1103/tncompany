@@ -78,6 +78,40 @@ type CatalogProduct = VirtualBillProduct & {
   farmSchedule: FarmPriceSchedule;
 };
 
+const FARM_REQUIRED_TICKET_ORDER = [
+  "ve farm tren 1m2",
+  "ve farm duoi 1m2",
+] as const;
+const FARM_REQUIRED_TICKET_NAMES = new Set<string>(FARM_REQUIRED_TICKET_ORDER);
+
+const normalizeProductName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("vi")
+    .trim();
+
+const isRequiredFarmTicket = (product: Pick<CatalogProduct, "product_name">) =>
+  FARM_REQUIRED_TICKET_NAMES.has(normalizeProductName(product.product_name));
+
+const getRequiredFarmTicketOrder = (
+  product: Pick<CatalogProduct, "product_name">,
+) => {
+  const normalizedName = normalizeProductName(product.product_name);
+  const index = FARM_REQUIRED_TICKET_ORDER.findIndex(
+    (name) => name === normalizedName,
+  );
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+};
+
+const buildInitialFarmQuantities = (products: CatalogProduct[]) =>
+  Object.fromEntries(
+    products.map((product) => [
+      product.product_code,
+      isRequiredFarmTicket(product) ? 1 : 0,
+    ]),
+  );
+
 const pageConfig: Record<
   SampleBillType,
   {
@@ -223,9 +257,7 @@ export default function SampleBillGeneratorPage({
             ]),
           ),
         );
-        setFarmQuantities(
-          Object.fromEntries(mapped.map((product) => [product.product_code, 0])),
-        );
+        setFarmQuantities(buildInitialFarmQuantities(mapped));
         setSelectedCodes(
           billType === "farm"
             ? []
@@ -259,16 +291,38 @@ export default function SampleBillGeneratorPage({
   const weekend = isWeekendDate(form.date);
   const activeFarmSchedule: FarmPriceSchedule =
     weekend || holidayOverride ? "weekend_holiday" : "weekday";
-  const eligibleCatalog = useMemo(
+  const farmRequiredProductCodes = useMemo(
     () =>
-      catalog.filter(
+      catalog
+        .filter(isRequiredFarmTicket)
+        .sort(
+          (left, right) =>
+            getRequiredFarmTicketOrder(left) - getRequiredFarmTicketOrder(right),
+        )
+        .map((product) => product.product_code),
+    [catalog],
+  );
+  const eligibleCatalog = useMemo(
+    () => {
+      const eligible = catalog.filter(
         (product) =>
           product.isSelling !== false &&
           (billType !== "farm" ||
+            isRequiredFarmTicket(product) ||
             product.farmSchedule === activeFarmSchedule ||
             product.farmSchedule === "both"),
-      ),
-    [activeFarmSchedule, billType, catalog],
+      );
+      if (billType !== "farm") return eligible;
+      const requiredOrder = new Map(
+        farmRequiredProductCodes.map((code, index) => [code, index]),
+      );
+      return [...eligible].sort(
+        (left, right) =>
+          (requiredOrder.get(left.product_code) ?? Number.MAX_SAFE_INTEGER) -
+          (requiredOrder.get(right.product_code) ?? Number.MAX_SAFE_INTEGER),
+      );
+    },
+    [activeFarmSchedule, billType, catalog, farmRequiredProductCodes],
   );
   const eligibleKey = eligibleCatalog
     .map((product) => product.product_code)
@@ -333,10 +387,13 @@ export default function SampleBillGeneratorPage({
         productRules: selectedRules,
         maxBillTotal: DEFAULT_MAX_BILL_TOTAL,
         fixedQuantities: billType === "farm" ? farmQuantities : undefined,
+        requiredProductCodes:
+          billType === "farm" ? farmRequiredProductCodes : undefined,
       }),
     [
       billType,
       farmQuantities,
+      farmRequiredProductCodes,
       maxQuantity,
       minQuantity,
       selectedProducts,
@@ -423,7 +480,12 @@ export default function SampleBillGeneratorPage({
   };
 
   const updateFarmQuantity = (productCode: string, value: number) => {
-    const normalized = Math.max(0, Math.min(9999, Math.round(value || 0)));
+    const required =
+      billType === "farm" && farmRequiredProductCodes.includes(productCode);
+    const normalized = Math.max(
+      required ? 1 : 0,
+      Math.min(9999, Math.round(value || 0)),
+    );
     setFarmQuantities((current) => ({
       ...current,
       [productCode]: normalized,
@@ -460,13 +522,17 @@ export default function SampleBillGeneratorPage({
         Object.fromEntries(
           eligibleCatalog.map((product) => [
             product.product_code,
-            allSelected ? 0 : 1,
+            allSelected
+              ? isRequiredFarmTicket(product)
+                ? 1
+                : 0
+              : 1,
           ]),
         ),
       );
       setSelectedCodes(
         allSelected
-          ? []
+          ? farmRequiredProductCodes
           : eligibleCatalog.map((product) => product.product_code),
       );
       clearResults();
@@ -506,6 +572,8 @@ export default function SampleBillGeneratorPage({
         productRules: selectedRules,
         maxBillTotal: DEFAULT_MAX_BILL_TOTAL,
         fixedQuantities: billType === "farm" ? farmQuantities : undefined,
+        requiredProductCodes:
+          billType === "farm" ? farmRequiredProductCodes : undefined,
       });
       setBills(generated);
       setActiveBill("all");
@@ -531,6 +599,14 @@ export default function SampleBillGeneratorPage({
   };
 
   const handleGenerate = () => {
+    if (billType === "farm" && farmRequiredProductCodes.length !== 2) {
+      setNotice({
+        tone: "error",
+        title: "Danh mục Farm chưa có đủ hai vé bắt buộc",
+        detail: "Cần có Vé Farm Dưới 1m2 và Vé Farm Trên 1m2 trước khi tạo bill.",
+      });
+      return;
+    }
     if (targetRevenue <= 0) {
       setNotice({
         tone: "error",
@@ -538,6 +614,19 @@ export default function SampleBillGeneratorPage({
           billType === "farm"
             ? "Nhập số lượng vé có doanh thu"
             : "Doanh thu mục tiêu phải lớn hơn 0",
+      });
+      return;
+    }
+    if (
+      billType === "farm" &&
+      farmRequiredProductCodes.some(
+        (productCode) => (farmQuantities[productCode] || 0) < 1,
+      )
+    ) {
+      setNotice({
+        tone: "error",
+        title: "Mỗi bill Farm phải có đủ hai vé Farm chính",
+        detail: "Vui lòng nhập ít nhất 1 Vé Farm Dưới 1m2 và 1 Vé Farm Trên 1m2.",
       });
       return;
     }
@@ -613,9 +702,7 @@ export default function SampleBillGeneratorPage({
         ]),
       ),
     );
-    setFarmQuantities(
-      Object.fromEntries(catalog.map((product) => [product.product_code, 0])),
-    );
+    setFarmQuantities(buildInitialFarmQuantities(catalog));
     setSelectedCodes(
       billType === "farm"
         ? []
@@ -1091,6 +1178,9 @@ export default function SampleBillGeneratorPage({
                           billType === "farm"
                             ? (farmQuantities[product.product_code] || 0) > 0
                             : selectedSet.has(product.product_code);
+                        const requiredFarmTicket =
+                          billType === "farm" &&
+                          farmRequiredProductCodes.includes(product.product_code);
                         const rule = getRule(product.product_code);
 
                         return (
@@ -1110,17 +1200,25 @@ export default function SampleBillGeneratorPage({
                               <input
                                 type="checkbox"
                                 checked={selected}
+                                disabled={requiredFarmTicket}
                                 aria-label={`Chọn ${product.product_name}`}
                                 onChange={() =>
                                   toggleProduct(product.product_code)
                                 }
-                                className="h-5 w-5 rounded border-slate-300 accent-emerald-600"
+                                className="h-5 w-5 rounded border-slate-300 accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-75"
                               />
                             </div>
                             <div className="min-w-0">
-                              <p className="break-words font-semibold leading-5">
-                                {product.product_name}
-                              </p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="break-words font-semibold leading-5">
+                                  {product.product_name}
+                                </p>
+                                {requiredFarmTicket ? (
+                                  <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+                                    Bắt buộc mỗi bill
+                                  </span>
+                                ) : null}
+                              </div>
                               <p className="mt-0.5 font-mono text-xs text-slate-500">
                                 {product.product_code}
                               </p>
@@ -1132,7 +1230,7 @@ export default function SampleBillGeneratorPage({
                               <div className="col-start-2 flex items-center sm:col-start-auto sm:justify-center">
                                 <input
                                   type="number"
-                                  min={0}
+                                  min={requiredFarmTicket ? 1 : 0}
                                   max={9999}
                                   value={farmQuantities[product.product_code] || 0}
                                   aria-label={`Số lượng vé ${product.product_name}`}
