@@ -61,6 +61,7 @@ import {
   CashierShift,
   closeShift,
   getOpenShiftByCashier,
+  getShiftHandoverAmount,
   getShiftsForReport,
   openShift,
   ShiftSummary,
@@ -152,8 +153,6 @@ const getCashDifferenceInfo = (difference: number) => {
   if (difference < 0) return { label: "Thiếu", amount: Math.abs(difference) };
   return { label: "Khớp", amount: 0 };
 };
-const getShiftHandoverAmount = (summary: ShiftSummary) =>
-  summary.totalSales - summary.transferSales - summary.expenseVouchers;
 const PRINT_FONT_FAMILY = "'Tahoma', 'Segoe UI', Arial, sans-serif";
 const PRINT_TAIL_SPACE_MM = 8;
 
@@ -2402,9 +2401,6 @@ export default function CafePosPage() {
               <tr><td>Phiếu chi</td><td class="right">-${formatCurrency(
                 closeShiftSummary.expenseVouchers
               )} đ</td></tr>
-              <tr><td>Dòng tiền thuần</td><td class="right">${formatCurrency(
-                closeShiftSummary.netCashFlow
-              )} đ</td></tr>
               </table>
             </div>
 
@@ -2414,8 +2410,8 @@ export default function CafePosPage() {
               <tr><td>Tiền đầu ca</td><td class="right">${formatCurrency(
                 activeShift.openingCash || 0
               )} đ</td></tr>
-              <tr><td>Tiền cuối ca</td><td class="right">${formatCurrency(
-                closingCash
+              <tr><td>Doanh thu két</td><td class="right">${formatCurrency(
+                reconciledClosingCash
               )} đ</td></tr>
               <tr class="strong"><td>Bàn giao thực tế</td><td class="right">${formatCurrency(
                 handoverAmount
@@ -2576,9 +2572,6 @@ export default function CafePosPage() {
             <tr><td>Phiếu chi</td><td class="right">-${formatCurrency(
               dailyReport.expenseVouchers
             )} đ</td></tr>
-            <tr><td>Dòng tiền thuần</td><td class="right">${formatCurrency(
-              dailyReport.netCashFlow
-            )} đ</td></tr>
             <tr><td>Tiền mặt</td><td class="right">${formatCurrency(
               dailyReport.cashSales
             )} đ</td></tr>
@@ -2591,9 +2584,9 @@ export default function CafePosPage() {
             <tr><td>Tiền dư</td><td class="right">+${formatCurrency(
               dailyCashSurplus
             )} đ</td></tr>
-            <tr><td>Tiền mặt cuối ca</td><td class="right">${formatCurrency(
-              dailyEndingCash
-            )} đ</td></tr>
+            <tr><td>Tiền bàn giao</td><td class="right"><strong>${formatCurrency(
+              getShiftHandoverAmount(dailyReport)
+            )} đ</strong></td></tr>
             <tr><td>Chuyển khoản</td><td class="right">${formatCurrency(
               dailyReport.transferSales
             )} đ</td></tr>
@@ -3044,17 +3037,21 @@ export default function CafePosPage() {
     () =>
       dailyReportShifts.reduce((total, shift) => {
         if (shift.closingCash === null || shift.closingCash === undefined) return total;
-        const expectedClosingCash = Number(
-          shift.expectedClosingCash ??
-            (Number(shift.openingCash || 0) + Number(shift.cashSales || 0))
+        const shiftSummary = summarizeBillsForShift(
+          dailyReportBills.filter((bill) => bill.shiftId === shift.id),
+          Number(shift.openingCash || 0),
+          dailyReportVouchers.filter((voucher) => voucher.shiftId === shift.id)
         );
-        return total + Math.max(0, Number(shift.closingCash) - expectedClosingCash);
+        return total + Math.max(
+          0,
+          Number(shift.closingCash) - shiftSummary.expectedClosingCash
+        );
       }, 0),
-    [dailyReportShifts]
+    [dailyReportBills, dailyReportShifts, dailyReportVouchers]
   );
-  const dailyTillRevenue = (dailyReport?.cashSales || 0) + dailyOpeningCash;
-  const dailyEndingCash = dailyTillRevenue + dailyCashSurplus;
-
+  const dailyTillRevenue = dailyReport
+    ? dailyOpeningCash + getShiftHandoverAmount(dailyReport)
+    : dailyOpeningCash;
   const filteredDailyBills = useMemo(
     () =>
       dailyReportPaymentFilter === "all"
@@ -4724,13 +4721,16 @@ export default function CafePosPage() {
                     -{formatCurrency(closeShiftSummary.expenseVouchers)} đ
                   </span>
                 </div>
-                <div className="flex items-center justify-between py-1">
-                  <span>Dòng tiền thuần</span>
-                  <span className="font-semibold">
-                    {formatCurrency(closeShiftSummary.netCashFlow)} đ
-                  </span>
-                </div>
                 <div className="mt-2 border-t pt-2">
+                  <div className="flex items-center justify-between py-1">
+                    <span>Doanh thu két</span>
+                    <span className="font-semibold">
+                      {formatCurrency(
+                        (activeShift.openingCash || 0) +
+                          getShiftHandoverAmount(closeShiftSummary)
+                      )} đ
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-700">Bàn giao thực tế</span>
                     <span className="text-lg font-bold text-slate-900">
@@ -4738,7 +4738,7 @@ export default function CafePosPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    Tổng doanh thu − Chuyển khoản − Phiếu chi
+                    Tiền mặt + Phiếu thu − Phiếu chi
                   </p>
                 </div>
               </div>
@@ -4943,10 +4943,9 @@ export default function CafePosPage() {
                         <div className="border-t pt-2 flex justify-between"><span>Tiền đầu ca</span><strong>{formatCurrency(dailyOpeningCash)} đ</strong></div>
                         <div className="flex justify-between"><span>Doanh thu két</span><strong>{formatCurrency(dailyTillRevenue)} đ</strong></div>
                         <div className="flex justify-between"><span>Tiền dư</span><strong className="text-emerald-700">+{formatCurrency(dailyCashSurplus)} đ</strong></div>
-                        <div className="flex justify-between"><span>Tiền mặt cuối ca</span><strong>{formatCurrency(dailyEndingCash)} đ</strong></div>
+                        <div className="flex justify-between border-t pt-2"><span>Tiền bàn giao</span><strong className="text-sky-700">{formatCurrency(getShiftHandoverAmount(dailyReport))} đ</strong></div>
                         <div className="border-t pt-2 flex justify-between"><span>Phiếu thu ({dailyReportVouchers.filter((voucher) => voucher.type === "income").length})</span><strong className="text-emerald-700">+{formatCurrency(dailyReport.incomeVouchers)} đ</strong></div>
                         <div className="flex justify-between"><span>Phiếu chi ({dailyReportVouchers.filter((voucher) => voucher.type === "expense").length})</span><strong className="text-rose-700">-{formatCurrency(dailyReport.expenseVouchers)} đ</strong></div>
-                        <div className="border-t pt-2 flex justify-between"><span>Dòng tiền thuần</span><strong>{formatCurrency(dailyReport.netCashFlow)} đ</strong></div>
                       </div>
                     </div>
                     <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -5166,14 +5165,6 @@ export default function CafePosPage() {
               <p className="hidden text-xs text-slate-500 sm:block">
                 Đang xem {getDailyReportShiftLabel(dailyReportShift)} ngày {getLocalDayRange(dailyReportDate).start.toLocaleDateString("vi-VN")}.
               </p>
-              <Button
-                className="ml-auto bg-sky-600 hover:bg-sky-700"
-                onClick={handlePrintDailyReport}
-                disabled={!dailyReport || isLoadingDailyReport}
-              >
-                <Printer className="mr-2 h-4 w-4" />
-                In báo cáo
-              </Button>
             </div>
           </div>
         </div>
