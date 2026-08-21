@@ -33,6 +33,9 @@ type DateRangePickerProps = {
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  hideLabel?: boolean;
+  summary?: string;
+  openTriggerClassName?: string;
 };
 
 type PickerPosition = {
@@ -51,6 +54,9 @@ export function DateRangePicker({
   disabled = false,
   className,
   triggerClassName,
+  hideLabel = false,
+  summary,
+  openTriggerClassName,
 }: DateRangePickerProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -292,8 +298,8 @@ export function DateRangePicker({
   ) : null;
 
   return (
-    <div className={cn("w-full space-y-1", className)}>
-      <span id={labelId} className="text-sm font-medium leading-none text-slate-700">
+    <div className={cn("w-full", !hideLabel && "space-y-1", className)}>
+      <span id={labelId} className={cn("text-sm font-medium leading-none text-slate-700", hideLabel && "sr-only")}>
         {label}
       </span>
       <button
@@ -308,18 +314,25 @@ export function DateRangePicker({
           "flex h-11 w-full min-w-0 items-center gap-2.5 rounded-md border border-slate-300 bg-slate-50 px-3 text-left text-sm transition-[background-color,border-color,box-shadow] duration-150 hover:border-emerald-500 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/20 disabled:cursor-not-allowed disabled:opacity-50 sm:h-10",
           open && "border-emerald-600 bg-white ring-2 ring-emerald-600/15",
           triggerClassName,
+          open && openTriggerClassName,
         )}
       >
         <span id={valueId} className="min-w-0 flex-1 truncate tabular-nums">
-          <span className="text-slate-500">Từ </span>
-          <strong className="font-semibold text-slate-950">
-            {formatDisplayDate(startDate)}
-          </strong>
-          <span aria-hidden="true" className="mx-1.5 text-slate-300">·</span>
-          <span className="text-slate-500">Đến </span>
-          <strong className="font-semibold text-slate-950">
-            {formatDisplayDate(endDate)}
-          </strong>
+          {summary ? (
+            <span className="font-medium text-emerald-900">{summary}</span>
+          ) : (
+            <>
+              <span className="shrink-0 text-slate-500">Từ </span>
+              <strong className="font-semibold text-slate-950">
+                {formatDisplayDate(startDate)}
+              </strong>
+              <span aria-hidden="true" className="mx-2 inline-block h-4 w-px align-middle bg-slate-200" />
+              <span className="shrink-0 text-slate-500">Đến </span>
+              <strong className="font-semibold text-slate-950">
+                {formatDisplayDate(endDate)}
+              </strong>
+            </>
+          )}
         </span>
         <CalendarDays className="h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
       </button>

@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import {
   Bill,
   cancelBill,
@@ -59,7 +58,11 @@ import {
   getBillActionVisibility,
   shouldActivateBillRow,
 } from "./billRowInteraction";
-import { buildBillExportRows, buildVoucherExportRows } from "./billExcelExport";
+import {
+  buildBillExportWorkbook,
+  buildVoucherExportWorkbook,
+  downloadExcelWorkbook,
+} from "./billExcelExport";
 
 type EditFormState = {
   tableNumber: string;
@@ -163,20 +166,6 @@ const getPaymentMethodLabel = (bill: Bill) =>
 const compareText = (left: string, right: string) =>
   left.localeCompare(right, "vi", { numeric: true, sensitivity: "base" });
 
-const exportExcel = (
-  rows: Record<string, string | number | Date>[],
-  sheetName: string,
-  fileName: string,
-) => {
-  const worksheet = XLSX.utils.json_to_sheet(rows, { cellDates: true });
-  worksheet["!cols"] = Object.keys(rows[0] || {}).map((header) => ({
-    wch: Math.min(45, Math.max(14, header.length + 2)),
-  }));
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-  XLSX.writeFile(workbook, fileName, { compression: true });
-};
-
 function BillActionButtons({
   bill,
   canEdit,
@@ -272,6 +261,7 @@ export default function BillsPage() {
 
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState<"bills" | "vouchers" | null>(null);
   const [billSearch, setBillSearch] = useState("");
   const [voucherSearch, setVoucherSearch] = useState("");
   const [billSortKey, setBillSortKey] = useState<BillSortKey>("time");
@@ -458,20 +448,34 @@ export default function BillsPage() {
     .reduce((sum, voucher) => sum + (voucher.amount || 0), 0);
   const netDailyCashFlow = totalAmount + totalIncomeVouchers - totalExpenseVouchers;
 
-  const handleExportBills = () => {
-    exportExcel(
-      buildBillExportRows(filteredBills),
-      "DanhSachHoaDon",
-      `danh-sach-hoa-don_${startDate}_${endDate}.xlsx`,
-    );
+  const handleExportBills = async () => {
+    setExporting("bills");
+    try {
+      await downloadExcelWorkbook(
+        buildBillExportWorkbook(filteredBills, { startDate, endDate }),
+        `danh-sach-hoa-don_${startDate}_${endDate}.xlsx`,
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Không thể tạo file Excel danh sách hóa đơn.");
+    } finally {
+      setExporting(null);
+    }
   };
 
-  const handleExportVouchers = () => {
-    exportExcel(
-      buildVoucherExportRows(filteredVouchers),
-      "PhieuThuChi",
-      `phieu-thu-chi_${startDate}_${endDate}.xlsx`,
-    );
+  const handleExportVouchers = async () => {
+    setExporting("vouchers");
+    try {
+      await downloadExcelWorkbook(
+        buildVoucherExportWorkbook(filteredVouchers, { startDate, endDate }),
+        `phieu-thu-chi_${startDate}_${endDate}.xlsx`,
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Không thể tạo file Excel phiếu thu/chi.");
+    } finally {
+      setExporting(null);
+    }
   };
 
   const openEdit = (bill: Bill) => {
@@ -858,11 +862,11 @@ export default function BillsPage() {
                       size="sm"
                       className={SORT_DIRECTION_CLASS}
                       onClick={handleExportBills}
-                      disabled={loading || filteredBills.length === 0}
+                      disabled={loading || exporting !== null || filteredBills.length === 0}
                       title="Xuất toàn bộ hóa đơn đang lọc ra Excel"
                     >
-                      <Download className="h-4 w-4 text-emerald-700" aria-hidden="true" />
-                      Xuất Excel
+                      {exporting === "bills" ? <Loader2 className="h-4 w-4 animate-spin text-emerald-700" aria-hidden="true" /> : <Download className="h-4 w-4 text-emerald-700" aria-hidden="true" />}
+                      {exporting === "bills" ? "Đang xuất..." : "Xuất Excel"}
                     </Button>
                     <SelectBox<BillSortKey>
                       value={billSortKey}
@@ -1191,11 +1195,11 @@ export default function BillsPage() {
                         size="sm"
                         className={SORT_DIRECTION_CLASS}
                         onClick={handleExportVouchers}
-                        disabled={loading || filteredVouchers.length === 0}
+                        disabled={loading || exporting !== null || filteredVouchers.length === 0}
                         title="Xuất toàn bộ phiếu thu chi đang lọc ra Excel"
                       >
-                        <Download className="h-4 w-4 text-emerald-700" aria-hidden="true" />
-                        Xuất Excel
+                        {exporting === "vouchers" ? <Loader2 className="h-4 w-4 animate-spin text-emerald-700" aria-hidden="true" /> : <Download className="h-4 w-4 text-emerald-700" aria-hidden="true" />}
+                        {exporting === "vouchers" ? "Đang xuất..." : "Xuất Excel"}
                       </Button>
                       <SelectBox<VoucherSortKey>
                         value={voucherSortKey}

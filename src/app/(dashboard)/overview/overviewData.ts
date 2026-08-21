@@ -8,10 +8,19 @@ export type OverviewBill = {
   cashierName?: string;
   tableNumber?: string;
   items: Array<{
+    menuId?: string;
     name: string;
     quantity: number;
     lineTotal: number;
   }>;
+};
+
+export type OverviewVoucher = {
+  type: "income" | "expense";
+  amount: number;
+  includeInCashFlow?: boolean;
+  happenedAt?: { seconds: number };
+  createdAt?: { seconds: number };
 };
 
 export type SalesPoint = {
@@ -32,7 +41,13 @@ export type OverviewRangePreset =
   | "yesterday"
   | "last7Days"
   | "thisMonth"
-  | "lastMonth";
+  | "lastMonth"
+  | "custom";
+
+export type OverviewCustomRange = {
+  startDate: Date;
+  endDate: Date;
+};
 
 export type OverviewDateRanges = {
   startDate: Date;
@@ -51,8 +66,14 @@ export type OverviewSnapshot = {
   salesSeries: SalesPoint[];
   hourlySeries: SalesPoint[];
   topProducts: ProductPerformance[];
+  bakeryProducts: ProductPerformance[];
   paymentTotals: { cash: number; transfer: number };
   recentBills: OverviewBill[];
+};
+
+export type OverviewVoucherTotals = {
+  income: number;
+  expense: number;
 };
 
 const toDateKey = (date: Date) => {
@@ -64,6 +85,11 @@ const toDateKey = (date: Date) => {
 
 const toBillDate = (bill: OverviewBill) =>
   bill.createdAt?.seconds ? new Date(bill.createdAt.seconds * 1000) : null;
+
+const toVoucherDate = (voucher: OverviewVoucher) => {
+  const timestamp = voucher.happenedAt?.seconds ? voucher.happenedAt : voucher.createdAt;
+  return timestamp?.seconds ? new Date(timestamp.seconds * 1000) : null;
+};
 
 const isWithinRange = (date: Date, startDate: Date, endDate: Date) =>
   date.getTime() >= startDate.getTime() && date.getTime() <= endDate.getTime();
@@ -80,10 +106,46 @@ const endOfDay = (value: Date) => {
   return date;
 };
 
+export function calculateOverviewVoucherTotals(
+  vouchers: OverviewVoucher[],
+  startDate: Date,
+  endDate: Date,
+): OverviewVoucherTotals {
+  return vouchers.filter((voucher) => {
+    const date = toVoucherDate(voucher);
+    return voucher.includeInCashFlow !== false && date ? isWithinRange(date, startDate, endDate) : false;
+  }).reduce<OverviewVoucherTotals>((totals, voucher) => {
+    totals[voucher.type] += Number(voucher.amount || 0);
+    return totals;
+  }, { income: 0, expense: 0 });
+}
+
 export function getOverviewDateRanges(
   preset: OverviewRangePreset,
   now = new Date(),
+  customRange?: OverviewCustomRange,
 ): OverviewDateRanges {
+  if (preset === "custom" && customRange) {
+    const startDate = startOfDay(customRange.startDate);
+    const endDate = endOfDay(customRange.endDate);
+    const normalizedStart = startDate <= endDate ? startDate : startOfDay(customRange.endDate);
+    const normalizedEnd = startDate <= endDate ? endDate : endOfDay(customRange.startDate);
+    const dayCount = Math.round(
+      (startOfDay(normalizedEnd).getTime() - normalizedStart.getTime()) / 86_400_000,
+    ) + 1;
+    const previousEndDate = new Date(normalizedStart);
+    previousEndDate.setDate(previousEndDate.getDate() - 1);
+    const previousStartDate = new Date(previousEndDate);
+    previousStartDate.setDate(previousStartDate.getDate() - dayCount + 1);
+
+    return {
+      startDate: normalizedStart,
+      endDate: normalizedEnd,
+      previousStartDate: startOfDay(previousStartDate),
+      previousEndDate: endOfDay(previousEndDate),
+    };
+  }
+
   if (preset === "today" || preset === "yesterday") {
     const selectedDay = new Date(now);
     if (preset === "yesterday") selectedDay.setDate(selectedDay.getDate() - 1);
@@ -151,10 +213,29 @@ export function calculatePercentageChange(current: number, previous: number) {
   return ((current - previous) / previous) * 100;
 }
 
+export function getOverviewComparisonLabel(
+  preset: OverviewRangePreset,
+  previousStartDate: Date,
+  previousEndDate: Date,
+) {
+  const formatDate = (date: Date) => date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  if (preset === "today") return `hôm qua (${formatDate(previousStartDate)})`;
+  if (preset === "yesterday") return `hôm kia (${formatDate(previousStartDate)})`;
+  if (preset === "last7Days") return "7 ngày trước";
+  if (preset === "thisMonth") return "tháng trước (cùng số ngày)";
+  if (preset === "lastMonth") return "tháng trước đó";
+  return `${formatDate(previousStartDate)} - ${formatDate(previousEndDate)}`;
+}
+
 export function buildOverviewSnapshot(
   bills: OverviewBill[],
   startDate: Date,
   endDate: Date,
+  bakeryProductCodes: ReadonlySet<string> = new Set(),
 ): OverviewSnapshot {
   const points = new Map<string, SalesPoint>();
   const cursor = new Date(startDate);
@@ -193,6 +274,7 @@ export function buildOverviewSnapshot(
   });
   const completedBills = scopedBills.filter((bill) => bill.status !== "cancelled");
   const productTotals = new Map<string, ProductPerformance>();
+  const bakeryProductTotals = new Map<string, ProductPerformance>();
   const paymentTotals = { cash: 0, transfer: 0 };
 
   completedBills.forEach((bill) => {
@@ -221,6 +303,12 @@ export function buildOverviewSnapshot(
       current.quantity += Number(item.quantity || 0);
       current.revenue += Number(item.lineTotal || 0);
       productTotals.set(name, current);
+      if (item.menuId && bakeryProductCodes.has(item.menuId)) {
+        const bakeryCurrent = bakeryProductTotals.get(name) || { name, quantity: 0, revenue: 0 };
+        bakeryCurrent.quantity += Number(item.quantity || 0);
+        bakeryCurrent.revenue += Number(item.lineTotal || 0);
+        bakeryProductTotals.set(name, bakeryCurrent);
+      }
     });
   });
 
@@ -246,12 +334,15 @@ export function buildOverviewSnapshot(
     topProducts: Array.from(productTotals.values())
       .sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue)
       .slice(0, 10),
+    bakeryProducts: Array.from(bakeryProductTotals.values())
+      .sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue)
+      .slice(0, 10),
     paymentTotals,
     recentBills: [...scopedBills]
       .sort(
         (left, right) =>
           (right.createdAt?.seconds || 0) - (left.createdAt?.seconds || 0),
       )
-      .slice(0, 6),
+      .slice(0, 7),
   };
 }

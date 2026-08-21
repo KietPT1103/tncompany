@@ -32,6 +32,7 @@ type SelectBoxProps<T extends string> = {
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  openTriggerClassName?: string;
 };
 
 type MenuPosition = {
@@ -56,6 +57,7 @@ export function SelectBox<T extends string>({
   disabled = false,
   className,
   triggerClassName,
+  openTriggerClassName,
 }: SelectBoxProps<T>) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -377,7 +379,8 @@ export function SelectBox<T extends string>({
         className={cn(
           "flex h-10 w-full min-w-0 items-center gap-2 rounded-md border border-input bg-background pl-3 pr-2 text-left text-sm font-medium text-foreground shadow-sm transition-[background-color,border-color,box-shadow,color] duration-150 ease-out hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-70 motion-reduce:transition-none",
           open && "border-primary ring-2 ring-primary/15",
-          triggerClassName
+          triggerClassName,
+          open && openTriggerClassName,
         )}
       >
         {SelectedIcon ? <SelectedIcon aria-hidden="true" className="h-4 w-4 shrink-0" /> : null}

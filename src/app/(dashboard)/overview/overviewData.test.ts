@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   buildOverviewSnapshot,
   calculatePercentageChange,
+  calculateOverviewVoucherTotals,
   getOverviewDateRanges,
+  getOverviewComparisonLabel,
 } from "./overviewData.ts";
 
 const timestamp = (value: string) => ({
@@ -187,6 +189,47 @@ test("caps this-month comparison at the final day of a shorter previous month", 
 
   assertSameDate(ranges.previousStartDate, new Date(2026, 1, 1, 0, 0, 0, 0));
   assertSameDate(ranges.previousEndDate, new Date(2026, 1, 28, 23, 59, 59, 999));
+});
+
+test("builds a same-length comparison period for a custom range", () => {
+  const ranges = getOverviewDateRanges(
+    "custom",
+    new Date(2026, 7, 31, 9, 0, 0, 0),
+    {
+      startDate: new Date(2026, 7, 21, 0, 0, 0, 0),
+      endDate: new Date(2026, 7, 23, 23, 59, 59, 999),
+    },
+  );
+
+  assertSameDate(ranges.startDate, new Date(2026, 7, 21, 0, 0, 0, 0));
+  assertSameDate(ranges.endDate, new Date(2026, 7, 23, 23, 59, 59, 999));
+  assertSameDate(ranges.previousStartDate, new Date(2026, 7, 18, 0, 0, 0, 0));
+  assertSameDate(ranges.previousEndDate, new Date(2026, 7, 20, 23, 59, 59, 999));
+});
+
+test("calculates cash voucher totals only inside the selected period", () => {
+  const totals = calculateOverviewVoucherTotals(
+    [
+      { type: "income", amount: 50_000, happenedAt: timestamp("2026-08-18T09:00:00+07:00") },
+      { type: "expense", amount: 20_000, happenedAt: timestamp("2026-08-18T10:00:00+07:00") },
+      { type: "income", amount: 90_000, happenedAt: timestamp("2026-08-17T10:00:00+07:00") },
+      { type: "income", amount: 10_000, happenedAt: timestamp("2026-08-18T11:00:00+07:00"), includeInCashFlow: false },
+    ],
+    new Date("2026-08-18T00:00:00+07:00"),
+    new Date("2026-08-18T23:59:59+07:00"),
+  );
+
+  assert.deepEqual(totals, { income: 50_000, expense: 20_000 });
+});
+
+test("describes the comparison period for each overview preset", () => {
+  const previousStart = new Date(2026, 7, 18);
+  const previousEnd = new Date(2026, 7, 20);
+
+  assert.equal(getOverviewComparisonLabel("today", previousStart, previousEnd), "hôm qua (18/08/2026)");
+  assert.equal(getOverviewComparisonLabel("yesterday", previousStart, previousEnd), "hôm kia (18/08/2026)");
+  assert.equal(getOverviewComparisonLabel("thisMonth", previousStart, previousEnd), "tháng trước (cùng số ngày)");
+  assert.equal(getOverviewComparisonLabel("custom", previousStart, previousEnd), "18/08/2026 - 20/08/2026");
 });
 
 test("returns the ten best-selling products ordered by sold quantity", () => {
