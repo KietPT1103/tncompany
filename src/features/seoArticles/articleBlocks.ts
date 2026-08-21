@@ -1,8 +1,19 @@
 import type { SeoArticleBlock } from "@/services/seoArticleService";
 
+function createSeoArticleBlockId(): string {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `seo-block-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export function createEmptySeoArticleBlock(): SeoArticleBlock {
   return {
-    id: crypto.randomUUID(),
+    id: createSeoArticleBlockId(),
     heading: "",
     html: "",
     imageUrl: "",
@@ -26,7 +37,7 @@ export function normalizeSeoArticleBlocks(
 ): SeoArticleBlock[] {
   if (blocks && blocks.length > 0) {
     return blocks.map((block) => ({
-      id: block.id || crypto.randomUUID(),
+      id: block.id || createSeoArticleBlockId(),
       heading: block.heading || "",
       html: block.html || "",
       imageUrl: block.imageUrl || "",
