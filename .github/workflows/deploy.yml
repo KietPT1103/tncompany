@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Build and Deploy Production
 
 on:
   push:
@@ -6,25 +6,28 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: production-deploy
-  cancel-in-progress: true
+  # Do not interrupt rsync while it is updating the live application.
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 15
-    environment: FTP
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
     env:
-      FTP_SERVER: ${{ secrets.FTP_SERVER }}
-      FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-      FTP_PORT: ${{ vars.FTP_PORT }}
-      FTP_PROTOCOL: ${{ vars.FTP_PROTOCOL }}
-      FTP_SERVER_DIR: ${{ vars.FTP_SERVER_DIR }}
+      SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+      SSH_USER: ${{ secrets.PROD_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+      SSH_PORT: ${{ vars.PROD_SSH_PORT }}
 
     steps:
-      - name: Checkout
+      - name: Checkout requested revision
         uses: actions/checkout@v4
         with:
           clean: true
@@ -36,59 +39,78 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Verify checked out revision
-        shell: powershell
-        run: |
-          Write-Host "github.sha: $env:GITHUB_SHA"
-          git rev-parse HEAD
-          git log -1 --oneline
-          Write-Host "`n--- src/prerender/entry-server.jsx ---"
-          Get-Content src\prerender\entry-server.jsx | Select-Object -First 20
-          Write-Host "`n--- src/components/PublicSiteShell.jsx ---"
-          Get-Content src\components\PublicSiteShell.jsx | Select-Object -First 60
-
-      - name: Validate deploy settings
-        id: deploy-settings
-        shell: powershell
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:FTP_SERVER)) { throw "Missing GitHub secret: FTP_SERVER" }
-          if ([string]::IsNullOrWhiteSpace($env:FTP_USERNAME)) { throw "Missing GitHub secret: FTP_USERNAME" }
-          if ([string]::IsNullOrWhiteSpace($env:FTP_PASSWORD)) { throw "Missing GitHub secret: FTP_PASSWORD" }
-          if ([string]::IsNullOrWhiteSpace($env:FTP_SERVER_DIR)) { throw "Missing GitHub variable: FTP_SERVER_DIR" }
-
-          $ftpPort = if ([string]::IsNullOrWhiteSpace($env:FTP_PORT)) { "21" } else { $env:FTP_PORT }
-          $ftpProtocol = if ([string]::IsNullOrWhiteSpace($env:FTP_PROTOCOL)) { "ftp" } else { $env:FTP_PROTOCOL }
-          $ftpServerDir = $env:FTP_SERVER_DIR.TrimEnd("/") + "/"
-
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "ftp_port=$ftpPort"
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "ftp_protocol=$ftpProtocol"
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "ftp_server_dir=$ftpServerDir"
-
       - name: Install dependencies
         run: npm ci
+
+      - name: Test print agent
+        run: npm run test:bar-print-agent
 
       - name: Build production bundle
         run: npm run build
 
-      - name: Deploy dist to DirectAdmin
-        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
-        with:
-          server: ${{ env.FTP_SERVER }}
-          username: ${{ env.FTP_USERNAME }}
-          password: ${{ env.FTP_PASSWORD }}
-          port: ${{ steps.deploy-settings.outputs.ftp_port }}
-          protocol: ${{ steps.deploy-settings.outputs.ftp_protocol }}
-          local-dir: ./dist/
-          server-dir: ${{ steps.deploy-settings.outputs.ftp_server_dir }}
-          log-level: standard
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            api/config.local.php
-            **/.env
-            **/.env.*
-            uploads/**
-            deploy.php
-            webhook.php
-            test.php
+      - name: Validate deployment settings
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : "${SSH_HOST:?Missing production secret PROD_SSH_HOST}"
+          : "${SSH_USER:?Missing production secret PROD_SSH_USER}"
+          : "${SSH_PRIVATE_KEY:?Missing production secret PROD_SSH_PRIVATE_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Missing production secret PROD_SSH_KNOWN_HOSTS}"
+
+          if [[ ! "$SSH_HOST" =~ ^[a-zA-Z0-9._:-]+$ ]]; then
+            echo "Invalid PROD_SSH_HOST" >&2
+            exit 1
+          fi
+          if [[ ! "$SSH_USER" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "Invalid PROD_SSH_USER" >&2
+            exit 1
+          fi
+
+          effective_port="${SSH_PORT:-22}"
+          if [[ ! "$effective_port" =~ ^[0-9]+$ ]] || (( effective_port < 1 || effective_port > 65535 )); then
+            echo "Invalid PROD_SSH_PORT" >&2
+            exit 1
+          fi
+          echo "SSH_PORT=$effective_port" >> "$GITHUB_ENV"
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+          ssh -p "$SSH_PORT" -o BatchMode=yes -o ConnectTimeout=10 \
+            "$SSH_USER@$SSH_HOST" "echo 'SSH connection OK'"
+
+      - name: Package release
+        shell: bash
+        run: tar -C dist -czf "release-${GITHUB_SHA}.tar.gz" .
+
+      - name: Upload and activate release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          remote_archive="/tmp/tncompany-release-${GITHUB_SHA}.tar.gz"
+          remote_script="/tmp/tncompany-deploy-${GITHUB_SHA}.sh"
+
+          scp -P "$SSH_PORT" "release-${GITHUB_SHA}.tar.gz" \
+            "$SSH_USER@$SSH_HOST:$remote_archive"
+          scp -P "$SSH_PORT" deploy-production.sh \
+            "$SSH_USER@$SSH_HOST:$remote_script"
+
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "chmod 700 '$remote_script' && '$remote_script' '$GITHUB_SHA' '$remote_archive'"
+
+      - name: Verify public production endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            https://tnservice.vn/api/health.php)"
+          printf '%s\n' "$response"
+          printf '%s' "$response" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'
