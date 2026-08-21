@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 20
     environment: production
     env:
@@ -49,68 +49,94 @@ jobs:
         run: npm run build
 
       - name: Validate deployment settings
-        shell: bash
+        shell: powershell
         run: |
-          set -euo pipefail
+          $ErrorActionPreference = "Stop"
 
-          : "${SSH_HOST:?Missing production secret PROD_SSH_HOST}"
-          : "${SSH_USER:?Missing production secret PROD_SSH_USER}"
-          : "${SSH_PRIVATE_KEY:?Missing production secret PROD_SSH_PRIVATE_KEY}"
-          : "${SSH_KNOWN_HOSTS:?Missing production secret PROD_SSH_KNOWN_HOSTS}"
+          if ([string]::IsNullOrWhiteSpace($env:SSH_HOST)) { throw "Missing production secret PROD_SSH_HOST" }
+          if ([string]::IsNullOrWhiteSpace($env:SSH_USER)) { throw "Missing production secret PROD_SSH_USER" }
+          if ([string]::IsNullOrWhiteSpace($env:SSH_PRIVATE_KEY)) { throw "Missing production secret PROD_SSH_PRIVATE_KEY" }
+          if ([string]::IsNullOrWhiteSpace($env:SSH_KNOWN_HOSTS)) { throw "Missing production secret PROD_SSH_KNOWN_HOSTS" }
 
-          if [[ ! "$SSH_HOST" =~ ^[a-zA-Z0-9._:-]+$ ]]; then
-            echo "Invalid PROD_SSH_HOST" >&2
-            exit 1
-          fi
-          if [[ ! "$SSH_USER" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-            echo "Invalid PROD_SSH_USER" >&2
-            exit 1
-          fi
+          if ($env:SSH_HOST -notmatch '^[a-zA-Z0-9._:-]+$') { throw "Invalid PROD_SSH_HOST" }
+          if ($env:SSH_USER -notmatch '^[a-zA-Z0-9._-]+$') { throw "Invalid PROD_SSH_USER" }
 
-          effective_port="${SSH_PORT:-22}"
-          if [[ ! "$effective_port" =~ ^[0-9]+$ ]] || (( effective_port < 1 || effective_port > 65535 )); then
-            echo "Invalid PROD_SSH_PORT" >&2
-            exit 1
-          fi
-          echo "SSH_PORT=$effective_port" >> "$GITHUB_ENV"
+          $effectivePort = if ([string]::IsNullOrWhiteSpace($env:SSH_PORT)) { 22 } else { $env:SSH_PORT }
+          $parsedPort = 0
+          if (-not [int]::TryParse($effectivePort, [ref]$parsedPort) -or $parsedPort -lt 1 -or $parsedPort -gt 65535) {
+            throw "Invalid PROD_SSH_PORT"
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "SSH_PORT=$parsedPort"
 
       - name: Configure SSH
-        shell: bash
+        shell: powershell
         run: |
-          set -euo pipefail
-          install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$HOME/.ssh/id_ed25519"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+          $ErrorActionPreference = "Stop"
+          $sshDirectory = Join-Path $env:RUNNER_TEMP "tncompany-ssh"
+          $privateKeyPath = Join-Path $sshDirectory "id_ed25519"
+          $knownHostsPath = Join-Path $sshDirectory "known_hosts"
 
-          ssh -p "$SSH_PORT" -o BatchMode=yes -o ConnectTimeout=10 \
-            "$SSH_USER@$SSH_HOST" "echo 'SSH connection OK'"
+          New-Item -ItemType Directory -Path $sshDirectory -Force | Out-Null
+          [IO.File]::WriteAllText(
+            $privateKeyPath,
+            (($env:SSH_PRIVATE_KEY -replace "`r", "").TrimEnd() + "`n"),
+            [Text.UTF8Encoding]::new($false)
+          )
+          [IO.File]::WriteAllText(
+            $knownHostsPath,
+            (($env:SSH_KNOWN_HOSTS -replace "`r", "").TrimEnd() + "`n"),
+            [Text.UTF8Encoding]::new($false)
+          )
+
+          $runnerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          & icacls.exe $sshDirectory /inheritance:r /grant:r "*${runnerSid}:(OI)(CI)F" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Cannot secure the temporary SSH directory" }
+
+          & ssh.exe -i $privateKeyPath -o IdentitiesOnly=yes -o BatchMode=yes `
+            -o ConnectTimeout=10 -o "UserKnownHostsFile=$knownHostsPath" `
+            -p $env:SSH_PORT "$env:SSH_USER@$env:SSH_HOST" "echo SSH_CONNECTION_OK"
+          if ($LASTEXITCODE -ne 0) { throw "SSH connection failed with exit code $LASTEXITCODE" }
 
       - name: Package release
-        shell: bash
-        run: tar -C dist -czf "release-${GITHUB_SHA}.tar.gz" .
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          & tar.exe -C dist -czf "release-$env:GITHUB_SHA.tar.gz" .
+          if ($LASTEXITCODE -ne 0) { throw "Cannot package production release" }
 
       - name: Upload and activate release
-        shell: bash
+        shell: powershell
         run: |
-          set -euo pipefail
+          $ErrorActionPreference = "Stop"
+          $sshDirectory = Join-Path $env:RUNNER_TEMP "tncompany-ssh"
+          $privateKeyPath = Join-Path $sshDirectory "id_ed25519"
+          $knownHostsPath = Join-Path $sshDirectory "known_hosts"
+          $remoteArchive = "/tmp/tncompany-release-$env:GITHUB_SHA.tar.gz"
+          $remoteScript = "/tmp/tncompany-deploy-$env:GITHUB_SHA.sh"
+          $sshTarget = "$env:SSH_USER@$env:SSH_HOST"
+          $sshOptions = @(
+            "-i", $privateKeyPath,
+            "-o", "IdentitiesOnly=yes",
+            "-o", "BatchMode=yes",
+            "-o", "UserKnownHostsFile=$knownHostsPath"
+          )
 
-          remote_archive="/tmp/tncompany-release-${GITHUB_SHA}.tar.gz"
-          remote_script="/tmp/tncompany-deploy-${GITHUB_SHA}.sh"
+          & scp.exe @sshOptions -P $env:SSH_PORT "release-$env:GITHUB_SHA.tar.gz" "${sshTarget}:$remoteArchive"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot upload release archive" }
 
-          scp -P "$SSH_PORT" "release-${GITHUB_SHA}.tar.gz" \
-            "$SSH_USER@$SSH_HOST:$remote_archive"
-          scp -P "$SSH_PORT" deploy-production.sh \
-            "$SSH_USER@$SSH_HOST:$remote_script"
+          & scp.exe @sshOptions -P $env:SSH_PORT deploy-production.sh "${sshTarget}:$remoteScript"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot upload deployment script" }
 
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "chmod 700 '$remote_script' && '$remote_script' '$GITHUB_SHA' '$remote_archive'"
+          $remoteCommand = "chmod 700 '$remoteScript' && '$remoteScript' '$env:GITHUB_SHA' '$remoteArchive'"
+          & ssh.exe @sshOptions -p $env:SSH_PORT $sshTarget $remoteCommand
+          if ($LASTEXITCODE -ne 0) { throw "Production activation failed" }
 
       - name: Verify public production endpoint
-        shell: bash
+        shell: powershell
         run: |
-          set -euo pipefail
-          response="$(curl --fail --silent --show-error --retry 3 --retry-delay 2 \
-            https://tnservice.vn/api/health.php)"
-          printf '%s\n' "$response"
-          printf '%s' "$response" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'
+          $ErrorActionPreference = "Stop"
+          $response = & curl.exe --fail --silent --show-error --retry 3 --retry-delay 2 `
+            https://tnservice.vn/api/health.php
+          if ($LASTEXITCODE -ne 0) { throw "Public production health request failed" }
+          Write-Host $response
+          if ($response -notmatch '"ok"\s*:\s*true') { throw "Unexpected production health response" }
