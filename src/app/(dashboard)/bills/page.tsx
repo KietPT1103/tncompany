@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import {
   Bill,
   cancelBill,
@@ -33,6 +34,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Download,
   Edit3,
   Filter,
   HandCoins,
@@ -57,6 +59,7 @@ import {
   getBillActionVisibility,
   shouldActivateBillRow,
 } from "./billRowInteraction";
+import { buildBillExportRows, buildVoucherExportRows } from "./billExcelExport";
 
 type EditFormState = {
   tableNumber: string;
@@ -159,6 +162,20 @@ const getPaymentMethodLabel = (bill: Bill) =>
 
 const compareText = (left: string, right: string) =>
   left.localeCompare(right, "vi", { numeric: true, sensitivity: "base" });
+
+const exportExcel = (
+  rows: Record<string, string | number | Date>[],
+  sheetName: string,
+  fileName: string,
+) => {
+  const worksheet = XLSX.utils.json_to_sheet(rows, { cellDates: true });
+  worksheet["!cols"] = Object.keys(rows[0] || {}).map((header) => ({
+    wch: Math.min(45, Math.max(14, header.length + 2)),
+  }));
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  XLSX.writeFile(workbook, fileName, { compression: true });
+};
 
 function BillActionButtons({
   bill,
@@ -440,6 +457,22 @@ export default function BillsPage() {
     .filter((voucher) => voucher.includeInCashFlow !== false && voucher.type === "expense")
     .reduce((sum, voucher) => sum + (voucher.amount || 0), 0);
   const netDailyCashFlow = totalAmount + totalIncomeVouchers - totalExpenseVouchers;
+
+  const handleExportBills = () => {
+    exportExcel(
+      buildBillExportRows(filteredBills),
+      "DanhSachHoaDon",
+      `danh-sach-hoa-don_${startDate}_${endDate}.xlsx`,
+    );
+  };
+
+  const handleExportVouchers = () => {
+    exportExcel(
+      buildVoucherExportRows(filteredVouchers),
+      "PhieuThuChi",
+      `phieu-thu-chi_${startDate}_${endDate}.xlsx`,
+    );
+  };
 
   const openEdit = (bill: Bill) => {
     if (!canEditBill) return;
@@ -819,7 +852,18 @@ export default function BillsPage() {
                     <ReceiptText className="h-5 w-5 text-sky-700" />
                     Danh sách hóa đơn ({filteredBills.length})
                   </CardTitle>
-                  <div className="flex w-full items-center gap-2 sm:w-auto">
+                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={SORT_DIRECTION_CLASS}
+                      onClick={handleExportBills}
+                      disabled={loading || filteredBills.length === 0}
+                      title="Xuất toàn bộ hóa đơn đang lọc ra Excel"
+                    >
+                      <Download className="h-4 w-4 text-emerald-700" aria-hidden="true" />
+                      Xuất Excel
+                    </Button>
                     <SelectBox<BillSortKey>
                       value={billSortKey}
                       options={BILL_SORT_OPTIONS}
@@ -1142,6 +1186,17 @@ export default function BillsPage() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={SORT_DIRECTION_CLASS}
+                        onClick={handleExportVouchers}
+                        disabled={loading || filteredVouchers.length === 0}
+                        title="Xuất toàn bộ phiếu thu chi đang lọc ra Excel"
+                      >
+                        <Download className="h-4 w-4 text-emerald-700" aria-hidden="true" />
+                        Xuất Excel
+                      </Button>
                       <SelectBox<VoucherSortKey>
                         value={voucherSortKey}
                         options={VOUCHER_SORT_OPTIONS}
