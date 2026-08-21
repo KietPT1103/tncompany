@@ -90,7 +90,10 @@ function receipts_list(): void
     }
     $employee = trim((string) ($_GET['employeeId'] ?? ''));
     if ($employee !== '') {
-        $where[] = 'r.created_by = :employee';
+        $where[] = 'EXISTS (
+            SELECT 1 FROM inventory_receipt_images employee_image
+            WHERE employee_image.receipt_id=r.id AND employee_image.uploaded_by=:employee
+        )';
         $params['employee'] = $employee;
     }
     $keyword = trim((string) ($_GET['keyword'] ?? $_GET['search'] ?? ''));
@@ -122,7 +125,12 @@ function receipts_list(): void
                 COALESCE(u.display_name,u.username,u.email,r.created_by) creator_name,
                 (SELECT COUNT(*) FROM inventory_receipt_items i WHERE i.receipt_id=r.id) item_count,
                 (SELECT COUNT(*) FROM inventory_receipt_images im WHERE im.receipt_id=r.id) image_count,
-                (SELECT im.id FROM inventory_receipt_images im WHERE im.receipt_id=r.id ORDER BY im.created_at LIMIT 1) thumbnail_id
+                (SELECT im.id FROM inventory_receipt_images im WHERE im.receipt_id=r.id ORDER BY im.created_at LIMIT 1) thumbnail_id,
+                (SELECT COALESCE(photo_user.display_name,photo_user.username,photo_user.email,im.uploaded_by)
+                   FROM inventory_receipt_images im
+                   LEFT JOIN users photo_user
+                     ON photo_user.id COLLATE utf8mb4_unicode_ci=im.uploaded_by COLLATE utf8mb4_unicode_ci
+                  WHERE im.receipt_id=r.id ORDER BY im.created_at LIMIT 1) captured_by_name
          FROM inventory_receipts r INNER JOIN stores s ON s.id=r.store_id
          LEFT JOIN suppliers supplier
            ON supplier.id COLLATE utf8mb4_unicode_ci=r.supplier_id COLLATE utf8mb4_unicode_ci
@@ -140,6 +148,7 @@ function receipts_list(): void
         $item['itemCount'] = (int) $row['item_count'];
         $item['imageCount'] = (int) $row['image_count'];
         $item['thumbnailUrl'] = $row['thumbnail_id'] ? '/api/inventory-receipt-images.php?id=' . rawurlencode($row['thumbnail_id']) . '&size=thumbnail' : null;
+        $item['capturedByName'] = $row['captured_by_name'] ?: null;
         return $item;
     }, $statement->fetchAll());
 

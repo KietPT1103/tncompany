@@ -13,7 +13,7 @@ export type InventoryReceipt = {
   id: string; receiptCode: string; areaId: string; storeId: string;
   area: { id: string; name: string }; status: ReceiptStatus; receiptDate: string;
   capturedAt: string | null; createdAt: string; updatedAt: string; createdBy: string;
-  createdByName: string; orderCreatorName: string; totalQuantity: number; totalAmount: number; itemCount: number;
+  createdByName: string; capturedByName?: string | null; orderCreatorName: string; totalQuantity: number; totalAmount: number; itemCount: number;
   imageCount: number; thumbnailUrl?: string | null; note: string;
   supplierId?: string | null; supplier?: { id: string; supplierCode: string; supplierName: string } | null;
   isLocked: boolean; lockedAt?: string | null; lockedBy?: string | null; unlockedAt?: string | null;

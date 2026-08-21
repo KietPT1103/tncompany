@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, Plus, Trash2, X, ZoomIn } from "lucide-react";
 import {
   addInventoryReceiptItem, attachReceiptProduct, completeInventoryReceipt, createReceiptProduct,
@@ -12,6 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 export default function FieldInventoryReceiptDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { role } = useAuth();
   const [receipt, setReceipt] = useState<InventoryReceipt | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -53,6 +54,7 @@ export default function FieldInventoryReceiptDetailPage() {
   if (!receipt) return <div className="p-10 text-slate-500">Đang tải phiếu…</div>;
   const editableStatus = receipt.status === "pending_explanation" || receipt.status === "draft";
   const editable = editableStatus && receipt.canEdit;
+  const listReturnTo = (location.state as { returnTo?: string } | null)?.returnTo || "/admin/inventory-receipts";
 
   async function choose(product: ProductResult) {
     if (!receipt) return;
@@ -127,7 +129,7 @@ export default function FieldInventoryReceiptDetailPage() {
   }
 
   return <div className="min-h-screen bg-slate-50 p-4 md:p-8"><div className="mx-auto max-w-7xl">
-    <button onClick={() => navigate("/admin/inventory-receipts")} className="flex items-center gap-2 font-semibold text-emerald-700"><ArrowLeft className="h-4 w-4" /> Danh sách phiếu</button>
+    <button onClick={() => navigate(listReturnTo, { replace: true })} className="flex items-center gap-2 font-semibold text-emerald-700"><ArrowLeft className="h-4 w-4" /> Danh sách phiếu</button>
     {receipt.isLocked && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><b>Phiếu đã tự động khóa sau 24 giờ</b>
         <p className="mt-1 text-sm">{role === "admin" ? "Admin vẫn có thể giải trình trực tiếp hoặc mở khóa cho nhân viên." : "Chỉ admin mới có thể giải trình hoặc mở khóa phiếu này."}</p></div>
