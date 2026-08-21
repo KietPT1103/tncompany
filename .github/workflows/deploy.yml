@@ -113,6 +113,7 @@ jobs:
           $knownHostsPath = Join-Path $sshDirectory "known_hosts"
           $remoteArchive = "/tmp/tncompany-release-$env:GITHUB_SHA.tar.gz"
           $remoteScript = "/tmp/tncompany-deploy-$env:GITHUB_SHA.sh"
+          $normalizedScript = Join-Path $env:RUNNER_TEMP "deploy-production.sh"
           $sshTarget = "$env:SSH_USER@$env:SSH_HOST"
           $sshOptions = @(
             "-i", $privateKeyPath,
@@ -124,7 +125,11 @@ jobs:
           & scp.exe @sshOptions -P $env:SSH_PORT "release-$env:GITHUB_SHA.tar.gz" "${sshTarget}:$remoteArchive"
           if ($LASTEXITCODE -ne 0) { throw "Cannot upload release archive" }
 
-          & scp.exe @sshOptions -P $env:SSH_PORT deploy-production.sh "${sshTarget}:$remoteScript"
+          $scriptContent = [IO.File]::ReadAllText((Resolve-Path "deploy-production.sh"))
+          $scriptContent = $scriptContent.Replace("`r`n", "`n").Replace("`r", "`n")
+          [IO.File]::WriteAllText($normalizedScript, $scriptContent, [Text.UTF8Encoding]::new($false))
+
+          & scp.exe @sshOptions -P $env:SSH_PORT $normalizedScript "${sshTarget}:$remoteScript"
           if ($LASTEXITCODE -ne 0) { throw "Cannot upload deployment script" }
 
           $remoteCommand = "chmod 700 '$remoteScript' && '$remoteScript' '$env:GITHUB_SHA' '$remoteArchive'"
