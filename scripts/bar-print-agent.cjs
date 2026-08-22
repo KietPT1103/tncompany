@@ -11,8 +11,9 @@ const util = require("node:util");
 const DEFAULT_STORE_ID = "cafe";
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api";
 const DEFAULT_PRINTER_PORT = 9100;
-const DEFAULT_SOCKET_TIMEOUT_MS = 12000;
-const DEFAULT_RETRY_INTERVAL_MS = 15000;
+const DEFAULT_SOCKET_TIMEOUT_MS = 5000;
+const DEFAULT_API_TIMEOUT_MS = 5000;
+const DEFAULT_RETRY_INTERVAL_MS = 1000;
 const DEFAULT_TERMINAL_NAME = "May pha che LAN";
 const DEFAULT_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const PAPER_WIDTH = 42;
@@ -37,6 +38,29 @@ const toAscii = (value) =>
 const parseInteger = (rawValue, fallback) => {
   const numeric = Number.parseInt(String(rawValue || ""), 10);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+};
+
+const delay = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const fetchWithTimeout = async (
+  url,
+  options = {},
+  timeoutMs = DEFAULT_API_TIMEOUT_MS,
+  fetchImplementation = fetch
+) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchImplementation(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`API timeout after ${timeoutMs}ms (${url})`, { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 const loadDotEnvLocal = () => {
@@ -423,6 +447,10 @@ const createConfig = () => {
     process.env.PRINT_AGENT_RETRY_INTERVAL_MS,
     DEFAULT_RETRY_INTERVAL_MS
   );
+  const apiTimeoutMs = parseInteger(
+    process.env.PRINT_AGENT_API_TIMEOUT_MS,
+    DEFAULT_API_TIMEOUT_MS
+  );
   const timeZone = process.env.PRINT_AGENT_TIME_ZONE || DEFAULT_TIME_ZONE;
   const dryRun = isTrue(process.env.PRINT_AGENT_DRY_RUN) || args.has("--dry-run");
   const testOnStart = isTrue(process.env.PRINT_AGENT_TEST_ON_START) || args.has("--test");
@@ -444,6 +472,7 @@ const createConfig = () => {
     printerPort,
     socketTimeoutMs,
     retryIntervalMs,
+    apiTimeoutMs,
     timeZone,
     dryRun,
     testOnStart,
@@ -483,15 +512,19 @@ const printTestPage = async (config) => {
 
 const apiFetch = async (config, pathName, options = {}) => {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await fetch(`${config.apiBaseUrl}${pathName}`, {
-      ...options,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...(config.apiToken ? { Authorization: `Bearer ${config.apiToken}` } : {}),
-        ...(options.headers || {}),
+    const response = await fetchWithTimeout(
+      `${config.apiBaseUrl}${pathName}`,
+      {
+        ...options,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...(config.apiToken ? { Authorization: `Bearer ${config.apiToken}` } : {}),
+          ...(options.headers || {}),
+        },
       },
-    });
+      config.apiTimeoutMs
+    );
 
     if (
       response.status === 401 &&
@@ -519,11 +552,15 @@ const authenticateApi = async (config, force = false) => {
   if (!config.apiLogin || !config.apiPassword) {
     throw new Error("Set PRINT_AGENT_API_LOGIN and PRINT_AGENT_API_PASSWORD (or PRINT_AGENT_API_TOKEN).");
   }
-  const response = await fetch(`${config.apiBaseUrl}/auth.php?action=login`, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ login: config.apiLogin, password: config.apiPassword }),
-  });
+  const response = await fetchWithTimeout(
+    `${config.apiBaseUrl}/auth.php?action=login`,
+    {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ login: config.apiLogin, password: config.apiPassword }),
+    },
+    config.apiTimeoutMs
+  );
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok || !payload.data?.token) {
     throw new Error(payload?.error || `API login failed (${response.status})`);
@@ -581,10 +618,25 @@ const run = async () => {
       return;
     }
 
+    const createdAtSeconds = Number(job.createdAt?.seconds);
+    const discoveredAfterMs = Number.isFinite(createdAtSeconds)
+      ? Math.max(0, Date.now() - createdAtSeconds * 1000)
+      : null;
+    if (discoveredAfterMs !== null) {
+      console.log(`[${jobId}] Picked up after ${discoveredAfterMs}ms.`);
+    }
+
     const payload = await buildEscPosPayload(job, config);
     await sendToPrinter(payload, config);
     await markPrinted(jobId);
-    console.log(`[${jobId}] Printed and marked.`);
+    const totalLatencyMs = Number.isFinite(createdAtSeconds)
+      ? Math.max(0, Date.now() - createdAtSeconds * 1000)
+      : null;
+    console.log(
+      totalLatencyMs === null
+        ? `[${jobId}] Printed and marked.`
+        : `[${jobId}] Printed and marked after ${totalLatencyMs}ms.`
+    );
   };
 
   const enqueueJob = (job) => {
@@ -638,17 +690,27 @@ const run = async () => {
   );
   console.log(`Terminal: ${config.terminalName}`);
   console.log(`API: ${config.apiBaseUrl}`);
-  console.log(`Retry poll: ${config.retryIntervalMs}ms`);
+  console.log(`API timeout: ${config.apiTimeoutMs}ms`);
+  console.log(`Poll interval: ${config.retryIntervalMs}ms`);
 
-  const pollTimer = setInterval(() => {
-    void pollPendingJobs();
-  }, config.retryIntervalMs);
-  void pollPendingJobs();
+  let stopping = false;
+  const pollLoop = (async () => {
+    while (!stopping) {
+      const pollStartedAt = Date.now();
+      await pollPendingJobs();
+      const waitMs = Math.max(
+        0,
+        config.retryIntervalMs - (Date.now() - pollStartedAt)
+      );
+      if (waitMs > 0) await delay(waitMs);
+    }
+  })();
 
   const shutdown = async (signal) => {
     console.log(`\nReceived ${signal}. Stopping agent...`);
-    clearInterval(pollTimer);
+    stopping = true;
     try {
+      await pollLoop;
       await queue;
     } catch {
       // Ignore queue errors during shutdown.
@@ -669,4 +731,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildRasterEscPosPayload };
+module.exports = { buildRasterEscPosPayload, fetchWithTimeout };

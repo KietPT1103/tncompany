@@ -1,7 +1,10 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { buildRasterEscPosPayload } = require("./bar-print-agent.cjs");
+const {
+  buildRasterEscPosPayload,
+  fetchWithTimeout,
+} = require("./bar-print-agent.cjs");
 
 test("splits a tall raster into bounded GS v 0 commands without losing bytes", () => {
   const widthBytes = 72;
@@ -37,4 +40,36 @@ test("splits a tall raster into bounded GS v 0 commands without losing bytes", (
 test("rejects malformed raster data", () => {
   assert.throws(() => buildRasterEscPosPayload(Buffer.alloc(73), 72, 96));
   assert.throws(() => buildRasterEscPosPayload(Buffer.alloc(72), 72, 0));
+});
+
+test("aborts an API request at the configured timeout", async () => {
+  const hangingFetch = (_url, options) =>
+    new Promise((_resolve, reject) => {
+      options.signal.addEventListener(
+        "abort",
+        () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        },
+        { once: true }
+      );
+    });
+
+  await assert.rejects(
+    () => fetchWithTimeout("https://example.test/api", {}, 20, hangingFetch),
+    /API timeout after 20ms/
+  );
+});
+
+test("returns a completed API response before the timeout", async () => {
+  const expected = { ok: true };
+  const immediateFetch = async () => expected;
+  const response = await fetchWithTimeout(
+    "https://example.test/api",
+    {},
+    100,
+    immediateFetch
+  );
+  assert.equal(response, expected);
 });

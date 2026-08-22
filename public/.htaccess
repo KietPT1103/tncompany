@@ -1,5 +1,8 @@
 RewriteEngine On
 
+# Short download URL for the Windows bar print agent installer.
+RewriteRule ^tai-agent/?$ api/download-bar-print-agent.php [L]
+
 # Let the PHP API handle its own requests.
 RewriteRule ^api/ - [L]
 
