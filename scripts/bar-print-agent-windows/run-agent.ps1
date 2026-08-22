@@ -24,8 +24,8 @@ while ($true) {
     $agentExitCode = $LASTEXITCODE
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -LiteralPath $logFile -Value "[$timestamp] Agent stopped with exit code $agentExitCode; restarting in 15 seconds"
-    Start-Sleep -Seconds 15
+    Add-Content -LiteralPath $logFile -Value "[$timestamp] Agent stopped with exit code $agentExitCode; restarting in 3 seconds"
+    Start-Sleep -Seconds 3
 }
 
 $ErrorActionPreference = $previousErrorActionPreference

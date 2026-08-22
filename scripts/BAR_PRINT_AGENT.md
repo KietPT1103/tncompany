@@ -26,8 +26,9 @@ for preparation tickets, so printing stays silent as long as this agent is runni
 - `PRINT_AGENT_STORE_ID` (optional, default `cafe`)
 - `PRINT_AGENT_TERMINAL_NAME` (optional, default machine hostname)
 - `PRINT_AGENT_TIME_ZONE` (optional, default `Asia/Ho_Chi_Minh`)
-- `PRINT_AGENT_SOCKET_TIMEOUT_MS` (optional, default `12000`)
-- `PRINT_AGENT_RETRY_INTERVAL_MS` (optional, default `15000`)
+- `PRINT_AGENT_SOCKET_TIMEOUT_MS` (optional, default `5000`)
+- `PRINT_AGENT_API_TIMEOUT_MS` (optional, default `5000`)
+- `PRINT_AGENT_RETRY_INTERVAL_MS` (optional, default `1000`)
 - `PRINT_AGENT_DRY_RUN=1` (optional, no real print, and does not mark printed)
 - `PRINT_AGENT_TEST_ON_START=1` (optional, print a test ticket on startup)
 - `PRINT_AGENT_API_BASE_URL` (optional, default `http://127.0.0.1:8000/api`)
@@ -68,6 +69,10 @@ its own Node.js runtime. Extract it on the bar Windows machine and double-click
 hidden startup task named `TNCompany-BarPrintAgent` that runs as `SYSTEM`,
 restarts after failures, and does not require a user to sign in.
 
+The current production installer is available at
+`https://tnservice.vn/api/download-bar-print-agent.php`. Upload a newly built
+archive with `php scripts/upload-bar-print-agent.php`.
+
 The installed configuration and logs are under
 `C:\ProgramData\TNCompany\BarPrintAgent`. Double-click `GO-CAI-DAT.cmd` from
 the extracted package to remove the scheduled task and installed files.
@@ -90,3 +95,6 @@ npm run print:bar-agent
   is interactive by design and opens a print dialog; this agent is the silent-print path.
 - This agent can run on cashier machine and print to pha che LAN printer directly.
 - Keep this process running with PM2/Task Scheduler/NSSM for production use.
+- API polling is sequential, so a slow request cannot create overlapping polls. Requests
+  are aborted after `PRINT_AGENT_API_TIMEOUT_MS` so a brief Wi-Fi failure cannot stall
+  printing for several minutes.
