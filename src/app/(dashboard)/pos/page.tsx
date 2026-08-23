@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { Fragment, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -1860,6 +1861,7 @@ export default function CafePosPage() {
 
   const handleConfirmPrint = async () => {
     if (!receiptData || paymentInFlightRef.current) return;
+    let paymentCompleted = false;
     const currentCashReceived = parseMoney(cashReceivedInput);
     const currentChangeAmount =
       paymentMethod === "cash"
@@ -1942,6 +1944,9 @@ export default function CafePosPage() {
       }
 
       if (!isBartenderAccount) {
+        // Browser printing blocks React from painting pending state updates. Commit
+        // the closed modal first so an Enter used in the print dialog cannot submit it again.
+        flushSync(() => setShowReceipt(false));
         printPaymentReceipt({
           billCode,
           title: isBakeryStore ? "HÓA ĐƠN BÁN HÀNG" : "PHIẾU TÍNH TIỀN",
@@ -1986,17 +1991,19 @@ export default function CafePosPage() {
       setPaymentMethod("cash");
       setShowReceipt(false);
       checkoutRequestIdRef.current = null;
-      if (!isFarmStore) {
-        setTableNumber("");
-        setTableSearch("");
-        setActiveTab("tables");
-      }
+      paymentCompleted = true;
     } catch (error) {
       console.error(error);
       alert("Lỗi khi lưu hoặc in bill. Vui lòng thử lại.");
     } finally {
-      paymentInFlightRef.current = false;
       setIsPaying(false);
+      if (paymentCompleted) {
+        window.setTimeout(() => {
+          paymentInFlightRef.current = false;
+        }, 500);
+      } else {
+        paymentInFlightRef.current = false;
+      }
     }
   };
 
@@ -3119,6 +3126,11 @@ export default function CafePosPage() {
         tag === "SELECT" ||
         target?.isContentEditable;
       if (isTyping) return;
+
+      if (paymentInFlightRef.current) {
+        e.preventDefault();
+        return;
+      }
 
       if (showReceipt && receiptData) {
         e.preventDefault();
