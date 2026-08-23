@@ -16,6 +16,18 @@ export type OverviewShiftSummary = {
   incomeVouchers: number;
   expenseVouchers: number;
   expectedClosingCash: number;
+  cupCount?: number;
+  peopleCount?: number;
+};
+
+export type OverviewCupBill = {
+  status?: "completed" | "cancelled";
+  items?: Array<{
+    menuId?: string;
+    quantity?: number;
+    countsAsCup?: boolean | null;
+    price?: number;
+  }>;
 };
 
 export type OverviewShiftRevenue = {
@@ -30,6 +42,25 @@ export const getShiftLabel = (shiftType: OverviewShiftData["shiftType"]) => {
   if (shiftType === "shift_3") return "Ca 3";
   return "Ca đơn";
 };
+
+export function countCupsForOverview(
+  bills: OverviewCupBill[],
+  fallbackCupProductCodes: ReadonlySet<string> = new Set(),
+): number {
+  return bills
+    .filter((bill) => bill.status !== "cancelled")
+    .flatMap((bill) => bill.items || [])
+    .filter((item) =>
+      item.countsAsCup === true
+      || (item.countsAsCup == null
+        && Boolean(item.menuId)
+        && fallbackCupProductCodes.has(item.menuId || "")),
+    )
+    .reduce((total, item) => {
+      const quantity = Number(item.quantity || 0);
+      return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+    }, 0);
+}
 
 export function orderOverviewShiftRevenueRows(
   rows: OverviewShiftRevenue[],

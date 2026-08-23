@@ -12,6 +12,7 @@ export type OverviewBill = {
     name: string;
     quantity: number;
     lineTotal: number;
+    countsAsCup?: boolean | null;
   }>;
 };
 
@@ -28,6 +29,7 @@ export type SalesPoint = {
   label: string;
   revenue: number;
   orders: number;
+  customers: number;
 };
 
 export type ProductPerformance = {
@@ -236,6 +238,7 @@ export function buildOverviewSnapshot(
   startDate: Date,
   endDate: Date,
   bakeryProductCodes: ReadonlySet<string> = new Set(),
+  cupProductCodes: ReadonlySet<string> = new Set(),
 ): OverviewSnapshot {
   const points = new Map<string, SalesPoint>();
   const cursor = new Date(startDate);
@@ -253,6 +256,7 @@ export function buildOverviewSnapshot(
       }),
       revenue: 0,
       orders: 0,
+      customers: 0,
     });
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -265,6 +269,7 @@ export function buildOverviewSnapshot(
       label: `${key}:00`,
       revenue: 0,
       orders: 0,
+      customers: 0,
     });
   }
 
@@ -276,14 +281,27 @@ export function buildOverviewSnapshot(
   const productTotals = new Map<string, ProductPerformance>();
   const bakeryProductTotals = new Map<string, ProductPerformance>();
   const paymentTotals = { cash: 0, transfer: 0 };
+  let customerCount = 0;
 
   completedBills.forEach((bill) => {
+    const billCustomerCount = bill.items.reduce((total, item) => {
+      const isCup = item.countsAsCup === true
+        || (item.countsAsCup == null
+          && Boolean(item.menuId)
+          && cupProductCodes.has(item.menuId || ""));
+      if (!isCup) return total;
+      const quantity = Number(item.quantity || 0);
+      return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+    }, 0);
+    customerCount += billCustomerCount;
+
     const date = toBillDate(bill);
     if (date) {
       const point = points.get(toDateKey(date));
       if (point) {
         point.revenue += Number(bill.total || 0);
         point.orders += 1;
+        point.customers += billCustomerCount;
       }
 
       const hourKey = String(date.getHours()).padStart(2, "0");
@@ -291,6 +309,7 @@ export function buildOverviewSnapshot(
       if (hourlyPoint) {
         hourlyPoint.revenue += Number(bill.total || 0);
         hourlyPoint.orders += 1;
+        hourlyPoint.customers += billCustomerCount;
       }
     }
 
@@ -325,7 +344,7 @@ export function buildOverviewSnapshot(
   return {
     totalRevenue,
     orderCount: completedBills.length,
-    customerCount: completedBills.length,
+    customerCount,
     cancelledCount: scopedBills.length - completedBills.length,
     averageOrder: completedBills.length ? totalRevenue / completedBills.length : 0,
     itemsSold,

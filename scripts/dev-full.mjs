@@ -53,20 +53,11 @@ function startProcess(name, command, args, extraEnv = {}) {
 process.on("SIGINT", () => stopAll(0));
 process.on("SIGTERM", () => stopAll(0));
 
-console.log("Starting PHP API on http://127.0.0.1:8000");
-startProcess("php", "php", ["-S", "127.0.0.1:8000", "-t", "public"]);
-
-console.log("Starting TikTok social listening worker");
-startProcess("tiktok-worker", "php", ["scripts/tiktok-social-listening-worker.php", "--daemon", "5"]);
-
-console.log("Starting Vite with /api proxied to http://127.0.0.1:8000");
+console.log("Starting Vite with /api proxied to https://tnservice.vn (production data)");
 startProcess(
   "vite",
   isWindows ? "cmd.exe" : "npm",
   isWindows
     ? ["/d", "/s", "/c", "npm run vite:dev -- --host 127.0.0.1"]
-    : ["run", "vite:dev", "--", "--host", "127.0.0.1"],
-  {
-    VITE_PROXY_TARGET: process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8000",
-  }
+    : ["run", "vite:dev", "--", "--host", "127.0.0.1"]
 );

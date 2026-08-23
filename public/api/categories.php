@@ -12,13 +12,23 @@ auth_ensure_column(
     'is_preparation_print_enabled',
     'TINYINT(1) NOT NULL DEFAULT 1 AFTER is_hidden'
 );
+auth_ensure_column(
+    'categories',
+    'counts_as_cup',
+    'TINYINT(1) NULL DEFAULT NULL AFTER is_preparation_print_enabled'
+);
+auth_ensure_column(
+    'bill_items',
+    'counts_as_cup',
+    'TINYINT(1) NULL DEFAULT NULL AFTER surcharge_total'
+);
 
 if ($method === 'GET') {
     auth_require_permission(['categories.access', 'bills.access', 'bar.checkout']);
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
-        'SELECT id, store_id, name, description, sort_order, is_hidden, is_preparation_print_enabled
+        'SELECT id, store_id, name, description, sort_order, is_hidden, is_preparation_print_enabled, counts_as_cup
          FROM categories
          WHERE store_id = :store_id
          ORDER BY name ASC'
@@ -37,6 +47,8 @@ if ($method === 'GET') {
                 'order' => $row['sort_order'] !== null ? (int) $row['sort_order'] : null,
                 'isHidden' => (bool) $row['is_hidden'],
                 'isPreparationPrintEnabled' => (bool) $row['is_preparation_print_enabled'],
+                'countsAsCup' => $row['counts_as_cup'] !== null && (bool) $row['counts_as_cup'],
+                'isCupCountConfigured' => $row['counts_as_cup'] !== null,
             ];
         },
         $statement->fetchAll()
@@ -56,6 +68,7 @@ if ($method === 'POST') {
     $description = trim((string) ($body['description'] ?? ''));
     $isPreparationPrintEnabled = !array_key_exists('isPreparationPrintEnabled', $body)
         || !empty($body['isPreparationPrintEnabled']);
+    $countsAsCup = !empty($body['countsAsCup']);
 
     if ($name === '') {
         respond_error('Category name is required', 422);
@@ -63,8 +76,8 @@ if ($method === 'POST') {
 
     $id = uuidv4();
     $statement = db()->prepare(
-        'INSERT INTO categories (id, store_id, name, description, sort_order, is_hidden, is_preparation_print_enabled)
-         VALUES (:id, :store_id, :name, :description, :sort_order, 0, :is_preparation_print_enabled)'
+        'INSERT INTO categories (id, store_id, name, description, sort_order, is_hidden, is_preparation_print_enabled, counts_as_cup)
+         VALUES (:id, :store_id, :name, :description, :sort_order, 0, :is_preparation_print_enabled, :counts_as_cup)'
     );
     $statement->execute([
         'id' => $id,
@@ -73,6 +86,7 @@ if ($method === 'POST') {
         'description' => $description,
         'sort_order' => time(),
         'is_preparation_print_enabled' => $isPreparationPrintEnabled ? 1 : 0,
+        'counts_as_cup' => $countsAsCup ? 1 : 0,
     ]);
 
     respond_ok([
@@ -91,6 +105,12 @@ if ($method === 'PATCH') {
 
     $fields = [];
     $params = ['id' => $id];
+    $previousCategory = db()->prepare('SELECT counts_as_cup FROM categories WHERE id = :id LIMIT 1');
+    $previousCategory->execute(['id' => $id]);
+    $previousCountsAsCup = $previousCategory->fetchColumn();
+    if ($previousCountsAsCup === false) {
+        respond_error('Category not found', 404);
+    }
 
     if (array_key_exists('name', $body)) {
         $name = trim((string) $body['name']);
@@ -116,6 +136,11 @@ if ($method === 'PATCH') {
         $params['is_preparation_print_enabled'] = !empty($body['isPreparationPrintEnabled']) ? 1 : 0;
     }
 
+    if (array_key_exists('countsAsCup', $body)) {
+        $fields[] = 'counts_as_cup = :counts_as_cup';
+        $params['counts_as_cup'] = !empty($body['countsAsCup']) ? 1 : 0;
+    }
+
     if ($fields === []) {
         respond_error('No changes provided', 422);
     }
@@ -124,6 +149,20 @@ if ($method === 'PATCH') {
         sprintf('UPDATE categories SET %s WHERE id = :id', implode(', ', $fields))
     );
     $statement->execute($params);
+
+    if (array_key_exists('countsAsCup', $body) && $previousCountsAsCup === null) {
+        $backfill = db()->prepare(
+            'UPDATE bill_items bi
+             INNER JOIN bills b ON b.id = bi.bill_id
+             INNER JOIN products p ON p.store_id = b.store_id AND p.product_code = bi.menu_id
+             SET bi.counts_as_cup = :counts_as_cup
+             WHERE bi.counts_as_cup IS NULL AND p.category_id = :category_id'
+        );
+        $backfill->execute([
+            'counts_as_cup' => !empty($body['countsAsCup']) ? 1 : 0,
+            'category_id' => $id,
+        ]);
+    }
 
     respond_ok([
         'updated' => true,

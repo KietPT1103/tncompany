@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS categories (
   sort_order INT NULL,
   is_hidden TINYINT(1) NOT NULL DEFAULT 0,
   is_preparation_print_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  counts_as_cup TINYINT(1) NULL DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_categories_store_name (store_id, name),
@@ -335,6 +336,7 @@ CREATE TABLE IF NOT EXISTS bill_items (
   base_price DECIMAL(15,2) NULL,
   surcharge_per_unit DECIMAL(15,2) NULL,
   surcharge_total DECIMAL(15,2) NULL,
+  counts_as_cup TINYINT(1) NULL DEFAULT NULL,
   KEY idx_bill_items_bill (bill_id),
   CONSTRAINT fk_bill_items_bill FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE
 );

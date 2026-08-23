@@ -16,7 +16,7 @@ export default function OverviewSalesChart({ snapshot }: { snapshot: OverviewSna
       <OverviewMetricChart
         id="customer-count-chart"
         title="Lượng khách hàng"
-        subtitle="Theo lượt bill hoàn tất"
+        subtitle="Quy đổi theo số ly đồ uống (1 ly = 1 khách hàng)"
         metric="customers"
         metricValue={snapshot.customerCount}
         hourlyPoints={snapshot.hourlySeries}

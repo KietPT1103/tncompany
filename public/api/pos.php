@@ -242,6 +242,21 @@ function pos_ensure_category_preparation_print_column(): void
     );
 }
 
+function pos_ensure_cup_snapshot_columns(): void
+{
+    pos_ensure_category_preparation_print_column();
+    auth_ensure_column(
+        'categories',
+        'counts_as_cup',
+        'TINYINT(1) NULL DEFAULT NULL AFTER is_preparation_print_enabled'
+    );
+    auth_ensure_column(
+        'bill_items',
+        'counts_as_cup',
+        'TINYINT(1) NULL DEFAULT NULL AFTER surcharge_total'
+    );
+}
+
 /** @param array<int, mixed> $items */
 function pos_filter_preparation_print_items(string $storeId, array $items): array
 {
@@ -361,7 +376,7 @@ function pos_bill_items(array $billIds): array
     $placeholders = implode(',', array_fill(0, count($billIds), '?'));
     $statement = db()->prepare(
         "SELECT bill_id, menu_id, name, price, quantity, line_total, note,
-                base_price, surcharge_per_unit, surcharge_total
+                base_price, surcharge_per_unit, surcharge_total, counts_as_cup
          FROM bill_items WHERE bill_id IN ($placeholders) ORDER BY id"
     );
     $statement->execute($billIds);
@@ -377,6 +392,7 @@ function pos_bill_items(array $billIds): array
             'basePrice' => $row['base_price'] !== null ? (float) $row['base_price'] : null,
             'surchargePerUnit' => $row['surcharge_per_unit'] !== null ? (float) $row['surcharge_per_unit'] : null,
             'surchargeTotal' => $row['surcharge_total'] !== null ? (float) $row['surcharge_total'] : null,
+            'countsAsCup' => $row['counts_as_cup'] !== null ? (bool) $row['counts_as_cup'] : null,
         ];
     }
     return $grouped;
@@ -439,18 +455,44 @@ function pos_map_bills(array $rows): array
     }, $rows);
 }
 
-function pos_replace_bill_children(string $billId, array $items, array $surcharges): void
+function pos_replace_bill_children(string $billId, string $storeId, array $items, array $surcharges): void
 {
+    $menuIds = [];
+    foreach ($items as $item) {
+        if (!is_array($item)) continue;
+        $menuId = trim((string) ($item['menuId'] ?? ''));
+        if ($menuId !== '') $menuIds[strtolower($menuId)] = $menuId;
+    }
+
+    $cupFlags = [];
+    if ($menuIds !== []) {
+        $values = array_values($menuIds);
+        $placeholders = implode(',', array_fill(0, count($values), '?'));
+        $cupStatement = db()->prepare(
+            "SELECT p.product_code, c.counts_as_cup
+             FROM products p
+             LEFT JOIN categories c ON c.id = p.category_id
+             WHERE p.store_id = ? AND p.product_code IN ({$placeholders})"
+        );
+        $cupStatement->execute(array_merge([$storeId], $values));
+        foreach ($cupStatement->fetchAll() as $row) {
+            $cupFlags[strtolower((string) $row['product_code'])] = $row['counts_as_cup'] !== null
+                ? ((bool) $row['counts_as_cup'] ? 1 : 0)
+                : null;
+        }
+    }
+
     db()->prepare('DELETE FROM bill_items WHERE bill_id=:id')->execute(['id' => $billId]);
     $itemStatement = db()->prepare(
         'INSERT INTO bill_items
-         (bill_id,menu_id,name,price,quantity,line_total,note,base_price,surcharge_per_unit,surcharge_total)
-         VALUES (:bill_id,:menu_id,:name,:price,:quantity,:line_total,:note,:base_price,:surcharge_per_unit,:surcharge_total)'
+         (bill_id,menu_id,name,price,quantity,line_total,note,base_price,surcharge_per_unit,surcharge_total,counts_as_cup)
+         VALUES (:bill_id,:menu_id,:name,:price,:quantity,:line_total,:note,:base_price,:surcharge_per_unit,:surcharge_total,:counts_as_cup)'
     );
     foreach ($items as $item) {
+        $menuId = trim((string) ($item['menuId'] ?? ''));
         $itemStatement->execute([
             'bill_id' => $billId,
-            'menu_id' => trim((string) ($item['menuId'] ?? '')),
+            'menu_id' => $menuId,
             'name' => trim((string) ($item['name'] ?? '')),
             'price' => (float) ($item['price'] ?? 0),
             'quantity' => (float) ($item['quantity'] ?? 0),
@@ -459,6 +501,7 @@ function pos_replace_bill_children(string $billId, array $items, array $surcharg
             'base_price' => isset($item['basePrice']) ? (float) $item['basePrice'] : null,
             'surcharge_per_unit' => isset($item['surchargePerUnit']) ? (float) $item['surchargePerUnit'] : null,
             'surcharge_total' => isset($item['surchargeTotal']) ? (float) $item['surchargeTotal'] : null,
+            'counts_as_cup' => $cupFlags[strtolower($menuId)] ?? null,
         ]);
     }
 
@@ -509,6 +552,7 @@ $body['storeId'] = $posStoreId;
 if ($resource === 'bills') pos_ensure_bill_order_source_column();
 if ($resource === 'bills') pos_ensure_bill_discount_columns();
 if ($resource === 'bills') pos_ensure_bill_checkout_request_column();
+if ($resource === 'bills') pos_ensure_cup_snapshot_columns();
 if ($method === 'POST' && in_array($resource, ['kitchen-jobs', 'bar-jobs'], true)) {
     pos_ensure_category_preparation_print_column();
 }
@@ -637,7 +681,7 @@ if ($method === 'POST' && $resource === 'bills') {
             'order_source' => ($user['role'] ?? '') === 'bartender' ? 'bar' : 'pos',
             'checkout_request_id' => $checkoutRequestId !== '' ? $checkoutRequestId : null,
         ]);
-        pos_replace_bill_children($id, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
+        pos_replace_bill_children($id, $posStoreId, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
         db()->commit();
     } catch (Throwable $exception) {
         if (db()->inTransaction()) db()->rollBack();
@@ -678,7 +722,7 @@ if ($method === 'PATCH' && $resource === 'bills') {
     try {
         if ($fields !== []) db()->prepare('UPDATE bills SET ' . implode(',', $fields) . ' WHERE id=:id')->execute($params);
         if (array_key_exists('items', $body) || array_key_exists('appliedSurcharges', $body)) {
-            pos_replace_bill_children($id, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
+            pos_replace_bill_children($id, $posStoreId, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
         }
         db()->commit();
     } catch (Throwable $exception) { if (db()->inTransaction()) db()->rollBack(); throw $exception; }

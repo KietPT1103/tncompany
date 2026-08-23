@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getShiftLabel, orderOverviewShiftRevenueRows } from "./overviewShiftData.ts";
+import {
+  countCupsForOverview,
+  getShiftLabel,
+  orderOverviewShiftRevenueRows,
+} from "./overviewShiftData.ts";
 
 const shift = (id: string, status: "open" | "closed") => ({
   id,
@@ -31,4 +35,41 @@ test("labels configured shifts for the overview", () => {
   assert.equal(getShiftLabel("shift_1"), "Ca 1");
   assert.equal(getShiftLabel("shift_2"), "Ca 2");
   assert.equal(getShiftLabel("shift_3"), "Ca 3");
+});
+
+test("counts drink quantities from completed bills as cups and people", () => {
+  const quantity = countCupsForOverview([
+    {
+      status: "completed",
+      items: [
+        { quantity: 2, countsAsCup: true, price: 45_000 },
+        { quantity: 1, countsAsCup: true, price: 0 },
+        { quantity: 3, countsAsCup: false, price: 30_000 },
+      ],
+    },
+    {
+      status: "cancelled",
+      items: [{ quantity: 4, countsAsCup: true, price: 45_000 }],
+    },
+  ]);
+
+  assert.equal(quantity, 3);
+});
+
+test("uses current drink categories only when historical bill items have no snapshot", () => {
+  const quantity = countCupsForOverview(
+    [
+      {
+        status: "completed",
+        items: [
+          { menuId: "CF01", quantity: 2 },
+          { menuId: "BANH01", quantity: 3 },
+          { menuId: "CF02", quantity: 4, countsAsCup: false },
+        ],
+      },
+    ],
+    new Set(["CF01", "CF02"]),
+  );
+
+  assert.equal(quantity, 2);
 });
