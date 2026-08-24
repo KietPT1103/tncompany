@@ -124,6 +124,7 @@ export function subscribeRealtimeResource<T>(options: {
   let queued = false;
   let realtimeState: RealtimeState = "connecting";
   let lastFallbackAt = Date.now();
+  const fallbackMs = Math.max(250, options.fallbackMs ?? 120000);
 
   const load = async () => {
     if (stopped) return;
@@ -159,13 +160,12 @@ export function subscribeRealtimeResource<T>(options: {
   );
   const fallbackTimer = globalThis.setInterval(() => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-    const fallbackMs = options.fallbackMs ?? 120000;
     const now = Date.now();
     if (realtimeState !== "connected" || now - lastFallbackAt >= fallbackMs) {
       lastFallbackAt = now;
       void load();
     }
-  }, 10000);
+  }, Math.min(10000, fallbackMs));
 
   const refreshWhenActive = () => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;

@@ -63,18 +63,18 @@ Build the portable Windows x64 installer package on a development machine:
 powershell -ExecutionPolicy Bypass -File scripts/build-bar-print-agent-windows.ps1
 ```
 
-This creates `artifacts/tn-company-bar-print-agent-windows-x64.zip`, including
-its own Node.js runtime. Extract it on the bar Windows machine and double-click
-`CAI-DAT.cmd`. The installer prompts for printer/API settings and registers a
+This creates both `artifacts/tn-company-bar-print-agent-setup-windows-x64.exe`
+and `artifacts/tn-company-bar-print-agent-windows-x64.zip`, including their own
+Node.js runtime. Open the EXE directly or extract the ZIP and run `CAI-DAT.cmd`.
+The installer prompts for printer/API settings and registers a
 hidden startup task named `TNCompany-BarPrintAgent` that runs as `SYSTEM`,
 restarts after failures, and does not require a user to sign in.
 
-The current production installer is available at `https://tnservice.vn/tai-agent`.
-Upload a newly built archive with `php scripts/upload-bar-print-agent.php`.
+Both production downloads are available at `https://tnservice.vn/tai-agent`.
+Upload both newly built artifacts with `php scripts/upload-bar-print-agent.php`.
 
 The installed configuration and logs are under
-`C:\ProgramData\TNCompany\BarPrintAgent`. Double-click `GO-CAI-DAT.cmd` from
-the extracted package to remove the scheduled task and installed files.
+`C:\ProgramData\TNCompany\BarPrintAgent`.
 
 ## PowerShell example
 
