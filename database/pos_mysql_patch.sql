@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS bill_items (
   base_price DECIMAL(15,2) NULL,
   surcharge_per_unit DECIMAL(15,2) NULL,
   surcharge_total DECIMAL(15,2) NULL,
+  counts_as_cup TINYINT(1) NULL DEFAULT NULL,
   KEY idx_bill_items_bill (bill_id),
   CONSTRAINT fk_bill_items_bill FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE
 );

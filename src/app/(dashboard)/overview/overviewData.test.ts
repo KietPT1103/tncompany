@@ -21,8 +21,8 @@ test("summarizes completed bills and keeps cancelled bills out of revenue", () =
         status: "completed",
         createdAt: timestamp("2026-08-17T09:00:00+07:00"),
         items: [
-          { name: "Cà phê sữa", quantity: 2, lineTotal: 70_000 },
-          { name: "Trà đào", quantity: 1, lineTotal: 50_000 },
+          { menuId: "CF01", name: "Cà phê sữa", quantity: 2, lineTotal: 70_000 },
+          { menuId: "TRA01", name: "Trà đào", quantity: 1, lineTotal: 50_000 },
         ],
       },
       {
@@ -30,23 +30,25 @@ test("summarizes completed bills and keeps cancelled bills out of revenue", () =
         total: 80_000,
         status: "completed",
         createdAt: timestamp("2026-08-18T14:00:00+07:00"),
-        items: [{ name: "Cà phê sữa", quantity: 2, lineTotal: 80_000 }],
+        items: [{ menuId: "CF01", name: "Cà phê sữa", quantity: 2, lineTotal: 80_000 }],
       },
       {
         id: "bill-3",
         total: 999_000,
         status: "cancelled",
         createdAt: timestamp("2026-08-18T15:00:00+07:00"),
-        items: [{ name: "Không tính", quantity: 9, lineTotal: 999_000 }],
+        items: [{ menuId: "CF01", name: "Không tính", quantity: 9, lineTotal: 999_000 }],
       },
     ],
     new Date("2026-08-17T00:00:00+07:00"),
     new Date("2026-08-18T23:59:59+07:00"),
+    new Set(),
+    new Set(["CF01", "TRA01"]),
   );
 
   assert.equal(snapshot.totalRevenue, 200_000);
   assert.equal(snapshot.orderCount, 2);
-  assert.equal(snapshot.customerCount, 2);
+  assert.equal(snapshot.customerCount, 5);
   assert.equal(snapshot.cancelledCount, 1);
   assert.equal(snapshot.averageOrder, 100_000);
   assert.equal(snapshot.itemsSold, 5);
@@ -73,7 +75,7 @@ test("returns a zero-filled daily series when there are no bills", () => {
   assert.equal(snapshot.customerCount, 0);
 });
 
-test("aggregates customer visits by hour and excludes cancelled bills", () => {
+test("aggregates cup-based customer counts by hour and excludes cancelled bills", () => {
   const snapshot = buildOverviewSnapshot(
     [
       {
@@ -81,35 +83,33 @@ test("aggregates customer visits by hour and excludes cancelled bills", () => {
         total: 120_000,
         status: "completed",
         createdAt: timestamp("2026-08-18T09:15:00+07:00"),
-        items: [],
+        items: [{ menuId: "CF01", name: "Cà phê", quantity: 2, lineTotal: 120_000 }],
       },
       {
         id: "bill-hour-2",
         total: 80_000,
         status: "completed",
         createdAt: timestamp("2026-08-18T09:45:00+07:00"),
-        items: [],
+        items: [{ menuId: "TRA01", name: "Trà", quantity: 1, lineTotal: 80_000 }],
       },
       {
         id: "bill-hour-cancelled",
         total: 999_000,
         status: "cancelled",
         createdAt: timestamp("2026-08-18T09:55:00+07:00"),
-        items: [],
+        items: [{ menuId: "CF01", name: "Không tính", quantity: 9, lineTotal: 999_000 }],
       },
     ],
     new Date("2026-08-18T00:00:00+07:00"),
     new Date("2026-08-18T23:59:59+07:00"),
+    new Set(),
+    new Set(["CF01", "TRA01"]),
   );
 
   const nineAm = snapshot.hourlySeries.find((point) => point.key === "09");
-  assert.deepEqual(nineAm, {
-    key: "09",
-    label: "09:00",
-    revenue: 200_000,
-    orders: 2,
-  });
-  assert.equal(snapshot.customerCount, 2);
+  assert.equal(nineAm?.orders, 2);
+  assert.equal(nineAm?.customers, 3);
+  assert.equal(snapshot.customerCount, 3);
 });
 
 test("percentage change handles a zero comparison period", () => {

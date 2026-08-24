@@ -7,6 +7,8 @@ export type Category = {
   order?: number | null;
   isHidden?: boolean;
   isPreparationPrintEnabled?: boolean;
+  countsAsCup?: boolean;
+  isCupCountConfigured?: boolean;
   storeId?: string;
 };
 
@@ -22,7 +24,8 @@ export async function addCategory(
   name: string,
   description?: string,
   storeId = "cafe",
-  isPreparationPrintEnabled = true
+  isPreparationPrintEnabled = true,
+  countsAsCup = false
 ) {
   if (!name.trim()) return null;
   const { id } = await apiRequest<{ id: string }>("/categories.php", {
@@ -32,6 +35,7 @@ export async function addCategory(
       description: description?.trim() || "",
       storeId,
       isPreparationPrintEnabled,
+      countsAsCup,
     }),
   });
   return id;
@@ -44,6 +48,7 @@ export async function updateCategory(
     description?: string;
     isHidden?: boolean;
     isPreparationPrintEnabled?: boolean;
+    countsAsCup?: boolean;
   }
 ) {
   const payload: Record<string, unknown> = { id: categoryId };
@@ -66,6 +71,10 @@ export async function updateCategory(
 
   if (data.isPreparationPrintEnabled !== undefined) {
     payload.isPreparationPrintEnabled = data.isPreparationPrintEnabled === true;
+  }
+
+  if (data.countsAsCup !== undefined) {
+    payload.countsAsCup = data.countsAsCup === true;
   }
 
   await apiRequest<{ updated: boolean }>("/categories.php", {

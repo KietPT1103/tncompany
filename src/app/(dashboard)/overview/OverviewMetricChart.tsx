@@ -30,8 +30,8 @@ function MetricValue({
   value: number;
 }) {
   return (
-    <span className="text-xl font-bold tabular-nums text-sky-700 sm:text-2xl">
-      {metric === "revenue" ? formatMoney(value) : `${formatNumber(value)} lượt khách`}
+    <span className="whitespace-nowrap text-xl font-bold tabular-nums text-sky-700 sm:text-2xl">
+      {metric === "revenue" ? formatMoney(value) : `${formatNumber(value)} khách hàng`}
     </span>
   );
 }
@@ -55,10 +55,10 @@ export default function OverviewMetricChart({
 }) {
   const [view, setView] = useState<ChartView>("hour");
   const points = view === "hour" ? hourlyPoints : dailyPoints;
-  const values = points.map((point) => (metric === "revenue" ? point.revenue : point.orders));
+  const values = points.map((point) => (metric === "revenue" ? point.revenue : point.customers));
   const maxValue = Math.max(...values, 1);
   const Icon = metric === "revenue" ? BarChart3 : UsersRound;
-  const valueLabel = metric === "revenue" ? "Doanh thu" : "lượt khách";
+  const valueLabel = metric === "revenue" ? "Doanh thu" : "khách hàng";
   const accent =
     metric === "customers"
       ? {
@@ -124,12 +124,16 @@ export default function OverviewMetricChart({
         <div className="flex min-h-64 items-center justify-center px-6 py-12 text-center" role="status">
           <div>
             <p className="font-semibold text-slate-800">Chưa có dữ liệu trong kỳ</p>
-            <p className="mt-1 text-sm text-slate-500">Các bill hoàn tất sẽ hiển thị tại đây.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {metric === "customers"
+                ? "Các ly đồ uống trong bill hoàn tất sẽ hiển thị tại đây."
+                : "Các bill hoàn tất sẽ hiển thị tại đây."}
+            </p>
           </div>
         </div>
       ) : (
         <div id={`${id}-chart`} className="overflow-x-auto px-5 pb-5 pt-4">
-          <div className="flex min-w-[560px] gap-3">
+          <div className="flex min-w-[560px] gap-3 sm:min-w-0">
             <div className="flex h-64 w-12 shrink-0 flex-col justify-between pb-8 pt-10 text-right text-[11px] tabular-nums text-slate-400">
               <span>{metric === "revenue" ? formatCompactMoney(maxValue) : formatNumber(maxValue)}</span>
               <span>{metric === "revenue" ? formatCompactMoney(maxValue / 2) : formatNumber(Math.round(maxValue / 2))}</span>
@@ -139,7 +143,7 @@ export default function OverviewMetricChart({
             <div className="relative h-64 min-w-0 flex-1 border-b border-slate-200 bg-[linear-gradient(to_bottom,transparent_39.5%,#e2e8f0_40%,transparent_40.5%,transparent_69.5%,#e2e8f0_70%,transparent_70.5%)]">
               <div className="absolute inset-x-1 bottom-8 top-10 flex items-end justify-between gap-1">
                 {points.map((point, index) => {
-                  const value = metric === "revenue" ? point.revenue : point.orders;
+                  const value = metric === "revenue" ? point.revenue : point.customers;
                   const height = value ? Math.max((value / maxValue) * 100, 3) : 1;
                   const isFirst = index === 0;
                   const isLast = index === points.length - 1;

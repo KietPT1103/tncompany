@@ -55,6 +55,30 @@ const getBakeryProductCodes = (products: Product[], categories: Category[]) => {
   }).map((product) => product.product_code));
 };
 
+const legacyNonDrinkCategoryPrefixes = ["banh", "topping", "do an", "mon an", "thuc an"];
+
+const getCupProductCodes = (products: Product[], categories: Category[]) => {
+  const categoriesById = new Map(categories.map((category) => [category.id, category]));
+  const categoriesByName = new Map(
+    categories.map((category) => [normalizeCategory(category.name), category]),
+  );
+
+  return new Set(products.filter((product) => {
+    const categoryValue = product.categoryName || product.category || "";
+    const category = categoriesById.get(product.category || "")
+      || categoriesByName.get(normalizeCategory(categoryValue));
+    if (category?.isCupCountConfigured === true) {
+      return category.countsAsCup === true;
+    }
+
+    const categoryName = normalizeCategory(category?.name || categoryValue);
+    if (!categoryName) return false;
+    return !legacyNonDrinkCategoryPrefixes.some(
+      (prefix) => categoryName === prefix || categoryName.startsWith(`${prefix} `),
+    );
+  }).map((product) => product.product_code));
+};
+
 export default function OverviewPage() {
   const { storeId, storeName } = useStore();
   const [rangePreset, setRangePreset] = useState<OverviewRangePreset>("today");
@@ -79,6 +103,11 @@ export default function OverviewPage() {
   const [shiftLoading, setShiftLoading] = useState(true);
   const [shiftError, setShiftError] = useState("");
   const [shiftRealtimeState, setShiftRealtimeState] = useState<RealtimeState>("connecting");
+  const [cupProductCodes, setCupProductCodes] = useState<ReadonlySet<string> | null>(null);
+
+  useEffect(() => {
+    setCupProductCodes(null);
+  }, [storeId]);
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
@@ -103,10 +132,24 @@ export default function OverviewPage() {
         getCategories(storeId).catch(() => [] as Category[]),
       ]);
       const bakeryProductCodes = getBakeryProductCodes(products, categories);
+      const nextCupProductCodes = getCupProductCodes(products, categories);
+      setCupProductCodes(nextCupProductCodes);
 
-      setSnapshot(buildOverviewSnapshot(bills, ranges.startDate, ranges.endDate, bakeryProductCodes));
+      setSnapshot(buildOverviewSnapshot(
+        bills,
+        ranges.startDate,
+        ranges.endDate,
+        bakeryProductCodes,
+        nextCupProductCodes,
+      ));
       setPreviousSnapshot(
-        buildOverviewSnapshot(bills, ranges.previousStartDate, ranges.previousEndDate, bakeryProductCodes),
+        buildOverviewSnapshot(
+          bills,
+          ranges.previousStartDate,
+          ranges.previousEndDate,
+          bakeryProductCodes,
+          nextCupProductCodes,
+        ),
       );
       setVoucherTotals(calculateOverviewVoucherTotals(vouchers, ranges.startDate, ranges.endDate));
       setLastUpdatedAt(new Date());
@@ -123,14 +166,19 @@ export default function OverviewPage() {
   }, [loadOverview]);
 
   const loadShiftRevenue = useCallback(
-    () => loadOverviewShiftRevenue({ storeId, startDate: ranges.startDate, endDate: ranges.endDate }),
-    [ranges.endDate, ranges.startDate, storeId],
+    () => loadOverviewShiftRevenue({
+      storeId,
+      startDate: ranges.startDate,
+      endDate: ranges.endDate,
+      cupProductCodes: cupProductCodes || new Set(),
+    }),
+    [cupProductCodes, ranges.endDate, ranges.startDate, storeId],
   );
 
   useEffect(() => {
-    if (!storeId) {
+    if (!storeId || cupProductCodes === null) {
       setShiftRevenue([]);
-      setShiftLoading(false);
+      setShiftLoading(Boolean(storeId));
       return;
     }
 
@@ -152,7 +200,7 @@ export default function OverviewPage() {
       onState: setShiftRealtimeState,
       fallbackMs: 30_000,
     });
-  }, [loadShiftRevenue, storeId]);
+  }, [cupProductCodes, loadShiftRevenue, storeId]);
 
   const revenueChange = calculatePercentageChange(
     snapshot.totalRevenue,

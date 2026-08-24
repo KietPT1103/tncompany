@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowDownRight, ArrowUpRight, CircleDollarSign, Clock3, WalletCards } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, CircleDollarSign, Clock3, CupSoda, UsersRound, WalletCards } from "lucide-react";
 import type { RealtimeState } from "@/services/realtimeService";
 import { getShiftLabel, type OverviewShiftRevenue as ShiftRevenue } from "@/services/overviewShiftData";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(value);
+
+const formatQuantity = (value: number) =>
+  new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value);
 
 const formatTime = (seconds?: number) =>
   seconds ? new Date(seconds * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "--:--";
@@ -32,8 +35,8 @@ function ShiftRow({ row }: { row: ShiftRevenue }) {
   const isOpen = row.shift.status === "open";
   const variancePositive = (row.variance || 0) >= 0;
   return (
-    <div className={`grid grid-cols-2 gap-x-4 gap-y-4 px-4 py-4 transition-colors sm:grid-cols-[minmax(160px,1.15fr)_minmax(135px,1fr)_minmax(145px,1fr)_minmax(135px,1fr)_minmax(165px,1.1fr)] sm:items-center ${isOpen ? "bg-emerald-50/45" : "hover:bg-slate-50"}`}>
-      <div className="col-span-2 min-w-0 sm:col-span-1">
+    <div className={`grid grid-cols-2 gap-x-4 gap-y-5 px-4 py-4 transition-colors md:grid-cols-3 md:gap-y-4 xl:grid-cols-[minmax(145px,1.1fr)_minmax(125px,0.9fr)_minmax(135px,0.9fr)_minmax(145px,1fr)_minmax(130px,0.9fr)_minmax(155px,1fr)] xl:items-center ${isOpen ? "bg-emerald-50/45" : "hover:bg-slate-50"}`}>
+      <div className="col-span-2 min-w-0 md:col-span-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-bold text-slate-950">{getShiftLabel(row.shift.shiftType)}</p>
           {isOpen ? (
@@ -53,6 +56,17 @@ function ShiftRow({ row }: { row: ShiftRevenue }) {
         <p className="mt-1 text-xs text-slate-500">{row.summary.completedBills} bill hợp lệ · {row.summary.cancelledBills} bill hủy</p>
       </div>
       <div className="min-w-0">
+        <p className="text-xs font-medium text-slate-500">Số lượng</p>
+        <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold tabular-nums text-slate-800">
+          <CupSoda className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
+          Số ly: {formatQuantity(row.summary.cupCount || 0)}
+        </p>
+        <p className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold tabular-nums text-slate-800">
+          <UsersRound className="h-3.5 w-3.5 shrink-0 text-[#B8860B]" aria-hidden="true" />
+          Tổng số khách hàng: {formatQuantity(row.summary.peopleCount || 0)}
+        </p>
+      </div>
+      <div className="min-w-0">
         <p className="text-xs font-medium text-slate-500">Thanh toán</p>
         <p title="Tiền mặt" className="mt-1 text-sm font-semibold tabular-nums text-slate-800">TM: {formatMoney(row.summary.cashSales)}</p>
         <p title="Chuyển khoản" className="mt-0.5 text-sm font-semibold tabular-nums text-slate-800">CK: {formatMoney(row.summary.transferSales)}</p>
@@ -62,7 +76,7 @@ function ShiftRow({ row }: { row: ShiftRevenue }) {
         <p title="Phiếu thu" className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-800">PT: {formatMoney(row.summary.incomeVouchers)}</p>
         <p title="Phiếu chi" className="mt-0.5 text-sm font-semibold tabular-nums text-rose-700">PC: {formatMoney(row.summary.expenseVouchers)}</p>
       </div>
-      <div className="min-w-0 text-left sm:text-right">
+      <div className="col-span-2 min-w-0 text-left md:col-span-1 xl:text-right">
         <p className="text-xs font-medium text-slate-500">{isOpen ? "Dự kiến bàn giao" : "Đối soát cuối ca"}</p>
         <p className="mt-1 font-bold tabular-nums text-[#B8860B]">{formatMoney(row.summary.expectedClosingCash)}</p>
         {isOpen ? (

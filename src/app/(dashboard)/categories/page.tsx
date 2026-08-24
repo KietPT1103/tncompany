@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Check,
   CircleAlert,
+  CupSoda,
   Eye,
   EyeOff,
   FolderTree,
@@ -38,6 +39,7 @@ type CategoryFormState = {
   name: string;
   description: string;
   isPreparationPrintEnabled: boolean;
+  countsAsCup: boolean;
 };
 
 type ToastState = {
@@ -51,6 +53,7 @@ const emptyForm: CategoryFormState = {
   name: "",
   description: "",
   isPreparationPrintEnabled: true,
+  countsAsCup: false,
 };
 
 const normalizeText = (value: string) =>
@@ -179,6 +182,26 @@ function CategoryModal({
                   <span className="mt-0.5 block text-xs leading-5 text-slate-500">
                     Các món thuộc danh mục này sẽ được đưa vào phiếu bếp hoặc
                     phiếu pha chế khi bán hàng.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 transition-colors hover:border-emerald-300 hover:bg-emerald-50/50">
+                <input
+                  type="checkbox"
+                  checked={form.countsAsCup}
+                  onChange={(event) =>
+                    onChange({ countsAsCup: event.target.checked })
+                  }
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-500"
+                />
+                <span>
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                    <CupSoda className="h-4 w-4 text-emerald-700" aria-hidden="true" />
+                    Tính vào số ly
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                    Món trong danh mục này được tính vào Số ly và Tổng số khách hàng.
                   </span>
                 </span>
               </label>
@@ -360,6 +383,7 @@ export default function CategoryManagementPage() {
       description: category.description || "",
       isPreparationPrintEnabled:
         category.isPreparationPrintEnabled !== false,
+      countsAsCup: category.countsAsCup === true,
     });
     setModalOpen(true);
   };
@@ -409,6 +433,7 @@ export default function CategoryManagementPage() {
           name: normalizedName,
           description: form.description.trim(),
           isPreparationPrintEnabled: form.isPreparationPrintEnabled,
+          countsAsCup: form.countsAsCup,
         });
 
         if (normalizeText(oldName) !== normalizeText(normalizedName)) {
@@ -426,6 +451,7 @@ export default function CategoryManagementPage() {
           form.description.trim(),
           storeId,
           form.isPreparationPrintEnabled,
+          form.countsAsCup,
         );
 
         setCurrentPage(1);
@@ -609,12 +635,13 @@ export default function CategoryManagementPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] border-collapse text-sm">
+              <table className="w-full min-w-[980px] border-collapse text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-700">
                   <tr>
                     <th className="px-4 py-3">Tên danh mục</th>
                     <th className="px-4 py-3">Mô tả</th>
                     <th className="px-4 py-3 text-center">Số sản phẩm</th>
+                    <th className="px-4 py-3">Tính số ly</th>
                     <th className="px-4 py-3">In chế biến</th>
                     <th className="px-4 py-3">Trạng thái</th>
                     <th className="w-28 px-4 py-3 text-center">Thao tác</th>
@@ -625,7 +652,7 @@ export default function CategoryManagementPage() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-4 py-14 text-center text-slate-600"
                       >
                         Đang tải danh mục...
@@ -633,7 +660,7 @@ export default function CategoryManagementPage() {
                     </tr>
                   ) : filteredCategories.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-14 text-center">
+                      <td colSpan={7} className="px-4 py-14 text-center">
                         <CircleAlert className="mx-auto h-6 w-6 text-slate-400" />
 
                         <p className="mt-2 font-medium">
@@ -690,6 +717,24 @@ export default function CategoryManagementPage() {
                           <td className="px-4 py-3 text-center">
                             <span className="inline-flex min-w-8 justify-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold tabular-nums text-slate-700">
                               {usageCount}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                                category.isCupCountConfigured !== true
+                                  ? "bg-amber-100 text-amber-800"
+                                  : category.countsAsCup === true
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {category.isCupCountConfigured !== true
+                                ? "Chưa cấu hình"
+                                : category.countsAsCup === true
+                                  ? "Có tính"
+                                  : "Không tính"}
                             </span>
                           </td>
 
