@@ -90,6 +90,8 @@ type VoucherEditFormState = {
 
 type SortDirection = "asc" | "desc";
 type BillSortKey = "time" | "code" | "table" | "total" | "status";
+type BillVisibilityFilter = "active" | "cancelled";
+type VoucherVisibilityFilter = "active" | "cancelled";
 type VoucherSortKey = "time" | "code" | "type" | "category" | "person" | "amount";
 
 const BILL_PAGE_SIZES = [10, 20, 50] as const;
@@ -118,6 +120,16 @@ const VOUCHER_SORT_OPTIONS: readonly SelectBoxOption<VoucherSortKey>[] = [
   { value: "category", label: "Nội dung" },
   { value: "person", label: "Người nộp/nhận" },
   { value: "amount", label: "Giá trị" },
+];
+
+const BILL_VISIBILITY_OPTIONS: readonly SelectBoxOption<BillVisibilityFilter>[] = [
+  { value: "active", label: "Hóa đơn hợp lệ" },
+  { value: "cancelled", label: "Hóa đơn đã hủy" },
+];
+
+const VOUCHER_VISIBILITY_OPTIONS: readonly SelectBoxOption<VoucherVisibilityFilter>[] = [
+  { value: "active", label: "Phiếu hợp lệ" },
+  { value: "cancelled", label: "Phiếu đã hủy" },
 ];
 
 const SORT_TRIGGER_CLASS =
@@ -256,8 +268,10 @@ export default function BillsPage() {
   const canEditBill = canUseBills && (role === "admin" || role === "user");
   const canEditBillDetails = role === "admin";
   const canCancelBill = canUseBills && role === "admin";
+  const canViewCancelledBills = hasPermission(user, "bills.cancelled.view");
   const canEditVoucherAmount = role !== "user";
   const canCancelVoucher = hasPermission(user, "cash_vouchers.cancel");
+  const canViewCancelledVouchers = hasPermission(user, "cash_vouchers.cancelled.view");
   const useSoftCancel = !isFarmStore;
 
   const todayInput = formatDateInput(new Date());
@@ -271,6 +285,8 @@ export default function BillsPage() {
   const [billSortDirection, setBillSortDirection] = useState<SortDirection>("desc");
   const [billPage, setBillPage] = useState(1);
   const [billPageSize, setBillPageSize] = useState(10);
+  const [billVisibility, setBillVisibility] = useState<BillVisibilityFilter>("active");
+  const [voucherVisibility, setVoucherVisibility] = useState<VoucherVisibilityFilter>("active");
   const [voucherSortKey, setVoucherSortKey] = useState<VoucherSortKey>("time");
   const [voucherSortDirection, setVoucherSortDirection] =
     useState<SortDirection>("desc");
@@ -339,13 +355,14 @@ export default function BillsPage() {
           startDate: start,
           endDate: end,
           storeId,
-          includeCancelled: true,
+          status: billVisibility,
           limitCount: 2000,
         }),
         getCashVouchers({
           startDate: start,
           endDate: end,
           storeId,
+          status: voucherVisibility,
           limitCount: 2000,
         }),
         getCashVoucherCategories(storeId),
@@ -364,16 +381,33 @@ export default function BillsPage() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate, storeId]);
+  }, [startDate, endDate, storeId, billVisibility, voucherVisibility]);
+
+  useEffect(() => {
+    if (!canViewCancelledBills && billVisibility === "cancelled") {
+      setBillVisibility("active");
+    }
+  }, [billVisibility, canViewCancelledBills]);
+
+  useEffect(() => {
+    if (!canViewCancelledVouchers && voucherVisibility === "cancelled") {
+      setVoucherVisibility("active");
+    }
+  }, [canViewCancelledVouchers, voucherVisibility]);
 
   const filteredBills = useMemo(() => {
+    const visibilityMatchedBills = bills.filter((bill) =>
+      billVisibility === "cancelled"
+        ? canViewCancelledBills && bill.status === "cancelled"
+        : bill.status !== "cancelled",
+    );
     const keyword = billSearch.trim().toLowerCase();
-    const matchedBills = keyword ? bills.filter((bill) => {
+    const matchedBills = keyword ? visibilityMatchedBills.filter((bill) => {
       const tableMatch = bill.tableNumber?.toLowerCase().includes(keyword);
       const idMatch = bill.id.toLowerCase().includes(keyword);
       const noteMatch = bill.note?.toLowerCase().includes(keyword);
       return tableMatch || idMatch || noteMatch;
-    }) : bills;
+    }) : visibilityMatchedBills;
 
     const direction = billSortDirection === "asc" ? 1 : -1;
     return [...matchedBills].sort((left, right) => {
@@ -391,7 +425,7 @@ export default function BillsPage() {
       }
       return compared * direction;
     });
-  }, [billSearch, billSortDirection, billSortKey, bills]);
+  }, [billSearch, billSortDirection, billSortKey, billVisibility, bills, canViewCancelledBills]);
 
   const billPagination = useMemo(
     () => paginateItems(filteredBills, billPage, billPageSize),
@@ -400,7 +434,7 @@ export default function BillsPage() {
 
   useEffect(() => {
     setBillPage(1);
-  }, [billPageSize, billSearch, billSortDirection, billSortKey, endDate, startDate, storeId]);
+  }, [billPageSize, billSearch, billSortDirection, billSortKey, billVisibility, endDate, startDate, storeId]);
 
   useEffect(() => {
     if (billPage !== billPagination.page) {
@@ -415,14 +449,19 @@ export default function BillsPage() {
 
   const totalAmount = activeBills.reduce((sum, bill) => sum + bill.total, 0);
   const filteredVouchers = useMemo(() => {
+    const visibilityMatchedVouchers = vouchers.filter((voucher) =>
+      voucherVisibility === "cancelled"
+        ? canViewCancelledVouchers && voucher.isCancelled === true
+        : voucher.isCancelled !== true,
+    );
     const keyword = voucherSearch.trim().toLowerCase();
-    const matchedVouchers = keyword ? vouchers.filter((voucher) => {
+    const matchedVouchers = keyword ? visibilityMatchedVouchers.filter((voucher) => {
       const codeMatch = voucher.code?.toLowerCase().includes(keyword);
       const categoryMatch = voucher.category?.toLowerCase().includes(keyword);
       const personMatch = voucher.personName?.toLowerCase().includes(keyword);
       const noteMatch = voucher.note?.toLowerCase().includes(keyword);
       return codeMatch || categoryMatch || personMatch || noteMatch;
-    }) : vouchers;
+    }) : visibilityMatchedVouchers;
 
     const direction = voucherSortDirection === "asc" ? 1 : -1;
     return [...matchedVouchers].sort((left, right) => {
@@ -442,7 +481,7 @@ export default function BillsPage() {
       }
       return compared * direction;
     });
-  }, [voucherSearch, voucherSortDirection, voucherSortKey, vouchers]);
+  }, [canViewCancelledVouchers, voucherSearch, voucherSortDirection, voucherSortKey, voucherVisibility, vouchers]);
 
   const totalIncomeVouchers = filteredVouchers
     .filter((voucher) => !voucher.isCancelled && voucher.includeInCashFlow !== false && voucher.type === "income")
@@ -707,7 +746,9 @@ export default function BillsPage() {
                   <ReceiptText className="h-4 w-4" />
                   Quản lý hóa đơn
                 </p>
-                <h1 className="text-2xl font-bold text-slate-900">Danh sách hóa đơn</h1>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  {billVisibility === "cancelled" ? "Hóa đơn đã hủy" : "Danh sách hóa đơn"}
+                </h1>
                 <p className="text-sm text-slate-500">
                   Mặc định lọc trong ngày để xem tổng thu nhanh.
                 </p>
@@ -811,12 +852,12 @@ export default function BillsPage() {
                       <p className="text-xs font-semibold text-slate-500">Số bill hợp lệ</p>
                       <p className="text-lg font-bold text-slate-900">{activeBills.length}</p>
                     </div>
-                    <div className="rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm">
+                    {canViewCancelledBills ? <div className="rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm">
                       <p className="text-xs font-semibold text-slate-500">Bill đã hủy</p>
                       <p className="text-lg font-bold text-rose-700">
                         {filteredBills.filter((bill) => bill.status === "cancelled").length}
                       </p>
-                    </div>
+                    </div> : null}
                     <div className="rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm">
                       <p className="text-xs font-semibold text-slate-500">Phiếu thu/chi</p>
                       <p className="text-lg font-bold text-slate-900">{filteredVouchers.length}</p>
@@ -843,6 +884,38 @@ export default function BillsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {canViewCancelledBills ? <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Trạng thái hóa đơn
+                    </label>
+                    <SelectBox<BillVisibilityFilter>
+                      value={billVisibility}
+                      options={BILL_VISIBILITY_OPTIONS}
+                      onValueChange={setBillVisibility}
+                      ariaLabel="Lọc theo trạng thái hóa đơn"
+                      className="w-full"
+                      triggerClassName={billVisibility === "cancelled" ? "border-rose-300 bg-rose-50 text-rose-800" : "border-emerald-300 bg-emerald-50 text-emerald-900"}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Hóa đơn đã hủy được lưu riêng và không xuất hiện trong danh sách mặc định.
+                    </p>
+                  </div> : null}
+                  {canViewCancelledVouchers ? <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Trạng thái phiếu thu/chi
+                    </label>
+                    <SelectBox<VoucherVisibilityFilter>
+                      value={voucherVisibility}
+                      options={VOUCHER_VISIBILITY_OPTIONS}
+                      onValueChange={setVoucherVisibility}
+                      ariaLabel="Lọc theo trạng thái phiếu thu chi"
+                      className="w-full"
+                      triggerClassName={voucherVisibility === "cancelled" ? "border-rose-300 bg-rose-50 text-rose-800" : "border-emerald-300 bg-emerald-50 text-emerald-900"}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Phiếu đã hủy được lưu riêng và không xuất hiện trong danh sách mặc định.
+                    </p>
+                  </div> : null}
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">
                       Tìm theo bàn / mã
@@ -878,7 +951,7 @@ export default function BillsPage() {
                 <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <ReceiptText className="h-5 w-5 text-sky-700" />
-                    Danh sách hóa đơn ({filteredBills.length})
+                    {billVisibility === "cancelled" ? "Hóa đơn đã hủy" : "Danh sách hóa đơn"} ({filteredBills.length})
                   </CardTitle>
                   <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                     <Button
@@ -969,14 +1042,14 @@ export default function BillsPage() {
                                 className={`group ${
                                   isCancelled ? "bg-rose-50/30 text-rose-950" : ""
                                 } ${
-                                  canEditBill
+                                  canEditBill && !isCancelled
                                     ? "cursor-pointer transition-colors hover:bg-emerald-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600"
                                     : !isCancelled
                                       ? "hover:bg-slate-50"
                                       : ""
                                 }`}
-                                onClick={canEditBill ? () => openEdit(bill) : undefined}
-                                onKeyDown={canEditBill ? (event) => {
+                                onClick={canEditBill && !isCancelled ? () => openEdit(bill) : undefined}
+                                onKeyDown={canEditBill && !isCancelled ? (event) => {
                                   if (
                                     shouldActivateBillRow(
                                       event.key,
@@ -987,8 +1060,8 @@ export default function BillsPage() {
                                     openEdit(bill);
                                   }
                                 } : undefined}
-                                tabIndex={canEditBill ? 0 : undefined}
-                                aria-label={canEditBill ? `Chỉnh sửa hóa đơn ${bill.id}` : undefined}
+                                tabIndex={canEditBill && !isCancelled ? 0 : undefined}
+                                aria-label={canEditBill && !isCancelled ? `Chỉnh sửa hóa đơn ${bill.id}` : undefined}
                               >
                                 <td className="px-4 py-3 font-mono text-xs">
                                   <div>{bill.id}</div>
@@ -1074,7 +1147,7 @@ export default function BillsPage() {
                                   : "border-slate-200"
                             }`}
                           >
-                            {canEditBill && (
+                            {canEditBill && !isCancelled && (
                               <button
                                 type="button"
                                 className="absolute inset-0 z-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600"
@@ -1201,7 +1274,7 @@ export default function BillsPage() {
                 <CardHeader className="flex flex-col gap-3 space-y-0 xl:flex-row xl:items-center xl:justify-between">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <HandCoins className="h-5 w-5 text-emerald-700" />
-                    Phiếu thu/chi ({filteredVouchers.length})
+                    {voucherVisibility === "cancelled" ? "Phiếu thu/chi đã hủy" : "Phiếu thu/chi"} ({filteredVouchers.length})
                   </CardTitle>
                   <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
                     <div className="relative min-w-0 sm:w-64">

@@ -174,7 +174,9 @@ function auth_all_permissions(): array
     return [
         'dashboard.access',
         'bills.access',
+        'bills.cancelled.view',
         'cash_vouchers.cancel',
+        'cash_vouchers.cancelled.view',
         'bar.access',
         'bar.checkout',
         'sample_bills.access',

@@ -635,7 +635,23 @@ if ($method === 'GET' && $resource === 'bills') {
     $where = ['store_id=:store_id'];
     $params = ['store_id' => $posStoreId];
     if (($user['role'] ?? '') === 'bartender') $where[] = "order_source='bar'";
-    if (!pos_bool($_GET['includeCancelled'] ?? false)) $where[] = "status<>'cancelled'";
+    $requestedBillStatus = strtolower(trim((string)($_GET['status'] ?? '')));
+    if ($requestedBillStatus === 'cancelled') {
+        if (!auth_has_permission($user, 'bills.cancelled.view')) {
+            respond_error('Tài khoản chưa được phân quyền xem hóa đơn đã hủy', 403);
+        }
+        $where[] = "status='cancelled'";
+    } elseif (
+        $requestedBillStatus === 'active'
+        || !pos_bool($_GET['includeCancelled'] ?? false)
+        || (
+            !auth_has_permission($user, 'bills.cancelled.view')
+            && empty($_GET['shiftId'])
+            && empty($_GET['shiftIds'])
+        )
+    ) {
+        $where[] = "status<>'cancelled'";
+    }
     if (!empty($_GET['shiftId'])) { $where[] = 'shift_id=:shift_id'; $params['shift_id'] = trim((string) $_GET['shiftId']); }
     if (!empty($_GET['shiftIds'])) {
         $shiftIds = array_values(array_filter(array_unique(array_map('trim', explode(',', (string) $_GET['shiftIds'])))));
@@ -799,6 +815,15 @@ if ($method === 'GET' && $resource === 'voucher-categories') {
 
 if ($method === 'GET' && $resource === 'vouchers') {
     $where = ['store_id=:store_id']; $params = ['store_id' => trim((string) ($_GET['storeId'] ?? 'cafe'))];
+    $voucherStatus = strtolower(trim((string) ($_GET['status'] ?? 'active')));
+    if ($voucherStatus === 'cancelled') {
+        if (!auth_has_permission($user, 'cash_vouchers.cancelled.view')) {
+            api_error('Bạn không có quyền xem phiếu thu/chi đã hủy.', 403);
+        }
+        $where[] = 'cancelled_at IS NOT NULL';
+    } else {
+        $where[] = 'cancelled_at IS NULL';
+    }
     if (!empty($_GET['shiftId'])) { $where[] = 'shift_id=:shift_id'; $params['shift_id'] = trim((string) $_GET['shiftId']); }
     if (!empty($_GET['shiftIds'])) {
         $shiftIds = array_values(array_filter(array_unique(array_map('trim', explode(',', (string) $_GET['shiftIds'])))));

@@ -26,11 +26,25 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     path: "/pos",
   },
   {
+    id: "bills.cancelled.view",
+    label: "Xem hóa đơn đã hủy",
+    description: "Mở bộ lọc riêng và xem chi tiết các hóa đơn đã hủy.",
+    category: "Giao dịch",
+    path: "/admin/bills/cancelled",
+  },
+  {
     id: "cash_vouchers.cancel",
     label: "Hủy phiếu thu/chi",
     description: "Hủy mềm phiếu thu/chi, lưu người hủy, thời điểm và lý do.",
     category: "Giao dịch",
     path: "/admin/bills",
+  },
+  {
+    id: "cash_vouchers.cancelled.view",
+    label: "Xem phiếu thu/chi đã hủy",
+    description: "Mở bộ lọc riêng và xem các phiếu thu/chi đã hủy.",
+    category: "Giao dịch",
+    path: "/admin/bills/cancelled-vouchers",
   },
   {
     id: "bar.access",
