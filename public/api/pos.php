@@ -159,6 +159,13 @@ function pos_ensure_voucher_categories_table(): void
     );
 }
 
+function pos_ensure_voucher_cancellation_columns(): void
+{
+    auth_ensure_column('cash_vouchers', 'cancelled_at', 'DATETIME NULL AFTER cashier_name');
+    auth_ensure_column('cash_vouchers', 'cancelled_by', 'VARCHAR(64) NULL AFTER cancelled_at');
+    auth_ensure_column('cash_vouchers', 'cancellation_reason', 'VARCHAR(500) NULL AFTER cancelled_by');
+}
+
 function pos_ensure_shift_device_columns(): void
 {
     auth_ensure_column('cashier_shifts', 'opened_by_device_id', 'VARCHAR(100) NULL AFTER open_note');
@@ -544,6 +551,7 @@ function pos_job_items(string $table, array $jobIds): array
 
 pos_ensure_bill_sequences_table();
 pos_ensure_voucher_categories_table();
+pos_ensure_voucher_cancellation_columns();
 pos_ensure_shift_device_columns();
 $requestedStoreId = trim((string) ($_GET['storeId'] ?? ($body['storeId'] ?? '')));
 $posStoreId = pos_resolve_store_id($user, $requestedStoreId);
@@ -809,6 +817,8 @@ if ($method === 'GET' && $resource === 'vouchers') {
         'amount'=>(float)$row['amount'],'category'=>(string)$row['category'],'note'=>$row['note']?:'',
         'personName'=>$row['person_name']?:'','includeInCashFlow'=>(bool)$row['include_in_cash_flow'],'shiftId'=>$row['shift_id']?:'',
         'cashierId'=>$row['cashier_id']?:'','cashierName'=>$row['cashier_name']?:'','happenedAt'=>pos_timestamp($row['happened_at']),'createdAt'=>pos_timestamp($row['created_at']),
+        'cancelledAt'=>pos_timestamp($row['cancelled_at']??null),'cancelledBy'=>$row['cancelled_by']?:'',
+        'cancellationReason'=>$row['cancellation_reason']?:'','isCancelled'=>!empty($row['cancelled_at']),
     ], $statement->fetchAll()));
 }
 
@@ -826,12 +836,53 @@ if ($method === 'POST' && $resource === 'vouchers') {
 }
 
 if ($method === 'PATCH' && $resource === 'vouchers') {
-    pos_assert_record_store('cash_vouchers', trim((string)($body['id']??'')), $user, $posStoreId);
-    db()->prepare('UPDATE cash_vouchers SET category=:category,amount=:amount WHERE id=:id')->execute(['id'=>trim((string)($body['id']??'')),'category'=>trim((string)($body['category']??'')),'amount'=>(float)($body['amount']??0)]);
-    $voucherTypeStatement = db()->prepare('SELECT voucher_type FROM cash_vouchers WHERE id=:id AND store_id=:store_id');
-    $voucherTypeStatement->execute(['id'=>trim((string)($body['id']??'')),'store_id'=>$posStoreId]);
-    $voucherType = $voucherTypeStatement->fetchColumn();
-    if ($voucherType !== false) pos_remember_voucher_category($posStoreId, (string)$voucherType, trim((string)($body['category']??'')));
+    $id = trim((string)($body['id']??''));
+    pos_assert_record_store('cash_vouchers', $id, $user, $posStoreId);
+    $voucherStatement = db()->prepare('SELECT voucher_type,cancelled_at FROM cash_vouchers WHERE id=:id AND store_id=:store_id LIMIT 1');
+    $voucherStatement->execute(['id'=>$id,'store_id'=>$posStoreId]);
+    $voucher = $voucherStatement->fetch();
+    if (!$voucher) respond_error('Không tìm thấy phiếu thu/chi', 404);
+
+    if (($body['action'] ?? '') === 'cancel') {
+        if (!auth_has_permission($user, 'cash_vouchers.cancel')) {
+            respond_error('Tài khoản chưa được phân quyền hủy phiếu thu/chi', 403);
+        }
+        if (!empty($voucher['cancelled_at'])) respond_error('Phiếu thu/chi đã được hủy trước đó', 409);
+        $reason = trim((string)($body['reason'] ?? ''));
+        if ($reason === '') respond_error('Vui lòng nhập lý do hủy phiếu', 422);
+        $cancelStatement = db()->prepare('UPDATE cash_vouchers SET cancelled_at=NOW(),cancelled_by=:cancelled_by,cancellation_reason=:reason WHERE id=:id AND cancelled_at IS NULL');
+        $cancelStatement->execute([
+            'id'=>$id,
+            'cancelled_by'=>(string)($user['id'] ?? ''),
+            'reason'=>mb_substr($reason, 0, 500),
+        ]);
+        if ($cancelStatement->rowCount() !== 1) respond_error('Phiếu thu/chi vừa được hủy bởi tài khoản khác', 409);
+        realtime_publish($posStoreId, 'vouchers-updated', ['id'=>$id,'action'=>'cancelled']);
+        respond_ok(['cancelled'=>true]);
+    }
+
+    if (!empty($voucher['cancelled_at'])) respond_error('Không thể sửa phiếu thu/chi đã hủy', 409);
+    $fields = [];
+    $params = ['id'=>$id];
+    if (array_key_exists('category', $body)) {
+        $category = trim((string)$body['category']);
+        if ($category === '') respond_error('Tên phiếu không được để trống', 422);
+        $fields[] = 'category=:category';
+        $params['category'] = $category;
+    }
+    if (array_key_exists('amount', $body)) {
+        if (($user['role'] ?? '') === 'user') {
+            respond_error('Thu ngân không được phép sửa giá trị phiếu thu/chi', 403);
+        }
+        $amount = (float)$body['amount'];
+        if ($amount <= 0) respond_error('Giá trị phiếu phải lớn hơn 0', 422);
+        $fields[] = 'amount=:amount';
+        $params['amount'] = $amount;
+    }
+    if ($fields === []) respond_error('Không có nội dung cần cập nhật', 422);
+    db()->prepare('UPDATE cash_vouchers SET ' . implode(',', $fields) . ' WHERE id=:id')->execute($params);
+    if (isset($params['category'])) pos_remember_voucher_category($posStoreId, (string)$voucher['voucher_type'], (string)$params['category']);
+    realtime_publish($posStoreId, 'vouchers-updated', ['id'=>$id,'action'=>'updated']);
     respond_ok(['updated'=>true]);
 }
 

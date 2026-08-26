@@ -4956,8 +4956,8 @@ export default function CafePosPage() {
                         <div className="flex justify-between"><span>Doanh thu két</span><strong>{formatCurrency(dailyTillRevenue)} đ</strong></div>
                         <div className="flex justify-between"><span>Tiền dư</span><strong className="text-emerald-700">+{formatCurrency(dailyCashSurplus)} đ</strong></div>
                         <div className="flex justify-between border-t pt-2"><span>Tiền bàn giao</span><strong className="text-sky-700">{formatCurrency(getShiftHandoverAmount(dailyReport))} đ</strong></div>
-                        <div className="border-t pt-2 flex justify-between"><span>Phiếu thu ({dailyReportVouchers.filter((voucher) => voucher.type === "income").length})</span><strong className="text-emerald-700">+{formatCurrency(dailyReport.incomeVouchers)} đ</strong></div>
-                        <div className="flex justify-between"><span>Phiếu chi ({dailyReportVouchers.filter((voucher) => voucher.type === "expense").length})</span><strong className="text-rose-700">-{formatCurrency(dailyReport.expenseVouchers)} đ</strong></div>
+                        <div className="border-t pt-2 flex justify-between"><span>Phiếu thu ({dailyReportVouchers.filter((voucher) => !voucher.isCancelled && voucher.type === "income").length})</span><strong className="text-emerald-700">+{formatCurrency(dailyReport.incomeVouchers)} đ</strong></div>
+                        <div className="flex justify-between"><span>Phiếu chi ({dailyReportVouchers.filter((voucher) => !voucher.isCancelled && voucher.type === "expense").length})</span><strong className="text-rose-700">-{formatCurrency(dailyReport.expenseVouchers)} đ</strong></div>
                       </div>
                     </div>
                     <div className="rounded-xl border bg-white p-4 shadow-sm">

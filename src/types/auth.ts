@@ -2,6 +2,7 @@ export type UserRole = "admin" | "manager" | "user" | "server" | "bartender";
 export type AppPermission =
   | "dashboard.access"
   | "bills.access"
+  | "cash_vouchers.cancel"
   | "bar.access"
   | "bar.checkout"
   | "virtual_bills.access"

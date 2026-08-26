@@ -13,6 +13,7 @@ import {
   CashVoucher,
   CashVoucherCategory,
   CashVoucherType,
+  cancelCashVoucher,
   createCashVoucher,
   getCashVoucherCategories,
   getCashVouchers,
@@ -255,6 +256,8 @@ export default function BillsPage() {
   const canEditBill = canUseBills && (role === "admin" || role === "user");
   const canEditBillDetails = role === "admin";
   const canCancelBill = canUseBills && role === "admin";
+  const canEditVoucherAmount = role !== "user";
+  const canCancelVoucher = hasPermission(user, "cash_vouchers.cancel");
   const useSoftCancel = !isFarmStore;
 
   const todayInput = formatDateInput(new Date());
@@ -305,6 +308,7 @@ export default function BillsPage() {
     amount: "",
   });
   const [savingVoucherEdit, setSavingVoucherEdit] = useState(false);
+  const [cancellingVoucherId, setCancellingVoucherId] = useState<string | null>(null);
 
   const getRange = () => {
     const start = startDate ? new Date(startDate) : undefined;
@@ -441,10 +445,10 @@ export default function BillsPage() {
   }, [voucherSearch, voucherSortDirection, voucherSortKey, vouchers]);
 
   const totalIncomeVouchers = filteredVouchers
-    .filter((voucher) => voucher.includeInCashFlow !== false && voucher.type === "income")
+    .filter((voucher) => !voucher.isCancelled && voucher.includeInCashFlow !== false && voucher.type === "income")
     .reduce((sum, voucher) => sum + (voucher.amount || 0), 0);
   const totalExpenseVouchers = filteredVouchers
-    .filter((voucher) => voucher.includeInCashFlow !== false && voucher.type === "expense")
+    .filter((voucher) => !voucher.isCancelled && voucher.includeInCashFlow !== false && voucher.type === "expense")
     .reduce((sum, voucher) => sum + (voucher.amount || 0), 0);
   const netDailyCashFlow = totalAmount + totalIncomeVouchers - totalExpenseVouchers;
 
@@ -627,6 +631,7 @@ export default function BillsPage() {
   };
 
   const openEditVoucher = (voucher: CashVoucher) => {
+    if (voucher.isCancelled) return;
     setEditingVoucher(voucher);
     setVoucherEditForm({
       category: voucher.category || "",
@@ -636,14 +641,14 @@ export default function BillsPage() {
 
   const handleSaveEditVoucher = async () => {
     if (!editingVoucher) return;
-    const amount = parseMoney(voucherEditForm.amount);
+    const amount = canEditVoucherAmount ? parseMoney(voucherEditForm.amount) : editingVoucher.amount;
     const category = voucherEditForm.category.trim();
 
     if (!category) {
       alert("Vui lòng nhập tên phiếu.");
       return;
     }
-    if (amount <= 0) {
+    if (canEditVoucherAmount && amount <= 0) {
       alert("Giá trị phiếu phải lớn hơn 0.");
       return;
     }
@@ -652,7 +657,7 @@ export default function BillsPage() {
     try {
       await updateCashVoucherBasic(editingVoucher.id, {
         category,
-        amount,
+        ...(canEditVoucherAmount ? { amount } : {}),
       });
       setEditingVoucher(null);
       await loadData();
@@ -662,6 +667,25 @@ export default function BillsPage() {
       alert("Không thể cập nhật phiếu thu/chi.");
     } finally {
       setSavingVoucherEdit(false);
+    }
+  };
+
+  const handleCancelVoucher = async (voucher: CashVoucher) => {
+    if (!canCancelVoucher || voucher.isCancelled) return;
+    const reason = window.prompt(`Nhập lý do hủy phiếu ${voucher.code || voucher.id}:`)?.trim();
+    if (!reason) return;
+    if (!window.confirm("Phiếu sẽ được đánh dấu đã hủy và loại khỏi mọi phép tính dòng tiền. Tiếp tục?")) return;
+
+    setCancellingVoucherId(voucher.id);
+    try {
+      await cancelCashVoucher(voucher.id, reason);
+      await loadData();
+      alert("Đã hủy phiếu và lưu đầy đủ dấu vết.");
+    } catch (error) {
+      console.error(error);
+      alert("Không thể hủy phiếu thu/chi.");
+    } finally {
+      setCancellingVoucherId(null);
     }
   };
 
@@ -802,7 +826,7 @@ export default function BillsPage() {
                       <p className="text-lg font-bold text-slate-900">
                         {
                           filteredVouchers.filter(
-                            (voucher) => voucher.includeInCashFlow !== false
+                            (voucher) => !voucher.isCancelled && voucher.includeInCashFlow !== false
                           ).length
                         }
                       </p>
@@ -1263,7 +1287,7 @@ export default function BillsPage() {
                             const happenedAt = getVoucherDate(voucher);
                             const isIncome = voucher.type === "income";
                             return (
-                              <tr key={voucher.id} className="hover:bg-slate-50">
+                              <tr key={voucher.id} className={voucher.isCancelled ? "bg-slate-50 text-slate-400" : "hover:bg-slate-50"}>
                                 <td className="px-4 py-3 font-mono text-xs">
                                   {voucher.code || voucher.id}
                                 </td>
@@ -1292,6 +1316,11 @@ export default function BillsPage() {
                                   <p className="font-semibold text-slate-900">
                                     {voucher.category || "Không rõ"}
                                   </p>
+                                  {voucher.isCancelled ? (
+                                    <p className="mt-1 text-xs font-semibold text-rose-700" title={voucher.cancellationReason}>
+                                      Đã hủy · {voucher.cancellationReason || "Không có lý do"}
+                                    </p>
+                                  ) : null}
                                   {voucher.note ? (
                                     <p className="text-xs text-slate-500">{voucher.note}</p>
                                   ) : null}
@@ -1319,16 +1348,14 @@ export default function BillsPage() {
                                   {formatCurrency(voucher.amount || 0)} VND
                                 </td>
                                 <td className="px-4 py-3 text-center">
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-9 w-9 text-sky-800 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-                                    onClick={() => openEditVoucher(voucher)}
-                                    title={`Sửa phiếu ${voucher.code || voucher.id}`}
-                                    aria-label={`Sửa phiếu ${voucher.code || voucher.id}`}
-                                  >
-                                    <Edit3 className="h-4 w-4" aria-hidden="true" />
-                                  </Button>
+                                  {!voucher.isCancelled ? <div className="flex items-center justify-center gap-2">
+                                    <Button variant="outline" size="icon" className="h-9 w-9 text-sky-800 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700" onClick={() => openEditVoucher(voucher)} title={`Sửa phiếu ${voucher.code || voucher.id}`} aria-label={`Sửa phiếu ${voucher.code || voucher.id}`}>
+                                      <Edit3 className="h-4 w-4" aria-hidden="true" />
+                                    </Button>
+                                    {canCancelVoucher ? <Button variant="outline" size="icon" className="h-9 w-9 text-rose-700 hover:border-rose-400 hover:bg-rose-50" onClick={() => void handleCancelVoucher(voucher)} disabled={cancellingVoucherId === voucher.id} title={`Hủy phiếu ${voucher.code || voucher.id}`} aria-label={`Hủy phiếu ${voucher.code || voucher.id}`}>
+                                      {cancellingVoucherId === voucher.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                    </Button> : null}
+                                  </div> : <span className="text-xs font-semibold text-rose-700">Đã hủy</span>}
                                 </td>
                               </tr>
                             );
@@ -1382,6 +1409,9 @@ export default function BillsPage() {
                                 <dt className="text-slate-500">Nội dung</dt>
                                 <dd className="max-w-[65%] text-right font-semibold text-slate-900">
                                   {voucher.category || "Không rõ"}
+                                  {voucher.isCancelled ? (
+                                    <span className="mt-1 block text-xs font-semibold text-rose-700">Đã hủy · {voucher.cancellationReason || "Không có lý do"}</span>
+                                  ) : null}
                                   {voucher.note ? (
                                     <span className="mt-0.5 block text-xs font-normal text-slate-500">
                                       {voucher.note}
@@ -1413,16 +1443,14 @@ export default function BillsPage() {
                                 {isIncome ? "+" : "-"}
                                 {formatCurrency(voucher.amount || 0)} VND
                               </p>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-11 w-11 text-sky-800 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-                                onClick={() => openEditVoucher(voucher)}
-                                title={`Sửa phiếu ${voucher.code || voucher.id}`}
-                                aria-label={`Sửa phiếu ${voucher.code || voucher.id}`}
-                              >
-                                <Edit3 className="h-4 w-4" aria-hidden="true" />
-                              </Button>
+                              {!voucher.isCancelled ? <div className="flex gap-2">
+                                <Button variant="outline" size="icon" className="h-11 w-11 text-sky-800 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700" onClick={() => openEditVoucher(voucher)} title={`Sửa phiếu ${voucher.code || voucher.id}`} aria-label={`Sửa phiếu ${voucher.code || voucher.id}`}>
+                                  <Edit3 className="h-4 w-4" aria-hidden="true" />
+                                </Button>
+                                {canCancelVoucher ? <Button variant="outline" size="icon" className="h-11 w-11 text-rose-700 hover:border-rose-400 hover:bg-rose-50" onClick={() => void handleCancelVoucher(voucher)} disabled={cancellingVoucherId === voucher.id} title={`Hủy phiếu ${voucher.code || voucher.id}`} aria-label={`Hủy phiếu ${voucher.code || voucher.id}`}>
+                                  {cancellingVoucherId === voucher.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                </Button> : null}
+                              </div> : null}
                             </div>
                           </article>
                         );
@@ -1741,7 +1769,7 @@ export default function BillsPage() {
                   }
                   placeholder="Nhập tên phiếu"
                 />
-                <Input
+                {canEditVoucherAmount ? <Input
                   label="Giá trị (VND)"
                   value={formatMoneyInput(voucherEditForm.amount)}
                   onChange={(e) =>
@@ -1751,7 +1779,9 @@ export default function BillsPage() {
                     }))
                   }
                   placeholder="Nhập giá trị"
-                />
+                /> : <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Giá trị phiếu được khóa đối với thu ngân: <strong>{formatCurrency(editingVoucher.amount)} VND</strong>
+                </div>}
               </div>
 
               <div className="flex items-center justify-end gap-2 border-t px-5 py-4">

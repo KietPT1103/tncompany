@@ -26,6 +26,13 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     path: "/pos",
   },
   {
+    id: "cash_vouchers.cancel",
+    label: "Hủy phiếu thu/chi",
+    description: "Hủy mềm phiếu thu/chi, lưu người hủy, thời điểm và lý do.",
+    category: "Giao dịch",
+    path: "/admin/bills",
+  },
+  {
     id: "bar.access",
     label: "Màn hình pha chế",
     description: "Xem và cập nhật tiến độ các bill pha chế.",

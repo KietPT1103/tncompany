@@ -19,6 +19,7 @@ export type OverviewBill = {
 export type OverviewVoucher = {
   type: "income" | "expense";
   amount: number;
+  isCancelled?: boolean;
   includeInCashFlow?: boolean;
   happenedAt?: { seconds: number };
   createdAt?: { seconds: number };
@@ -115,7 +116,7 @@ export function calculateOverviewVoucherTotals(
 ): OverviewVoucherTotals {
   return vouchers.filter((voucher) => {
     const date = toVoucherDate(voucher);
-    return voucher.includeInCashFlow !== false && date ? isWithinRange(date, startDate, endDate) : false;
+    return !voucher.isCancelled && voucher.includeInCashFlow !== false && date ? isWithinRange(date, startDate, endDate) : false;
   }).reduce<OverviewVoucherTotals>((totals, voucher) => {
     totals[voucher.type] += Number(voucher.amount || 0);
     return totals;

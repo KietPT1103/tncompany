@@ -56,6 +56,8 @@ export function buildVoucherExportRows(vouchers: CashVoucher[]) {
     "Người nộp/nhận": voucher.personName || "",
     "Tính vào dòng tiền": voucher.includeInCashFlow === false ? "Không" : "Có",
     "Giá trị (VND)": (voucher.type === "expense" ? -1 : 1) * (voucher.amount || 0),
+    "Trạng thái": voucher.isCancelled ? "Đã hủy" : "Hợp lệ",
+    "Lý do hủy": voucher.cancellationReason || "",
   }));
 }
 

@@ -41,6 +41,7 @@ import HotpotSampleBillsPage from "./app/(dashboard)/sample-bills/hotpot/page";
 import FarmSampleBillsPage from "./app/(dashboard)/sample-bills/farm/page";
 import LoginPage from "./app/login/page";
 import RoleGuard from "./components/RoleGuard";
+import CashierOpenShiftGuard from "./components/CashierOpenShiftGuard";
 import SeoManager from "./components/SeoManager";
 import ArticlesIndexPage from "./app/tin-tuc/ArticlesIndexPage";
 import ArticleDetailPage from "./app/tin-tuc/ArticleDetailPage";
@@ -121,9 +122,10 @@ export function App() {
           <Route path="gesture-studio" element={<Navigate to="/gesture-studio" replace />} />
           <Route path="pos" element={<Navigate to="/pos" replace />} />
           <Route path="bar" element={<Navigate to="/bar" replace />} />
-          <Route element={<AdminLayout />}>
-            <Route index element={<AdminIndexPage />} />
-            <Route element={<ProtectedLayout />}>
+          <Route element={<CashierOpenShiftGuard />}>
+            <Route element={<AdminLayout />}>
+              <Route index element={<AdminIndexPage />} />
+              <Route element={<ProtectedLayout />}>
               <Route element={<ProtectedLayout allowedRoles={["admin"]} permission="dashboard.access" />}>
                 <Route path="cost" element={<DashboardPage />} />
                 <Route path="overview" element={<OverviewPage />} />
@@ -157,6 +159,7 @@ export function App() {
               <Route path="seo-articles/:id" element={<EditSeoArticlePage />} />
               <Route path="tax-invoices" element={<TaxInvoicesPage />} />
               <Route path="timesheet" element={<TimesheetPage />} />
+              </Route>
             </Route>
           </Route>
         </Route>
