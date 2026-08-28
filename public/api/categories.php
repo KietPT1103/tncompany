@@ -18,6 +18,11 @@ auth_ensure_column(
     'TINYINT(1) NULL DEFAULT NULL AFTER is_preparation_print_enabled'
 );
 auth_ensure_column(
+    'categories',
+    'is_separated_in_sales_report',
+    'TINYINT(1) NOT NULL DEFAULT 0 AFTER counts_as_cup'
+);
+auth_ensure_column(
     'bill_items',
     'counts_as_cup',
     'TINYINT(1) NULL DEFAULT NULL AFTER surcharge_total'
@@ -28,7 +33,7 @@ if ($method === 'GET') {
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
-        'SELECT id, store_id, name, description, sort_order, is_hidden, is_preparation_print_enabled, counts_as_cup
+        'SELECT id, store_id, name, description, sort_order, is_hidden, is_preparation_print_enabled, counts_as_cup, is_separated_in_sales_report
          FROM categories
          WHERE store_id = :store_id
          ORDER BY name ASC'
@@ -49,6 +54,7 @@ if ($method === 'GET') {
                 'isPreparationPrintEnabled' => (bool) $row['is_preparation_print_enabled'],
                 'countsAsCup' => $row['counts_as_cup'] !== null && (bool) $row['counts_as_cup'],
                 'isCupCountConfigured' => $row['counts_as_cup'] !== null,
+                'isSeparatedInSalesReport' => (bool) $row['is_separated_in_sales_report'],
             ];
         },
         $statement->fetchAll()
@@ -95,12 +101,19 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PATCH') {
-    auth_require_permission('categories.access');
+    $authenticatedUser = auth_require_permission('categories.access');
 
     $body = read_json_body();
     $id = trim((string) ($body['id'] ?? ''));
     if ($id === '') {
         respond_error('Category id is required', 422);
+    }
+
+    if (
+        array_key_exists('isSeparatedInSalesReport', $body)
+        && strtolower((string) ($authenticatedUser['role'] ?? '')) !== 'admin'
+    ) {
+        respond_error('Only admin can configure sales report categories', 403);
     }
 
     $fields = [];
@@ -139,6 +152,12 @@ if ($method === 'PATCH') {
     if (array_key_exists('countsAsCup', $body)) {
         $fields[] = 'counts_as_cup = :counts_as_cup';
         $params['counts_as_cup'] = !empty($body['countsAsCup']) ? 1 : 0;
+    }
+
+
+    if (array_key_exists('isSeparatedInSalesReport', $body)) {
+        $fields[] = 'is_separated_in_sales_report = :is_separated_in_sales_report';
+        $params['is_separated_in_sales_report'] = !empty($body['isSeparatedInSalesReport']) ? 1 : 0;
     }
 
     if ($fields === []) {

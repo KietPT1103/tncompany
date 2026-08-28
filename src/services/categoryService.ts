@@ -9,6 +9,7 @@ export type Category = {
   isPreparationPrintEnabled?: boolean;
   countsAsCup?: boolean;
   isCupCountConfigured?: boolean;
+  isSeparatedInSalesReport?: boolean;
   storeId?: string;
 };
 
@@ -49,6 +50,7 @@ export async function updateCategory(
     isHidden?: boolean;
     isPreparationPrintEnabled?: boolean;
     countsAsCup?: boolean;
+    isSeparatedInSalesReport?: boolean;
   }
 ) {
   const payload: Record<string, unknown> = { id: categoryId };
@@ -75,6 +77,10 @@ export async function updateCategory(
 
   if (data.countsAsCup !== undefined) {
     payload.countsAsCup = data.countsAsCup === true;
+  }
+
+  if (data.isSeparatedInSalesReport !== undefined) {
+    payload.isSeparatedInSalesReport = data.isSeparatedInSalesReport === true;
   }
 
   await apiRequest<{ updated: boolean }>("/categories.php", {

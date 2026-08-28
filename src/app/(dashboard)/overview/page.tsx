@@ -13,6 +13,7 @@ import OverviewKpiBand from "./OverviewKpiBand";
 import OverviewSalesChart from "./OverviewSalesChart";
 import OverviewTables from "./OverviewTables";
 import OverviewShiftRevenue from "./OverviewShiftRevenue";
+import OverviewWeeklyQuantity from "@/components/OverviewWeeklyQuantity";
 import {
   buildOverviewSnapshot,
   calculateOverviewVoucherTotals,
@@ -24,7 +25,11 @@ import {
   type OverviewSnapshot,
   type OverviewVoucherTotals,
 } from "./overviewData";
-import { loadOverviewShiftRevenue } from "@/services/overviewShiftService";
+import {
+  loadOverviewShiftRevenue,
+  loadOverviewWeeklyQuantity,
+  type OverviewWeeklyQuantityRow,
+} from "@/services/overviewShiftService";
 import { subscribeRealtimeResource, type RealtimeState } from "@/services/realtimeService";
 
 const emptySnapshot = (startDate: Date, endDate: Date) =>
@@ -45,6 +50,18 @@ const formatShortDate = (date: Date) =>
 const formatDateInputValue = (date: Date) =>
   [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 
+const getCurrentWeekRange = () => {
+  const now = new Date();
+  const startDate = new Date(now);
+  const dayFromMonday = now.getDay() === 0 ? 6 : now.getDay() - 1;
+  startDate.setDate(now.getDate() - dayFromMonday);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + 6);
+  endDate.setHours(23, 59, 59, 999);
+  return { startDate, endDate };
+};
+
 const normalizeCategory = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 const getBakeryProductCodes = (products: Product[], categories: Category[]) => {
@@ -52,6 +69,14 @@ const getBakeryProductCodes = (products: Product[], categories: Category[]) => {
   return new Set(products.filter((product) => {
     const category = categoryNames.get(product.category || "") || product.categoryName || product.category || "";
     return normalizeCategory(category) === "banh";
+  }).map((product) => product.product_code));
+};
+
+const getConfiguredBakeryProductCodes = (products: Product[], categories: Category[]) => {
+  const categoriesById = new Map(categories.map((category) => [category.id, category]));
+  return new Set(products.filter((product) => {
+    const category = categoriesById.get(product.category || "");
+    return category?.isCupCountConfigured === true && category.countsAsCup !== true;
   }).map((product) => product.product_code));
 };
 
@@ -89,6 +114,7 @@ export default function OverviewPage() {
     }
     return getOverviewDateRanges(rangePreset);
   }, [customRange, rangePreset]);
+  const weeklyRange = useMemo(() => getCurrentWeekRange(), []);
   const [snapshot, setSnapshot] = useState<OverviewSnapshot>(() =>
     emptySnapshot(ranges.startDate, ranges.endDate),
   );
@@ -104,9 +130,14 @@ export default function OverviewPage() {
   const [shiftError, setShiftError] = useState("");
   const [shiftRealtimeState, setShiftRealtimeState] = useState<RealtimeState>("connecting");
   const [cupProductCodes, setCupProductCodes] = useState<ReadonlySet<string> | null>(null);
+  const [bakeryProductCodes, setBakeryProductCodes] = useState<ReadonlySet<string> | null>(null);
+  const [weeklyQuantity, setWeeklyQuantity] = useState<OverviewWeeklyQuantityRow[]>([]);
+  const [weeklyQuantityLoading, setWeeklyQuantityLoading] = useState(true);
+  const [weeklyQuantityError, setWeeklyQuantityError] = useState("");
 
   useEffect(() => {
     setCupProductCodes(null);
+    setBakeryProductCodes(null);
   }, [storeId]);
 
   const loadOverview = useCallback(async () => {
@@ -133,7 +164,9 @@ export default function OverviewPage() {
       ]);
       const bakeryProductCodes = getBakeryProductCodes(products, categories);
       const nextCupProductCodes = getCupProductCodes(products, categories);
+      const nextConfiguredBakeryProductCodes = getConfiguredBakeryProductCodes(products, categories);
       setCupProductCodes(nextCupProductCodes);
+      setBakeryProductCodes(nextConfiguredBakeryProductCodes);
 
       setSnapshot(buildOverviewSnapshot(
         bills,
@@ -201,6 +234,43 @@ export default function OverviewPage() {
       fallbackMs: 30_000,
     });
   }, [cupProductCodes, loadShiftRevenue, storeId]);
+
+  const loadWeeklyQuantity = useCallback(
+    () => loadOverviewWeeklyQuantity({
+      storeId,
+      startDate: weeklyRange.startDate,
+      endDate: weeklyRange.endDate,
+      cupProductCodes: cupProductCodes || new Set(),
+      bakeryProductCodes: bakeryProductCodes || new Set(),
+    }),
+    [bakeryProductCodes, cupProductCodes, storeId, weeklyRange.endDate, weeklyRange.startDate],
+  );
+
+  useEffect(() => {
+    if (!storeId || cupProductCodes === null || bakeryProductCodes === null) {
+      setWeeklyQuantity([]);
+      setWeeklyQuantityLoading(Boolean(storeId));
+      return;
+    }
+
+    setWeeklyQuantityLoading(true);
+    setWeeklyQuantityError("");
+    return subscribeRealtimeResource({
+      storeId,
+      events: ["bill-created", "bill-updated", "bill-deleted", "shifts-updated"],
+      loader: loadWeeklyQuantity,
+      onChange: (rows) => {
+        setWeeklyQuantity(rows);
+        setWeeklyQuantityLoading(false);
+        setWeeklyQuantityError("");
+      },
+      onError: (reason) => {
+        setWeeklyQuantityLoading(false);
+        setWeeklyQuantityError(reason.message || "Không thể tải số lượng theo tuần.");
+      },
+      fallbackMs: 30_000,
+    });
+  }, [bakeryProductCodes, cupProductCodes, loadWeeklyQuantity, storeId]);
 
   const revenueChange = calculatePercentageChange(
     snapshot.totalRevenue,
@@ -297,6 +367,7 @@ export default function OverviewPage() {
           <>
             <OverviewKpiBand snapshot={snapshot} voucherTotals={voucherTotals} comparisonLabel={comparisonLabel} revenueChange={revenueChange} orderChange={orderChange} />
             <OverviewShiftRevenue rows={shiftRevenue} loading={shiftLoading} error={shiftError} realtimeState={shiftRealtimeState} />
+            <OverviewWeeklyQuantity rows={weeklyQuantity} loading={weeklyQuantityLoading} error={weeklyQuantityError} />
             <OverviewSalesChart snapshot={snapshot} />
             <OverviewTables snapshot={snapshot} />
           </>

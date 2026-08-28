@@ -62,6 +62,25 @@ export function countCupsForOverview(
     }, 0);
 }
 
+export function countBakeryForOverview(
+  bills: OverviewCupBill[],
+  fallbackBakeryProductCodes: ReadonlySet<string> = new Set(),
+): number {
+  return bills
+    .filter((bill) => bill.status !== "cancelled")
+    .flatMap((bill) => bill.items || [])
+    .filter((item) =>
+      item.countsAsCup === false
+      || (item.countsAsCup == null
+        && Boolean(item.menuId)
+        && fallbackBakeryProductCodes.has(item.menuId || "")),
+    )
+    .reduce((total, item) => {
+      const quantity = Number(item.quantity || 0);
+      return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+    }, 0);
+}
+
 export function orderOverviewShiftRevenueRows(
   rows: OverviewShiftRevenue[],
 ): OverviewShiftRevenue[] {

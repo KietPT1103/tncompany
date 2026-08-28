@@ -52,7 +52,7 @@ import {
 } from "@/services/cashVoucherService";
 import { getAllProducts, Product } from "@/services/products";
 import { addTable, CafeTable, getTables } from "@/services/tableService";
-import { Category, getCategories } from "@/services/categoryService";
+import { Category, getCategories, updateCategory } from "@/services/categoryService";
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
@@ -194,6 +194,22 @@ type DailyReportTab = "overview" | "bills" | "products";
 type DailyReportShift = Exclude<ShiftType, "single"> | "all";
 type DailyReportPaymentFilter = "all" | PaymentMethod;
 type SoldProductKind = "drink" | "bakery";
+type DailyProductRow = {
+  key: string;
+  name: string;
+  categoryId: string | null;
+  categoryName: string;
+  quantity: number;
+  revenue: number;
+  billCount: number;
+};
+type DailyProductGroup = {
+  key: string;
+  title: string;
+  unit: string;
+  rows: DailyProductRow[];
+  total: number;
+};
 type EndOfDayHandover = {
   shifts: Record<Exclude<ShiftType, "single">, number>;
   total: number;
@@ -363,6 +379,7 @@ export default function CafePosPage() {
     useState<DailyReportPaymentFilter>("all");
   const [dailyReportDate, setDailyReportDate] = useState(() => toLocalDateInput(new Date()));
   const [dailyReportShift, setDailyReportShift] = useState<DailyReportShift>("shift_1");
+  const [updatingDailyReportCategoryId, setUpdatingDailyReportCategoryId] = useState<string | null>(null);
   const [expandedDailyBillHours, setExpandedDailyBillHours] = useState<Set<number>>(
     () => new Set()
   );
@@ -395,6 +412,10 @@ export default function CafePosPage() {
   const kitchenTerminalNameStorageKey = useMemo(
     () => `${KITCHEN_TERMINAL_NAME_KEY_PREFIX}:${storeId || "default"}`,
     [storeId]
+  );
+  const dailyReportSplitCategoryIds = useMemo(
+    () => categories.filter((item) => item.isSeparatedInSalesReport === true).map((item) => item.id),
+    [categories]
   );
   const appendKitchenPrintLog = useCallback((message: string) => {
     const time = new Date().toLocaleTimeString("vi-VN");
@@ -498,6 +519,25 @@ export default function CafePosPage() {
   useEffect(() => {
     setDeviceIdentity(getOrCreatePosDevice());
   }, []);
+
+  const handleToggleDailyReportSplitCategory = async (categoryItem: Category) => {
+    if (role !== "admin" || updatingDailyReportCategoryId) return;
+    const nextValue = categoryItem.isSeparatedInSalesReport !== true;
+    setUpdatingDailyReportCategoryId(categoryItem.id);
+    try {
+      await updateCategory(categoryItem.id, { isSeparatedInSalesReport: nextValue });
+      setCategories((current) => current.map((item) =>
+        item.id === categoryItem.id
+          ? { ...item, isSeparatedInSalesReport: nextValue }
+          : item
+      ));
+    } catch (error) {
+      console.error(error);
+      alert("Không thể lưu cấu hình category báo cáo.");
+    } finally {
+      setUpdatingDailyReportCategoryId(null);
+    }
+  };
 
   useEffect(() => {
     if (!user || !storeId || !isShiftEnabledForUser) {
@@ -2508,8 +2548,13 @@ export default function CafePosPage() {
     }
   };
 
-  const handleOpenDailyReport = () => {
+  const handleOpenDailyReport = async () => {
     if (!storeId) return;
+    try {
+      setCategories(await getCategories(storeId));
+    } catch (error) {
+      console.error("Không tải được cấu hình category báo cáo mới nhất", error);
+    }
     const activeShiftOpenedAt = activeShift?.openedAt?.seconds
       ? new Date(activeShift.openedAt.seconds * 1000)
       : new Date();
@@ -2532,15 +2577,27 @@ export default function CafePosPage() {
   const handlePrintDailyReport = () => {
     if (!dailyReport) return;
     const reportDateText = getLocalDayRange(dailyReportDate).start.toLocaleDateString("vi-VN");
-    const buildProductRows = (rows: typeof dailyProductRows) =>
+    const buildProductRows = (rows: DailyProductRow[]) =>
       rows.map(
         (item) => `<tr><td>${escapeHtml(item.name)}</td><td class="right">${formatCurrency(
           item.quantity
         )}</td><td class="right">${formatCurrency(item.revenue)} đ</td></tr>`
       )
       .join("");
-    const drinkProductRows = buildProductRows(dailyDrinkRows);
-    const bakeryProductRows = buildProductRows(dailyBakeryRows);
+    const productSummaryRows = dailyReportProductGroups
+      .map((group) => `<tr><td>${escapeHtml(group.title)} (${escapeHtml(group.unit)})</td><td class="right">${formatCurrency(group.total)}</td></tr>`)
+      .join("");
+    const productGroupSections = dailyReportProductGroups
+      .map((group) => {
+        const rows = buildProductRows(group.rows);
+        return `<div class="line"></div>
+          <p><strong>${escapeHtml(group.title.toUpperCase())} - ${getDailyReportShiftLabel(dailyReportShift).toUpperCase()} (${formatCurrency(group.total)} ${escapeHtml(group.unit.toUpperCase())})</strong></p>
+          <table>
+            <thead><tr><td><strong>Món</strong></td><td class="right"><strong>SL</strong></td><td class="right"><strong>Doanh thu</strong></td></tr></thead>
+            <tbody>${rows || `<tr><td colspan="3">Chưa có dữ liệu</td></tr>`}</tbody>
+          </table>`;
+      })
+      .join("");
     const html = `
       <html lang="vi">
         <head>
@@ -2567,12 +2624,7 @@ export default function CafePosPage() {
               dailyReport.totalSales
             )} đ</td></tr>
             <tr><td>Số bill</td><td class="right">${dailyReport.completedBills}</td></tr>
-            <tr><td>Nước đã bán (ly)</td><td class="right">${formatCurrency(
-              dailyDrinkTotal
-            )}</td></tr>
-            <tr><td>Bánh đã bán (món)</td><td class="right">${formatCurrency(
-              dailyBakeryTotal
-            )}</td></tr>
+            ${productSummaryRows}
             <tr><td>Phiếu thu</td><td class="right">${formatCurrency(
               dailyReport.incomeVouchers
             )} đ</td></tr>
@@ -2604,18 +2656,7 @@ export default function CafePosPage() {
               dailyReport.cancelledAmount
             )} đ</td></tr>
           </table>
-          <div class="line"></div>
-          <p><strong>NƯỚC ĐÃ BÁN - ${getDailyReportShiftLabel(dailyReportShift).toUpperCase()} (${formatCurrency(dailyDrinkTotal)} LY)</strong></p>
-          <table>
-            <thead><tr><td><strong>Món</strong></td><td class="right"><strong>SL</strong></td><td class="right"><strong>Doanh thu</strong></td></tr></thead>
-            <tbody>${drinkProductRows || `<tr><td colspan="3">Chưa có nước bán trong ${getDailyReportShiftLabel(dailyReportShift)}</td></tr>`}</tbody>
-          </table>
-          <div class="line"></div>
-          <p><strong>BÁNH ĐÃ BÁN - ${getDailyReportShiftLabel(dailyReportShift).toUpperCase()} (${formatCurrency(dailyBakeryTotal)} MÓN)</strong></p>
-          <table>
-            <thead><tr><td><strong>Món</strong></td><td class="right"><strong>SL</strong></td><td class="right"><strong>Doanh thu</strong></td></tr></thead>
-            <tbody>${bakeryProductRows || `<tr><td colspan="3">Chưa có bánh bán trong ${getDailyReportShiftLabel(dailyReportShift)}</td></tr>`}</tbody>
-          </table>
+          ${productGroupSections}
           <div class="line"></div>
           <p style="text-align:center">Kết thúc báo cáo</p>
           <div class="tail-space"></div>
@@ -2993,16 +3034,23 @@ export default function CafePosPage() {
   const dailyProductRows = useMemo(() => {
     const productsByKey = new Map<
       string,
-      { key: string; name: string; kind: SoldProductKind; quantity: number; revenue: number; billIds: Set<string> }
+      Omit<DailyProductRow, "billCount"> & { billIds: Set<string> }
     >();
+    const productsByCode = new Map(products.map((product) => [product.product_code, product]));
+    const categoriesById = new Map(categories.map((categoryItem) => [categoryItem.id, categoryItem]));
 
     completedDailyBills.forEach((bill) => {
       (bill.items || []).forEach((item) => {
         const key = item.menuId || normalizeSearchText(item.name || "mon-khac");
+        const product = productsByCode.get(item.menuId);
+        const matchedCategory = product?.category
+          ? categoriesById.get(product.category)
+          : undefined;
         const current = productsByKey.get(key) || {
           key,
           name: item.name || "Món chưa đặt tên",
-          kind: getSoldProductKind(item.menuId, item.name || ""),
+          categoryId: matchedCategory?.id || null,
+          categoryName: matchedCategory?.name || "",
           quantity: 0,
           revenue: 0,
           billIds: new Set<string>(),
@@ -3017,24 +3065,38 @@ export default function CafePosPage() {
     return Array.from(productsByKey.values())
       .map((item) => ({ ...item, billCount: item.billIds.size }))
       .sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue);
-  }, [completedDailyBills, getSoldProductKind]);
+  }, [categories, completedDailyBills, products]);
 
-  const dailyDrinkRows = useMemo(
-    () => dailyProductRows.filter((item) => item.kind === "drink"),
-    [dailyProductRows]
-  );
-  const dailyBakeryRows = useMemo(
-    () => dailyProductRows.filter((item) => item.kind === "bakery"),
-    [dailyProductRows]
-  );
-  const dailyDrinkTotal = useMemo(
-    () => dailyDrinkRows.reduce((total, item) => total + item.quantity, 0),
-    [dailyDrinkRows]
-  );
-  const dailyBakeryTotal = useMemo(
-    () => dailyBakeryRows.reduce((total, item) => total + item.quantity, 0),
-    [dailyBakeryRows]
-  );
+  const dailyReportProductGroups = useMemo<DailyProductGroup[]>(() => {
+    const selectedIds = new Set(dailyReportSplitCategoryIds);
+    const drinkRows = dailyProductRows.filter(
+      (item) => !item.categoryId || !selectedIds.has(item.categoryId)
+    );
+    const groups: DailyProductGroup[] = [{
+      key: "drink",
+      title: "Nước đã bán",
+      unit: "ly",
+      rows: drinkRows,
+      total: drinkRows.reduce((total, item) => total + item.quantity, 0),
+    }];
+
+    dailyReportSplitCategoryIds.forEach((categoryId) => {
+      const categoryItem = categories.find((item) => item.id === categoryId);
+      if (!categoryItem) return;
+      const rows = dailyProductRows.filter((item) => item.categoryId === categoryId);
+      groups.push({
+        key: categoryId,
+        title: `${categoryItem.name} đã bán`,
+        unit: "món",
+        rows,
+        total: rows.reduce((total, item) => total + item.quantity, 0),
+      });
+    });
+    return groups;
+  }, [categories, dailyProductRows, dailyReportSplitCategoryIds]);
+
+  const dailyDrinkRows = dailyReportProductGroups[0]?.rows || [];
+  const dailyDrinkTotal = dailyReportProductGroups[0]?.total || 0;
 
   const dailyOpeningCash = useMemo(
     () => dailyReportShifts.reduce((total, shift) => total + Number(shift.openingCash || 0), 0),
@@ -3855,13 +3917,8 @@ export default function CafePosPage() {
                             handleItemNoteChange(item.id, e.target.value)
                           }
                           placeholder="Ghi chú..."
-                          className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:border-sky-400 focus:outline-none"
+                          className="block h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs leading-5 text-slate-700 focus:border-sky-400 focus:outline-none"
                         />
-                        {item.note?.trim() && (
-                          <p className="text-[11px] text-slate-500">
-                            Ghi chú: {item.note.trim()}
-                          </p>
-                        )}
                         <div className="space-y-0.5">
                           <p className="text-sm text-slate-500">
                             {formatCurrency(pricedItem?.price ?? item.price)} đ
@@ -4881,7 +4938,7 @@ export default function CafePosPage() {
               {([
                 ["overview", "Tổng quan"],
                 ["bills", `Bill theo giờ (${dailyReport?.completedBills || 0})`],
-                ["products", `Nước & bánh ${getDailyReportShiftLabel(dailyReportShift)} (${dailyProductRows.length})`],
+                ["products", `Hàng đã bán ${getDailyReportShiftLabel(dailyReportShift)} (${dailyProductRows.length})`],
               ] as [DailyReportTab, string][]).map(([tab, label]) => (
                 <button
                   key={tab}
@@ -4928,12 +4985,12 @@ export default function CafePosPage() {
                         {formatCurrency(dailyDrinkTotal)}
                       </p>
                     </div>
-                    <div className="rounded-xl border bg-white p-4 shadow-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bánh đã bán (món)</p>
-                      <p className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">
-                        {formatCurrency(dailyBakeryTotal)}
-                      </p>
-                    </div>
+                    {dailyReportProductGroups.slice(1).map((group) => (
+                      <div key={group.key} className="rounded-xl border bg-white p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{group.title} ({group.unit})</p>
+                        <p className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">{formatCurrency(group.total)}</p>
+                      </div>
+                    ))}
                     <div className="rounded-xl border bg-white p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trung bình / bill</p>
                       <p className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">
@@ -4968,7 +5025,9 @@ export default function CafePosPage() {
                         <div className="flex justify-between"><span>Giá trị bill hủy</span><strong className="text-rose-700">{formatCurrency(dailyReport.cancelledAmount)} đ</strong></div>
                         <div className="border-t pt-2 flex justify-between"><span>Khung giờ có bán hàng</span><strong>{dailyAllBillHourCount}</strong></div>
                         <div className="flex justify-between"><span>Mặt hàng nước</span><strong>{dailyDrinkRows.length}</strong></div>
-                        <div className="flex justify-between"><span>Mặt hàng bánh</span><strong>{dailyBakeryRows.length}</strong></div>
+                        {dailyReportProductGroups.slice(1).map((group) => (
+                          <div key={group.key} className="flex justify-between"><span>Mặt hàng {group.title.replace(" đã bán", "")}</span><strong>{group.rows.length}</strong></div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -5130,10 +5189,31 @@ export default function CafePosPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {[
-                    { key: "drink", title: "Nước đã bán", unit: "ly", rows: dailyDrinkRows, total: dailyDrinkTotal },
-                    { key: "bakery", title: "Bánh đã bán", unit: "món", rows: dailyBakeryRows, total: dailyBakeryTotal },
-                  ].map((group) => (
+                  {role === "admin" && (
+                  <section className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
+                    <h4 className="font-bold text-slate-900">Chọn category cần tách riêng</h4>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Cấu hình này áp dụng cho thu ngân của cửa hàng. Thu ngân chỉ thấy các bảng kết quả đã được chọn bên dưới.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {categories.map((categoryItem) => {
+                        const checked = dailyReportSplitCategoryIds.includes(categoryItem.id);
+                        return (
+                          <button
+                            type="button"
+                            key={categoryItem.id}
+                            disabled={updatingDailyReportCategoryId !== null}
+                            onClick={() => void handleToggleDailyReportSplitCategory(categoryItem)}
+                            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold transition disabled:cursor-wait disabled:opacity-60 ${checked ? "border-sky-600 bg-sky-600 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-sky-400"}`}
+                          >
+                            {categoryItem.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                  )}
+                  {dailyReportProductGroups.map((group) => (
                     <section key={group.key} className="overflow-hidden rounded-xl border bg-white shadow-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-100 px-4 py-3">
                         <h4 className="font-bold text-slate-900">
@@ -5145,7 +5225,7 @@ export default function CafePosPage() {
                       </div>
                       {group.rows.length === 0 ? (
                         <div className="p-6 text-center text-sm text-slate-500">
-                          Chưa có {group.key === "drink" ? "nước" : "bánh"} bán trong {getDailyReportShiftLabel(dailyReportShift)}.
+                          Chưa có dữ liệu trong {getDailyReportShiftLabel(dailyReportShift)}.
                         </div>
                       ) : (
                         <div className="overflow-x-auto">

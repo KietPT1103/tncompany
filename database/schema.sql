@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS categories (
   is_hidden TINYINT(1) NOT NULL DEFAULT 0,
   is_preparation_print_enabled TINYINT(1) NOT NULL DEFAULT 1,
   counts_as_cup TINYINT(1) NULL DEFAULT NULL,
+  is_separated_in_sales_report TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_categories_store_name (store_id, name),
