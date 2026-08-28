@@ -46,16 +46,19 @@ export const getShiftLabel = (shiftType: OverviewShiftData["shiftType"]) => {
 export function countCupsForOverview(
   bills: OverviewCupBill[],
   fallbackCupProductCodes: ReadonlySet<string> = new Set(),
+  excludedProductCodes: ReadonlySet<string> = new Set(),
 ): number {
   return bills
     .filter((bill) => bill.status !== "cancelled")
     .flatMap((bill) => bill.items || [])
-    .filter((item) =>
-      item.countsAsCup === true
-      || (item.countsAsCup == null
-        && Boolean(item.menuId)
-        && fallbackCupProductCodes.has(item.menuId || "")),
-    )
+    .filter((item) => {
+      const menuId = item.menuId || "";
+      if (menuId && excludedProductCodes.has(menuId)) return false;
+      return item.countsAsCup === true
+        || (item.countsAsCup == null
+          && Boolean(menuId)
+          && fallbackCupProductCodes.has(menuId));
+    })
     .reduce((total, item) => {
       const quantity = Number(item.quantity || 0);
       return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
@@ -64,17 +67,12 @@ export function countCupsForOverview(
 
 export function countBakeryForOverview(
   bills: OverviewCupBill[],
-  fallbackBakeryProductCodes: ReadonlySet<string> = new Set(),
+  bakeryProductCodes: ReadonlySet<string> = new Set(),
 ): number {
   return bills
     .filter((bill) => bill.status !== "cancelled")
     .flatMap((bill) => bill.items || [])
-    .filter((item) =>
-      item.countsAsCup === false
-      || (item.countsAsCup == null
-        && Boolean(item.menuId)
-        && fallbackBakeryProductCodes.has(item.menuId || "")),
-    )
+    .filter((item) => Boolean(item.menuId) && bakeryProductCodes.has(item.menuId || ""))
     .reduce((total, item) => {
       const quantity = Number(item.quantity || 0);
       return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);

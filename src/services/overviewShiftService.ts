@@ -19,7 +19,7 @@ import {
 export type OverviewWeeklyQuantityRow = {
   dateKey: string;
   date: Date;
-  shifts: Record<Exclude<ShiftType, "single">, { cups: number; bakery: number }>;
+  shifts: Record<Exclude<ShiftType, "single">, { cups: number; bakery: number; revenue: number }>;
 };
 
 const toLocalDateKey = (date: Date) =>
@@ -145,9 +145,9 @@ export async function loadOverviewWeeklyQuantity(options: {
       dateKey,
       date,
       shifts: {
-        shift_1: { cups: 0, bakery: 0 },
-        shift_2: { cups: 0, bakery: 0 },
-        shift_3: { cups: 0, bakery: 0 },
+        shift_1: { cups: 0, bakery: 0, revenue: 0 },
+        shift_2: { cups: 0, bakery: 0, revenue: 0 },
+        shift_3: { cups: 0, bakery: 0, revenue: 0 },
       },
     });
   }
@@ -157,9 +157,11 @@ export async function loadOverviewWeeklyQuantity(options: {
     const row = rows.get(toLocalDateKey(new Date(shift.openedAt.seconds * 1000)));
     if (!row) return;
     const shiftBills = billsByShift.get(shift.id) || [];
+    row.shifts[shift.shiftType].revenue += summarizeBillsForShift(shiftBills, 0).totalSales;
     row.shifts[shift.shiftType].cups += countCupsForOverview(
       shiftBills,
       options.cupProductCodes,
+      options.bakeryProductCodes,
     );
     row.shifts[shift.shiftType].bakery += countBakeryForOverview(
       shiftBills,

@@ -4,11 +4,16 @@ import type { OverviewWeeklyQuantityRow } from "@/services/overviewShiftService"
 const formatQuantity = (value: number) =>
   new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value);
 
+const formatRevenue = (value: number) => `${formatQuantity(value)} đ`;
+
 const shiftColumns = [
   { key: "shift_1", label: "Ca 1" },
   { key: "shift_2", label: "Ca 2" },
   { key: "shift_3", label: "Ca 3" },
 ] as const;
+
+const getDailyRevenue = (row: OverviewWeeklyQuantityRow) =>
+  shiftColumns.reduce((total, shift) => total + row.shifts[shift.key].revenue, 0);
 
 export default function OverviewWeeklyQuantity({
   rows,
@@ -36,7 +41,49 @@ export default function OverviewWeeklyQuantity({
       ) : error ? (
         <div className="px-5 py-8 text-sm text-rose-700" role="alert">{error}</div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          <div className="divide-y divide-slate-100 md:hidden">
+            {rows.map((row) => (
+              <article key={row.dateKey}>
+                <div className="flex items-center justify-between bg-slate-50/80 px-4 py-2">
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <p className="shrink-0 text-sm font-semibold capitalize text-slate-900">
+                      {row.date.toLocaleDateString("vi-VN", { weekday: "long" })}
+                    </p>
+                    <p className="truncate text-[10px] font-bold tabular-nums text-sky-700">
+                      Tổng {formatRevenue(getDailyRevenue(row))}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-xs text-slate-500">
+                    {row.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-100">
+                  {shiftColumns.map((shift) => {
+                    const quantity = row.shifts[shift.key];
+                    return (
+                      <div key={shift.key} className="min-w-0 px-1.5 py-2.5 text-center">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{shift.label}</p>
+                        <p className="mt-1.5 flex items-center justify-center gap-1 whitespace-nowrap text-[11px] font-semibold tabular-nums text-emerald-800">
+                          <CupSoda className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          Nước {formatQuantity(quantity.cups)}
+                        </p>
+                        <p className="mt-1 flex items-center justify-center gap-1 whitespace-nowrap text-[11px] font-semibold tabular-nums text-amber-700">
+                          <CakeSlice className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          Bánh {formatQuantity(quantity.bakery)}
+                        </p>
+                        <p className="mt-1 whitespace-nowrap text-[10px] font-bold tabular-nums text-sky-700">
+                          DT {formatRevenue(quantity.revenue)}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[700px] text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -50,6 +97,7 @@ export default function OverviewWeeklyQuantity({
                   <td className="whitespace-nowrap px-5 py-3">
                     <p className="font-semibold capitalize text-slate-900">{row.date.toLocaleDateString("vi-VN", { weekday: "long" })}</p>
                     <p className="mt-0.5 text-xs text-slate-500">{row.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
+                    <p className="mt-1 text-xs font-bold tabular-nums text-sky-700">Tổng ngày: {formatRevenue(getDailyRevenue(row))}</p>
                   </td>
                   {shiftColumns.map((shift) => {
                     const quantity = row.shifts[shift.key];
@@ -63,6 +111,9 @@ export default function OverviewWeeklyQuantity({
                           <CakeSlice className="h-4 w-4" aria-hidden="true" />
                           Bánh: {formatQuantity(quantity.bakery)}
                         </p>
+                        <p className="mt-1 font-bold tabular-nums text-sky-700">
+                          Doanh thu: {formatRevenue(quantity.revenue)}
+                        </p>
                       </td>
                     );
                   })}
@@ -70,7 +121,8 @@ export default function OverviewWeeklyQuantity({
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </section>
   );

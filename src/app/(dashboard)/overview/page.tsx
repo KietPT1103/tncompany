@@ -76,7 +76,7 @@ const getConfiguredBakeryProductCodes = (products: Product[], categories: Catego
   const categoriesById = new Map(categories.map((category) => [category.id, category]));
   return new Set(products.filter((product) => {
     const category = categoriesById.get(product.category || "");
-    return category?.isCupCountConfigured === true && category.countsAsCup !== true;
+    return category?.isSeparatedInSalesReport === true;
   }).map((product) => product.product_code));
 };
 
