@@ -19,6 +19,7 @@ import ProductsPage from "./app/(dashboard)/product/page";
 import IngredientsPage from "./pages/IngredientsPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import InventoryChecksPage from "./app/(dashboard)/product/checks/page";
+import InventoryIssuesPage from "./app/(dashboard)/product/issues/page";
 import InventoryReceiptsPage from "./app/(dashboard)/product/receipts/page";
 import FieldInventoryReceiptsPage from "./app/(dashboard)/inventory-receipts/page";
 import FieldInventoryReceiptDetailPage from "./app/(dashboard)/inventory-receipts/[id]/page";
@@ -145,6 +146,7 @@ export function App() {
               <Route path="product/ingredients" element={<IngredientsPage />} />
               <Route path="product/suppliers" element={<SuppliersPage />} />
               <Route path="product/checks" element={<InventoryChecksPage />} />
+              <Route path="product/issues" element={<InventoryIssuesPage />} />
               <Route path="product/receipts" element={<InventoryReceiptsPage />} />
               <Route path="inventory-receipts" element={<FieldInventoryReceiptsPage />} />
               <Route path="inventory-receipts/:id" element={<FieldInventoryReceiptDetailPage />} />

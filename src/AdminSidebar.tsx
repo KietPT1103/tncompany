@@ -26,6 +26,7 @@ import {
   MessageSquareText,
   Package,
   PackageSearch,
+  PackageMinus,
   PanelLeftClose,
   PanelLeftOpen,
   ReceiptText,
@@ -212,6 +213,12 @@ const navGroups: NavGroup[] = [
         label: "Kiểm kho",
         icon: Package,
         permission: "inventory_checks.access",
+      },
+      {
+        href: "/product/issues",
+        label: "Xuất kho pha chế",
+        icon: PackageMinus,
+        permission: "inventory_issues.access",
       },
       {
         href: "/inventory-receipts",

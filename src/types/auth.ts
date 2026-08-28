@@ -16,6 +16,7 @@ export type AppPermission =
   | "cash_flow.access"
   | "product.access"
   | "inventory_checks.access"
+  | "inventory_issues.access"
   | "inventory_receipts.access"
   | "inventory_receipts.view"
   | "inventory_receipts.create"

@@ -126,6 +126,13 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     path: "/product/checks",
   },
   {
+    id: "inventory_issues.access",
+    label: "Xuất kho pha chế",
+    description: "Lập và hoàn thành phiếu cấp nguyên liệu từ kho cho quầy pha chế.",
+    category: "Hàng hóa",
+    path: "/product/issues",
+  },
+  {
     id: "inventory_receipts.access",
     label: "Nhap hang",
     description: "Lap va quan ly phieu nhap kho.",

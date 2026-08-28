@@ -27,11 +27,11 @@ export default function PendingScreen() {
   }, []);
   useFocusEffect(useCallback(() => {
     if (!area) return;
-    getReceipts(`status=pending_explanation&areaId=${encodeURIComponent(area.id)}&sort=oldest&limit=50`)
+    getReceipts(`status=pending_explanation&areaId=${encodeURIComponent(area.id)}&sort=newest&limit=50`)
       .then((r) => setItems(r.items)).catch((e) => Alert.alert("Không tải được phiếu", e.message));
   }, [area]));
   return <Screen><Pressable style={({ pressed }) => pressed && styles.pressed} onPress={() => router.back()}><Text style={styles.back}>‹ Quay lại</Text></Pressable>
-    <Text style={styles.title}>Chưa giải trình</Text><Text style={styles.subtitle}>{area?.name} • Cũ nhất trước</Text>
+    <Text style={styles.title}>Chưa giải trình</Text><Text style={styles.subtitle}>{area?.name} • Mới nhất trước • Đã ẩn phiếu bị khóa</Text>
     <FlatList data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.list}
       ListEmptyComponent={<Text style={styles.empty}>Không có phiếu đang chờ.</Text>}
       renderItem={({ item }) => {

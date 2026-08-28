@@ -85,6 +85,11 @@ export async function login(loginName: string, password: string) {
 }
 export const getMe = () => api<{ user: AppUser }>("/auth.php?action=me");
 export const getAreas = () => api<{ items: Area[] }>("/areas.php");
+function visibleReceiptList(items: Receipt[]) {
+  return items
+    .filter((item) => !(item.status === "pending_explanation" && item.isLocked))
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+}
 export async function getReceipts(query: string) {
   const params = new URLSearchParams(query);
   const areaId = params.get("areaId") || "";
@@ -94,11 +99,11 @@ export async function getReceipts(query: string) {
     await cacheReceipts(result.items);
     const local = areaId ? (await cachedReceipts(areaId, status)).filter((item) => item.syncStatus !== "synced") : [];
     const serverIds = new Set(result.items.map((item) => item.clientRequestId).filter(Boolean));
-    return { ...result, items: [...local.filter((item) => !serverIds.has(item.clientRequestId)), ...result.items] };
+    return { ...result, items: visibleReceiptList([...local.filter((item) => !serverIds.has(item.clientRequestId)), ...result.items]) };
   } catch (error) {
     if (!areaId) throw error;
     const items = await cachedReceipts(areaId, status);
-    return { items, counts: {} as Record<string, number>, offline: true };
+    return { items: visibleReceiptList(items), counts: {} as Record<string, number>, offline: true };
   }
 }
 export async function getReceipt(id: string) {
