@@ -6,6 +6,7 @@ const net = require("node:net");
 const fs = require("node:fs");
 const path = require("node:path");
 const childProcess = require("node:child_process");
+const crypto = require("node:crypto");
 const util = require("node:util");
 
 const DEFAULT_STORE_ID = "cafe";
@@ -42,6 +43,13 @@ const parseInteger = (rawValue, fallback) => {
 
 const delay = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const runClaimedPrint = async ({ claim, print, markPrinted }) => {
+  if (!(await claim())) return false;
+  await print();
+  await markPrinted();
+  return true;
+};
 
 const fetchWithTimeout = async (
   url,
@@ -592,11 +600,41 @@ const run = async () => {
   const processingJobIds = new Set();
   let queue = Promise.resolve();
 
-  const markPrinted = async (jobId) => {
-    await apiFetch(config, "/pos.php?resource=bar-jobs&_method=PATCH", {
+  const claimJob = async (jobId, claimToken) => {
+    const data = await apiFetch(config, "/pos.php?resource=bar-job-claims", {
       method: "POST",
-      body: JSON.stringify({ id: jobId, terminalName: config.terminalName }),
+      body: JSON.stringify({
+        id: jobId,
+        storeId: config.storeId,
+        claimToken,
+        terminalName: config.terminalName,
+      }),
     });
+    return data?.claimed === true;
+  };
+
+  const markPrinted = async (jobId, claimToken) => {
+    while (true) {
+      try {
+        const data = await apiFetch(config, "/pos.php?resource=bar-jobs&_method=PATCH", {
+          method: "POST",
+          body: JSON.stringify({
+            id: jobId,
+            storeId: config.storeId,
+            claimToken,
+            terminalName: config.terminalName,
+          }),
+        });
+        if (data?.updated !== true) {
+          throw new Error("Print acknowledgement was not accepted.");
+        }
+        return;
+      } catch (error) {
+        console.error(`[${jobId}] Printed, but acknowledgement failed; retrying without reprinting.`);
+        console.error(error);
+        await delay(config.retryIntervalMs);
+      }
+    }
   };
 
   const processJob = async (rawJob) => {
@@ -618,17 +656,27 @@ const run = async () => {
       return;
     }
 
+    const claimToken = crypto.randomUUID();
     const createdAtSeconds = Number(job.createdAt?.seconds);
     const discoveredAfterMs = Number.isFinite(createdAtSeconds)
       ? Math.max(0, Date.now() - createdAtSeconds * 1000)
       : null;
-    if (discoveredAfterMs !== null) {
-      console.log(`[${jobId}] Picked up after ${discoveredAfterMs}ms.`);
+    const printed = await runClaimedPrint({
+      claim: () => claimJob(jobId, claimToken),
+      print: async () => {
+        if (discoveredAfterMs !== null) {
+          console.log(`[${jobId}] Picked up after ${discoveredAfterMs}ms.`);
+        }
+        const payload = await buildEscPosPayload(job, config);
+        await sendToPrinter(payload, config);
+      },
+      markPrinted: () => markPrinted(jobId, claimToken),
+    });
+    if (!printed) {
+      console.log(`[${jobId}] Skipped: claimed by another print agent.`);
+      return;
     }
 
-    const payload = await buildEscPosPayload(job, config);
-    await sendToPrinter(payload, config);
-    await markPrinted(jobId);
     const totalLatencyMs = Number.isFinite(createdAtSeconds)
       ? Math.max(0, Date.now() - createdAtSeconds * 1000)
       : null;
@@ -731,4 +779,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildRasterEscPosPayload, fetchWithTimeout };
+module.exports = { buildRasterEscPosPayload, fetchWithTimeout, runClaimedPrint };

@@ -12,7 +12,9 @@ $body = in_array($method, ['POST', 'PUT', 'PATCH'], true) ? read_json_body() : [
 $user = auth_require();
 
 if (($user['role'] ?? '') === 'bartender') {
-    $isBarBoardRequest = $resource === 'bar-jobs' && in_array($method, ['GET', 'PATCH'], true);
+    $isBarBoardRequest =
+        ($resource === 'bar-jobs' && in_array($method, ['GET', 'PATCH'], true)) ||
+        ($resource === 'bar-job-claims' && $method === 'POST');
     $isBarCheckoutRequest =
         ($method === 'GET' && in_array($resource, ['tables', 'surcharges', 'voucher-categories', 'bills', 'live-orders'], true)) ||
         ($method === 'POST' && in_array($resource, ['bills', 'bar-jobs'], true)) ||
@@ -247,6 +249,12 @@ function pos_ensure_category_preparation_print_column(): void
         'is_preparation_print_enabled',
         'TINYINT(1) NOT NULL DEFAULT 1 AFTER is_hidden'
     );
+}
+
+function pos_ensure_bar_print_claim_columns(): void
+{
+    auth_ensure_column('bar_print_jobs', 'print_claim_token', 'VARCHAR(100) NULL AFTER terminal_name');
+    auth_ensure_column('bar_print_jobs', 'print_claimed_at', 'DATETIME NULL AFTER print_claim_token');
 }
 
 function pos_ensure_cup_snapshot_columns(): void
@@ -1035,12 +1043,40 @@ if ($method === 'DELETE' && $resource === 'live-orders') {
     $storeId=trim((string)($_GET['storeId']??''));$orderKey=trim((string)($_GET['orderKey']??''));db()->prepare('DELETE FROM live_orders WHERE store_id=:store_id AND order_key=:order_key')->execute(['store_id'=>$storeId,'order_key'=>$orderKey]);realtime_publish($storeId,'live-orders-updated',['orderKey'=>$orderKey,'action'=>'deleted']);respond_ok(['deleted'=>true]);
 }
 
+if ($method === 'POST' && $resource === 'bar-job-claims') {
+    pos_ensure_bar_print_claim_columns();
+    $id=trim((string)($body['id']??''));
+    pos_assert_record_store('bar_print_jobs',$id,$user,$posStoreId);
+    $claimToken=trim((string)($body['claimToken']??''));
+    if(!preg_match('/^[A-Za-z0-9._:-]{16,100}$/',$claimToken)) respond_error('Invalid print claim token',422);
+    $statement=db()->prepare("UPDATE bar_print_jobs
+        SET print_claim_token=:claim_token,print_claimed_at=NOW(),terminal_name=:terminal
+        WHERE id=:id AND store_id=:store_id AND status='pending'
+          AND (print_claim_token IS NULL OR print_claimed_at IS NULL OR print_claimed_at < DATE_SUB(NOW(), INTERVAL 2 MINUTE))");
+    $statement->execute([
+        'id'=>$id,
+        'store_id'=>$posStoreId,
+        'claim_token'=>$claimToken,
+        'terminal'=>trim((string)($body['terminalName']??'')),
+    ]);
+    respond_ok(['claimed'=>$statement->rowCount()===1]);
+}
+
 if (in_array($resource, ['kitchen-jobs','bar-jobs'], true)) {
     $prefix=$resource==='kitchen-jobs'?'kitchen':'bar';$jobTable=$prefix.'_print_jobs';$itemTable=$prefix.'_print_job_items';
-    if($prefix==='bar') pos_ensure_bar_workflow_columns();
+    if($prefix==='bar') {
+        pos_ensure_bar_workflow_columns();
+        pos_ensure_bar_print_claim_columns();
+    }
     if($method==='GET'){
         $view=$prefix==='bar'?trim((string)($_GET['view']??'')):'';
-        $where=$view==='board'?"workflow_status<>'collected'":($view==='history'?"workflow_status='collected'":"status='pending'");
+        $where=$view==='board'
+            ? "workflow_status<>'collected'"
+            : ($view==='history'
+                ? "workflow_status='collected'"
+                : ($prefix==='bar'
+                    ? "status='pending' AND (print_claim_token IS NULL OR print_claimed_at IS NULL OR print_claimed_at < DATE_SUB(NOW(), INTERVAL 2 MINUTE))"
+                    : "status='pending'"));
         $order=$view==='history'?'COALESCE(collected_at, workflow_updated_at, created_at) DESC':'created_at';
         $limit=$view==='history'?' LIMIT 100':'';
         $select=$prefix==='bar'?"{$jobTable}.*,COALESCE((SELECT cashier_name FROM bills WHERE bills.id={$jobTable}.bill_id LIMIT 1),'') AS created_by_name":"{$jobTable}.*";
@@ -1078,15 +1114,39 @@ if (in_array($resource, ['kitchen-jobs','bar-jobs'], true)) {
     }
     if($method==='PATCH'){
         $id=trim((string)($body['id']??''));pos_assert_record_store($jobTable,$id,$user,$posStoreId);
+        $printUpdated=null;
         if($prefix==='bar'&&array_key_exists('workflowStatus',$body)){
             $workflowStatus=trim((string)$body['workflowStatus']);
             if(!in_array($workflowStatus,['new','preparing','ready','collected'],true)) respond_error('Trạng thái pha chế không hợp lệ',422);
             db()->prepare("UPDATE bar_print_jobs SET workflow_status=:workflow_status,workflow_updated_at=NOW(),collected_at=IF(:is_collected=1,NOW(),NULL) WHERE id=:id")->execute(['id'=>$id,'workflow_status'=>$workflowStatus,'is_collected'=>$workflowStatus==='collected'?1:0]);
+        }elseif($prefix==='bar'){
+            $claimToken=trim((string)($body['claimToken']??''));
+            if($claimToken!==''){
+                $statement=db()->prepare("UPDATE bar_print_jobs
+                    SET status='printed',printed_at=NOW(),terminal_name=:terminal,print_claimed_at=NULL
+                    WHERE id=:id AND status='pending' AND print_claim_token=:claim_token");
+                $statement->execute(['id'=>$id,'terminal'=>trim((string)($body['terminalName']??'')),'claim_token'=>$claimToken]);
+                $printUpdated=$statement->rowCount()===1;
+                if(!$printUpdated){
+                    $statement=db()->prepare("SELECT status,print_claim_token FROM bar_print_jobs WHERE id=:id LIMIT 1");
+                    $statement->execute(['id'=>$id]);
+                    $printedJob=$statement->fetch();
+                    $printUpdated=is_array($printedJob)
+                        && ($printedJob['status']??'')==='printed'
+                        && hash_equals((string)($printedJob['print_claim_token']??''),$claimToken);
+                }
+            }else{
+                $statement=db()->prepare("UPDATE bar_print_jobs
+                    SET status='printed',printed_at=NOW(),terminal_name=:terminal
+                    WHERE id=:id AND status='pending' AND print_claim_token IS NULL");
+                $statement->execute(['id'=>$id,'terminal'=>trim((string)($body['terminalName']??''))]);
+                $printUpdated=$statement->rowCount()===1;
+            }
         }else{
             db()->prepare("UPDATE {$jobTable} SET status='printed',printed_at=NOW(),terminal_name=:terminal WHERE id=:id")->execute(['id'=>$id,'terminal'=>trim((string)($body['terminalName']??''))]);
         }
         realtime_publish($posStoreId,$prefix.'-jobs-updated',['id'=>$id,'action'=>'updated']);
-        respond_ok(['updated'=>true]);
+        respond_ok(['updated'=>$printUpdated??true]);
     }
 }
 

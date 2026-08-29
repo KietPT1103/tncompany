@@ -3,6 +3,7 @@
 Script `scripts/bar-print-agent.cjs` is a small background service that:
 
 - Polls pending print jobs from the MySQL-backed POS API
+- Atomically claims each pending job so multiple agent processes cannot print it twice
 - Prints each ticket directly to a LAN printer via TCP (`IP:9100`)
 - Renders tickets as monochrome bitmaps on Windows so Vietnamese diacritics print correctly
 - Marks the MySQL job as `printed` through the API after successful printing
@@ -97,3 +98,7 @@ npm run print:bar-agent
 - API polling is sequential, so a slow request cannot create overlapping polls. Requests
   are aborted after `PRINT_AGENT_API_TIMEOUT_MS` so a brief Wi-Fi failure cannot stall
   printing for several minutes.
+- A print claim expires after two minutes, allowing another agent to recover a job if the
+  original process stops before printing it.
+- After bytes have been sent to the printer, the agent retries only the API acknowledgement;
+  it does not send the ticket to the printer again while the process is running.

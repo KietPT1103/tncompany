@@ -628,6 +628,8 @@ CREATE TABLE IF NOT EXISTS bar_print_jobs (
   workflow_updated_at DATETIME NULL,
   collected_at DATETIME NULL,
   terminal_name VARCHAR(255) NULL,
+  print_claim_token VARCHAR(100) NULL,
+  print_claimed_at DATETIME NULL,
   note TEXT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   printed_at DATETIME NULL,

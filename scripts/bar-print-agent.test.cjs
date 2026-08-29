@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   buildRasterEscPosPayload,
   fetchWithTimeout,
+  runClaimedPrint,
 } = require("./bar-print-agent.cjs");
 
 test("splits a tall raster into bounded GS v 0 commands without losing bytes", () => {
@@ -72,4 +73,31 @@ test("returns a completed API response before the timeout", async () => {
     immediateFetch
   );
   assert.equal(response, expected);
+});
+
+test("only the agent that wins the claim sends and marks the print job", async () => {
+  let isClaimed = false;
+  let printCount = 0;
+  let markedCount = 0;
+  const claim = async () => {
+    if (isClaimed) return false;
+    isClaimed = true;
+    return true;
+  };
+  const execute = () =>
+    runClaimedPrint({
+      claim,
+      print: async () => {
+        printCount += 1;
+      },
+      markPrinted: async () => {
+        markedCount += 1;
+      },
+    });
+
+  const results = await Promise.all([execute(), execute()]);
+
+  assert.deepEqual(results.sort(), [false, true]);
+  assert.equal(printCount, 1);
+  assert.equal(markedCount, 1);
 });
