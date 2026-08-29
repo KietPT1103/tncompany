@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
+import Link from "next/link";
 import { Boxes, LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 import {
   createIngredient, deleteIngredient, getIngredients, getNextIngredientCode,
   updateIngredient, type Ingredient,
@@ -19,6 +22,7 @@ const decimal = (value: string) => Number(value.replace(",", ".")) || 0;
 
 export default function IngredientsPage() {
   const { storeId } = useStore();
+  const { user } = useAuth();
   const [items, setItems] = useState<Ingredient[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
@@ -83,13 +87,13 @@ export default function IngredientsPage() {
     setError("");
     const payload = {
       storeId, ingredientName: form.name.trim(), unit: form.unit.trim(),
-      stockQuantity: Math.max(0, decimal(form.stock)), cost: Math.max(0, decimal(form.cost)),
+      cost: Math.max(0, decimal(form.cost)),
       supplierId: form.supplierId || null, supplierItemCode: form.supplierItemCode.trim(),
       description: form.description.trim(),
     };
     try {
       if (editing) await updateIngredient(editing.ingredientCode, payload);
-      else await createIngredient({ ...payload, ingredientCode: form.code.trim() });
+      else await createIngredient({ ...payload, ingredientCode: form.code.trim(), stockQuantity: 0 });
       await reload();
       setOpen(false);
     } catch (e) {
@@ -114,8 +118,11 @@ export default function IngredientsPage() {
   return <div className="min-h-screen bg-slate-50 p-4 md:p-8"><div className="mx-auto max-w-7xl">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="text-3xl font-bold">Nguyên liệu</h1><p className="mt-1 text-slate-500">Dữ liệu riêng cho định mức, nhập hàng và kiểm kho.</p></div>
-      <button disabled={preparing} onClick={() => void startCreate()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">
-        {preparing ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}{preparing ? "Đang chuẩn bị…" : "Thêm nguyên liệu"}</button>
+      <div className="flex flex-wrap gap-2">
+        {(hasPermission(user, "inventory_receipts.view") || hasPermission(user, "inventory_issues.access") || hasPermission(user, "inventory_checks.access")) && <Link href="/inventory" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 hover:bg-emerald-50"><Boxes className="h-4 w-4" /> Sổ kho</Link>}
+        <button disabled={preparing} onClick={() => void startCreate()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">
+          {preparing ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}{preparing ? "Đang chuẩn bị…" : "Thêm nguyên liệu"}</button>
+      </div>
     </header>
     {error && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700">{error}</div>}
     <div className="mt-6 rounded-3xl border bg-white shadow-sm">
@@ -139,7 +146,7 @@ export default function IngredientsPage() {
       <Field label="Mã nguyên liệu *"><input disabled={Boolean(editing)} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Field>
       <Field label="Tên nguyên liệu *"><input value={form.name} placeholder="Ví dụ: Cà phê hạt" onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
       <Field label="Đơn vị *"><input value={form.unit} placeholder="kg, chai, thùng…" onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
-      <Field label="Tồn kho"><input inputMode="decimal" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></Field>
+      <Field label="Tồn kho hiện tại"><input disabled value={form.stock} title="Tồn kho chỉ thay đổi qua phiếu nhập, phiếu xuất hoặc kiểm kho." /></Field>
       <Field label="Giá vốn"><input inputMode="decimal" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></Field>
       <Field label="Nhà phân phối"><select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}><option value="">Chưa chọn</option>{suppliers.filter((s) => s.isActive).map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}</select></Field>
       <Field label="Mã tại nhà phân phối"><input value={form.supplierItemCode} placeholder="Mã hàng của nhà phân phối" onChange={(e) => setForm({ ...form, supplierItemCode: e.target.value })} /></Field>

@@ -166,6 +166,44 @@ function pos_ensure_voucher_cancellation_columns(): void
     auth_ensure_column('cash_vouchers', 'cancellation_reason', 'VARCHAR(500) NULL AFTER cancelled_by');
 }
 
+function pos_ensure_voucher_inventory_receipt_column(): void
+{
+    auth_ensure_column('cash_vouchers', 'inventory_receipt_id', 'VARCHAR(64) NULL AFTER cashier_name');
+    $statement = db()->prepare(
+        'SELECT 1 FROM information_schema.statistics
+         WHERE table_schema=DATABASE() AND table_name="cash_vouchers"
+           AND index_name="idx_cash_vouchers_inventory_receipt" LIMIT 1'
+    );
+    $statement->execute();
+    if (!$statement->fetchColumn()) {
+        db()->exec('CREATE INDEX idx_cash_vouchers_inventory_receipt ON cash_vouchers (inventory_receipt_id)');
+    }
+}
+
+function pos_voucher_evidence_images(array $receiptIds): array
+{
+    $receiptIds = array_values(array_unique(array_filter(array_map('strval', $receiptIds))));
+    if ($receiptIds === []) return [];
+    $placeholders = implode(',', array_fill(0, count($receiptIds), '?'));
+    $statement = db()->prepare(
+        "SELECT id,receipt_id,captured_at,location_address
+         FROM inventory_receipt_images WHERE receipt_id IN ($placeholders) ORDER BY created_at"
+    );
+    $statement->execute($receiptIds);
+    $grouped = [];
+    foreach ($statement->fetchAll() as $row) {
+        $imageId = (string) $row['id'];
+        $grouped[(string) $row['receipt_id']][] = [
+            'id' => $imageId,
+            'url' => '/api/inventory-receipt-images.php?id=' . rawurlencode($imageId),
+            'thumbnailUrl' => '/api/inventory-receipt-images.php?id=' . rawurlencode($imageId) . '&size=thumbnail',
+            'capturedAt' => (string) $row['captured_at'],
+            'locationAddress' => $row['location_address'] ?: null,
+        ];
+    }
+    return $grouped;
+}
+
 function pos_ensure_shift_device_columns(): void
 {
     auth_ensure_column('cashier_shifts', 'opened_by_device_id', 'VARCHAR(100) NULL AFTER open_note');
@@ -552,6 +590,7 @@ function pos_job_items(string $table, array $jobIds): array
 pos_ensure_bill_sequences_table();
 pos_ensure_voucher_categories_table();
 pos_ensure_voucher_cancellation_columns();
+pos_ensure_voucher_inventory_receipt_column();
 pos_ensure_shift_device_columns();
 $requestedStoreId = trim((string) ($_GET['storeId'] ?? ($body['storeId'] ?? '')));
 $posStoreId = pos_resolve_store_id($user, $requestedStoreId);
@@ -813,30 +852,77 @@ if ($method === 'GET' && $resource === 'voucher-categories') {
     ], $categoryRows));
 }
 
+if ($method === 'GET' && $resource === 'voucher-evidences') {
+    $limit = max(1, min(100, (int) ($_GET['limit'] ?? 50)));
+    $statement = db()->prepare(
+        "SELECT r.id,r.store_id,r.receipt_code,r.receipt_date,r.status,r.total_amount,r.created_at,
+                supplier.supplier_name,receipt_store.name store_name,
+                (SELECT COUNT(*) FROM inventory_receipt_images image_count WHERE image_count.receipt_id=r.id) image_count
+         FROM inventory_receipts r
+         INNER JOIN stores receipt_store ON receipt_store.id=r.store_id
+         LEFT JOIN suppliers supplier
+           ON supplier.id COLLATE utf8mb4_unicode_ci=r.supplier_id COLLATE utf8mb4_unicode_ci
+         LEFT JOIN cash_vouchers voucher
+           ON voucher.inventory_receipt_id COLLATE utf8mb4_unicode_ci=r.id COLLATE utf8mb4_unicode_ci
+          AND voucher.cancelled_at IS NULL
+         WHERE r.store_id IN (:store_id,:warehouse_store) AND r.status<>'cancelled' AND voucher.id IS NULL
+           AND EXISTS (SELECT 1 FROM inventory_receipt_images image_exists WHERE image_exists.receipt_id=r.id)
+         ORDER BY CASE WHEN r.status='pending_explanation' THEN 0 ELSE 1 END,r.created_at DESC LIMIT $limit"
+    );
+    $statement->execute(['store_id' => $posStoreId,'warehouse_store' => 'warehouse']);
+    $rows = $statement->fetchAll();
+    $images = pos_voucher_evidence_images(array_column($rows, 'id'));
+    pos_polling_response(array_map(static fn(array $row): array => [
+        'receiptId' => (string) $row['id'],
+        'storeId' => (string) $row['store_id'],
+        'storeName' => (string) $row['store_name'],
+        'receiptCode' => (string) $row['receipt_code'],
+        'receiptDate' => (string) $row['receipt_date'],
+        'status' => (string) $row['status'],
+        'totalAmount' => (float) $row['total_amount'],
+        'supplierName' => $row['supplier_name'] ?: '',
+        'createdAt' => (string) $row['created_at'],
+        'imageCount' => (int) $row['image_count'],
+        'images' => $images[(string) $row['id']] ?? [],
+    ], $rows));
+}
+
 if ($method === 'GET' && $resource === 'vouchers') {
-    $where = ['store_id=:store_id']; $params = ['store_id' => trim((string) ($_GET['storeId'] ?? 'cafe'))];
+    $where = ['voucher.store_id=:store_id']; $params = ['store_id' => trim((string) ($_GET['storeId'] ?? 'cafe'))];
     $voucherStatus = strtolower(trim((string) ($_GET['status'] ?? 'active')));
     if ($voucherStatus === 'cancelled') {
         if (!auth_has_permission($user, 'cash_vouchers.cancelled.view')) {
             api_error('Bạn không có quyền xem phiếu thu/chi đã hủy.', 403);
         }
-        $where[] = 'cancelled_at IS NOT NULL';
+        $where[] = 'voucher.cancelled_at IS NOT NULL';
     } else {
-        $where[] = 'cancelled_at IS NULL';
+        $where[] = 'voucher.cancelled_at IS NULL';
     }
-    if (!empty($_GET['shiftId'])) { $where[] = 'shift_id=:shift_id'; $params['shift_id'] = trim((string) $_GET['shiftId']); }
+    if (!empty($_GET['shiftId'])) { $where[] = 'voucher.shift_id=:shift_id'; $params['shift_id'] = trim((string) $_GET['shiftId']); }
     if (!empty($_GET['shiftIds'])) {
         $shiftIds = array_values(array_filter(array_unique(array_map('trim', explode(',', (string) $_GET['shiftIds'])))));
         if ($shiftIds !== []) {
             $placeholders = [];
             foreach ($shiftIds as $index => $shiftId) { $key = 'shift_id_' . $index; $placeholders[] = ':' . $key; $params[$key] = $shiftId; }
-            $where[] = 'shift_id IN (' . implode(',', $placeholders) . ')';
+            $where[] = 'voucher.shift_id IN (' . implode(',', $placeholders) . ')';
         }
     }
-    if (!empty($_GET['startDate'])) { $where[] = 'happened_at>=:start_date'; $params['start_date'] = pos_mysql_datetime($_GET['startDate']); }
-    if (!empty($_GET['endDate'])) { $where[] = 'happened_at<=:end_date'; $params['end_date'] = pos_mysql_datetime($_GET['endDate']); }
+    if (!empty($_GET['startDate'])) { $where[] = 'voucher.happened_at>=:start_date'; $params['start_date'] = pos_mysql_datetime($_GET['startDate']); }
+    if (!empty($_GET['endDate'])) { $where[] = 'voucher.happened_at<=:end_date'; $params['end_date'] = pos_mysql_datetime($_GET['endDate']); }
     $limit = pos_limit($_GET['limit'] ?? 500, 500);
-    $statement = db()->prepare('SELECT * FROM cash_vouchers WHERE ' . implode(' AND ', $where) . " ORDER BY happened_at DESC LIMIT $limit"); $statement->execute($params);
+    $statement = db()->prepare(
+        'SELECT voucher.*,receipt.receipt_code,receipt.receipt_date,receipt.total_amount AS receipt_total_amount,
+                supplier.supplier_name
+         FROM cash_vouchers voucher
+         LEFT JOIN inventory_receipts receipt
+           ON receipt.id COLLATE utf8mb4_unicode_ci=voucher.inventory_receipt_id COLLATE utf8mb4_unicode_ci
+         LEFT JOIN suppliers supplier
+           ON supplier.id COLLATE utf8mb4_unicode_ci=receipt.supplier_id COLLATE utf8mb4_unicode_ci
+         WHERE ' . implode(' AND ', $where) . " ORDER BY voucher.happened_at DESC LIMIT $limit"
+    );
+    $statement->execute($params);
+    $voucherRows = $statement->fetchAll();
+    $evidenceImages = pos_voucher_evidence_images(array_column($voucherRows, 'inventory_receipt_id'));
     pos_polling_response(array_map(static fn(array $row): array => [
         'id'=>(string)$row['id'],'code'=>(string)$row['code'],'storeId'=>(string)$row['store_id'],'type'=>(string)$row['voucher_type'],
         'amount'=>(float)$row['amount'],'category'=>(string)$row['category'],'note'=>$row['note']?:'',
@@ -844,20 +930,50 @@ if ($method === 'GET' && $resource === 'vouchers') {
         'cashierId'=>$row['cashier_id']?:'','cashierName'=>$row['cashier_name']?:'','happenedAt'=>pos_timestamp($row['happened_at']),'createdAt'=>pos_timestamp($row['created_at']),
         'cancelledAt'=>pos_timestamp($row['cancelled_at']??null),'cancelledBy'=>$row['cancelled_by']?:'',
         'cancellationReason'=>$row['cancellation_reason']?:'','isCancelled'=>!empty($row['cancelled_at']),
-    ], $statement->fetchAll()));
+        'inventoryReceiptId'=>$row['inventory_receipt_id']?:null,
+        'evidence'=>$row['inventory_receipt_id'] ? [
+            'receiptId'=>(string)$row['inventory_receipt_id'],'receiptCode'=>(string)($row['receipt_code']??''),
+            'receiptDate'=>(string)($row['receipt_date']??''),'totalAmount'=>(float)($row['receipt_total_amount']??0),
+            'supplierName'=>(string)($row['supplier_name']??''),
+            'images'=>$evidenceImages[(string)$row['inventory_receipt_id']]??[],
+        ] : null,
+    ], $voucherRows));
 }
 
 if ($method === 'POST' && $resource === 'vouchers') {
     $id=uuidv4(); $type=($body['type']??'')==='expense'?'expense':'income'; $prefix=$type==='income'?'TTHD':'CTM';
     $code=$prefix.date('ymd').str_pad((string)random_int(0,999999),6,'0',STR_PAD_LEFT);
+    $receiptId = $type === 'expense' ? (trim((string)($body['inventoryReceiptId']??'')) ?: null) : null;
+    db()->beginTransaction();
+    try {
+    if ($receiptId !== null) {
+        $receipt = db()->prepare(
+            'SELECT id FROM inventory_receipts
+             WHERE id=:id AND store_id IN (:store_id,:warehouse_store) AND status<>:cancelled_status
+               AND EXISTS (SELECT 1 FROM inventory_receipt_images image WHERE image.receipt_id=inventory_receipts.id)
+             LIMIT 1 FOR UPDATE'
+        );
+        $receipt->execute(['id'=>$receiptId,'store_id'=>$posStoreId,'warehouse_store'=>'warehouse','cancelled_status'=>'cancelled']);
+        if (!$receipt->fetchColumn()) respond_error('Minh chứng nhập hàng không hợp lệ hoặc không thuộc cửa hàng này.', 422);
+        $used = db()->prepare('SELECT id FROM cash_vouchers WHERE inventory_receipt_id=:receipt_id AND cancelled_at IS NULL LIMIT 1');
+        $used->execute(['receipt_id'=>$receiptId]);
+        if ($used->fetchColumn()) respond_error('Bộ ảnh nhập hàng này đã được gắn với một phiếu chi đang hiệu lực.', 409);
+    }
     pos_remember_voucher_category($posStoreId, $type, trim((string)($body['category']??'')));
-    db()->prepare('INSERT INTO cash_vouchers (id,code,store_id,voucher_type,amount,category,note,person_name,include_in_cash_flow,happened_at,shift_id,cashier_id,cashier_name) VALUES (:id,:code,:store_id,:type,:amount,:category,:note,:person_name,:included,:happened_at,:shift_id,:cashier_id,:cashier_name)')->execute([
+    db()->prepare('INSERT INTO cash_vouchers (id,code,store_id,voucher_type,amount,category,note,person_name,include_in_cash_flow,happened_at,shift_id,cashier_id,cashier_name,inventory_receipt_id) VALUES (:id,:code,:store_id,:type,:amount,:category,:note,:person_name,:included,:happened_at,:shift_id,:cashier_id,:cashier_name,:receipt_id)')->execute([
         'id'=>$id,'code'=>$code,'store_id'=>trim((string)($body['storeId']??'cafe')),'type'=>$type,'amount'=>(float)($body['amount']??0),
         'category'=>trim((string)($body['category']??'')),'note'=>trim((string)($body['note']??'')),
         'person_name'=>trim((string)($body['personName']??'')),'included'=>pos_bool($body['includeInCashFlow']??true,true)?1:0,
         'happened_at'=>pos_mysql_datetime($body['happenedAt']??'now'),'shift_id'=>trim((string)($body['shiftId']??''))?:null,
         'cashier_id'=>trim((string)($body['cashierId']??''))?:null,'cashier_name'=>trim((string)($body['cashierName']??''))?:null,
-    ]); respond_ok(['id'=>$id],201);
+        'receipt_id'=>$receiptId,
+    ]);
+    db()->commit();
+    } catch (Throwable $exception) {
+        if (db()->inTransaction()) db()->rollBack();
+        throw $exception;
+    }
+    respond_ok(['id'=>$id],201);
 }
 
 if ($method === 'PATCH' && $resource === 'vouchers') {
@@ -903,6 +1019,27 @@ if ($method === 'PATCH' && $resource === 'vouchers') {
         if ($amount <= 0) respond_error('Giá trị phiếu phải lớn hơn 0', 422);
         $fields[] = 'amount=:amount';
         $params['amount'] = $amount;
+    }
+    if (array_key_exists('inventoryReceiptId', $body)) {
+        $receiptId = trim((string)($body['inventoryReceiptId'] ?? '')) ?: null;
+        if ((string)$voucher['voucher_type'] !== 'expense' && $receiptId !== null) {
+            respond_error('Chỉ phiếu chi mới được gắn minh chứng nhập hàng', 422);
+        }
+        if ($receiptId !== null) {
+            $receipt = db()->prepare(
+                'SELECT id FROM inventory_receipts
+                 WHERE id=:id AND store_id IN (:store_id,:warehouse_store) AND status<>:cancelled_status
+                   AND EXISTS (SELECT 1 FROM inventory_receipt_images image WHERE image.receipt_id=inventory_receipts.id)
+                 LIMIT 1'
+            );
+            $receipt->execute(['id'=>$receiptId,'store_id'=>$posStoreId,'warehouse_store'=>'warehouse','cancelled_status'=>'cancelled']);
+            if (!$receipt->fetchColumn()) respond_error('Minh chứng nhập hàng không hợp lệ hoặc không thuộc cửa hàng này.', 422);
+            $used = db()->prepare('SELECT id FROM cash_vouchers WHERE inventory_receipt_id=:receipt_id AND id<>:voucher_id AND cancelled_at IS NULL LIMIT 1');
+            $used->execute(['receipt_id'=>$receiptId,'voucher_id'=>$id]);
+            if ($used->fetchColumn()) respond_error('Bộ ảnh nhập hàng này đã được gắn với một phiếu chi đang hiệu lực.', 409);
+        }
+        $fields[] = 'inventory_receipt_id=:inventory_receipt_id';
+        $params['inventory_receipt_id'] = $receiptId;
     }
     if ($fields === []) respond_error('Không có nội dung cần cập nhật', 422);
     db()->prepare('UPDATE cash_vouchers SET ' . implode(',', $fields) . ' WHERE id=:id')->execute($params);

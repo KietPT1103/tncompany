@@ -11,6 +11,7 @@ export type InventoryReceiptImage = {
 };
 export type InventoryReceipt = {
   id: string; receiptCode: string; areaId: string; storeId: string;
+  entrySource?: "mobile_photo" | "web_manual";
   area: { id: string; name: string }; status: ReceiptStatus; receiptDate: string;
   capturedAt: string | null; createdAt: string; updatedAt: string; createdBy: string;
   createdByName: string; capturedByName?: string | null; orderCreatorName: string; totalQuantity: number; totalAmount: number; itemCount: number;
@@ -86,3 +87,18 @@ export async function saveInventoryReceipt(payload: InventoryReceiptPayload) {
 }
 export const deleteInventoryReceipt = (id: string) =>
   apiRequest<{ deleted: boolean }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+export async function createManualInventoryReceipt(payload: {
+  storeId: string;
+  receiptDate: string;
+  enteredBy: string;
+  supplierId?: string | null;
+  note?: string;
+  items: Array<{ ingredientCode: string; quantity: number; unitCost: number; note?: string }>;
+}) {
+  const result = await apiRequest<{ item: InventoryReceipt }>("/inventory-manual-receipts.php", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return result.item;
+}

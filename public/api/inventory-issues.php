@@ -153,7 +153,7 @@ try {
     }
     if ($status === 'completed') {
         $lock = $pdo->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');
-        $deduct = $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,updated_at=NOW() WHERE id=:id');
+        $deduct = $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,preparation_stock_quantity=preparation_stock_quantity+:quantity,updated_at=NOW() WHERE id=:id');
         $snapshot = $pdo->prepare('UPDATE inventory_issue_items SET stock_before=:before,stock_after=:after WHERE issue_id=:issue AND ingredient_id=:ingredient');
         foreach ($normalized as $line) {
             $ingredient = $line['ingredient'];
@@ -162,7 +162,7 @@ try {
             $lock->closeCursor();
             $after = round($before - $line['quantity'], 3);
             if ($after < 0) throw new RuntimeException('Tồn kho ' . $ingredient['ingredient_code'] . ' chỉ còn ' . $before . ' ' . ($ingredient['unit'] ?? '') . '.');
-            $deduct->execute(['id' => $ingredient['id'], 'stock' => $after]);
+            $deduct->execute(['id' => $ingredient['id'], 'stock' => $after, 'quantity' => $line['quantity']]);
             $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => $before, 'after' => $after]);
         }
         $pdo->prepare('UPDATE inventory_issues SET status="completed",completed_at=NOW(),completed_by=:actor,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'actor' => inventory_issues_actor($user)]);
