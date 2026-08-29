@@ -18,6 +18,7 @@ function ingredient_payload(array $row): array
         'unit' => $row['unit'] ?: '',
         'cost' => $row['cost'] !== null ? (float) $row['cost'] : null,
         'stockQuantity' => (float) $row['stock_quantity'],
+        'preparationStockQuantity' => (float) ($row['preparation_stock_quantity'] ?? 0),
         'supplierId' => $row['supplier_id'] ?: null,
         'supplierCode' => $row['supplier_code'] ?? null,
         'supplierName' => $row['supplier_name'] ?? null,

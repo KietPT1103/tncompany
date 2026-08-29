@@ -15,6 +15,7 @@ import {
   Coffee,
   CreditCard,
   HandCoins,
+  Images,
   Landmark,
   LayoutGrid,
   Menu,
@@ -33,6 +34,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import PrivateApiImage from "@/components/PrivateApiImage";
 import {
   Bill,
   BillSurcharge,
@@ -46,9 +48,11 @@ import {
   CashVoucher,
   CashVoucherCategory,
   CashVoucherType,
+  VoucherEvidenceOption,
   createCashVoucher,
   getCashVoucherCategories,
   getCashVouchers,
+  getVoucherEvidenceOptions,
 } from "@/services/cashVoucherService";
 import { getAllProducts, Product } from "@/services/products";
 import { addTable, CafeTable, getTables } from "@/services/tableService";
@@ -395,7 +399,14 @@ export default function CafePosPage() {
   const [voucherNote, setVoucherNote] = useState("");
   const [voucherIncludeInCashFlow, setVoucherIncludeInCashFlow] = useState(true);
   const [voucherDateTime, setVoucherDateTime] = useState("");
+  const [voucherInventoryReceiptId, setVoucherInventoryReceiptId] = useState("");
+  const [voucherEvidenceOptions, setVoucherEvidenceOptions] = useState<VoucherEvidenceOption[]>([]);
+  const [isLoadingVoucherEvidences, setIsLoadingVoucherEvidences] = useState(false);
+  const [voucherEvidenceError, setVoucherEvidenceError] = useState("");
   const [isSavingVoucher, setIsSavingVoucher] = useState(false);
+  const selectedVoucherEvidence = voucherEvidenceOptions.find(
+    (item) => item.receiptId === voucherInventoryReceiptId
+  );
   const [isKitchenAutoPrintEnabled, setIsKitchenAutoPrintEnabled] = useState(false);
   const [kitchenTerminalName, setKitchenTerminalName] = useState("May bep chinh");
   const [kitchenPrintLogs, setKitchenPrintLogs] = useState<string[]>([]);
@@ -445,6 +456,50 @@ export default function CafePosPage() {
     setVoucherNote("");
     setVoucherIncludeInCashFlow(true);
     setVoucherDateTime(toDateTimeLocalValue(new Date()));
+    setVoucherInventoryReceiptId("");
+  };
+
+  useEffect(() => {
+    if (showVoucherModal !== "expense" || !storeId) {
+      setVoucherEvidenceOptions([]);
+      setVoucherEvidenceError("");
+      return;
+    }
+    let active = true;
+    setIsLoadingVoucherEvidences(true);
+    setVoucherEvidenceError("");
+    getVoucherEvidenceOptions(storeId, 50)
+      .then((items) => {
+        if (active) setVoucherEvidenceOptions(items);
+      })
+      .catch((error) => {
+        console.error("Failed to load inventory receipt evidences", error);
+        if (active) {
+          setVoucherEvidenceOptions([]);
+          setVoucherEvidenceError("Không tải được ảnh nhập hàng. Vui lòng đóng và mở lại phiếu chi.");
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoadingVoucherEvidences(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [showVoucherModal, storeId]);
+
+  const selectVoucherEvidence = (receiptId: string) => {
+    const selected = voucherEvidenceOptions.find((item) => item.receiptId === receiptId);
+    setVoucherInventoryReceiptId(receiptId);
+    if (!selected) return;
+    if (parseMoney(voucherAmountInput) <= 0 && selected.totalAmount > 0) {
+      setVoucherAmountInput(String(selected.totalAmount));
+    }
+    if (!voucherPersonName.trim() && selected.supplierName) {
+      setVoucherPersonName(selected.supplierName);
+    }
+    if (!voucherCategory.trim()) {
+      setVoucherCategory("Chi mua nguyên liệu");
+    }
   };
 
   const cashierName = useMemo(() => {
@@ -2702,6 +2757,8 @@ export default function CafePosPage() {
         shiftId: activeShift?.id,
         cashierId: user?.uid,
         cashierName,
+        inventoryReceiptId:
+          showVoucherModal === "expense" ? voucherInventoryReceiptId || null : null,
       });
       setVoucherCategories(await getCashVoucherCategories(storeId));
       setShowVoucherModal(null);
@@ -5454,7 +5511,7 @@ export default function CafePosPage() {
 
       {showVoucherModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b px-5 py-4">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">
@@ -5529,6 +5586,67 @@ export default function CafePosPage() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
               </div>
+              {showVoucherModal === "expense" && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="text-sm font-medium leading-none">Minh chứng nhập hàng</label>
+                    <span className="text-xs text-slate-500">Chọn bộ ảnh nhân viên đã chụp</span>
+                  </div>
+                  {isLoadingVoucherEvidences ? (
+                    <div className="rounded-lg border bg-slate-50 p-4 text-center text-sm text-slate-500">
+                      Đang tải ảnh nhập hàng...
+                    </div>
+                  ) : voucherEvidenceError ? (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                      {voucherEvidenceError}
+                    </div>
+                  ) : voucherEvidenceOptions.length === 0 ? (
+                    <div className="rounded-lg border border-dashed bg-slate-50 p-4 text-center text-sm text-slate-500">
+                      Không có bộ ảnh nhập hàng chưa liên kết.
+                    </div>
+                  ) : (
+                    <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border bg-slate-50 p-2">
+                      <button
+                        type="button"
+                        onClick={() => selectVoucherEvidence("")}
+                        className={`w-full rounded-md border p-3 text-left text-sm ${voucherInventoryReceiptId === "" ? "border-sky-500 bg-sky-50 font-semibold text-sky-900" : "border-slate-200 bg-white text-slate-600"}`}
+                      >
+                        Không gắn minh chứng
+                      </button>
+                      {voucherEvidenceOptions.map((evidence) => (
+                        <button
+                          key={evidence.receiptId}
+                          type="button"
+                          onClick={() => selectVoucherEvidence(evidence.receiptId)}
+                          className={`grid w-full grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 rounded-md border p-2 text-left ${voucherInventoryReceiptId === evidence.receiptId ? "border-sky-500 bg-sky-50" : "border-slate-200 bg-white hover:border-sky-300"}`}
+                        >
+                          <div className="h-14 w-16 overflow-hidden rounded bg-slate-200">
+                            {evidence.images[0] ? (
+                              <PrivateApiImage src={evidence.images[0].thumbnailUrl} alt="Ảnh nhập hàng" className="h-full w-full object-cover" />
+                            ) : (
+                              <Images className="m-4 h-6 w-6 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900">{evidence.receiptCode}</p>
+                            <p className="truncate text-xs text-slate-600">{evidence.supplierName || "Chưa nhập nhà cung cấp"} · {evidence.imageCount} ảnh</p>
+                            <p className="text-xs font-medium text-amber-700">{evidence.status === "pending_explanation" ? "Chưa giải trình" : "Đã nhập thông tin"}{evidence.storeName ? ` · ${evidence.storeName}` : ""}</p>
+                            <p className="text-xs text-slate-500">{new Date(`${evidence.receiptDate}T12:00:00`).toLocaleDateString("vi-VN")}</p>
+                          </div>
+                          <strong className="text-right text-sm text-sky-800">{formatCurrency(evidence.totalAmount)} đ</strong>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selectedVoucherEvidence && (
+                    <div className="flex gap-2 overflow-x-auto rounded-lg border border-sky-200 bg-sky-50 p-2">
+                      {selectedVoucherEvidence.images.map((image) => (
+                        <PrivateApiImage key={image.id} src={image.thumbnailUrl} alt="Minh chứng đã chọn" className="h-16 w-20 shrink-0 rounded object-cover" />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"

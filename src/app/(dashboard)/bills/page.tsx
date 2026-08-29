@@ -13,10 +13,12 @@ import {
   CashVoucher,
   CashVoucherCategory,
   CashVoucherType,
+  VoucherEvidenceOption,
   cancelCashVoucher,
   createCashVoucher,
   getCashVoucherCategories,
   getCashVouchers,
+  getVoucherEvidenceOptions,
   updateCashVoucherBasic,
 } from "@/services/cashVoucherService";
 import { getOpenShiftByCashier } from "@/services/shiftService";
@@ -26,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Tooltip } from "@/components/ui/Tooltip";
+import PrivateApiImage from "@/components/PrivateApiImage";
 import {
   ArrowDownLeft,
   ArrowDown,
@@ -38,6 +41,7 @@ import {
   Edit3,
   Filter,
   HandCoins,
+  Images,
   Loader2,
   Plus,
   RefreshCcw,
@@ -81,11 +85,13 @@ type VoucherFormState = {
   personName: string;
   note: string;
   includeInCashFlow: boolean;
+  inventoryReceiptId: string;
 };
 
 type VoucherEditFormState = {
   category: string;
   amount: string;
+  inventoryReceiptId: string;
 };
 
 type SortDirection = "asc" | "desc";
@@ -316,12 +322,20 @@ export default function BillsPage() {
     personName: "",
     note: "",
     includeInCashFlow: true,
+    inventoryReceiptId: "",
   });
+  const [voucherEvidenceOptions, setVoucherEvidenceOptions] = useState<VoucherEvidenceOption[]>([]);
+  const [loadingVoucherEvidences, setLoadingVoucherEvidences] = useState(false);
+  const [previewingVoucher, setPreviewingVoucher] = useState<CashVoucher | null>(null);
+  const selectedVoucherEvidence = voucherEvidenceOptions.find(
+    (item) => item.receiptId === voucherForm.inventoryReceiptId,
+  );
   const [savingVoucher, setSavingVoucher] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState<CashVoucher | null>(null);
   const [voucherEditForm, setVoucherEditForm] = useState<VoucherEditFormState>({
     category: "",
     amount: "",
+    inventoryReceiptId: "",
   });
   const [savingVoucherEdit, setSavingVoucherEdit] = useState(false);
   const [cancellingVoucherId, setCancellingVoucherId] = useState<string | null>(null);
@@ -343,7 +357,51 @@ export default function BillsPage() {
       personName: "",
       note: "",
       includeInCashFlow: true,
+      inventoryReceiptId: "",
     });
+  };
+
+  useEffect(() => {
+    const editingExpense = editingVoucher?.type === "expense";
+    if (showVoucherModal !== "expense" && !editingExpense) {
+      setVoucherEvidenceOptions([]);
+      return;
+    }
+    let active = true;
+    setLoadingVoucherEvidences(true);
+    getVoucherEvidenceOptions(storeId, 50)
+      .then((items) => {
+        if (!active) return;
+        const current = editingVoucher?.evidence;
+        if (current && !items.some((item) => item.receiptId === current.receiptId)) {
+          setVoucherEvidenceOptions([{
+            ...current,
+            status: "linked",
+            createdAt: "",
+            imageCount: current.images.length,
+          }, ...items]);
+        } else {
+          setVoucherEvidenceOptions(items);
+        }
+      })
+      .catch(() => { if (active) setVoucherEvidenceOptions([]); })
+      .finally(() => { if (active) setLoadingVoucherEvidences(false); });
+    return () => { active = false; };
+  }, [showVoucherModal, storeId, editingVoucher]);
+
+  const selectVoucherEvidence = (receiptId: string) => {
+    const selected = voucherEvidenceOptions.find((item) => item.receiptId === receiptId);
+    setVoucherForm((current) => ({
+      ...current,
+      inventoryReceiptId: receiptId,
+      amount: selected && !parseMoney(current.amount) && selected.totalAmount > 0
+        ? String(selected.totalAmount)
+        : current.amount,
+      personName: selected?.supplierName && !current.personName.trim()
+        ? selected.supplierName
+        : current.personName,
+      category: selected && !current.category.trim() ? "Chi mua nguyên liệu" : current.category,
+    }));
   };
 
   const loadData = async () => {
@@ -656,6 +714,9 @@ export default function BillsPage() {
         shiftId: maybeShift?.id,
         cashierId: user?.uid,
         cashierName: defaultCashierName,
+        inventoryReceiptId: showVoucherModal === "expense"
+          ? voucherForm.inventoryReceiptId || null
+          : null,
       });
 
       setShowVoucherModal(null);
@@ -675,6 +736,7 @@ export default function BillsPage() {
     setVoucherEditForm({
       category: voucher.category || "",
       amount: String(voucher.amount || 0),
+      inventoryReceiptId: voucher.inventoryReceiptId || "",
     });
   };
 
@@ -697,6 +759,9 @@ export default function BillsPage() {
       await updateCashVoucherBasic(editingVoucher.id, {
         category,
         ...(canEditVoucherAmount ? { amount } : {}),
+        ...(editingVoucher.type === "expense" ? {
+          inventoryReceiptId: voucherEditForm.inventoryReceiptId || null,
+        } : {}),
       });
       setEditingVoucher(null);
       await loadData();
@@ -1397,6 +1462,7 @@ export default function BillsPage() {
                                   {voucher.note ? (
                                     <p className="text-xs text-slate-500">{voucher.note}</p>
                                   ) : null}
+                                  {voucher.evidence ? <button type="button" onClick={() => setPreviewingVoucher(voucher)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900"><Images className="h-3.5 w-3.5" /> Minh chứng {voucher.evidence.receiptCode} · {voucher.evidence.images.length} ảnh</button> : null}
                                 </td>
                                 <td className="px-4 py-3 text-slate-700">
                                   <p>{voucher.personName || "Khách lẻ"}</p>
@@ -1490,6 +1556,7 @@ export default function BillsPage() {
                                       {voucher.note}
                                     </span>
                                   ) : null}
+                                  {voucher.evidence ? <button type="button" onClick={() => setPreviewingVoucher(voucher)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-700"><Images className="h-3.5 w-3.5" /> Minh chứng {voucher.evidence.receiptCode}</button> : null}
                                 </dd>
                               </div>
                               <div className="flex items-center justify-between gap-3">
@@ -1697,9 +1764,22 @@ export default function BillsPage() {
           </div>
         )}
 
+        {previewingVoucher?.evidence && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+            <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white shadow-2xl">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-5 py-4">
+                <div><p className="text-sm text-slate-500">Minh chứng của {previewingVoucher.code}</p><h3 className="text-lg font-bold text-slate-900">{previewingVoucher.evidence.receiptCode} · {previewingVoucher.evidence.images.length} ảnh</h3></div>
+                <Button variant="ghost" onClick={() => setPreviewingVoucher(null)}>Đóng</Button>
+              </div>
+              <div className="grid gap-3 border-b bg-slate-50 px-5 py-3 text-sm sm:grid-cols-3"><div><span className="text-slate-500">Ngày nhập</span><strong className="block">{previewingVoucher.evidence.receiptDate ? new Date(`${previewingVoucher.evidence.receiptDate}T12:00:00`).toLocaleDateString("vi-VN") : "—"}</strong></div><div><span className="text-slate-500">Nhà cung cấp</span><strong className="block">{previewingVoucher.evidence.supplierName || "Chưa nhập"}</strong></div><div><span className="text-slate-500">Giá trị phiếu nhập</span><strong className="block text-emerald-800">{formatCurrency(previewingVoucher.evidence.totalAmount)} VND</strong></div></div>
+              <div className="grid gap-4 p-5 sm:grid-cols-2">{previewingVoucher.evidence.images.map((image) => <figure key={image.id} className="overflow-hidden rounded-lg border bg-slate-50"><PrivateApiImage src={image.url} alt={`Minh chứng ${previewingVoucher.evidence?.receiptCode}`} className="max-h-[560px] w-full object-contain" />{(image.capturedAt || image.locationAddress) && <figcaption className="border-t p-3 text-xs text-slate-600">{image.capturedAt ? new Date(image.capturedAt).toLocaleString("vi-VN") : ""}{image.locationAddress ? ` · ${image.locationAddress}` : ""}</figcaption>}</figure>)}</div>
+            </div>
+          </div>
+        )}
+
         {showVoucherModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+            <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b px-5 py-4">
                 <div>
                   <p className="text-sm text-slate-500">Phiếu tiền mặt</p>
@@ -1775,6 +1855,21 @@ export default function BillsPage() {
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   />
                 </div>
+                {showVoucherModal === "expense" && <div className="space-y-2 sm:col-span-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="text-sm font-semibold text-slate-800">Minh chứng nhập hàng</label>
+                    <span className="text-xs text-slate-500">Chọn bộ ảnh nhân viên vừa chụp</span>
+                  </div>
+                  {loadingVoucherEvidences ? <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">Đang tải ảnh nhập hàng...</div> : voucherEvidenceOptions.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-sm text-slate-500">Không có bộ ảnh nhập hàng chưa liên kết.</div> : <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+                    <button type="button" onClick={() => selectVoucherEvidence("")} className={`w-full rounded-md border p-3 text-left text-sm ${voucherForm.inventoryReceiptId === "" ? "border-emerald-500 bg-emerald-50 font-semibold text-emerald-900" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"}`}>Không gắn minh chứng</button>
+                    {voucherEvidenceOptions.map((evidence) => <button key={evidence.receiptId} type="button" onClick={() => selectVoucherEvidence(evidence.receiptId)} className={`grid w-full grid-cols-[64px_1fr_auto] items-center gap-3 rounded-md border p-2 text-left transition-colors ${voucherForm.inventoryReceiptId === evidence.receiptId ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:border-emerald-300"}`}>
+                      <div className="h-14 w-16 overflow-hidden rounded-md bg-slate-200">{evidence.images[0] ? <PrivateApiImage src={evidence.images[0].thumbnailUrl} alt="Ảnh nhập hàng" className="h-full w-full object-cover" /> : <Images className="m-4 h-6 w-6 text-slate-400" />}</div>
+                      <div className="min-w-0"><p className="font-bold text-slate-900">{evidence.receiptCode}</p><p className="truncate text-xs text-slate-600">{evidence.supplierName || "Chưa nhập nhà cung cấp"} · {evidence.imageCount} ảnh</p><p className="text-xs font-medium text-amber-700">{evidence.status === "pending_explanation" ? "Chưa giải trình" : "Đã nhập thông tin"}{evidence.storeName ? ` · ${evidence.storeName}` : ""}</p><p className="text-xs text-slate-500">{new Date(`${evidence.receiptDate}T12:00:00`).toLocaleDateString("vi-VN")}</p></div>
+                      <strong className="text-right text-sm text-emerald-800">{formatCurrency(evidence.totalAmount)} VND</strong>
+                    </button>)}
+                  </div>}
+                  {selectedVoucherEvidence && <div className="flex gap-2 overflow-x-auto rounded-lg border border-emerald-200 bg-emerald-50 p-2">{selectedVoucherEvidence.images.map((image) => <PrivateApiImage key={image.id} src={image.thumbnailUrl} alt="Minh chứng nhập hàng đã chọn" className="h-16 w-20 shrink-0 rounded-md object-cover" />)}</div>}
+                </div>}
               </div>
 
               <div className="px-5 pb-4">
@@ -1817,7 +1912,7 @@ export default function BillsPage() {
 
         {editingVoucher && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+            <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b px-5 py-4">
                 <div>
                   <p className="text-sm text-slate-500">Cập nhật phiếu thu/chi</p>
@@ -1855,6 +1950,30 @@ export default function BillsPage() {
                 /> : <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   Giá trị phiếu được khóa đối với thu ngân: <strong>{formatCurrency(editingVoucher.amount)} VND</strong>
                 </div>}
+                {editingVoucher.type === "expense" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-sm font-semibold text-slate-800">Minh chứng nhập hàng</label>
+                      <span className="text-xs text-slate-500">Gắn hoặc thay bộ ảnh</span>
+                    </div>
+                    {loadingVoucherEvidences ? (
+                      <div className="rounded-lg border bg-slate-50 p-4 text-center text-sm text-slate-500">Đang tải ảnh nhập hàng...</div>
+                    ) : voucherEvidenceOptions.length === 0 ? (
+                      <div className="rounded-lg border border-dashed bg-slate-50 p-4 text-center text-sm text-slate-500">Không có bộ ảnh nhập hàng chưa liên kết.</div>
+                    ) : (
+                      <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border bg-slate-50 p-2">
+                        <button type="button" onClick={() => setVoucherEditForm((current) => ({ ...current, inventoryReceiptId: "" }))} className={`w-full rounded-md border p-3 text-left text-sm ${voucherEditForm.inventoryReceiptId === "" ? "border-emerald-500 bg-emerald-50 font-semibold text-emerald-900" : "border-slate-200 bg-white text-slate-600"}`}>Không gắn minh chứng</button>
+                        {voucherEvidenceOptions.map((evidence) => (
+                          <button key={evidence.receiptId} type="button" onClick={() => setVoucherEditForm((current) => ({ ...current, inventoryReceiptId: evidence.receiptId }))} className={`grid w-full grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 rounded-md border p-2 text-left ${voucherEditForm.inventoryReceiptId === evidence.receiptId ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:border-emerald-300"}`}>
+                            <div className="h-14 w-16 overflow-hidden rounded bg-slate-200">{evidence.images[0] ? <PrivateApiImage src={evidence.images[0].thumbnailUrl} alt="Ảnh nhập hàng" className="h-full w-full object-cover" /> : <Images className="m-4 h-6 w-6 text-slate-400" />}</div>
+                            <div className="min-w-0"><p className="font-bold text-slate-900">{evidence.receiptCode}</p><p className="truncate text-xs text-slate-600">{evidence.supplierName || "Chưa nhập nhà cung cấp"} · {evidence.imageCount} ảnh</p><p className="text-xs font-medium text-amber-700">{evidence.status === "pending_explanation" ? "Chưa giải trình" : "Đã nhập thông tin"}{evidence.storeName ? ` · ${evidence.storeName}` : ""}</p><p className="text-xs text-slate-500">{evidence.receiptDate ? new Date(`${evidence.receiptDate}T12:00:00`).toLocaleDateString("vi-VN") : ""}</p></div>
+                            <strong className="text-right text-sm text-emerald-800">{formatCurrency(evidence.totalAmount)} VND</strong>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 border-t px-5 py-4">

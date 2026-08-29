@@ -593,7 +593,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
         'SELECT pi.product_id, ingredient.id AS component_id,
                 ingredient.ingredient_code AS product_code,
                 ingredient.ingredient_name AS product_name,
-                ingredient.cost,ingredient.stock_quantity,pi.quantity
+                ingredient.cost,ingredient.preparation_stock_quantity AS stock_quantity,pi.quantity
          FROM product_ingredients pi
          INNER JOIN ingredients ingredient
            ON ingredient.id COLLATE utf8mb4_unicode_ci = pi.ingredient_id COLLATE utf8mb4_unicode_ci
@@ -854,17 +854,11 @@ function products_inventory_apply_sales_consumption(
          )'
     );
     $lockProduct = db()->prepare(
-        'SELECT id, stock_quantity
+        'SELECT id, preparation_stock_quantity AS stock_quantity
          FROM ingredients
          WHERE id = :id
          LIMIT 1
          FOR UPDATE'
-    );
-    $updateProduct = db()->prepare(
-        'UPDATE ingredients
-         SET stock_quantity = :stock_quantity,
-             updated_at = NOW()
-         WHERE id = :id'
     );
 
     db()->beginTransaction();
@@ -896,11 +890,6 @@ function products_inventory_apply_sales_consumption(
 
             $stockBefore = $productRow['stock_quantity'] !== null ? (float) $productRow['stock_quantity'] : 0.0;
             $stockAfter = round($stockBefore - (float) $item['quantity'], 3);
-
-            $updateProduct->execute([
-                'id' => (string) $item['productId'],
-                'stock_quantity' => $stockAfter,
-            ]);
 
             $insertConsumptionItem->execute([
                 'consumption_id' => $consumptionId,

@@ -136,6 +136,8 @@ function ingredients_ensure_schema(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
 
+    auth_ensure_column('ingredients', 'preparation_stock_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER stock_quantity');
+
     $existingTables = db()->query(
         'SELECT table_name FROM information_schema.tables
          WHERE table_schema=DATABASE() AND table_name IN

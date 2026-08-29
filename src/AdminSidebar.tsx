@@ -26,7 +26,6 @@ import {
   MessageSquareText,
   Package,
   PackageSearch,
-  PackageMinus,
   PanelLeftClose,
   PanelLeftOpen,
   ReceiptText,
@@ -46,6 +45,7 @@ type NavItem = {
   label: string;
   icon: typeof Calculator;
   permission?: AppPermission;
+  permissions?: AppPermission[];
   roles?: UserRole[];
   exact?: boolean;
 };
@@ -209,22 +209,10 @@ const navGroups: NavGroup[] = [
         permission: "product.access",
       },
       {
-        href: "/product/checks",
-        label: "Kiểm kho",
-        icon: Package,
-        permission: "inventory_checks.access",
-      },
-      {
-        href: "/product/issues",
-        label: "Xuất kho pha chế",
-        icon: PackageMinus,
-        permission: "inventory_issues.access",
-      },
-      {
-        href: "/inventory-receipts",
-        label: "Nhập hàng",
-        icon: Package,
-        permission: "inventory_receipts.view",
+        href: "/inventory",
+        label: "Nhập · Xuất · Tồn kho",
+        icon: Boxes,
+        permissions: ["inventory_receipts.view", "inventory_issues.access", "inventory_checks.access"],
       },
       {
         href: "/categories",
@@ -382,7 +370,8 @@ export default function AdminSidebar({
     if (item.roles?.length && (!userRole || !item.roles.includes(userRole))) {
       return false;
     }
-    return item.permission ? hasPermission(user, item.permission) : true;
+    if (item.permission) return hasPermission(user, item.permission);
+    return item.permissions ? item.permissions.some((permission) => hasPermission(user, permission)) : true;
   };
 
   const visibleStandaloneItems = standaloneNavItems.filter(canViewItem);
