@@ -326,6 +326,7 @@ export default function BillsPage() {
   });
   const [voucherEvidenceOptions, setVoucherEvidenceOptions] = useState<VoucherEvidenceOption[]>([]);
   const [loadingVoucherEvidences, setLoadingVoucherEvidences] = useState(false);
+  const showVoucherEvidencePicker = false;
   const [previewingVoucher, setPreviewingVoucher] = useState<CashVoucher | null>(null);
   const selectedVoucherEvidence = voucherEvidenceOptions.find(
     (item) => item.receiptId === voucherForm.inventoryReceiptId,
@@ -362,8 +363,9 @@ export default function BillsPage() {
   };
 
   useEffect(() => {
+    const creatingExpense = showVoucherEvidencePicker && showVoucherModal === "expense";
     const editingExpense = editingVoucher?.type === "expense";
-    if (showVoucherModal !== "expense" && !editingExpense) {
+    if (!creatingExpense && !editingExpense) {
       setVoucherEvidenceOptions([]);
       return;
     }
@@ -1855,7 +1857,7 @@ export default function BillsPage() {
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   />
                 </div>
-                {showVoucherModal === "expense" && <div className="space-y-2 sm:col-span-2">
+                {showVoucherEvidencePicker && showVoucherModal === "expense" && <div className="space-y-2 sm:col-span-2">
                   <div className="flex items-center justify-between gap-3">
                     <label className="text-sm font-semibold text-slate-800">Minh chứng nhập hàng</label>
                     <span className="text-xs text-slate-500">Chọn bộ ảnh nhân viên vừa chụp</span>

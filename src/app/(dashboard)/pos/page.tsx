@@ -403,6 +403,7 @@ export default function CafePosPage() {
   const [voucherEvidenceOptions, setVoucherEvidenceOptions] = useState<VoucherEvidenceOption[]>([]);
   const [isLoadingVoucherEvidences, setIsLoadingVoucherEvidences] = useState(false);
   const [voucherEvidenceError, setVoucherEvidenceError] = useState("");
+  const showVoucherEvidencePicker = false;
   const [isSavingVoucher, setIsSavingVoucher] = useState(false);
   const selectedVoucherEvidence = voucherEvidenceOptions.find(
     (item) => item.receiptId === voucherInventoryReceiptId
@@ -460,7 +461,7 @@ export default function CafePosPage() {
   };
 
   useEffect(() => {
-    if (showVoucherModal !== "expense" || !storeId) {
+    if (!showVoucherEvidencePicker || showVoucherModal !== "expense" || !storeId) {
       setVoucherEvidenceOptions([]);
       setVoucherEvidenceError("");
       return;
@@ -5586,7 +5587,7 @@ export default function CafePosPage() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
               </div>
-              {showVoucherModal === "expense" && (
+              {showVoucherEvidencePicker && showVoucherModal === "expense" && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <label className="text-sm font-medium leading-none">Minh chứng nhập hàng</label>
