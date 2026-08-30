@@ -13,6 +13,7 @@ import {
   Search,
   UserRound,
   Wallet,
+  PackagePlus,
 } from "lucide-react";
 import {
   getAreas,
@@ -29,6 +30,8 @@ import {
   inventoryReceiptFiltersFromSearchParams,
   inventoryReceiptFiltersToSearchParams,
 } from "./inventoryReceiptFilters";
+import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 
 const tabs: Array<{ status?: ReceiptStatus; label: string }> = [
   { status: "pending_explanation", label: "Chưa giải trình" },
@@ -65,6 +68,9 @@ const formatFilterDate = (value?: string) =>
 
 export default function FieldInventoryReceiptsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canCreateManualReceipt = hasPermission(user, "inventory_receipts.create")
+    && hasPermission(user, "inventory_receipts.complete");
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [areas, setAreas] = useState<Area[]>([]);
@@ -140,6 +146,13 @@ export default function FieldInventoryReceiptsPage() {
               Theo dõi ảnh hóa đơn, giải trình và trạng thái nhập kho.
             </p>
           </div>
+          {canCreateManualReceipt && <button
+            type="button"
+            onClick={() => navigate("/admin/inventory-receipts/manual")}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm bg-emerald-800 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F]"
+          >
+            <PackagePlus className="h-4 w-4" /> Nhập kho thủ công
+          </button>}
         </div>
         <div className="mt-7 overflow-x-auto rounded-sm border border-slate-200 bg-white p-1.5 shadow-sm">
           <div className="flex min-w-max gap-1.5">

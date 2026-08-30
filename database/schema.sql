@@ -368,12 +368,14 @@ CREATE TABLE IF NOT EXISTS cash_vouchers (
   shift_id VARCHAR(64) NULL,
   cashier_id VARCHAR(64) NULL,
   cashier_name VARCHAR(255) NULL,
+  inventory_receipt_id VARCHAR(64) NULL,
   cancelled_at DATETIME NULL,
   cancelled_by VARCHAR(64) NULL,
   cancellation_reason VARCHAR(500) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_cash_vouchers_store_happened (store_id, happened_at),
+  KEY idx_cash_vouchers_inventory_receipt (inventory_receipt_id),
   CONSTRAINT fk_cash_vouchers_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
 );
 

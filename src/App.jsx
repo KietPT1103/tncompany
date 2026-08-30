@@ -22,7 +22,9 @@ import InventoryChecksPage from "./app/(dashboard)/product/checks/page";
 import InventoryIssuesPage from "./app/(dashboard)/product/issues/page";
 import InventoryReceiptsPage from "./app/(dashboard)/product/receipts/page";
 import FieldInventoryReceiptsPage from "./app/(dashboard)/inventory-receipts/page";
+import ManualInventoryReceiptPage from "./app/(dashboard)/inventory-receipts/manual/page";
 import FieldInventoryReceiptDetailPage from "./app/(dashboard)/inventory-receipts/[id]/page";
+import InventoryWorkspacePage from "./app/(dashboard)/inventory/page";
 import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
 import ProductSalesReportPage from "./app/(dashboard)/reports/products/page";
@@ -197,6 +199,13 @@ export function App() {
               <Route path="product" element={<ProductsPage />} />
               <Route path="product/ingredients" element={<IngredientsPage />} />
               <Route path="product/suppliers" element={<SuppliersPage />} />
+              <Route path="product/checks" element={<InventoryChecksPage />} />
+              <Route path="product/issues" element={<InventoryIssuesPage />} />
+              <Route path="product/receipts" element={<InventoryReceiptsPage />} />
+              <Route path="inventory" element={<InventoryWorkspacePage />} />
+              <Route path="inventory-receipts" element={<FieldInventoryReceiptsPage />} />
+              <Route path="inventory-receipts/manual" element={<ManualInventoryReceiptPage />} />
+              <Route path="inventory-receipts/:id" element={<FieldInventoryReceiptDetailPage />} />
               <Route path="categories" element={<CategoryManagementPage />} />
               <Route path="accounts" element={<AccountManagementPage />} />
               <Route path="activity-logs" element={<ActivityLogsPage />} />

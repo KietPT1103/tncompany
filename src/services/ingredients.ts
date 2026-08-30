@@ -7,6 +7,7 @@ export type Ingredient = {
   unit: string;
   cost: number | null;
   stockQuantity: number;
+  preparationStockQuantity: number;
   supplierId: string | null;
   supplierCode?: string | null;
   supplierName?: string | null;
@@ -61,4 +62,3 @@ export async function deleteIngredient(storeId: string, code: string) {
     { method: "DELETE" }
   );
 }
-

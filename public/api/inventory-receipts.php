@@ -12,6 +12,7 @@ auth_ensure_column('inventory_receipts', 'locked_at', 'DATETIME NULL AFTER order
 auth_ensure_column('inventory_receipts', 'locked_by', 'VARCHAR(64) NULL AFTER locked_at');
 auth_ensure_column('inventory_receipts', 'unlocked_at', 'DATETIME NULL AFTER locked_by');
 auth_ensure_column('inventory_receipts', 'unlocked_by', 'VARCHAR(64) NULL AFTER unlocked_at');
+auth_ensure_column('inventory_receipts', 'entry_source', "ENUM('mobile_photo','web_manual') NOT NULL DEFAULT 'mobile_photo' AFTER receipt_date");
 
 final class ReceiptValidationException extends RuntimeException
 {

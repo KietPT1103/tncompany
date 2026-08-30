@@ -201,6 +201,7 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
         'autoLockAt' => $autoLockAt,
         'status' => (string) $row['status'],
         'receiptDate' => (string) $row['receipt_date'],
+        'entrySource' => (string) ($row['entry_source'] ?? 'mobile_photo'),
         'receivedAt' => $row['received_at'] ?: null,
         'capturedAt' => $row['captured_at'] ?: null,
         'location' => [

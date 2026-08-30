@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS ingredients (
   unit VARCHAR(50) NULL,
   cost DECIMAL(15,2) NULL,
   stock_quantity DECIMAL(15,3) NOT NULL DEFAULT 0,
+  preparation_stock_quantity DECIMAL(15,3) NOT NULL DEFAULT 0,
   supplier_id VARCHAR(64) NULL,
   supplier_item_code VARCHAR(100) NULL,
   description TEXT NULL,

@@ -11,7 +11,14 @@ function stopAll(exitCode = 0) {
 
   for (const child of processes) {
     if (!child.killed) {
-      child.kill("SIGTERM");
+      if (isWindows && child.pid) {
+        spawn("taskkill.exe", ["/pid", String(child.pid), "/T", "/F"], {
+          stdio: "ignore",
+          windowsHide: true,
+        });
+      } else {
+        child.kill("SIGTERM");
+      }
     }
   }
 
@@ -53,7 +60,10 @@ function startProcess(name, command, args, extraEnv = {}) {
 process.on("SIGINT", () => stopAll(0));
 process.on("SIGTERM", () => stopAll(0));
 
-console.log("Starting Vite with /api proxied to https://tnservice.vn (production data)");
+console.log("Starting local PHP API at http://127.0.0.1:8000");
+startProcess("api", "php", ["-S", "127.0.0.1:8000", "-t", "public"]);
+
+console.log("Starting Vite with /api proxied to the local PHP API");
 startProcess(
   "vite",
   isWindows ? "cmd.exe" : "npm",

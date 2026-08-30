@@ -40,6 +40,13 @@ CREATE TABLE IF NOT EXISTS user_store_access (
 ALTER TABLE inventory_receipts
   MODIFY status ENUM('pending_explanation', 'draft', 'completed', 'cancelled') NOT NULL DEFAULT 'draft';
 
+SET @column_sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='inventory_receipts' AND column_name='entry_source'),
+  'SELECT 1',
+  'ALTER TABLE inventory_receipts ADD COLUMN entry_source ENUM(''mobile_photo'',''web_manual'') NOT NULL DEFAULT ''mobile_photo'' AFTER receipt_date'
+);
+PREPARE column_stmt FROM @column_sql; EXECUTE column_stmt; DEALLOCATE PREPARE column_stmt;
+
 -- MySQL does not support ADD COLUMN IF NOT EXISTS. Resolve every optional
 -- column through information_schema so this patch remains safe to re-run.
 SET @column_sql := IF(

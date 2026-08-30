@@ -165,7 +165,7 @@ export default function HomePage() {
       setSalesRows([]);
       setInventoryPreview(null);
       alert(
-        "Không thể đọc file báo cáo bán hàng hoặc preview dữ liệu trừ kho.",
+        "Không thể đọc file báo cáo bán hàng hoặc xem trước tiêu hao.",
       );
     } finally {
       setIsProcessing(false);
@@ -237,25 +237,25 @@ export default function HomePage() {
 
   const handleApplyInventoryConsumption = async () => {
     if (!fileName || salesRows.length === 0) {
-      alert("Chưa có báo cáo bán hàng để trừ kho.");
+      alert("Chưa có báo cáo bán hàng để ghi nhận.");
       return;
     }
 
     if (!inventoryPreview || inventoryPreview.items.length === 0) {
-      alert("Không có nguyên liệu hợp lệ để trừ kho.");
+      alert("Không có nguyên liệu hợp lệ để ghi nhận.");
       return;
     }
 
     if (inventoryPreview.errors.length > 0) {
       alert(
-        "Báo cáo đang có lỗi công thức hoặc mã hàng. Hãy xử lý trước khi trừ kho.",
+        "Báo cáo đang có lỗi công thức hoặc mã hàng. Hãy xử lý trước khi ghi nhận.",
       );
       return;
     }
 
     if (
       !confirm(
-        `Sẽ trừ ${inventoryPreview.items.length} nguyên liệu trong kho theo file ${fileName}. Tiếp tục?`,
+        `Sẽ ghi nhận tiêu hao của ${inventoryPreview.items.length} nguyên liệu theo file ${fileName}. Tiếp tục?`,
       )
     ) {
       return;
@@ -278,13 +278,13 @@ export default function HomePage() {
 
       setInventoryApplied(true);
       await loadRecentConsumptions();
-      alert("Đã trừ kho theo công thức thành công.");
+      alert("Đã ghi nhận tiêu hao theo công thức.");
     } catch (error) {
       console.error(error);
       alert(
         error instanceof Error
           ? error.message
-          : "Không thể trừ kho theo báo cáo.",
+          : "Không thể ghi nhận tiêu hao theo báo cáo.",
       );
     } finally {
       setIsApplyingInventory(false);
@@ -681,11 +681,10 @@ export default function HomePage() {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <CardTitle className="text-base font-semibold text-slate-800">
-                        Dự kiến trừ kho theo công thức
+                        Tiêu hao dự kiến theo công thức
                       </CardTitle>
                       <p className="mt-1 text-sm text-slate-500">
-                        Trừ theo BOM thành phần từ file báo cáo bán hàng vừa
-                        upload.
+                        Tính theo BOM từ báo cáo bán hàng, không trừ kho vật lý.
                       </p>
                     </div>
                     {inventoryApplied ? (
@@ -802,10 +801,10 @@ export default function HomePage() {
                       ) : (
                         <ArchiveX className="mr-2 h-4 w-4" />
                       )}
-                      Trừ kho theo công thức
+                      Ghi nhận tiêu hao
                     </Button>
                     <div className="flex items-center text-sm text-slate-500">
-                      Hệ thống sẽ chặn trừ lặp cùng một báo cáo đã áp dụng trước
+                      Hệ thống sẽ chặn ghi nhận lặp cùng một báo cáo đã áp dụng trước
                       đó.
                     </div>
                   </div>
@@ -831,13 +830,13 @@ export default function HomePage() {
             <Card className="border-0 ring-1 ring-slate-100 shadow-[6px_8px_14px_rgba(6,78,59,0.22)]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-semibold text-slate-800">
-                  Lịch sử trừ kho gần đây
+                  Lịch sử ghi nhận tiêu hao
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {recentConsumptions.length === 0 ? (
                   <div className="text-sm text-slate-400">
-                    Chưa có lần trừ kho nào được ghi nhận.
+                    Chưa có lần tiêu hao nào được ghi nhận.
                   </div>
                 ) : (
                   recentConsumptions.map((item) => (
