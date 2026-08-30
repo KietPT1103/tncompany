@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState } from "react";
 
-export type StoreType = "cafe" | "restaurant" | "farm" | "bakery";
+export type StoreType = "cafe" | "restaurant" | "farm" | "bakery" | "warehouse";
 
 interface StoreContextType {
   storeId: StoreType;
@@ -16,7 +16,8 @@ const isStoreType = (value: string): value is StoreType =>
   value === "cafe" ||
   value === "restaurant" ||
   value === "farm" ||
-  value === "bakery";
+  value === "bakery" ||
+  value === "warehouse";
 
 const getInitialStoreId = (): StoreType => {
   if (typeof window === "undefined") return "cafe";
@@ -36,6 +37,7 @@ export const STORE_NAMES: Record<StoreType, string> = {
   restaurant: "Mô hình Bếp",
   bakery: "Mô hình Tiệm bánh",
   farm: "Mô hình Farm",
+  warehouse: "Kho hàng",
 };
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {

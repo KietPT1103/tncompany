@@ -6,6 +6,17 @@ import { useAuth } from "@/context/AuthContext";
 import { getOpenShiftByCashier } from "@/services/shiftService";
 
 const SHIFT_ENABLED_STORES = new Set(["cafe", "restaurant", "bakery"]);
+const SHIFT_EXEMPT_ADMIN_PATHS = [
+  "/admin/product/checks",
+  "/admin/product/issues",
+  "/admin/product/receipts",
+  "/admin/inventory-receipts",
+];
+
+export const isShiftExemptAdminPath = (pathname: string) =>
+  SHIFT_EXEMPT_ADMIN_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
 
 export default function CashierOpenShiftGuard() {
   const { user, role, loading: authLoading } = useAuth();
@@ -15,7 +26,10 @@ export default function CashierOpenShiftGuard() {
   const [error, setError] = useState("");
 
   const mustHaveOpenShift =
-    role === "user" && !!user?.storeId && SHIFT_ENABLED_STORES.has(user.storeId);
+    role === "user" &&
+    !!user?.storeId &&
+    SHIFT_ENABLED_STORES.has(user.storeId) &&
+    !isShiftExemptAdminPath(location.pathname);
 
   const checkShift = useCallback(async () => {
     if (!mustHaveOpenShift || !user?.storeId || !user.uid) {

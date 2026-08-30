@@ -314,6 +314,7 @@ const storeOptions: {
   },
   { id: "bakery", icon: CakeSlice, label: "Tiệm bánh", note: "Quầy bánh" },
   { id: "farm", icon: Tractor, label: "Farm", note: "Khu trải nghiệm" },
+  { id: "warehouse", icon: Boxes, label: "Kho", note: "Kho hàng" },
 ];
 
 export default function AdminSidebar({
@@ -340,7 +341,8 @@ export default function AdminSidebar({
       (assignedStoreId === "cafe" ||
         assignedStoreId === "restaurant" ||
         assignedStoreId === "bakery" ||
-        assignedStoreId === "farm") &&
+        assignedStoreId === "farm" ||
+        assignedStoreId === "warehouse") &&
       assignedStoreId !== storeId
     ) {
       setStoreId(assignedStoreId);

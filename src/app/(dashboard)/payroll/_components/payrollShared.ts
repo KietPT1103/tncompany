@@ -16,6 +16,7 @@ const STORE_ROLE_GROUPS: Record<StoreType, Array<keyof typeof ROLE_GROUPS>> = {
   restaurant: ["Bep", "Chung"],
   farm: ["Farm", "Chung"],
   bakery: ["Cafe", "Chung"],
+  warehouse: ["Chung"],
 };
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN");

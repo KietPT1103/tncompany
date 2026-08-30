@@ -70,6 +70,18 @@ function AdminLayout() {
   );
 }
 
+function InventoryAdminPage({ children, permission }) {
+  return (
+    <RoleGuard
+      allowedRoles={["admin", "manager", "user", "server", "bartender"]}
+      permission={permission}
+      inferPermission={false}
+    >
+      <DashboardLayout>{children}</DashboardLayout>
+    </RoleGuard>
+  );
+}
+
 function AdminIndexPage() {
   const { user, loading } = useAuth();
 
@@ -112,6 +124,46 @@ export function App() {
         <Route path="/tai-app" element={<DownloadAppPage />} />
         <Route path="/tai-app-admin" element={<DownloadAdminAppPage />} />
         <Route
+          path="/admin/product/checks"
+          element={
+            <InventoryAdminPage permission="inventory_checks.access">
+              <InventoryChecksPage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
+          path="/admin/product/issues"
+          element={
+            <InventoryAdminPage permission="inventory_issues.access">
+              <InventoryIssuesPage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
+          path="/admin/product/receipts"
+          element={
+            <InventoryAdminPage permission="inventory_receipts.view">
+              <InventoryReceiptsPage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
+          path="/admin/inventory-receipts"
+          element={
+            <InventoryAdminPage permission="inventory_receipts.view">
+              <FieldInventoryReceiptsPage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
+          path="/admin/inventory-receipts/:id"
+          element={
+            <InventoryAdminPage permission="inventory_receipts.view">
+              <FieldInventoryReceiptDetailPage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
           path="/admin"
           element={
             <ProtectedLayout
@@ -145,11 +197,6 @@ export function App() {
               <Route path="product" element={<ProductsPage />} />
               <Route path="product/ingredients" element={<IngredientsPage />} />
               <Route path="product/suppliers" element={<SuppliersPage />} />
-              <Route path="product/checks" element={<InventoryChecksPage />} />
-              <Route path="product/issues" element={<InventoryIssuesPage />} />
-              <Route path="product/receipts" element={<InventoryReceiptsPage />} />
-              <Route path="inventory-receipts" element={<FieldInventoryReceiptsPage />} />
-              <Route path="inventory-receipts/:id" element={<FieldInventoryReceiptDetailPage />} />
               <Route path="categories" element={<CategoryManagementPage />} />
               <Route path="accounts" element={<AccountManagementPage />} />
               <Route path="activity-logs" element={<ActivityLogsPage />} />

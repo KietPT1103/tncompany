@@ -8,6 +8,7 @@ import {
   CakeSlice,
   Coffee,
   EllipsisVertical,
+  Package,
   Tractor,
   UtensilsCrossed,
 } from "lucide-react";
@@ -46,7 +47,7 @@ const serviceToEmail = (account: string) => `${account}@service.local`;
 const adminToEmail = (account: string) => `${account}@admin.local`;
 
 const isValidStoreId = (value: string | null | undefined): value is StoreType =>
-  value === "cafe" || value === "restaurant" || value === "bakery" || value === "farm";
+  value === "cafe" || value === "restaurant" || value === "bakery" || value === "farm" || value === "warehouse";
 
 const getRedirectAfterLogin = (user: AppUser) =>
   getDefaultRouteForUser({
@@ -92,6 +93,11 @@ export default function LoginPage() {
       id: "farm",
       label: "Farm",
       icon: <Tractor className="h-6 w-6 text-green-700" />,
+    },
+    {
+      id: "warehouse",
+      label: "Kho",
+      icon: <Package className="h-6 w-6 text-slate-700" />,
     },
   ];
 
