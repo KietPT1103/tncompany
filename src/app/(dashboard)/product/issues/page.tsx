@@ -33,6 +33,8 @@ const quantity = (value: number) => value.toLocaleString("vi-VN", { maximumFract
 export default function InventoryIssuesPage() {
   const { storeId } = useStore();
   const { user } = useAuth();
+  const isConstructionWarehouse = storeId === "warehouse";
+  const stockItemLabel = isConstructionWarehouse ? "vật tư" : "nguyên liệu";
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [issues, setIssues] = useState<InventoryIssue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export default function InventoryIssuesPage() {
   const [historySearch, setHistorySearch] = useState("");
   const actor = user?.displayName || user?.username || user?.email || "";
   const emptyForm = (): FormState => ({
-    issueDate: today(), destination: "Quầy pha chế", issuedBy: actor,
+    issueDate: today(), destination: isConstructionWarehouse ? "Đội thợ / công trình" : "Quầy pha chế", issuedBy: actor,
     note: "", items: [line()],
   });
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -101,11 +103,11 @@ export default function InventoryIssuesPage() {
       .filter((item) => item.ingredientCode || item.quantity.trim())
       .map((item) => ({ ingredientCode: item.ingredientCode, quantity: number(item.quantity), note: item.note.trim() }));
     if (!form.issueDate || !form.destination.trim() || !form.issuedBy.trim() || items.length === 0) {
-      setError("Vui lòng nhập ngày, nơi nhận, người xuất và ít nhất một dòng nguyên liệu.");
+      setError(`Vui lòng nhập ngày, nơi nhận, người xuất và ít nhất một dòng ${stockItemLabel}.`);
       return;
     }
     if (items.some((item) => !item.ingredientCode || item.quantity <= 0)) {
-      setError("Mỗi dòng phải chọn nguyên liệu và có số lượng xuất lớn hơn 0.");
+      setError(`Mỗi dòng phải chọn ${stockItemLabel} và có số lượng xuất lớn hơn 0.`);
       return;
     }
     if (status === "completed" && !window.confirm("Hoàn thành phiếu sẽ trừ tồn kho ngay và không thể sửa. Tiếp tục?")) return;
@@ -139,9 +141,9 @@ export default function InventoryIssuesPage() {
   return <div className="min-h-screen bg-slate-50 p-4 text-slate-950 sm:p-6 2xl:p-8">
     <div className="mx-auto max-w-[1680px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div><div className="text-sm font-bold uppercase tracking-[.2em] text-amber-600">Kho nguyên liệu → pha chế</div>
+        <div><div className="text-sm font-bold uppercase tracking-[.2em] text-amber-600">{isConstructionWarehouse ? "Kho vật tư xây dựng → đội thợ / công trình" : "Kho nguyên liệu → pha chế"}</div>
           <h1 className="mt-2 text-3xl font-black text-emerald-900 sm:text-4xl">Phiếu xuất kho</h1>
-          <p className="mt-2 max-w-3xl text-slate-600">Ghi nhận nguyên liệu cấp cho quầy. Đây là luồng xuất vật lý, tách biệt với tiêu hao lý thuyết tính từ công thức món bán.</p></div>
+          <p className="mt-2 max-w-3xl text-slate-600">{isConstructionWarehouse ? "Ghi nhận vật tư cấp cho đội thợ hoặc từng công trình. Phiếu hoàn thành sẽ trừ trực tiếp tồn vật tư của Kho thợ." : "Ghi nhận nguyên liệu cấp cho quầy. Đây là luồng xuất vật lý, tách biệt với tiêu hao lý thuyết tính từ công thức món bán."}</p></div>
         <button onClick={() => setForm(emptyForm())} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-800 bg-white px-4 font-bold text-emerald-900 hover:bg-emerald-50"><Plus className="h-4 w-4" /> Phiếu mới</button>
       </header>
 
@@ -165,7 +167,7 @@ export default function InventoryIssuesPage() {
               return <tr key={item.key} className={insufficient ? "bg-rose-50" : "hover:bg-blue-50/40"}>
                 <td className="px-4 py-2 text-center font-semibold">{index + 1}</td>
                 <td className="px-4 py-2 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>
-                <td className="px-4 py-2"><select value={item.ingredientCode} onChange={(e) => updateLine(index, { ingredientCode: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="">Chọn nguyên liệu...</option>{ingredients.map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
+                <td className="px-4 py-2"><select value={item.ingredientCode} onChange={(e) => updateLine(index, { ingredientCode: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="">Chọn {stockItemLabel}...</option>{ingredients.map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
                 <td className="px-4 py-2"><input inputMode="decimal" value={item.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} className={`h-10 w-full rounded-md border px-3 text-right font-bold ${insufficient ? "border-rose-500 text-rose-700" : "border-slate-300"}`} /></td>
                 <td className="px-4 py-2">{ingredient?.unit || "—"}</td>
                 <td className="px-4 py-2 text-right font-semibold">{ingredient ? quantity(ingredient.stockQuantity) : "—"}</td>

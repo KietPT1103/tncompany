@@ -38,6 +38,22 @@ function ingredients_exec_with_deadlock_retry(string $sql, int $attempts = 3): v
     }
 }
 
+function ingredients_ensure_packaging_columns(): void
+{
+    $exists = db()->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='ingredients' LIMIT 1")->fetchColumn();
+    if (!$exists) {
+        return;
+    }
+    auth_ensure_column('ingredients', 'purchase_unit', 'VARCHAR(50) NULL AFTER unit');
+    auth_ensure_column('ingredients', 'base_unit', 'VARCHAR(50) NULL AFTER purchase_unit');
+    auth_ensure_column('ingredients', 'purchase_to_base_factor', 'DECIMAL(15,6) NOT NULL DEFAULT 1 AFTER base_unit');
+    $costScale = db()->query("SELECT numeric_scale FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ingredients' AND column_name='cost' LIMIT 1")->fetchColumn();
+    if ($costScale !== false && (int) $costScale < 6) {
+        db()->exec('ALTER TABLE ingredients MODIFY cost DECIMAL(15,6) NULL');
+    }
+    db()->exec("UPDATE ingredients SET purchase_unit=COALESCE(NULLIF(purchase_unit,''),unit),base_unit=COALESCE(NULLIF(base_unit,''),unit),purchase_to_base_factor=IF(purchase_to_base_factor>0,purchase_to_base_factor,1)");
+}
+
 function ingredients_ensure_schema(): void
 {
     static $ensured = false;
@@ -57,6 +73,7 @@ function ingredients_ensure_schema(): void
     );
     $migrationCheck->execute(['migration_key' => $migrationKey]);
     if ($migrationCheck->fetchColumn()) {
+        ingredients_ensure_packaging_columns();
         $ensured = true;
         return;
     }
@@ -70,6 +87,7 @@ function ingredients_ensure_schema(): void
     try {
         $migrationCheck->execute(['migration_key' => $migrationKey]);
         if ($migrationCheck->fetchColumn()) {
+            ingredients_ensure_packaging_columns();
             $ensured = true;
             return;
         }
@@ -104,7 +122,7 @@ function ingredients_ensure_schema(): void
             ingredient_name VARCHAR(255) NOT NULL,
             normalized_name VARCHAR(255) NULL,
             unit VARCHAR(50) NULL,
-            cost DECIMAL(15,2) NULL,
+            cost DECIMAL(15,6) NULL,
             stock_quantity DECIMAL(15,3) NOT NULL DEFAULT 0,
             supplier_id VARCHAR(64) NULL,
             supplier_item_code VARCHAR(100) NULL,
@@ -137,6 +155,7 @@ function ingredients_ensure_schema(): void
     );
 
     auth_ensure_column('ingredients', 'preparation_stock_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER stock_quantity');
+    ingredients_ensure_packaging_columns();
 
     $existingTables = db()->query(
         'SELECT table_name FROM information_schema.tables

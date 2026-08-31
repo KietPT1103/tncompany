@@ -5,6 +5,9 @@ export type Ingredient = {
   ingredientCode: string;
   ingredientName: string;
   unit: string;
+  purchaseUnit: string;
+  baseUnit: string;
+  purchaseToBaseFactor: number;
   cost: number | null;
   stockQuantity: number;
   preparationStockQuantity: number;
@@ -22,6 +25,9 @@ export type IngredientInput = {
   ingredientCode: string;
   ingredientName: string;
   unit?: string;
+  purchaseUnit?: string;
+  baseUnit?: string;
+  purchaseToBaseFactor?: number;
   cost?: number | null;
   stockQuantity?: number;
   supplierId?: string | null;

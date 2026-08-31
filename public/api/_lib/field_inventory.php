@@ -114,7 +114,7 @@ function field_inventory_allowed_stores(array $user): array
     return array_map(static fn(array $row): array => [
         'id' => (string) $row['id'],
         'code' => strtoupper((string) $row['id']),
-        'name' => (string) $row['name'],
+        'name' => (string) $row['id'] === 'warehouse' ? 'Kho thợ' : (string) $row['name'],
     ], $statement->fetchAll());
 }
 

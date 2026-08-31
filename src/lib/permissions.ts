@@ -127,18 +127,17 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   },
   {
     id: "inventory_issues.access",
-    label: "Xuất kho pha chế",
-    description: "Lập và hoàn thành phiếu cấp nguyên liệu từ kho cho quầy pha chế.",
+    label: "Xuất kho (đầy đủ)",
+    description: "Xem, lập và hoàn thành phiếu xuất kho tại các khu vực được cấp.",
     category: "Hàng hóa",
     path: "/product/issues",
   },
   {
     id: "inventory_receipts.access",
-    label: "Nhap hang",
-    description: "Lap va quan ly phieu nhap kho.",
-    category: "Hang hoa",
+    label: "Nhập kho (đầy đủ)",
+    description: "Xem, lập, chỉnh sửa và hoàn thành phiếu nhập kho tại các khu vực được cấp.",
+    category: "Hàng hóa",
     path: "/product/receipts",
-    hidden: true,
   },
   {
     id: "inventory_receipts.view",
@@ -461,5 +460,11 @@ export function getDefaultRouteForUser(user: AppUser | null | undefined) {
   }
 
   const matchedPath = DEFAULT_ROUTE_ORDER.find((path) => canAccessPath(user, path));
-  return matchedPath || "/pos";
+  if (matchedPath) {
+    return matchedPath;
+  }
+  if (hasAnyPermission(user, ["inventory_issues.access", "inventory_checks.access"])) {
+    return "/inventory";
+  }
+  return "/pos";
 }

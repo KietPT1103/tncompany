@@ -9,6 +9,7 @@ const ADMIN_PATHS = [
   "/virtual-bills",
   "/sample-bills",
   "/product",
+  "/inventory",
   "/inventory-receipts",
   "/categories",
   "/accounts",

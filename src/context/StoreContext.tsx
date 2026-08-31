@@ -37,7 +37,7 @@ export const STORE_NAMES: Record<StoreType, string> = {
   restaurant: "Mô hình Bếp",
   bakery: "Mô hình Tiệm bánh",
   farm: "Mô hình Farm",
-  warehouse: "Kho hàng",
+  warehouse: "Kho thợ",
 };
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {

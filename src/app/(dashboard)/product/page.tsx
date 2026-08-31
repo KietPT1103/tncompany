@@ -349,6 +349,7 @@ function ProductModal({
 
         return {
           ...component,
+          unit: matched?.unit || "",
           unitCost,
           stockQuantity: matched?.stockQuantity ?? 0,
           lineTotal: quantity * unitCost,
@@ -696,6 +697,7 @@ function ProductModal({
                               <p className="mt-0.5 text-xs text-slate-500">
                                 Tồn kho:{" "}
                                 {formatQuantity(component.stockQuantity)}
+                                {component.unit ? ` ${component.unit}` : ""}
                               </p>
                             </td>
 
@@ -713,6 +715,7 @@ function ProductModal({
                                 }
                                 className="ml-auto h-9 w-24 rounded-md border border-slate-300 px-2 text-right text-sm tabular-nums outline-none transition-[border-color,box-shadow] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                               />
+                              {component.unit ? <small className="mt-1 block text-xs text-slate-500">{component.unit} / món</small> : null}
                             </td>
 
                             <td className="px-4 py-3 text-right tabular-nums text-slate-700">

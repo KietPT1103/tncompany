@@ -6,7 +6,7 @@ INSERT INTO stores (id, name) VALUES
   ('cafe', 'Cà phê'),
   ('restaurant', 'Lẩu'),
   ('farm', 'Farm'),
-  ('warehouse', 'Kho')
+  ('warehouse', 'Kho thợ')
 ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 -- Production may contain legacy MyISAM tables. Receipt completion relies on

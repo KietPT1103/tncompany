@@ -12,7 +12,7 @@ function inventory_issues_ensure_schema(): void
     ingredients_ensure_schema();
     db()->exec('CREATE TABLE IF NOT EXISTS inventory_issues (
         id VARCHAR(64) PRIMARY KEY, store_id VARCHAR(32) NOT NULL, issue_code VARCHAR(100) NOT NULL,
-        issue_date DATE NOT NULL, destination VARCHAR(255) NOT NULL DEFAULT "Quầy pha chế", issued_by VARCHAR(255) NULL,
+        issue_date DATE NOT NULL, destination VARCHAR(255) NOT NULL DEFAULT "Nơi sử dụng", issued_by VARCHAR(255) NULL,
         status ENUM("draft","completed","cancelled") NOT NULL DEFAULT "draft", note TEXT NULL,
         total_quantity DECIMAL(15,3) NOT NULL DEFAULT 0, completed_at DATETIME NULL, completed_by VARCHAR(255) NULL,
         created_by VARCHAR(255) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -153,7 +153,9 @@ try {
     }
     if ($status === 'completed') {
         $lock = $pdo->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');
-        $deduct = $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,preparation_stock_quantity=preparation_stock_quantity+:quantity,updated_at=NOW() WHERE id=:id');
+        $deduct = $storeId === 'warehouse'
+            ? $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,updated_at=NOW() WHERE id=:id')
+            : $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,preparation_stock_quantity=preparation_stock_quantity+:quantity,updated_at=NOW() WHERE id=:id');
         $snapshot = $pdo->prepare('UPDATE inventory_issue_items SET stock_before=:before,stock_after=:after WHERE issue_id=:issue AND ingredient_id=:ingredient');
         foreach ($normalized as $line) {
             $ingredient = $line['ingredient'];
@@ -162,7 +164,11 @@ try {
             $lock->closeCursor();
             $after = round($before - $line['quantity'], 3);
             if ($after < 0) throw new RuntimeException('Tồn kho ' . $ingredient['ingredient_code'] . ' chỉ còn ' . $before . ' ' . ($ingredient['unit'] ?? '') . '.');
-            $deduct->execute(['id' => $ingredient['id'], 'stock' => $after, 'quantity' => $line['quantity']]);
+            $deductParams = ['id' => $ingredient['id'], 'stock' => $after];
+            if ($storeId !== 'warehouse') {
+                $deductParams['quantity'] = $line['quantity'];
+            }
+            $deduct->execute($deductParams);
             $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => $before, 'after' => $after]);
         }
         $pdo->prepare('UPDATE inventory_issues SET status="completed",completed_at=NOW(),completed_by=:actor,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'actor' => inventory_issues_actor($user)]);

@@ -67,7 +67,7 @@ if ($rawItems === []) {
 }
 
 $findIngredient = db()->prepare(
-    'SELECT id,ingredient_code,ingredient_name,unit,stock_quantity,cost
+    'SELECT id,ingredient_code,ingredient_name,unit,purchase_unit,base_unit,purchase_to_base_factor,stock_quantity,cost
      FROM ingredients WHERE store_id=:store_id AND ingredient_code=:code AND is_active=1 LIMIT 1'
 );
 $items = [];
@@ -90,6 +90,7 @@ foreach ($rawItems as $raw) {
     $items[$code] = [
         'ingredient' => $ingredient,
         'quantity' => $quantity,
+        'baseQuantity' => round($quantity * max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1)), 3),
         'unitCost' => $unitCost,
         'lineTotal' => round($quantity * $unitCost, 2),
         'note' => trim((string) ($raw['note'] ?? '')),
@@ -154,14 +155,15 @@ try {
         $lockIngredient->execute(['id' => $ingredient['id']]);
         $stockBefore = (float) $lockIngredient->fetchColumn();
         $lockIngredient->closeCursor();
-        $stockAfter = round($stockBefore + $line['quantity'], 3);
+        $conversionFactor = max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1));
+        $stockAfter = round($stockBefore + $line['baseQuantity'], 3);
 
         $insertItem->execute([
             'receipt_id' => $receiptId,
             'ingredient_id' => $ingredient['id'],
             'code' => $ingredient['ingredient_code'],
             'name' => $ingredient['ingredient_name'],
-            'unit' => $ingredient['unit'],
+            'unit' => $ingredient['purchase_unit'] ?: $ingredient['unit'],
             'quantity' => $line['quantity'],
             'unit_cost' => $line['unitCost'],
             'line_total' => $line['lineTotal'],
@@ -171,7 +173,7 @@ try {
         $updateIngredient->execute([
             'id' => $ingredient['id'],
             'stock' => $stockAfter,
-            'cost' => $line['unitCost'],
+            'cost' => round($line['unitCost'] / $conversionFactor, 6),
         ]);
         $insertMovement->execute([
             'id' => uuidv4(),
@@ -179,7 +181,7 @@ try {
             'receipt_item_id' => $receiptItemId,
             'store_id' => $storeId,
             'ingredient_id' => $ingredient['id'],
-            'quantity' => $line['quantity'],
+            'quantity' => $line['baseQuantity'],
             'stock_before' => $stockBefore,
             'stock_after' => $stockAfter,
             'created_by' => $actorId,

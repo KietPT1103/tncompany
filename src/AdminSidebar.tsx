@@ -302,7 +302,7 @@ const storeOptions: {
   },
   { id: "bakery", icon: CakeSlice, label: "Tiệm bánh", note: "Quầy bánh" },
   { id: "farm", icon: Tractor, label: "Farm", note: "Khu trải nghiệm" },
-  { id: "warehouse", icon: Boxes, label: "Kho", note: "Kho hàng" },
+  { id: "warehouse", icon: Boxes, label: "Kho thợ", note: "Vật tư xây dựng" },
 ];
 
 export default function AdminSidebar({
@@ -372,15 +372,30 @@ export default function AdminSidebar({
     if (item.roles?.length && (!userRole || !item.roles.includes(userRole))) {
       return false;
     }
+    if (storeId === "warehouse" && item.href === "/product/ingredients") {
+      return ["product.access", "inventory_checks.access", "inventory_issues.access", "inventory_receipts.view"]
+        .some((permission) => hasPermission(user, permission as AppPermission));
+    }
     if (item.permission) return hasPermission(user, item.permission);
     return item.permissions ? item.permissions.some((permission) => hasPermission(user, permission)) : true;
+  };
+
+  const warehouseNavLabels: Record<string, string> = {
+    "/product/ingredients": "Danh mục vật tư",
+    "/inventory": "Nhập · Xuất · Tồn vật tư",
   };
 
   const visibleStandaloneItems = standaloneNavItems.filter(canViewItem);
   const visibleNavGroups = navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter(canViewItem),
+      label: storeId === "warehouse" && group.key === "products" ? "Kho thợ" : group.label,
+      items: group.items
+        .map((item) => ({
+          ...item,
+          label: storeId === "warehouse" ? warehouseNavLabels[item.href] || item.label : item.label,
+        }))
+        .filter(canViewItem),
     }))
     .filter((group) => group.items.length > 0);
 

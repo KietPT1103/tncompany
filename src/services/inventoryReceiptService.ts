@@ -52,21 +52,21 @@ export const cancelInventoryReceipt = async (id: string, reason: string) =>
   (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=cancel", { method: "POST", body: JSON.stringify({ id, reason }) })).item;
 export const searchReceiptProducts = async (search: string, areaId: string) =>
   (await apiRequest<{ items: Array<{
-    id: string; ingredientCode: string; ingredientName: string; unit: string; storeId: string;
+    id: string; ingredientCode: string; ingredientName: string; unit: string; purchaseUnit?: string; storeId: string;
   }> }>(`/ingredients.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}`)).items
     .map((item) => ({
       id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
-      unit: item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
+      unit: item.purchaseUnit || item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
     }));
 export const attachReceiptProduct = async (productId: string, areaId: string) =>
   (await apiRequest<{ item: { id: string } }>("/area-products.php", { method: "POST", body: JSON.stringify({ productId, areaId }) })).item;
 export const createReceiptProduct = async (payload: object): Promise<ProductResult> => {
   const item = (await apiRequest<{ item: {
-    id: string; ingredientCode: string; ingredientName: string; unit: string; storeId: string;
+    id: string; ingredientCode: string; ingredientName: string; unit: string; purchaseUnit?: string; storeId: string;
   } }>("/ingredients.php", { method: "POST", body: JSON.stringify(payload) })).item;
   return {
     id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
-    unit: item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
+    unit: item.purchaseUnit || item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
   };
 };
 export const addInventoryReceiptItem = (payload: object) =>

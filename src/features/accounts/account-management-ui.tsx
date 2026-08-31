@@ -28,14 +28,14 @@ export const STORE_OPTIONS = [
   { value: "restaurant", label: "Lẩu / Bếp" },
   { value: "bakery", label: "Tiệm bánh" },
   { value: "farm", label: "Farm" },
-  { value: "warehouse", label: "Kho" },
+  { value: "warehouse", label: "Kho thợ" },
 ];
 
 export const INVENTORY_AREA_OPTIONS = [
   { value: "cafe", label: "Cafe" },
   { value: "restaurant", label: "Lẩu / Bếp" },
   { value: "farm", label: "Farm" },
-  { value: "warehouse", label: "Kho" },
+  { value: "warehouse", label: "Kho thợ" },
 ];
 
 export const ROLE_OPTIONS: Array<{
@@ -559,6 +559,22 @@ export function AccountEditorModal({
 }: AccountEditorProps) {
   const requiresAreas = form.role === "bartender" || form.permissions.some((permission) => permission.startsWith("inventory_"));
   const permissionCount = form.role === "admin" ? MANAGED_PERMISSION_GROUPS.reduce((count, group) => count + group.items.length, 0) : normalizePermissionList(form.permissions).length;
+  const warehouseQuickPermissions = [
+    { id: "inventory_receipts.access" as const, label: "Nhập kho", description: "Lập và hoàn thành phiếu nhập kho." },
+    { id: "inventory_issues.access" as const, label: "Xuất kho", description: "Lập và hoàn thành phiếu xuất kho." },
+  ];
+  const toggleWarehousePermission = (permission: AppPermission) => {
+    const checked = form.permissions.includes(permission);
+    const permissions = checked
+      ? form.permissions.filter((item) => item !== permission)
+      : normalizePermissionList([...form.permissions, permission]);
+    onChange({
+      permissions,
+      ...(!checked && form.storeIds.length === 0 && form.storeId
+        ? { storeIds: [form.storeId] }
+        : {}),
+    });
+  };
 
   return (
     <Modal open={open} title={editingId ? "Chỉnh sửa tài khoản" : "Tạo tài khoản mới"} description="Thông tin đăng nhập và phạm vi sử dụng của tài khoản." onClose={onClose} footer={
@@ -597,6 +613,10 @@ export function AccountEditorModal({
         <div className="rounded-sm border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-slate-900">Phân quyền chức năng</h3><p className="mt-1 text-sm text-slate-500">Chỉnh sửa chi tiết trong tab Phân quyền sau khi lưu tài khoản.</p></div><span className="whitespace-nowrap bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">{permissionCount} tính năng</span></div>
           {form.role === "admin" ? <p className="mt-3 flex gap-2 text-sm text-emerald-800"><ShieldCheck className="h-4 w-4 shrink-0" />Admin luôn có toàn quyền hệ thống.</p> : null}
+          {canManageAccess && form.role !== "admin" ? <div className="mt-4 grid gap-2 sm:grid-cols-2">{warehouseQuickPermissions.map((permission) => {
+            const checked = form.permissions.includes(permission.id);
+            return <label key={permission.id} className={"flex cursor-pointer items-start gap-3 border bg-white p-3 " + (checked ? "border-emerald-400 text-emerald-950" : "border-slate-200 text-slate-700")}><input type="checkbox" checked={checked} onChange={() => toggleWarehousePermission(permission.id)} className="mt-0.5 h-4 w-4 accent-emerald-700" /><span><span className="block text-sm font-semibold">{permission.label}</span><span className="mt-1 block text-xs text-slate-500">{permission.description}</span></span></label>;
+          })}</div> : null}
         </div>
 
         <label className="flex items-center justify-between rounded-sm border border-slate-200 px-4 py-3"><span><span className="block text-sm font-medium text-slate-900">Trạng thái đăng nhập</span><span className="mt-1 block text-xs text-slate-500">Tắt để khóa tài khoản.</span></span><input type="checkbox" checked={form.isActive} onChange={(event) => onChange({ isActive: event.target.checked })} className="h-4 w-4 accent-emerald-700" /></label>

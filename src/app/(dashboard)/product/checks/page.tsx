@@ -92,6 +92,8 @@ const statusClassName: Record<InventoryCheck["status"], string> = {
 
 export default function InventoryChecksPage() {
   const { storeId } = useStore();
+  const isConstructionWarehouse = storeId === "warehouse";
+  const itemLabel = isConstructionWarehouse ? "vật tư" : "nguyên liệu";
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -352,7 +354,7 @@ export default function InventoryChecksPage() {
 
   async function handleSave(status: "draft" | "completed") {
     if (form.items.length === 0) {
-      alert("Vui lòng thêm ít nhất 1 nguyên liệu cần kiểm.");
+      alert(`Vui lòng thêm ít nhất 1 ${itemLabel} cần kiểm.`);
       return;
     }
 
@@ -407,14 +409,14 @@ export default function InventoryChecksPage() {
   }
 
   return (
-    <RoleGuard allowedRoles={["admin"]}>
+    <RoleGuard permission="inventory_checks.access">
       <main className="mx-auto max-w-7xl space-y-6 p-6 lg:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <Link
               href="/product/ingredients"
               className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
-              title="Trở về nguyên liệu"
+              title={`Trở về danh mục ${itemLabel}`}
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
@@ -448,7 +450,7 @@ export default function InventoryChecksPage() {
                   <input
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Tìm theo mã hoặc tên nguyên liệu"
+                    placeholder={`Tìm theo mã hoặc tên ${itemLabel}`}
                     className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
                   />
 
@@ -504,7 +506,7 @@ export default function InventoryChecksPage() {
                     <thead className="bg-sky-50 text-slate-700">
                       <tr>
                         <th className="px-4 py-3 text-left font-semibold">STT</th>
-                        <th className="px-4 py-3 text-left font-semibold">Mã nguyên liệu</th>
+                        <th className="px-4 py-3 text-left font-semibold">Mã {itemLabel}</th>
                         <th className="px-4 py-3 text-left font-semibold">Tên hàng</th>
                         <th className="px-4 py-3 text-right font-semibold">Tồn kho</th>
                         <th className="px-4 py-3 text-right font-semibold">Thực tế</th>
@@ -518,7 +520,7 @@ export default function InventoryChecksPage() {
                         <tr>
                           <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
                             {form.items.length === 0
-                              ? "Chưa có nguyên liệu nào trong phiếu kiểm."
+                              ? `Chưa có ${itemLabel} nào trong phiếu kiểm.`
                               : "Không có dòng nào phù hợp bộ lọc hiện tại."}
                           </td>
                         </tr>
@@ -817,12 +819,12 @@ export default function InventoryChecksPage() {
                   </p>
                   <p>
                     Sau khi bấm <strong>Hoàn thành</strong>, hệ thống sẽ cập nhật lại tồn kho của từng
-                    nguyên liệu bằng đúng số thực tế bạn đã kiểm. Giá vốn không bị đổi ở bước này,
+                    {itemLabel} bằng đúng số thực tế bạn đã kiểm. Giá vốn không bị đổi ở bước này,
                     chỉ cân bằng lại số lượng.
                   </p>
                   <p>
                     Thực tế vận hành nên kiểm theo mốc giờ rõ ràng, hạn chế nhập hàng hoặc bán hàng
-                    trong lúc kiểm, và ưu tiên kiểm các nguyên liệu chính hoặc nhóm đang lệch nhiều.
+                    trong lúc kiểm, và ưu tiên kiểm các {itemLabel} chính hoặc nhóm đang lệch nhiều.
                   </p>
                 </div>
               </CardContent>

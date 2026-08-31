@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
+require_once __DIR__ . '/_lib/field_inventory.php';
 
 function inventory_consumptions_actor_name(array $user): string
 {
@@ -30,9 +31,10 @@ products_inventory_ensure_schema();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require_permission('dashboard.access');
+    $user = auth_require_permission('dashboard.access');
 
-    $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
+    $storeId = field_inventory_require_store($user, trim((string) ($_GET['storeId'] ?? '')));
+    if ($storeId === 'warehouse') respond_error('Kho thợ không sử dụng tiêu hao theo công thức bán hàng.', 422);
     $limit = max(1, min(50, (int) ($_GET['limit'] ?? 10)));
 
     respond_ok([
@@ -43,7 +45,8 @@ if ($method === 'GET') {
 if ($method === 'POST') {
     $user = auth_require_permission('dashboard.access');
     $body = read_json_body();
-    $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
+    $storeId = field_inventory_require_store($user, trim((string) ($body['storeId'] ?? '')));
+    if ($storeId === 'warehouse') respond_error('Kho thợ không sử dụng tiêu hao theo công thức bán hàng.', 422);
     $fileName = trim((string) ($body['fileName'] ?? 'Báo cáo bán hàng'));
     $salesItems = is_array($body['salesItems'] ?? null) ? $body['salesItems'] : [];
     $startDate = inventory_consumptions_normalize_date($body['startDate'] ?? null);

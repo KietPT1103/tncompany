@@ -290,6 +290,7 @@ function products_inventory_load_components(string $storeId, array $productIds):
                 pi.product_id,
                 ingredient.ingredient_code AS component_product_code,
                 ingredient.ingredient_name AS component_product_name,
+                COALESCE(NULLIF(ingredient.base_unit,""),ingredient.unit) AS component_unit,
                 ingredient.cost AS component_cost,
                 ingredient.stock_quantity AS component_stock_quantity,
                 pi.quantity
@@ -316,6 +317,7 @@ function products_inventory_load_components(string $storeId, array $productIds):
         $grouped[$productId][] = [
             'productCode' => (string) $row['component_product_code'],
             'productName' => (string) $row['component_product_name'],
+            'unit' => (string) ($row['component_unit'] ?? ''),
             'quantity' => $quantity,
             'cost' => $cost,
             'stockQuantity' => $row['component_stock_quantity'] !== null ? (float) $row['component_stock_quantity'] : 0.0,
@@ -593,6 +595,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
         'SELECT pi.product_id, ingredient.id AS component_id,
                 ingredient.ingredient_code AS product_code,
                 ingredient.ingredient_name AS product_name,
+                COALESCE(NULLIF(ingredient.base_unit,""),ingredient.unit) AS unit,
                 ingredient.cost,ingredient.preparation_stock_quantity AS stock_quantity,pi.quantity
          FROM product_ingredients pi
          INNER JOIN ingredients ingredient
@@ -610,6 +613,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
             'id' => (string) $row['component_id'],
             'productCode' => (string) $row['product_code'],
             'productName' => (string) $row['product_name'],
+            'unit' => (string) ($row['unit'] ?? ''),
             'cost' => $row['cost'] !== null ? (float) $row['cost'] : 0.0,
             'stockQuantity' => $row['stock_quantity'] !== null ? (float) $row['stock_quantity'] : 0.0,
             'quantity' => (float) $row['quantity'],
@@ -647,6 +651,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
                     'productId' => $ingredientId,
                     'productCode' => $component['productCode'],
                     'productName' => $component['productName'],
+                    'unit' => $component['unit'],
                     'quantity' => 0.0,
                     'stockBefore' => (float) $component['stockQuantity'],
                     'costUnit' => (float) $component['cost'],
@@ -714,6 +719,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
                     'productId' => $item['productId'],
                     'productCode' => $item['productCode'],
                     'productName' => $item['productName'],
+                    'unit' => $item['unit'] ?? '',
                     'quantity' => $quantity,
                     'stockBefore' => $stockBefore,
                     'stockAfter' => $stockAfter,
@@ -860,6 +866,12 @@ function products_inventory_apply_sales_consumption(
          LIMIT 1
          FOR UPDATE'
     );
+    $updatePreparationStock = db()->prepare(
+        'UPDATE ingredients
+         SET preparation_stock_quantity = :stock,
+             updated_at = NOW()
+         WHERE id = :id'
+    );
 
     db()->beginTransaction();
 
@@ -890,6 +902,13 @@ function products_inventory_apply_sales_consumption(
 
             $stockBefore = $productRow['stock_quantity'] !== null ? (float) $productRow['stock_quantity'] : 0.0;
             $stockAfter = round($stockBefore - (float) $item['quantity'], 3);
+            if ($stockAfter < 0) {
+                throw new RuntimeException(sprintf('Tồn quầy %s chỉ còn %s.', $item['productCode'], $stockBefore));
+            }
+            $updatePreparationStock->execute([
+                'id' => (string) $item['productId'],
+                'stock' => $stockAfter,
+            ]);
 
             $insertConsumptionItem->execute([
                 'consumption_id' => $consumptionId,

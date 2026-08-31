@@ -43,3 +43,28 @@ test("admin accounts are shown with all managed permissions enabled", () => {
   );
   assert.ok(groups.every((group) => group.items.every((item) => item.enabled)));
 });
+
+test("warehouse employees can be granted separate import and export permissions", () => {
+  const importEmployee = {
+    role: "manager" as const,
+    permissions: ["inventory_receipts.access"] as AppPermission[],
+  };
+  const exportEmployee = {
+    role: "manager" as const,
+    permissions: ["inventory_issues.access"] as AppPermission[],
+  };
+
+  const importEffective = getAccountEffectivePermissions(importEmployee);
+  const importGroups = getAccountPermissionGroups(importEmployee);
+  const exportGroups = getAccountPermissionGroups(exportEmployee);
+
+  assert.ok(importEffective.includes("inventory_receipts.complete"));
+  assert.equal(
+    importGroups.flatMap((group) => group.items).find((item) => item.id === "inventory_receipts.access")?.enabled,
+    true,
+  );
+  assert.equal(
+    exportGroups.flatMap((group) => group.items).find((item) => item.id === "inventory_issues.access")?.enabled,
+    true,
+  );
+});

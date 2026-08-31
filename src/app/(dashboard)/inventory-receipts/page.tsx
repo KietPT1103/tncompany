@@ -31,6 +31,7 @@ import {
   inventoryReceiptFiltersToSearchParams,
 } from "./inventoryReceiptFilters";
 import { useAuth } from "@/context/AuthContext";
+import { useStore } from "@/context/StoreContext";
 import { hasPermission } from "@/lib/permissions";
 
 const tabs: Array<{ status?: ReceiptStatus; label: string }> = [
@@ -69,6 +70,8 @@ const formatFilterDate = (value?: string) =>
 export default function FieldInventoryReceiptsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { storeId } = useStore();
+  const isConstructionWarehouse = storeId === "warehouse";
   const canCreateManualReceipt = hasPermission(user, "inventory_receipts.create")
     && hasPermission(user, "inventory_receipts.complete");
   const location = useLocation();
@@ -81,10 +84,14 @@ export default function FieldInventoryReceiptsPage() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const searchKey = searchParams.toString();
-  const filters = useMemo(
+  const parsedFilters = useMemo(
     () =>
       inventoryReceiptFiltersFromSearchParams(new URLSearchParams(searchKey)),
     [searchKey],
+  );
+  const filters = useMemo(
+    () => isConstructionWarehouse ? { ...parsedFilters, areaId: "warehouse" } : parsedFilters,
+    [isConstructionWarehouse, parsedFilters],
   );
   const key = useMemo(() => JSON.stringify(filters), [filters]);
   useEffect(() => {
@@ -137,13 +144,13 @@ export default function FieldInventoryReceiptsPage() {
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <div className="font-firasans text-sm font-bold uppercase tracking-[.2em] text-[#d6ba5d]">
-              Kho vận
+              {isConstructionWarehouse ? "Kho thợ · Vật tư xây dựng" : "Kho vận"}
             </div>
             <h1 className="mt-2 font-smooch text-4xl font-bold leading-none text-emerald-800 sm:text-5xl">
-              Phiếu nhập hiện trường
+              {isConstructionWarehouse ? "Phiếu nhập vật tư" : "Phiếu nhập hiện trường"}
             </h1>
             <p className="font-firasans mt-2 text-slate-600">
-              Theo dõi ảnh hóa đơn, giải trình và trạng thái nhập kho.
+              {isConstructionWarehouse ? "Theo dõi chứng từ và vật tư nhập riêng vào kho thợ." : "Theo dõi ảnh hóa đơn, giải trình và trạng thái nhập kho."}
             </p>
           </div>
           {canCreateManualReceipt && <button
@@ -188,7 +195,9 @@ export default function FieldInventoryReceiptsPage() {
               className={`${filterControlClassName} pl-10`}
             />
           </label>
-          <SelectBox
+          {isConstructionWarehouse ? (
+            <div className={`${filterControlClassName} flex items-center`}>Khu: Kho thợ</div>
+          ) : <SelectBox
             ariaLabel="Lọc theo khu vực"
             value={filters.areaId || "all"}
             options={[
@@ -200,7 +209,7 @@ export default function FieldInventoryReceiptsPage() {
             }
             className="w-full"
             triggerClassName="h-11 rounded-sm border-emerald-900/25 bg-white text-emerald-950 shadow-none hover:border-emerald-700 hover:bg-slate-50 focus-visible:ring-[#F6C85F]/35"
-          />
+          />}
           <DateRangePicker
             label="Khoảng thời gian"
             startDate={filters.dateFrom || ""}

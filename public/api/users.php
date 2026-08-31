@@ -61,6 +61,8 @@ function users_requires_store_access(string $role, array $permissions): bool
     }
 
     $inventoryPermissions = [
+        'inventory_checks.access',
+        'inventory_issues.access',
         'inventory_receipts.access',
         'inventory_receipts.view',
         'inventory_receipts.create',
@@ -134,7 +136,7 @@ if ($method === 'POST') {
         respond_error('Vai trò không hợp lệ.', 422);
     }
     if (users_requires_store_access($role, $permissions) && $storeIds === []) {
-        respond_error('Tài khoản có chức năng nhập hàng phải được cấp ít nhất một khu vực.', 422);
+        respond_error('Tài khoản có chức năng kho phải được cấp ít nhất một khu vực.', 422);
     }
 
     $id = uuidv4();
@@ -289,7 +291,7 @@ if ($method === 'PATCH') {
         );
     }
     if (users_requires_store_access($nextRole, $nextPermissions) && $nextStoreIds === []) {
-        respond_error('Tài khoản có chức năng nhập hàng phải được cấp ít nhất một khu vực.', 422);
+        respond_error('Tài khoản có chức năng kho phải được cấp ít nhất một khu vực.', 422);
     }
     if ($storeAccessChanged) {
         if (!in_array('store_id = :store_id', $fields, true)) {

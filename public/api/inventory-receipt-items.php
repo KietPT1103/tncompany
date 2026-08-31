@@ -31,7 +31,7 @@ function receipt_item_product(string $storeId, array $body): array
     $productId = trim((string) ($body['ingredientId'] ?? $body['productId'] ?? ''));
     $productCode = trim((string) ($body['ingredientCode'] ?? $body['productCode'] ?? ''));
     $statement = db()->prepare(
-        'SELECT id,ingredient_code AS product_code,ingredient_name AS product_name,unit FROM ingredients
+        'SELECT id,ingredient_code AS product_code,ingredient_name AS product_name,COALESCE(NULLIF(purchase_unit,""),unit) AS unit FROM ingredients
          WHERE store_id=:store_id
            AND is_active=1
            AND (id=:product_id OR ingredient_code=:product_code)

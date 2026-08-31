@@ -126,6 +126,22 @@ export function App() {
         <Route path="/tai-app" element={<DownloadAppPage />} />
         <Route path="/tai-app-admin" element={<DownloadAdminAppPage />} />
         <Route
+          path="/admin/inventory"
+          element={
+            <InventoryAdminPage permission={["inventory_receipts.view", "inventory_issues.access", "inventory_checks.access"]}>
+              <InventoryWorkspacePage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
+          path="/admin/product/ingredients"
+          element={
+            <InventoryAdminPage permission={["product.access", "inventory_checks.access", "inventory_issues.access", "inventory_receipts.view"]}>
+              <IngredientsPage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
           path="/admin/product/checks"
           element={
             <InventoryAdminPage permission="inventory_checks.access">
@@ -197,12 +213,10 @@ export function App() {
               <Route path="sample-bills/hotpot" element={<HotpotSampleBillsPage />} />
               <Route path="sample-bills/farm" element={<FarmSampleBillsPage />} />
               <Route path="product" element={<ProductsPage />} />
-              <Route path="product/ingredients" element={<IngredientsPage />} />
               <Route path="product/suppliers" element={<SuppliersPage />} />
               <Route path="product/checks" element={<InventoryChecksPage />} />
               <Route path="product/issues" element={<InventoryIssuesPage />} />
               <Route path="product/receipts" element={<InventoryReceiptsPage />} />
-              <Route path="inventory" element={<InventoryWorkspacePage />} />
               <Route path="inventory-receipts" element={<FieldInventoryReceiptsPage />} />
               <Route path="inventory-receipts/manual" element={<ManualInventoryReceiptPage />} />
               <Route path="inventory-receipts/:id" element={<FieldInventoryReceiptDetailPage />} />

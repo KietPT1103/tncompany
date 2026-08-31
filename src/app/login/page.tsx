@@ -85,19 +85,9 @@ export default function LoginPage() {
       icon: <UtensilsCrossed className="h-6 w-6 text-red-600" />,
     },
     {
-      id: "bakery",
-      label: "Bánh",
-      icon: <CakeSlice className="h-6 w-6 text-pink-600" />,
-    },
-    {
       id: "farm",
       label: "Farm",
       icon: <Tractor className="h-6 w-6 text-green-700" />,
-    },
-    {
-      id: "warehouse",
-      label: "Kho",
-      icon: <Package className="h-6 w-6 text-slate-700" />,
     },
   ];
 
@@ -248,7 +238,7 @@ export default function LoginPage() {
                 Quầy bán hàng được khóa theo tài khoản và không thể thay đổi khi đăng nhập.
               </div>
             ) : (
-            <div className="mb-6 grid grid-cols-4 gap-2">
+            <div className="mb-6 grid grid-cols-3 gap-2">
               {stores.map((store) => (
                 <div
                   key={store.id}

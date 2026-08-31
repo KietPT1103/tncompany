@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
+require_once __DIR__ . '/_lib/field_inventory.php';
 
 function inventory_checks_normalize_date(?string $rawValue): string
 {
@@ -224,9 +225,9 @@ products_inventory_ensure_schema();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require_permission('inventory_checks.access');
+    $user = auth_require_permission('inventory_checks.access');
 
-    $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
+    $storeId = field_inventory_require_store($user, trim((string) ($_GET['storeId'] ?? '')));
     $status = strtolower(trim((string) ($_GET['status'] ?? '')));
     $search = trim((string) ($_GET['search'] ?? ''));
     $limit = max(1, min(200, (int) ($_GET['limit'] ?? 50)));
@@ -346,7 +347,7 @@ if ($method === 'GET') {
 if ($method === 'POST') {
     $user = auth_require_permission('inventory_checks.access');
     $body = read_json_body();
-    $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
+    $storeId = field_inventory_require_store($user, trim((string) ($body['storeId'] ?? '')));
     $status = inventory_checks_normalize_status((string) ($body['status'] ?? 'draft'));
     $checkDate = inventory_checks_normalize_date((string) ($body['checkDate'] ?? ''));
     $note = trim((string) ($body['note'] ?? ''));
@@ -472,20 +473,25 @@ if ($method === 'POST') {
 }
 
 if ($method === 'DELETE') {
-    auth_require_permission('inventory_checks.access');
+    $user = auth_require_permission('inventory_checks.access');
     $body = read_json_body();
     $checkId = trim((string) ($body['id'] ?? ''));
 
     if ($checkId === '') {
         respond_error('Thieu ma phieu kiem kho.', 422);
     }
+    $checkStore = db()->prepare('SELECT store_id FROM inventory_checks WHERE id=:id LIMIT 1');
+    $checkStore->execute(['id' => $checkId]);
+    $checkStoreId = (string) ($checkStore->fetchColumn() ?: '');
+    field_inventory_require_store($user, $checkStoreId);
 
     $statement = db()->prepare(
         'DELETE FROM inventory_checks
          WHERE id = :id
+           AND store_id = :store_id
            AND status = "draft"'
     );
-    $statement->execute(['id' => $checkId]);
+    $statement->execute(['id' => $checkId, 'store_id' => $checkStoreId]);
 
     if ($statement->rowCount() === 0) {
         respond_error('Chi co the xoa phieu tam.', 422);

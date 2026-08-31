@@ -154,8 +154,13 @@ function receipts_list(): void
     }, $statement->fetchAll());
 
     $counts = array_fill_keys(FIELD_RECEIPT_STATUSES, 0);
-    $countSql = db()->prepare('SELECT status,COUNT(*) total FROM inventory_receipts r WHERE r.store_id IN (' . implode(',', $allowedSql) . ') GROUP BY status');
     $allowedParams = array_filter($params, static fn(string $key): bool => strpos($key, 'area_') === 0, ARRAY_FILTER_USE_KEY);
+    $countWhere = 'r.store_id IN (' . implode(',', $allowedSql) . ')';
+    if ($storeId !== '') {
+        $countWhere .= ' AND r.store_id = :count_store_id';
+        $allowedParams['count_store_id'] = $storeId;
+    }
+    $countSql = db()->prepare('SELECT status,COUNT(*) total FROM inventory_receipts r WHERE ' . $countWhere . ' GROUP BY status');
     $countSql->execute($allowedParams);
     foreach ($countSql->fetchAll() as $row) {
         $counts[$row['status']] = (int) $row['total'];
@@ -302,7 +307,9 @@ function receipts_complete(array $body): void
             throw new ReceiptValidationException('Cần ít nhất một ảnh watermark.');
         }
         $query = db()->prepare(
-            'SELECT i.id,i.ingredient_id,i.quantity,i.unit_cost,p.stock_quantity,p.store_id
+            'SELECT i.id,i.ingredient_id,i.quantity,i.unit_cost,p.stock_quantity,p.store_id,
+                    COALESCE(NULLIF(p.base_unit,""),p.unit) base_unit,
+                    GREATEST(COALESCE(p.purchase_to_base_factor,1),0.000001) conversion_factor
              FROM inventory_receipt_items i INNER JOIN ingredients p ON p.id=i.ingredient_id
              WHERE i.receipt_id=:id ORDER BY i.id FOR UPDATE'
         );
@@ -322,17 +329,19 @@ function receipts_complete(array $body): void
         $totalAmount = 0.0;
         foreach ($items as $item) {
             $quantity = (float) $item['quantity'];
+            $baseQuantity = round($quantity * (float) $item['conversion_factor'], 3);
             $price = (float) $item['unit_cost'];
             if ($quantity <= 0 || $price < 0 || $item['store_id'] !== $receipt['store_id']) {
                 throw new ReceiptValidationException('Dòng hàng không hợp lệ hoặc sản phẩm không thuộc khu vực.');
             }
             $lineTotal = round($quantity * $price, 2);
-            $after = round((float) $item['stock_quantity'] + $quantity, 3);
+            $after = round((float) $item['stock_quantity'] + $baseQuantity, 3);
+            $baseCost = round($price / (float) $item['conversion_factor'], 6);
             $updateLine->execute(['id' => $item['id'], 'total' => $lineTotal]);
-            $updateStock->execute(['id' => $item['ingredient_id'], 'stock' => $after, 'cost' => $price]);
+            $updateStock->execute(['id' => $item['ingredient_id'], 'stock' => $after, 'cost' => $baseCost]);
             $movement->execute([
                 'id' => uuidv4(), 'receipt' => $id, 'item' => $item['id'], 'store' => $receipt['store_id'],
-                'ingredient' => $item['ingredient_id'], 'quantity' => $quantity, 'before' => $item['stock_quantity'],
+                'ingredient' => $item['ingredient_id'], 'quantity' => $baseQuantity, 'before' => $item['stock_quantity'],
                 'after' => $after, 'actor' => $user['id'],
             ]);
             $totalQuantity += $quantity;

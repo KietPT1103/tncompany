@@ -15,10 +15,15 @@ function ingredient_payload(array $row): array
         'id' => (string) $row['id'],
         'ingredientCode' => (string) $row['ingredient_code'],
         'ingredientName' => (string) $row['ingredient_name'],
-        'unit' => $row['unit'] ?: '',
+        'unit' => $row['base_unit'] ?: ($row['unit'] ?: ''),
+        'purchaseUnit' => $row['purchase_unit'] ?: ($row['unit'] ?: ''),
+        'baseUnit' => $row['base_unit'] ?: ($row['unit'] ?: ''),
+        'purchaseToBaseFactor' => max(0.000001, (float) ($row['purchase_to_base_factor'] ?? 1)),
         'cost' => $row['cost'] !== null ? (float) $row['cost'] : null,
         'stockQuantity' => (float) $row['stock_quantity'],
-        'preparationStockQuantity' => (float) ($row['preparation_stock_quantity'] ?? 0),
+        'preparationStockQuantity' => (string) $row['store_id'] === 'warehouse'
+            ? 0.0
+            : (float) ($row['preparation_stock_quantity'] ?? 0),
         'supplierId' => $row['supplier_id'] ?: null,
         'supplierCode' => $row['supplier_code'] ?? null,
         'supplierName' => $row['supplier_name'] ?? null,
@@ -35,13 +40,15 @@ if ($method === 'GET') {
     $user = auth_require_permission([
         'product.access',
         'inventory_checks.access',
+        'inventory_issues.access',
         'inventory_receipts.access',
         'inventory_receipts.view',
     ]);
     $storeId = trim((string) ($_GET['areaId'] ?? $_GET['storeId'] ?? ''));
     field_inventory_require_store($user, $storeId);
     if (strtolower(trim((string) ($_GET['action'] ?? ''))) === 'next-code') {
-        respond_ok(['suggestedCode' => ingredients_next_code('NL', 'ingredients', 'ingredient_code')]);
+        $prefix = $storeId === 'warehouse' ? 'VT' : 'NL';
+        respond_ok(['suggestedCode' => ingredients_next_code($prefix, 'ingredients', 'ingredient_code')]);
     }
     $search = trim((string) ($_GET['search'] ?? ''));
     $params = ['store_id' => $storeId];
@@ -65,20 +72,26 @@ if ($method === 'GET') {
     respond_ok([
         'items' => array_map('ingredient_payload', $statement->fetchAll()),
         'canCreate' => field_inventory_has_permission($user, 'products.create'),
-        'suggestedCode' => ingredients_next_code('NL', 'ingredients', 'ingredient_code'),
+        'suggestedCode' => ingredients_next_code($storeId === 'warehouse' ? 'VT' : 'NL', 'ingredients', 'ingredient_code'),
     ]);
 }
 
 $body = read_json_body();
-$user = auth_require_permission(['product.access', 'products.create', 'inventory_receipts.update']);
+$user = auth_require_permission(['product.access', 'products.create', 'inventory_receipts.access', 'inventory_receipts.update']);
 $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? $_GET['storeId'] ?? ''));
 field_inventory_require_store($user, $storeId);
 
 if ($method === 'POST') {
     $code = trim((string) ($body['ingredientCode'] ?? $body['productCode'] ?? ''));
     $name = trim((string) ($body['ingredientName'] ?? $body['productName'] ?? ''));
+    $purchaseUnit = trim((string) ($body['purchaseUnit'] ?? $body['unit'] ?? ''));
+    $baseUnit = trim((string) ($body['baseUnit'] ?? $body['unit'] ?? ''));
+    $conversionFactor = is_numeric($body['purchaseToBaseFactor'] ?? null) ? (float) $body['purchaseToBaseFactor'] : 1.0;
     if ($code === '' || $name === '') {
         respond_error('Vui lòng nhập mã và tên nguyên liệu.', 422);
+    }
+    if ($purchaseUnit === '' || $baseUnit === '' || $conversionFactor <= 0) {
+        respond_error('Vui lòng nhập đơn vị nhập, đơn vị sử dụng và hệ số quy đổi lớn hơn 0.', 422);
     }
     $duplicate = db()->prepare(
         'SELECT id FROM ingredients
@@ -103,15 +116,18 @@ if ($method === 'POST') {
     try {
         $statement = $pdo->prepare(
             'INSERT INTO ingredients
-             (id,store_id,ingredient_code,ingredient_name,normalized_name,unit,cost,stock_quantity,
+             (id,store_id,ingredient_code,ingredient_name,normalized_name,unit,purchase_unit,base_unit,purchase_to_base_factor,cost,stock_quantity,
               supplier_id,supplier_item_code,description,is_active)
              VALUES
-             (:id,:store_id,:code,:name,:normalized,:unit,:cost,:stock,:supplier,:supplier_item_code,:description,:active)'
+             (:id,:store_id,:code,:name,:normalized,:unit,:purchase_unit,:base_unit,:conversion_factor,:cost,:stock,:supplier,:supplier_item_code,:description,:active)'
         );
         $statement->execute([
             'id' => $id, 'store_id' => $storeId, 'code' => $code, 'name' => $name,
             'normalized' => ingredients_normalized_name($name),
-            'unit' => trim((string) ($body['unit'] ?? '')) ?: null,
+            'unit' => $baseUnit,
+            'purchase_unit' => $purchaseUnit,
+            'base_unit' => $baseUnit,
+            'conversion_factor' => round($conversionFactor, 6),
             'cost' => is_numeric($body['cost'] ?? null) ? (float) $body['cost'] : null,
             'stock' => is_numeric($body['stockQuantity'] ?? null) ? round((float) $body['stockQuantity'], 3) : 0,
             'supplier' => $supplierId,
@@ -139,18 +155,29 @@ if (!$existing) respond_error('Không tìm thấy nguyên liệu.', 404);
 
 if (in_array($method, ['PUT', 'PATCH'], true)) {
     $name = trim((string) ($body['ingredientName'] ?? $existing['ingredient_name']));
+    $purchaseUnit = trim((string) ($body['purchaseUnit'] ?? $existing['purchase_unit'] ?? $existing['unit'] ?? ''));
+    $baseUnit = trim((string) ($body['baseUnit'] ?? $existing['base_unit'] ?? $existing['unit'] ?? ''));
+    $conversionFactor = is_numeric($body['purchaseToBaseFactor'] ?? $existing['purchase_to_base_factor'] ?? 1)
+        ? (float) ($body['purchaseToBaseFactor'] ?? $existing['purchase_to_base_factor'] ?? 1) : 1.0;
+    if ($purchaseUnit === '' || $baseUnit === '' || $conversionFactor <= 0) {
+        respond_error('Quy cách nguyên liệu không hợp lệ.', 422);
+    }
     $supplierId = array_key_exists('supplierId', $body)
         ? (trim((string) $body['supplierId']) ?: null)
         : ($existing['supplier_id'] ?: null);
     $statement = db()->prepare(
-        'UPDATE ingredients SET ingredient_name=:name,normalized_name=:normalized,unit=:unit,cost=:cost,
+        'UPDATE ingredients SET ingredient_name=:name,normalized_name=:normalized,unit=:unit,purchase_unit=:purchase_unit,
+          base_unit=:base_unit,purchase_to_base_factor=:conversion_factor,cost=:cost,
           stock_quantity=:stock,supplier_id=:supplier,supplier_item_code=:supplier_item_code,
           description=:description,is_active=:active,updated_at=NOW()
          WHERE id=:id'
     );
     $statement->execute([
         'id' => $existing['id'], 'name' => $name, 'normalized' => ingredients_normalized_name($name),
-        'unit' => trim((string) ($body['unit'] ?? $existing['unit'])) ?: null,
+        'unit' => $baseUnit,
+        'purchase_unit' => $purchaseUnit,
+        'base_unit' => $baseUnit,
+        'conversion_factor' => round($conversionFactor, 6),
         'cost' => is_numeric($body['cost'] ?? $existing['cost']) ? (float) ($body['cost'] ?? $existing['cost']) : null,
         'stock' => is_numeric($body['stockQuantity'] ?? $existing['stock_quantity'])
             ? round((float) ($body['stockQuantity'] ?? $existing['stock_quantity']), 3) : 0,

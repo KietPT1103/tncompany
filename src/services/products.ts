@@ -24,6 +24,7 @@ export type ProductComponent = {
   productCode: string;
   productName: string;
   quantity: number;
+  unit?: string;
   cost: number;
   stockQuantity: number;
   lineTotal: number;

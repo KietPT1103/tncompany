@@ -1,6 +1,14 @@
 ALTER TABLE ingredients
   ADD COLUMN preparation_stock_quantity DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER stock_quantity;
 
+ALTER TABLE ingredients
+  ADD COLUMN purchase_unit VARCHAR(50) NULL AFTER unit,
+  ADD COLUMN base_unit VARCHAR(50) NULL AFTER purchase_unit,
+  ADD COLUMN purchase_to_base_factor DECIMAL(15,6) NOT NULL DEFAULT 1 AFTER base_unit;
+
+ALTER TABLE ingredients
+  MODIFY COLUMN cost DECIMAL(15,6) NULL;
+
 CREATE TABLE IF NOT EXISTS inventory_counter_counts (
   id VARCHAR(64) PRIMARY KEY,
   store_id VARCHAR(32) NOT NULL,

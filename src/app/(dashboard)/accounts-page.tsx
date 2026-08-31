@@ -44,6 +44,8 @@ import {
 } from "@/features/accounts/account-management-ui";
 
 const INVENTORY_ACCOUNT_PERMISSIONS = new Set<AppPermission>([
+  "inventory_checks.access",
+  "inventory_issues.access",
   "inventory_receipts.access",
   "inventory_receipts.view",
   "inventory_receipts.create",
@@ -307,7 +309,12 @@ export default function AccountManagementPage() {
     setSaving(true);
     setError("");
     try {
-      const updated = await updateManagedUser(permissionTargetId, { role: form.role, permissions: form.permissions });
+      const updated = await updateManagedUser(permissionTargetId, {
+        role: form.role,
+        permissions: form.permissions,
+        storeId: form.storeId,
+        storeIds: form.storeIds,
+      });
       setItems((current) => current.map((item) => item.id === updated.id ? updated : item));
       setPermissionModalOpen(false);
       setMessage("Đã cập nhật phân quyền.");

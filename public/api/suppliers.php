@@ -61,7 +61,7 @@ if ($method === 'GET') {
 }
 
 $body = read_json_body();
-$user = auth_require_permission(['product.access', 'products.create', 'inventory_receipts.update']);
+$user = auth_require_permission(['product.access', 'products.create', 'inventory_receipts.access', 'inventory_receipts.update']);
 $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? $_GET['storeId'] ?? ''));
 field_inventory_require_store($user, $storeId);
 
