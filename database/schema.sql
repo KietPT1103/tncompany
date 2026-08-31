@@ -505,6 +505,8 @@ CREATE TABLE IF NOT EXISTS payroll_entries (
   salary_type VARCHAR(20) NOT NULL DEFAULT 'hourly',
   monthly_salary DECIMAL(15,2) NOT NULL DEFAULT 0,
   expected_work_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+  payroll_period_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+  prorate_monthly_by_attendance TINYINT(1) NOT NULL DEFAULT 0,
   paid_leave_days DECIMAL(10,2) NOT NULL DEFAULT 0,
   attendance_bonus_enabled TINYINT(1) NOT NULL DEFAULT 0,
   attendance_bonus_days DECIMAL(10,2) NOT NULL DEFAULT 0,

@@ -147,6 +147,8 @@ function payrolls_ensure_tables(): void
             salary_type VARCHAR(20) NOT NULL DEFAULT "hourly",
             monthly_salary DECIMAL(12,2) NOT NULL DEFAULT 0,
             expected_work_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+            payroll_period_days DECIMAL(10,2) NOT NULL DEFAULT 0,
+            prorate_monthly_by_attendance TINYINT(1) NOT NULL DEFAULT 0,
             paid_leave_days DECIMAL(10,2) NOT NULL DEFAULT 0,
             attendance_bonus_enabled TINYINT(1) NOT NULL DEFAULT 0,
             attendance_bonus_days DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -178,6 +180,8 @@ function payrolls_ensure_tables(): void
     payrolls_ensure_column('payroll_entries', 'hourly_multiplier', 'DECIMAL(10,3) NOT NULL DEFAULT 1 AFTER hourly_rate');
     payrolls_ensure_column('payroll_entries', 'monthly_salary', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER salary_type');
     payrolls_ensure_column('payroll_entries', 'expected_work_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER monthly_salary');
+    payrolls_ensure_column('payroll_entries', 'payroll_period_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER expected_work_days');
+    payrolls_ensure_column('payroll_entries', 'prorate_monthly_by_attendance', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER payroll_period_days');
     payrolls_ensure_column('payroll_entries', 'paid_leave_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER expected_work_days');
     payrolls_ensure_column('payroll_entries', 'attendance_bonus_enabled', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER paid_leave_days');
     payrolls_ensure_column('payroll_entries', 'attendance_bonus_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER attendance_bonus_enabled');
@@ -243,6 +247,8 @@ function payrolls_map_entry_row(array $row): array
         'salaryType' => payrolls_normalize_salary_type((string) ($row['salary_type'] ?? ''), $row),
         'monthlySalary' => (float) (($row['monthly_salary'] ?? 0) ?: ($row['fixed_salary'] ?? 0)),
         'expectedWorkDays' => (float) ($row['expected_work_days'] ?? 0),
+        'payrollPeriodDays' => (float) ($row['payroll_period_days'] ?? 0),
+        'prorateMonthlyByAttendance' => (bool) ($row['prorate_monthly_by_attendance'] ?? false),
         'paidLeaveDays' => (float) ($row['paid_leave_days'] ?? 0),
         'attendanceBonusEnabled' => (bool) ($row['attendance_bonus_enabled'] ?? false),
         'attendanceBonusDays' => (float) ($row['attendance_bonus_days'] ?? 0),
@@ -416,6 +422,8 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
     $salaryType = payrolls_normalize_salary_type((string) ($entry['salaryType'] ?? ''), $entry);
     $monthlySalary = (float) ($entry['monthlySalary'] ?? ($entry['fixedSalary'] ?? 0));
     $expectedWorkDays = (float) ($entry['expectedWorkDays'] ?? ($salaryType === 'monthly' ? 30 : 0));
+    $payrollPeriodDays = (float) ($entry['payrollPeriodDays'] ?? 0);
+    $prorateMonthlyByAttendance = !empty($entry['prorateMonthlyByAttendance']) ? 1 : 0;
     $hourlyMultiplier = array_key_exists('hourlyMultiplier', $entry)
         ? max(0, (float) $entry['hourlyMultiplier'])
         : 1.0;
@@ -424,13 +432,15 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
         'INSERT INTO payroll_entries (
             id, payroll_id, employee_id, employee_code, employee_name, role,
             hourly_rate, hourly_multiplier, total_hours, weekend_hours, salary, allowances_json, note,
-            salary_type, monthly_salary, expected_work_days, paid_leave_days,
+            salary_type, monthly_salary, expected_work_days, payroll_period_days,
+            prorate_monthly_by_attendance, paid_leave_days,
             attendance_bonus_enabled, attendance_bonus_days, attendance_bonus_amount,
             fixed_salary, standard_hours, shifts_json, created_at
          ) VALUES (
             :id, :payroll_id, :employee_id, :employee_code, :employee_name, :role,
             :hourly_rate, :hourly_multiplier, :total_hours, :weekend_hours, :salary, :allowances_json, :note,
-            :salary_type, :monthly_salary, :expected_work_days, :paid_leave_days,
+            :salary_type, :monthly_salary, :expected_work_days, :payroll_period_days,
+            :prorate_monthly_by_attendance, :paid_leave_days,
             :attendance_bonus_enabled, :attendance_bonus_days, :attendance_bonus_amount,
             :fixed_salary, :standard_hours, :shifts_json, NOW()
          )'
@@ -452,6 +462,8 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
         'salary_type' => $salaryType,
         'monthly_salary' => $monthlySalary,
         'expected_work_days' => $expectedWorkDays,
+        'payroll_period_days' => $payrollPeriodDays,
+        'prorate_monthly_by_attendance' => $prorateMonthlyByAttendance,
         'paid_leave_days' => (float) ($entry['paidLeaveDays'] ?? 0),
         'attendance_bonus_enabled' => !empty($entry['attendanceBonusEnabled']) ? 1 : 0,
         'attendance_bonus_days' => (float) ($entry['attendanceBonusDays'] ?? 0),
@@ -644,6 +656,8 @@ if ($method === 'PATCH') {
             'salaryType' => 'salary_type',
             'monthlySalary' => 'monthly_salary',
             'expectedWorkDays' => 'expected_work_days',
+            'payrollPeriodDays' => 'payroll_period_days',
+            'prorateMonthlyByAttendance' => 'prorate_monthly_by_attendance',
             'paidLeaveDays' => 'paid_leave_days',
             'attendanceBonusEnabled' => 'attendance_bonus_enabled',
             'attendanceBonusDays' => 'attendance_bonus_days',
@@ -663,6 +677,8 @@ if ($method === 'PATCH') {
             if ($payloadKey === 'salaryType') {
                 $params[$payloadKey] = payrolls_normalize_salary_type((string) $body[$payloadKey], $body);
             } elseif ($payloadKey === 'attendanceBonusEnabled') {
+                $params[$payloadKey] = !empty($body[$payloadKey]) ? 1 : 0;
+            } elseif ($payloadKey === 'prorateMonthlyByAttendance') {
                 $params[$payloadKey] = !empty($body[$payloadKey]) ? 1 : 0;
             } elseif ($payloadKey === 'hourlyMultiplier') {
                 $params[$payloadKey] = max(0, (float) $body[$payloadKey]);

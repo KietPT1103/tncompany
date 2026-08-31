@@ -45,6 +45,8 @@ export type PayrollEntry = {
   salaryType?: "hourly" | "monthly" | "fixed";
   monthlySalary?: number;
   expectedWorkDays?: number;
+  payrollPeriodDays?: number;
+  prorateMonthlyByAttendance?: boolean;
   paidLeaveDays?: number;
   attendanceBonusEnabled?: boolean;
   attendanceBonusDays?: number;
@@ -190,4 +192,3 @@ export async function deletePayrollEntry(entryId: string) {
     }
   );
 }
-

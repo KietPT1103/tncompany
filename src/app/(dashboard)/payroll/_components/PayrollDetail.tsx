@@ -746,6 +746,10 @@ const buildPayrollEntryPayload = (
     fixedSalary: salaryType === "monthly" ? monthlySalary : 0,
     expectedWorkDays:
       salaryType === "monthly" ? entry.expectedWorkDays || 30 : 0,
+    payrollPeriodDays:
+      salaryType === "monthly" ? entry.payrollPeriodDays || 0 : 0,
+    prorateMonthlyByAttendance:
+      salaryType === "monthly" && Boolean(entry.prorateMonthlyByAttendance),
     paidLeaveDays: salaryType === "monthly" ? entry.paidLeaveDays || 0 : 0,
     attendanceBonusEnabled: entry.attendanceBonusEnabled || false,
     attendanceBonusDays: entry.attendanceBonusDays || 0,
@@ -2772,19 +2776,19 @@ export default function PayrollDetail({
                         : "valid";
                   const rowBackground =
                     rowStatus === "error"
-                      ? "bg-rose-50/55"
+                      ? "bg-rose-100/80"
                       : rowStatus === "warning"
-                        ? "bg-amber-50/50"
+                        ? "bg-white"
                         : rowStatus === "manual"
-                          ? "bg-violet-50/40"
+                          ? "bg-violet-100/70"
                           : "bg-white";
                   const stickyCellBackground =
                     rowStatus === "error"
-                      ? "bg-rose-50/95"
+                      ? "bg-rose-100"
                       : rowStatus === "warning"
-                        ? "bg-amber-50/95"
+                        ? "bg-white"
                         : rowStatus === "manual"
-                          ? "bg-violet-50/95"
+                          ? "bg-violet-100"
                           : "bg-white";
                   const cellClass =
                     "border-b border-slate-200/90 px-3 py-3 align-middle";
@@ -2862,7 +2866,8 @@ export default function PayrollDetail({
                             ) : null}
                           </div>
                           {lateSummary.lateShiftCount > 0 ? (
-                            <div className="mt-2 text-xs font-medium text-amber-700">
+                            <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+                              <CalendarClock className="h-3.5 w-3.5 shrink-0" />
                               Trễ {lateSummary.lateShiftCount} ca
                               {lateSummary.totalLateMinutes > 0
                                 ? ` • ${lateSummary.totalLateMinutes} phút`

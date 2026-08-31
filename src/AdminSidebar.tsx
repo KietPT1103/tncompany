@@ -563,9 +563,12 @@ export default function AdminSidebar({
                       role="option"
                       aria-selected={active}
                       onClick={() => {
+                        if (active) {
+                          setShowStoreMenu(false);
+                          return;
+                        }
                         setStoreId(option.id);
-                        setShowStoreMenu(false);
-                        setIsOpen(false);
+                        window.location.assign("/admin");
                       }}
                       className={cn(
                         "flex min-h-12 w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-[background-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white motion-reduce:transition-none",

@@ -151,6 +151,14 @@ function inferMonthlyExpectedWorkDays(entry: PayrollEntry) {
 }
 
 export function getExpectedWorkDays(entry: PayrollEntry) {
+  if (
+    resolvePayrollSalaryType(entry) === 'monthly' &&
+    entry.prorateMonthlyByAttendance &&
+    (entry.payrollPeriodDays || 0) > 0
+  ) {
+    return Math.max(0, entry.payrollPeriodDays || 0);
+  }
+
   return Math.max(
     0,
     resolvePayrollSalaryType(entry) === "monthly"
@@ -160,9 +168,14 @@ export function getExpectedWorkDays(entry: PayrollEntry) {
 }
 
 export function getWorkingDays(entry: PayrollEntry) {
+  const isMonthly = resolvePayrollSalaryType(entry) === 'monthly';
   const dates = new Set(
     (entry.shifts || [])
-      .filter((shift) => shift.isValid && shift.inTime && shift.outTime)
+      .filter((shift) =>
+        isMonthly
+          ? Boolean(shift.inTime || shift.outTime)
+          : Boolean(shift.isValid && shift.inTime && shift.outTime),
+      )
       .map((shift) => getShiftDateKey(shift))
       .filter(Boolean),
   );
@@ -176,6 +189,9 @@ export function getAbsentDays(entry: PayrollEntry) {
 }
 
 export function getUnpaidLeaveDays(entry: PayrollEntry) {
+  if (entry.prorateMonthlyByAttendance) {
+    return getAbsentDays(entry);
+  }
   return Math.max(0, getAbsentDays(entry) - Math.max(0, entry.paidLeaveDays || 0));
 }
 
@@ -441,6 +457,7 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
   const unpaidLeaveDays = getUnpaidLeaveDays(entry);
   const standardHours = Math.max(0, entry.standardHours || 0);
   const overtimeHours =
+    !entry.prorateMonthlyByAttendance &&
     salaryType === "monthly" && standardHours > 0
       ? Math.max(0, (entry.totalHours || 0) - standardHours)
       : 0;
@@ -456,8 +473,11 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
   let baseSalary = 0;
   let deduction = 0;
   if (salaryType === "monthly") {
-    baseSalary = entry.monthlySalary || entry.fixedSalary || 0;
-    deduction = Math.round(unpaidLeaveDays * (baseSalary / 30));
+    const fullMonthlySalary = entry.monthlySalary || entry.fixedSalary || 0;
+    baseSalary = entry.prorateMonthlyByAttendance
+      ? (fullMonthlySalary / 30) * expectedWorkDays
+      : fullMonthlySalary;
+    deduction = Math.round(unpaidLeaveDays * (fullMonthlySalary / 30));
   } else {
     baseSalary = (entry.totalHours || 0) * (entry.hourlyRate || 0);
   }

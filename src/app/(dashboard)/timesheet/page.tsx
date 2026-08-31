@@ -69,6 +69,8 @@ interface EmployeeSummary {
   SalaryPerHour: number;
   MonthlySalary: number;
   ExpectedWorkDays: number;
+  PayrollPeriodDays: number;
+  ProrateMonthlyByAttendance: boolean;
   PaidLeaveDays: number;
   AttendanceBonusEnabled: boolean;
   AttendanceBonusDays: number;
@@ -142,6 +144,8 @@ function buildPayrollEntryFromSummary(employee: EmployeeSummary): PayrollEntry {
     salaryType: employee.SalaryType,
     monthlySalary: employee.MonthlySalary,
     expectedWorkDays: employee.ExpectedWorkDays,
+    payrollPeriodDays: employee.PayrollPeriodDays,
+    prorateMonthlyByAttendance: employee.ProrateMonthlyByAttendance,
     paidLeaveDays: employee.PaidLeaveDays,
     attendanceBonusEnabled: employee.AttendanceBonusEnabled,
     attendanceBonusDays: employee.AttendanceBonusDays,
@@ -172,6 +176,8 @@ function calculateEmployeeTotal(employee: EmployeeSummary) {
       salaryType: "monthly",
       monthlySalary: employee.MonthlySalary,
       expectedWorkDays: employee.ExpectedWorkDays,
+      payrollPeriodDays: employee.PayrollPeriodDays,
+      prorateMonthlyByAttendance: employee.ProrateMonthlyByAttendance,
       paidLeaveDays: employee.PaidLeaveDays,
       attendanceBonusEnabled: employee.AttendanceBonusEnabled,
       attendanceBonusDays: employee.AttendanceBonusDays,
@@ -254,6 +260,20 @@ export default function TimesheetPage() {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
       date.getDate(),
     ).padStart(2, "0")}`;
+  };
+
+  const getSelectedCalendarDays = () => {
+    if (!startDate || !endDate) return 0;
+    const start = new Date(`${startDate}T00:00:00`);
+    const end = new Date(`${endDate}T00:00:00`);
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      end < start
+    ) {
+      return 0;
+    }
+    return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
   };
 
   const handleSelectPeriod = (monthValue: string, period: 1 | 2) => {
@@ -410,6 +430,8 @@ export default function TimesheetPage() {
       salaryType: employee.SalaryType,
       monthlySalary: employee.MonthlySalary,
       expectedWorkDays: employee.ExpectedWorkDays,
+      payrollPeriodDays: employee.PayrollPeriodDays,
+      prorateMonthlyByAttendance: employee.ProrateMonthlyByAttendance,
       paidLeaveDays: employee.PaidLeaveDays,
       attendanceBonusEnabled: employee.AttendanceBonusEnabled,
       attendanceBonusDays: employee.AttendanceBonusDays,
@@ -726,6 +748,12 @@ export default function TimesheetPage() {
             matchedDbEmployee?.hourlyRate || DEFAULT_IMPORTED_HOURLY_RATE,
           MonthlySalary: matchedDbEmployee?.monthlySalary || 0,
           ExpectedWorkDays: matchedDbEmployee?.expectedWorkDays || 30,
+          PayrollPeriodDays:
+            useMonthlySalary && mode === "custom"
+              ? getSelectedCalendarDays()
+              : 0,
+          ProrateMonthlyByAttendance:
+            useMonthlySalary && mode === "custom",
           PaidLeaveDays: matchedDbEmployee?.paidLeaveDays || 0,
           AttendanceBonusEnabled:
             matchedDbEmployee?.attendanceBonusEnabled || false,
@@ -903,6 +931,12 @@ export default function TimesheetPage() {
               salaryType === "monthly"
                 ? targetConflict.existingEmployee.expectedWorkDays || 30
                 : targetConflict.existingEmployee.expectedWorkDays || 0,
+            PayrollPeriodDays:
+              salaryType === "monthly" && mode === "custom"
+                ? getSelectedCalendarDays()
+                : 0,
+            ProrateMonthlyByAttendance:
+              salaryType === "monthly" && mode === "custom",
             PaidLeaveDays: targetConflict.existingEmployee.paidLeaveDays || 0,
             AttendanceBonusEnabled:
               targetConflict.existingEmployee.attendanceBonusEnabled || false,
@@ -925,6 +959,8 @@ export default function TimesheetPage() {
           SalaryPerHour: DEFAULT_IMPORTED_HOURLY_RATE,
           MonthlySalary: 0,
           ExpectedWorkDays: 0,
+          PayrollPeriodDays: 0,
+          ProrateMonthlyByAttendance: false,
           PaidLeaveDays: 0,
           AttendanceBonusEnabled: false,
           AttendanceBonusDays: 0,
@@ -994,6 +1030,11 @@ export default function TimesheetPage() {
             fixedSalary: salaryType === "monthly" ? employee.MonthlySalary : 0,
             expectedWorkDays:
               salaryType === "monthly" ? employee.ExpectedWorkDays : 0,
+            payrollPeriodDays:
+              salaryType === "monthly" ? employee.PayrollPeriodDays : 0,
+            prorateMonthlyByAttendance:
+              salaryType === "monthly" &&
+              employee.ProrateMonthlyByAttendance,
             paidLeaveDays:
               salaryType === "monthly" ? employee.PaidLeaveDays : 0,
             attendanceBonusEnabled:
@@ -1568,7 +1609,7 @@ export default function TimesheetPage() {
                       className={cn(
                         "group border-b border-slate-200 transition-colors",
                         hasError
-                          ? "bg-rose-50/55 hover:bg-rose-50"
+                          ? "bg-rose-100/90 hover:bg-rose-100"
                           : "bg-white hover:bg-slate-50",
                       )}
                     >
@@ -1576,7 +1617,7 @@ export default function TimesheetPage() {
                         className={cn(
                           "sticky left-0 z-10 px-4 py-3 shadow-[1px_0_0_0_rgba(226,232,240,1)]",
                           hasError
-                            ? "bg-rose-50/95"
+                            ? "bg-rose-100"
                             : "bg-white group-hover:bg-slate-50",
                         )}
                       >
@@ -1751,7 +1792,7 @@ export default function TimesheetPage() {
                   key={employee.EnNo}
                   className={cn(
                     "group",
-                    hasError ? "bg-rose-50/45" : "bg-white",
+                    hasError ? "bg-rose-100/80" : "bg-white",
                   )}
                 >
                   <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
