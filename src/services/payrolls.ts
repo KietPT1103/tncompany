@@ -18,6 +18,7 @@ export interface Shift {
   inTime: string;
   outTime: string;
   hours: number;
+  hourlyRateOverride?: number;
   isWeekend: boolean;
   isValid: boolean;
 }
@@ -26,6 +27,12 @@ export type PayrollAllowance = {
   name: string;
   amount: number;
   period?: "all" | "1" | "2";
+};
+
+export type PayrollDeduction = {
+  date: string;
+  reason: string;
+  amount: number;
 };
 
 export type PayrollEntry = {
@@ -41,6 +48,7 @@ export type PayrollEntry = {
   weekendHours: number;
   salary: number;
   allowances?: PayrollAllowance[];
+  deductions?: PayrollDeduction[];
   note: string;
   salaryType?: "hourly" | "monthly" | "fixed";
   monthlySalary?: number;

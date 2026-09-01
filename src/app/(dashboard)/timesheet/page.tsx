@@ -2038,6 +2038,17 @@ export default function TimesheetPage() {
                 </div>
               ) : null}
 
+              {salaryDetailBreakdown.salaryType === "hourly" &&
+              salaryDetailBreakdown.shiftRateAdjustment !== 0 ? (
+                <div className="flex items-center justify-between rounded-md bg-sky-50 px-4 py-3">
+                  <span className="text-sky-700">Điều chỉnh đơn giá ca</span>
+                  <span className="font-semibold text-sky-800">
+                    {salaryDetailBreakdown.shiftRateAdjustment > 0 ? "+ " : "- "}
+                    {formatCurrency(Math.abs(salaryDetailBreakdown.shiftRateAdjustment))}
+                  </span>
+                </div>
+              ) : null}
+
               {salaryDetailBreakdown.salaryType === "monthly" ? (
                 salaryDetailBreakdown.overtimePay > 0 ? (
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
@@ -2144,6 +2155,10 @@ export default function TimesheetPage() {
           employeeName={summaryData[selectedEmpIndex].Name}
           employeeId={summaryData[selectedEmpIndex].EnNo}
           initialShifts={summaryData[selectedEmpIndex].Shifts || []}
+          defaultHourlyRate={summaryData[selectedEmpIndex].SalaryPerHour || 0}
+          canOverrideHourlyRate={
+            summaryData[selectedEmpIndex].SalaryType === "hourly"
+          }
         />
       ) : null}
 

@@ -143,6 +143,7 @@ function payrolls_ensure_tables(): void
             weekend_hours DECIMAL(10,2) NOT NULL DEFAULT 0,
             salary DECIMAL(12,2) NOT NULL DEFAULT 0,
             allowances_json LONGTEXT NULL,
+            deductions_json LONGTEXT NULL,
             note TEXT NULL,
             salary_type VARCHAR(20) NOT NULL DEFAULT "hourly",
             monthly_salary DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -177,6 +178,7 @@ function payrolls_ensure_tables(): void
     payrolls_ensure_column('payrolls', 'period_end', 'DATE NULL AFTER period_start');
     payrolls_ensure_column('payroll_entries', 'employee_code', "VARCHAR(100) NOT NULL DEFAULT '' AFTER employee_id");
     payrolls_ensure_column('payroll_entries', 'allowances_json', 'LONGTEXT NULL AFTER salary');
+    payrolls_ensure_column('payroll_entries', 'deductions_json', 'LONGTEXT NULL AFTER allowances_json');
     payrolls_ensure_column('payroll_entries', 'hourly_multiplier', 'DECIMAL(10,3) NOT NULL DEFAULT 1 AFTER hourly_rate');
     payrolls_ensure_column('payroll_entries', 'monthly_salary', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER salary_type');
     payrolls_ensure_column('payroll_entries', 'expected_work_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER monthly_salary');
@@ -243,6 +245,7 @@ function payrolls_map_entry_row(array $row): array
         'weekendHours' => (float) $row['weekend_hours'],
         'salary' => (float) $row['salary'],
         'allowances' => json_decode((string) ($row['allowances_json'] ?? '[]'), true) ?: [],
+        'deductions' => json_decode((string) ($row['deductions_json'] ?? '[]'), true) ?: [],
         'note' => (string) ($row['note'] ?? ''),
         'salaryType' => payrolls_normalize_salary_type((string) ($row['salary_type'] ?? ''), $row),
         'monthlySalary' => (float) (($row['monthly_salary'] ?? 0) ?: ($row['fixed_salary'] ?? 0)),
@@ -431,14 +434,14 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
     $statement = db()->prepare(
         'INSERT INTO payroll_entries (
             id, payroll_id, employee_id, employee_code, employee_name, role,
-            hourly_rate, hourly_multiplier, total_hours, weekend_hours, salary, allowances_json, note,
+            hourly_rate, hourly_multiplier, total_hours, weekend_hours, salary, allowances_json, deductions_json, note,
             salary_type, monthly_salary, expected_work_days, payroll_period_days,
             prorate_monthly_by_attendance, paid_leave_days,
             attendance_bonus_enabled, attendance_bonus_days, attendance_bonus_amount,
             fixed_salary, standard_hours, shifts_json, created_at
          ) VALUES (
             :id, :payroll_id, :employee_id, :employee_code, :employee_name, :role,
-            :hourly_rate, :hourly_multiplier, :total_hours, :weekend_hours, :salary, :allowances_json, :note,
+            :hourly_rate, :hourly_multiplier, :total_hours, :weekend_hours, :salary, :allowances_json, :deductions_json, :note,
             :salary_type, :monthly_salary, :expected_work_days, :payroll_period_days,
             :prorate_monthly_by_attendance, :paid_leave_days,
             :attendance_bonus_enabled, :attendance_bonus_days, :attendance_bonus_amount,
@@ -458,6 +461,7 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
         'weekend_hours' => (float) ($entry['weekendHours'] ?? 0),
         'salary' => (float) ($entry['salary'] ?? 0),
         'allowances_json' => json_encode($entry['allowances'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'deductions_json' => json_encode($entry['deductions'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         'note' => (string) ($entry['note'] ?? ''),
         'salary_type' => $salaryType,
         'monthly_salary' => $monthlySalary,
@@ -702,6 +706,11 @@ if ($method === 'PATCH') {
         if (array_key_exists('allowances', $body)) {
             $fields[] = 'allowances_json = :allowances_json';
             $params['allowances_json'] = json_encode($body['allowances'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        if (array_key_exists('deductions', $body)) {
+            $fields[] = 'deductions_json = :deductions_json';
+            $params['deductions_json'] = json_encode($body['deductions'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
 
         if (array_key_exists('shifts', $body)) {

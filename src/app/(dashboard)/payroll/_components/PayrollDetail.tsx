@@ -18,6 +18,7 @@ import {
   deletePayrollEntry,
   getPayrollEntries,
   PayrollEntry,
+  type PayrollDeduction,
   updatePayrollEntry,
 } from "@/services/payrolls";
 
@@ -149,7 +150,7 @@ const COLUMN_OPTIONS: { key: keyof VisibleColumns; label: string }[] = [
   { key: "workDays", label: "Ngày công" },
   { key: "rate", label: "Đơn giá" },
   { key: "weekend", label: "Cuối tuần" },
-  { key: "allowance", label: "Phụ cấp" },
+  { key: "allowance", label: "Phụ cấp / khấu trừ" },
   { key: "total", label: "Tổng lương" },
   { key: "note", label: "Ghi chú" },
   { key: "action", label: "Tác vụ" },
@@ -739,6 +740,7 @@ const buildPayrollEntryPayload = (
     weekendHours: entry.weekendHours || 0,
     salary: entry.salary || 0,
     allowances: entry.allowances || [],
+    deductions: (entry.deductions || []).map((deduction) => ({ ...deduction })),
     shifts: cloneShifts(entry.shifts || []),
     note: entry.note || "",
     salaryType,
@@ -895,6 +897,7 @@ export default function PayrollDetail({
   const [editAllowances, setEditAllowances] = useState<
     { name: string; amount: number }[]
   >([]);
+  const [editDeductions, setEditDeductions] = useState<PayrollDeduction[]>([]);
 
   const [attendanceBonusEnabled, setAttendanceBonusEnabled] = useState(false);
 
@@ -2120,7 +2123,8 @@ export default function PayrollDetail({
         "Ngày nghỉ không lương": breakdown.unpaidLeaveDays,
         "Ngày phép": Math.max(0, entry.paidLeaveDays || 0),
         "Lương cơ bản": Math.round(breakdown.baseSalary || 0),
-        "Khấu trừ": Math.round(breakdown.deduction || 0),
+        "Khấu trừ nghỉ vượt phép": Math.round(breakdown.deduction || 0),
+        "Khấu trừ thủ công": Math.round(breakdown.manualDeductionTotal || 0),
         "Giờ tăng ca": Number((breakdown.overtimeHours || 0).toFixed(2)),
         "Tiền tăng ca": Math.round(breakdown.overtimePay || 0),
         "Thưởng cuối tuần": Math.round(breakdown.weekendBonus || 0),
@@ -2130,6 +2134,7 @@ export default function PayrollDetail({
           ? `${attendanceProgress.qualifiedDays}/${attendanceProgress.targetDays}`
           : "",
         "Hệ số lương": breakdown.hourlyMultiplier ?? 1,
+        "Điều chỉnh đơn giá ca": Math.round(breakdown.shiftRateAdjustment || 0),
         "Lương giờ": Math.round(entry.hourlyRate || 0),
         "Lương tháng": Math.round(
           entry.monthlySalary || entry.fixedSalary || 0,
@@ -2729,7 +2734,7 @@ export default function PayrollDetail({
                   ) : null}
                   {visibleColumns.allowance ? (
                     <th className="sticky top-0 z-20 bg-slate-50 px-3 py-3 text-center">
-                      Phụ cấp
+                      Phụ cấp / khấu trừ
                     </th>
                   ) : null}
 
@@ -3034,6 +3039,7 @@ export default function PayrollDetail({
                             onClick={() => {
                               setAllowanceEntryId(entry.id || null);
                               setEditAllowances(entry.allowances || []);
+                              setEditDeductions(entry.deductions || []);
                               setAttendanceBonusEnabled(
                                 entry.attendanceBonusEnabled || false,
                               );
@@ -3044,20 +3050,26 @@ export default function PayrollDetail({
                                 entry.attendanceBonusAmount || 0,
                               );
                             }}
-                            className="mx-auto block w-full max-w-[140px] rounded-md px-2 py-2 text-right transition-colors duration-150 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            className="mx-auto block w-full max-w-[160px] rounded-md px-2 py-2 text-right transition-colors duration-150 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                           >
                             <div className="text-xs font-medium text-slate-500">
-                              {(entry.allowances || []).length} khoản
+                              {(entry.allowances || []).length} phụ cấp •{" "}
+                              {(entry.deductions || []).length} khấu trừ
                               {entry.attendanceBonusEnabled
-                                ? " + chuyên cần"
+                                ? " • chuyên cần"
                                 : ""}
                             </div>
-                            <div className="mt-1 font-semibold tabular-nums text-slate-900">
-                              {formatCurrency(
+                            <div className="mt-1 font-semibold tabular-nums text-emerald-700">
+                              + {formatCurrency(
                                 getAllowanceTotal(entry) +
                                   getAttendanceBonusValue(entry),
                               )}
                             </div>
+                            {breakdown.manualDeductionTotal > 0 ? (
+                              <div className="mt-0.5 font-semibold tabular-nums text-rose-700">
+                                - {formatCurrency(breakdown.manualDeductionTotal)}
+                              </div>
+                            ) : null}
                           </button>
                         </td>
                       ) : null}
@@ -3197,6 +3209,7 @@ export default function PayrollDetail({
                                         setEditAllowances(
                                           entry.allowances || [],
                                         );
+                                        setEditDeductions(entry.deductions || []);
                                         setAttendanceBonusEnabled(
                                           entry.attendanceBonusEnabled || false,
                                         );
@@ -3208,10 +3221,10 @@ export default function PayrollDetail({
                                         );
                                         setOpenActionMenuId(null);
                                       }}
-                                      title="Mở popup phụ cấp và chuyên cần"
+                                      title="Mở popup phụ cấp, chuyên cần và khấu trừ"
                                     >
                                       <Plus className="h-4 w-4 text-emerald-600" />
-                                      Phụ cấp
+                                      Phụ cấp / khấu trừ
                                     </button>
                                     {rowMeta?.lastImportSnapshot ? (
                                       <button
@@ -3550,6 +3563,29 @@ export default function PayrollDetail({
                 </div>
               ) : null}
 
+              {salaryDetailBreakdown.salaryType === "hourly" &&
+              salaryDetailBreakdown.shiftRateAdjustment !== 0 ? (
+                <div className="rounded-md bg-sky-50 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sky-700">Điều chỉnh đơn giá ca</span>
+                    <span className="font-semibold text-sky-800">
+                      {salaryDetailBreakdown.shiftRateAdjustment > 0 ? "+ " : "- "}
+                      {formatCurrency(Math.abs(salaryDetailBreakdown.shiftRateAdjustment))}
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-1 border-t border-sky-200 pt-2 text-xs text-sky-700/80">
+                    {(salaryDetailEntry.shifts || [])
+                      .filter((shift) => (shift.hourlyRateOverride || 0) > 0)
+                      .map((shift, index) => (
+                        <div key={`${shift.id}-${index}`} className="flex items-center justify-between gap-4">
+                          <span>{shift.date || `Ca ${index + 1}`} • {formatHours(shift.hours || 0)}h</span>
+                          <span className="shrink-0">{formatCurrency(shift.hourlyRateOverride)} / giờ</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
+
               {salaryDetailBreakdown.salaryType === "monthly" ? (
                 salaryDetailBreakdown.overtimePay > 0 ? (
                   <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3">
@@ -3640,6 +3676,28 @@ export default function PayrollDetail({
                 </div>
               ) : null}
 
+              {salaryDetailBreakdown.manualDeductionTotal > 0 ? (
+                <div className="rounded-md bg-rose-50 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-rose-700">Khấu trừ thủ công</span>
+                    <span className="font-semibold text-rose-800">
+                      - {formatCurrency(salaryDetailBreakdown.manualDeductionTotal)}
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-1 border-t border-rose-200 pt-2 text-rose-700/80">
+                    {(salaryDetailEntry.deductions || []).map((deduction, index) => (
+                      <div key={`${deduction.date}-${deduction.reason}-${index}`} className="flex items-center justify-between gap-4">
+                        <span>
+                          {deduction.date ? `${deduction.date} • ` : ""}
+                          {deduction.reason || `Khấu trừ ${index + 1}`}
+                        </span>
+                        <span className="shrink-0">- {formatCurrency(deduction.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {salaryDetailBreakdown.deduction > 0 ? (
                 <div className="flex items-center justify-between rounded-md bg-rose-50 px-4 py-3">
                   <span className="text-rose-700">Khấu trừ nghỉ vượt phép</span>
@@ -3694,6 +3752,7 @@ export default function PayrollDetail({
       {allowanceEntryId ? (
         <AllowanceDialog
           allowances={editAllowances}
+          deductions={editDeductions}
           attendanceBonusAmount={attendanceBonusAmount}
           attendanceBonusDays={attendanceBonusDays}
           attendanceBonusEnabled={attendanceBonusEnabled}
@@ -3718,6 +3777,44 @@ export default function PayrollDetail({
           onAttendanceBonusDaysChange={setAttendanceBonusDays}
           onAttendanceBonusEnabledChange={setAttendanceBonusEnabled}
           onClose={() => setAllowanceEntryId(null)}
+          onDeductionAdd={() =>
+            setEditDeductions((current) => [
+              ...current,
+              { date: formatDateInput(new Date()), reason: "", amount: 0 },
+            ])
+          }
+          onDeductionAmountChange={(index, value) =>
+            setEditDeductions((current) =>
+              current.map((deduction, deductionIndex) =>
+                deductionIndex === index
+                  ? { ...deduction, amount: Math.max(0, value) }
+                  : deduction,
+              ),
+            )
+          }
+          onDeductionDateChange={(index, value) =>
+            setEditDeductions((current) =>
+              current.map((deduction, deductionIndex) =>
+                deductionIndex === index
+                  ? { ...deduction, date: value }
+                  : deduction,
+              ),
+            )
+          }
+          onDeductionReasonChange={(index, value) =>
+            setEditDeductions((current) =>
+              current.map((deduction, deductionIndex) =>
+                deductionIndex === index
+                  ? { ...deduction, reason: value }
+                  : deduction,
+              ),
+            )
+          }
+          onDeductionRemove={(index) =>
+            setEditDeductions((current) =>
+              current.filter((_, deductionIndex) => deductionIndex !== index),
+            )
+          }
           onNameChange={(index, value) =>
             setEditAllowances((current) =>
               current.map((allowance, allowanceIndex) =>
@@ -3734,10 +3831,18 @@ export default function PayrollDetail({
           }
           onSave={() => {
             if (!allowanceEntryId) return;
+            const normalizedDeductions = editDeductions
+              .map((deduction) => ({
+                date: deduction.date || "",
+                reason: deduction.reason.trim() || "Khấu trừ thủ công",
+                amount: Math.max(0, deduction.amount || 0),
+              }))
+              .filter((deduction) => deduction.amount > 0);
             applyEntryPatch(
               allowanceEntryId,
               {
                 allowances: editAllowances,
+                deductions: normalizedDeductions,
                 attendanceBonusEnabled,
                 attendanceBonusDays,
                 attendanceBonusAmount,
@@ -3929,6 +4034,12 @@ export default function PayrollDetail({
           currentShiftEntry?.employeeCode || currentShiftEntry?.employeeId || ""
         }
         initialShifts={currentShiftEntry?.shifts || []}
+        defaultHourlyRate={currentShiftEntry?.hourlyRate || 0}
+        canOverrideHourlyRate={
+          currentShiftEntry
+            ? resolvePayrollSalaryType(currentShiftEntry) === "hourly"
+            : false
+        }
         scheduledStartTimes={
           currentShiftEntry
             ? roleStartTimes[currentShiftEntry.role || defaultRole]

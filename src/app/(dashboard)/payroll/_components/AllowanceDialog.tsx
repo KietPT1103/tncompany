@@ -7,6 +7,7 @@ import { Plus, Trash2, X } from "lucide-react";
 
 export default function AllowanceDialog({
   allowances,
+  deductions,
   attendanceBonusAmount,
   attendanceBonusDays,
   attendanceBonusEnabled,
@@ -18,6 +19,11 @@ export default function AllowanceDialog({
   onAttendanceBonusDaysChange,
   onAttendanceBonusEnabledChange,
   onClose,
+  onDeductionAdd,
+  onDeductionAmountChange,
+  onDeductionDateChange,
+  onDeductionReasonChange,
+  onDeductionRemove,
   onNameChange,
   onRemove,
   onSave,
@@ -25,6 +31,7 @@ export default function AllowanceDialog({
   absentDays,
 }: {
   allowances: { name: string; amount: number }[];
+  deductions: { date: string; reason: string; amount: number }[];
   attendanceBonusAmount: number;
   attendanceBonusDays: number;
   attendanceBonusEnabled: boolean;
@@ -36,6 +43,11 @@ export default function AllowanceDialog({
   onAttendanceBonusDaysChange: (value: number) => void;
   onAttendanceBonusEnabledChange: (value: boolean) => void;
   onClose: () => void;
+  onDeductionAdd: () => void;
+  onDeductionAmountChange: (index: number, value: number) => void;
+  onDeductionDateChange: (index: number, value: string) => void;
+  onDeductionReasonChange: (index: number, value: string) => void;
+  onDeductionRemove: (index: number) => void;
   onNameChange: (index: number, value: string) => void;
   onRemove: (index: number) => void;
   onSave: () => void;
@@ -47,7 +59,7 @@ export default function AllowanceDialog({
       <div className="w-full max-w-3xl overflow-hidden rounded-t-lg border border-slate-200 bg-white shadow-2xl sm:rounded-lg">
         <div className="flex items-start justify-between border-b border-slate-200 px-4 py-4 sm:px-5">
           <div>
-            <h3 className="text-lg font-semibold text-slate-950">Quản lý phụ cấp</h3>
+            <h3 className="text-lg font-semibold text-slate-950">Phụ cấp &amp; khấu trừ</h3>
             <p className="mt-1 text-sm text-slate-500">{employeeName}</p>
           </div>
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-md" onClick={onClose} aria-label="Đóng">
@@ -92,11 +104,34 @@ export default function AllowanceDialog({
               Thêm khoản phụ cấp
             </Button>
           </div>
+
+          <div className="space-y-3 border-t border-slate-200 pt-4">
+            <div>
+              <div className="font-semibold text-slate-900">Khấu trừ thủ công</div>
+              <p className="mt-1 text-sm text-slate-500">Nhập ngày, lý do và số tiền cần trừ trực tiếp khỏi tổng lương của đợt này.</p>
+            </div>
+
+            {deductions.map((item, index) => (
+              <div key={index} className="grid gap-3 rounded-md border border-rose-200 bg-rose-50/50 p-3 md:grid-cols-[150px_1fr_180px_44px]">
+                <Input type="date" value={item.date} onChange={(event) => onDeductionDateChange(index, event.target.value)} className="h-10 rounded-md bg-white" />
+                <Input value={item.reason} onChange={(event) => onDeductionReasonChange(index, event.target.value)} placeholder="Lý do, ví dụ: Đi trễ" className="h-10 rounded-md bg-white" />
+                <InputMoney value={item.amount} set={(value) => onDeductionAmountChange(index, value)} className="h-10 rounded-md bg-white" />
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-md text-rose-600 hover:bg-rose-100" onClick={() => onDeductionRemove(index)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+
+            <Button variant="outline" className="w-full gap-2 rounded-md border-dashed border-rose-300 text-rose-700 hover:bg-rose-50" onClick={onDeductionAdd}>
+              <Plus className="h-4 w-4" />
+              Thêm khoản khấu trừ
+            </Button>
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 border-t border-slate-200 px-4 py-4 sm:px-5">
           <Button variant="outline" className="h-9 w-9 rounded-md" onClick={onClose} aria-label="Đóng">Hủy</Button>
-          <Button className="rounded-md" onClick={onSave}>Lưu phụ cấp</Button>
+          <Button className="rounded-md" onClick={onSave}>Lưu thay đổi</Button>
         </div>
       </div>
     </div>

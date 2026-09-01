@@ -71,6 +71,13 @@ export function getAllowanceTotal(entry: PayrollEntry) {
   return (entry.allowances || []).reduce((sum, item) => sum + item.amount, 0);
 }
 
+export function getManualDeductionTotal(entry: PayrollEntry) {
+  return (entry.deductions || []).reduce(
+    (sum, item) => sum + Math.max(0, item.amount || 0),
+    0,
+  );
+}
+
 export function normalizePayrollSalaryType(value?: PayrollEntry["salaryType"]) {
   return value === "fixed" ? "monthly" : value || "hourly";
 }
@@ -451,6 +458,7 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
   const salaryType = resolvePayrollSalaryType(entry);
   const expectedWorkDays = getExpectedWorkDays(entry);
   const allowanceTotal = getAllowanceTotal(entry);
+  const manualDeductionTotal = getManualDeductionTotal(entry);
   const attendanceBonus = getAttendanceBonusValue(entry);
   const workingDays = getWorkingDays(entry);
   const absentDays = getAbsentDays(entry);
@@ -463,6 +471,25 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
       : 0;
   const overtimeRate =
     salaryType === "monthly" ? Math.max(0, entry.hourlyRate || 0) : 0;
+  const defaultHourlyRate = Math.max(0, entry.hourlyRate || 0);
+  const shiftRateAdjustment =
+    salaryType === "hourly"
+      ? (entry.shifts || []).reduce((total, shift) => {
+          const overrideRate = shift.hourlyRateOverride;
+          if (
+            !shift.isValid ||
+            !Number.isFinite(overrideRate) ||
+            (overrideRate || 0) <= 0
+          ) {
+            return total;
+          }
+          return (
+            total +
+            Math.max(0, shift.hours || 0) *
+              (Math.max(0, overrideRate || 0) - defaultHourlyRate)
+          );
+        }, 0)
+      : 0;
   const salaryMultiplier =
     typeof entry.hourlyMultiplier === "number" &&
     Number.isFinite(entry.hourlyMultiplier)
@@ -479,7 +506,7 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
       : fullMonthlySalary;
     deduction = Math.round(unpaidLeaveDays * (fullMonthlySalary / 30));
   } else {
-    baseSalary = (entry.totalHours || 0) * (entry.hourlyRate || 0);
+    baseSalary = (entry.totalHours || 0) * defaultHourlyRate + shiftRateAdjustment;
   }
 
   if (salaryMultiplier !== 1) {
@@ -495,7 +522,8 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
       overtimePay +
       weekendBonus +
       allowanceTotal +
-      attendanceBonus,
+      attendanceBonus -
+      manualDeductionTotal,
   );
   return {
     absentDays,
@@ -505,11 +533,13 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
     deduction,
     expectedWorkDays,
     hourlyMultiplier: salaryMultiplier,
+    manualDeductionTotal,
     overtimeHours,
     overtimePay,
     overtimeRate,
     roundedSalary: Math.ceil(rawSalary / 1000) * 1000,
     salaryType,
+    shiftRateAdjustment: shiftRateAdjustment * salaryMultiplier,
     standardHours,
     unpaidLeaveDays,
     weekendBonus,

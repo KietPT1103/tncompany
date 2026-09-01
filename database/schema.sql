@@ -501,6 +501,7 @@ CREATE TABLE IF NOT EXISTS payroll_entries (
   weekend_hours DECIMAL(15,3) NOT NULL DEFAULT 0,
   salary DECIMAL(15,2) NOT NULL DEFAULT 0,
   allowances_json LONGTEXT NULL,
+  deductions_json LONGTEXT NULL,
   note TEXT NULL,
   salary_type VARCHAR(20) NOT NULL DEFAULT 'hourly',
   monthly_salary DECIMAL(15,2) NOT NULL DEFAULT 0,

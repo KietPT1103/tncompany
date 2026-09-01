@@ -30,6 +30,7 @@ export interface Shift {
   inTime: string; // ISO string or formatted string
   outTime: string; // ISO string or formatted string
   hours: number;
+  hourlyRateOverride?: number; // đơn giá riêng chỉ áp dụng cho ca này
   isWeekend: boolean;
   isValid: boolean; // if false, it means missing pair
 }
@@ -41,6 +42,8 @@ interface ShiftDetailModalProps {
   employeeName: string;
   employeeId: string;
   initialShifts: Shift[];
+  defaultHourlyRate?: number;
+  canOverrideHourlyRate?: boolean;
   scheduledStartTimes?: Partial<RoleStartTimeSetting>;
 }
 
@@ -166,6 +169,8 @@ export default function ShiftDetailModal({
   employeeName,
   employeeId,
   initialShifts,
+  defaultHourlyRate = 0,
+  canOverrideHourlyRate = true,
   scheduledStartTimes,
 }: ShiftDetailModalProps) {
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -228,6 +233,20 @@ export default function ShiftDetailModal({
       }),
     );
   };
+  const handleHourlyRateOverrideChange = (id: string, rawValue: string) => {
+    setShifts((current) =>
+      current.map((shift) =>
+        shift.id === id
+          ? {
+              ...shift,
+              hourlyRateOverride:
+                rawValue === "" ? undefined : Math.max(0, Number(rawValue) || 0),
+            }
+          : shift,
+      ),
+    );
+  };
+
   const handleDateChange = (id: string, newDate: string) => {
     // newDate is "YYYY-MM-DD"
     setShifts((prev) =>
@@ -835,6 +854,23 @@ export default function ShiftDetailModal({
                           <div className="font-semibold tabular-nums text-slate-900">
                             {hours.toFixed(2)}h
                           </div>
+                          {canOverrideHourlyRate ? (
+                          <label className="mt-2 block">
+                            <span className="text-[11px] font-medium text-slate-500">Đơn giá riêng</span>
+                            <div className="mt-1 flex items-center gap-1">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1000"
+                                value={shift.hourlyRateOverride ?? ""}
+                                placeholder={defaultHourlyRate ? String(defaultHourlyRate) : "Mặc định"}
+                                onChange={(event) => handleHourlyRateOverrideChange(shift.id, event.target.value)}
+                                className="h-8 w-[105px] rounded-md border border-slate-300 bg-white px-2 text-right text-xs tabular-nums outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+                              />
+                              <span className="text-[11px] text-slate-500">đ/h</span>
+                            </div>
+                          </label>
+                          ) : null}
                           {lateMinutes > 0 ? (
                             <div className="mt-1 text-xs font-medium text-amber-700">
                               Trễ {lateMinutes} phút
@@ -962,6 +998,25 @@ export default function ShiftDetailModal({
                         />
                       </label>
                     </div>
+
+                    {canOverrideHourlyRate ? (
+                    <label className="mt-3 block rounded-md bg-slate-50 p-2.5">
+                      <span className="text-xs font-medium text-slate-600">Đơn giá riêng của ca</span>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={shift.hourlyRateOverride ?? ""}
+                          placeholder={defaultHourlyRate ? String(defaultHourlyRate) : "Dùng mức mặc định"}
+                          onChange={(event) => handleHourlyRateOverrideChange(shift.id, event.target.value)}
+                          className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-right text-sm tabular-nums outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+                        />
+                        <span className="shrink-0 text-sm text-slate-500">đ/giờ</span>
+                      </div>
+                      <span className="mt-1 block text-[11px] text-slate-500">Để trống để dùng mức mặc định{defaultHourlyRate ? ` ${defaultHourlyRate.toLocaleString("vi-VN")} đ/giờ` : ""}.</span>
+                    </label>
+                    ) : null}
 
                     <div className="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-slate-200 pt-2.5">
                       <div className="text-sm">
