@@ -884,7 +884,7 @@ export default function PayrollDetail({
     overtimeRate: 0,
     hourlyMultiplier: 1,
   });
-  const [batchHourlyMultiplier, setBatchHourlyMultiplier] = useState(1);
+  const [batchSalaryMultiplier, setBatchSalaryMultiplier] = useState(1);
   const [isApplyingBatchMultiplier, setIsApplyingBatchMultiplier] =
     useState(false);
   const [showBatchMultiplierDialog, setShowBatchMultiplierDialog] =
@@ -1343,9 +1343,7 @@ export default function PayrollDetail({
         standardHours:
           resolvedSalaryType === "monthly" ? nextEntry.standardHours || 0 : 0,
         hourlyMultiplier:
-          resolvedSalaryType === "hourly"
-            ? (nextEntry.hourlyMultiplier ?? 1)
-            : 1,
+          nextEntry.hourlyMultiplier ?? 1,
       };
       persistedEntry.salary = calculatePayrollSalary(persistedEntry);
 
@@ -1429,7 +1427,7 @@ export default function PayrollDetail({
         standardHours:
           resolvedSalaryType === "monthly" ? settingsData.standardHours : 0,
         hourlyMultiplier:
-          resolvedSalaryType === "hourly" ? settingsData.hourlyMultiplier : 1,
+          settingsData.hourlyMultiplier,
         hourlyRate:
           resolvedSalaryType === "monthly"
             ? settingsData.overtimeRate
@@ -2062,16 +2060,16 @@ export default function PayrollDetail({
   const monthlyEntries = entries.filter(
     (entry) => resolvePayrollSalaryType(entry) === "monthly",
   ).length;
-  const hourlyEntries = entries;
-  const uniformHourlyMultiplier =
-    hourlyEntries.length === 0
+  const salaryEntries = entries;
+  const uniformSalaryMultiplier =
+    salaryEntries.length === 0
       ? 1
-      : hourlyEntries.every(
+      : salaryEntries.every(
             (entry) =>
               (entry.hourlyMultiplier ?? 1) ===
-              (hourlyEntries[0]?.hourlyMultiplier ?? 1),
+              (salaryEntries[0]?.hourlyMultiplier ?? 1),
           )
-        ? (hourlyEntries[0]?.hourlyMultiplier ?? 1)
+        ? (salaryEntries[0]?.hourlyMultiplier ?? 1)
         : null;
 
   const allowanceEntry = entries.find((entry) => entry.id === allowanceEntryId);
@@ -2131,7 +2129,7 @@ export default function PayrollDetail({
         "Tiến độ chuyên cần": attendanceProgress
           ? `${attendanceProgress.qualifiedDays}/${attendanceProgress.targetDays}`
           : "",
-        "Hệ số lương giờ": breakdown.hourlyMultiplier ?? 1,
+        "Hệ số lương": breakdown.hourlyMultiplier ?? 1,
         "Lương giờ": Math.round(entry.hourlyRate || 0),
         "Lương tháng": Math.round(
           entry.monthlySalary || entry.fixedSalary || 0,
@@ -2204,17 +2202,17 @@ export default function PayrollDetail({
     XLSX.writeFile(workbook, `${exportBaseName}.xlsx`);
   }
 
-  async function handleApplyBatchHourlyMultiplier() {
-    if (hourlyEntries.length === 0) {
+  async function handleApplyBatchSalaryMultiplier() {
+    if (salaryEntries.length === 0) {
       showNotice(
         "warning",
-        "Không có nhân viên theo giờ",
-        "Bảng lương này không có nhân viên phù hợp để áp dụng hệ số.",
+        "Không có nhân viên",
+        "Bảng lương này không có nhân viên để áp dụng hệ số.",
       );
       return;
     }
 
-    const nextMultiplier = Number(batchHourlyMultiplier);
+    const nextMultiplier = Number(batchSalaryMultiplier);
     if (!Number.isFinite(nextMultiplier) || nextMultiplier < 0) {
       showNotice(
         "warning",
@@ -2228,7 +2226,7 @@ export default function PayrollDetail({
     try {
       await Promise.resolve(debouncedUpdate.flush());
 
-      const updatedHourlyEntries = hourlyEntries
+      const updatedSalaryEntries = salaryEntries
         .filter((entry): entry is PayrollEntry & { id: string } =>
           Boolean(entry.id),
         )
@@ -2241,7 +2239,7 @@ export default function PayrollDetail({
           return nextEntry as PayrollEntry & { id: string };
         });
       const updatedMap = new Map(
-        updatedHourlyEntries.map((entry) => [entry.id, entry]),
+        updatedSalaryEntries.map((entry) => [entry.id, entry]),
       );
 
       setEntries((current) =>
@@ -2251,7 +2249,7 @@ export default function PayrollDetail({
       );
 
       await Promise.all(
-        updatedHourlyEntries.map((entry) =>
+        updatedSalaryEntries.map((entry) =>
           queueEntryPersist(entry, { hourlyMultiplier: nextMultiplier }),
         ),
       );
@@ -2420,14 +2418,14 @@ export default function PayrollDetail({
             <Settings2 className="h-4 w-4 shrink-0 text-amber-700" />
             <p className="min-w-0 text-sm text-amber-900">
               <span className="font-semibold">Hệ số toàn đợt:</span>{" "}
-              {hourlyEntries.length === 0
-                ? "Không có nhân viên theo giờ"
-                : uniformHourlyMultiplier === null
-                  ? hourlyEntries.length + " nhân viên đang dùng nhiều hệ số"
-                  : formatHours(uniformHourlyMultiplier) +
+              {salaryEntries.length === 0
+                ? "Không có nhân viên"
+                : uniformSalaryMultiplier === null
+                  ? salaryEntries.length + " nhân viên đang dùng nhiều hệ số"
+                  : formatHours(uniformSalaryMultiplier) +
                     "x cho " +
-                    hourlyEntries.length +
-                    " nhân viên theo giờ"}
+                    salaryEntries.length +
+                    " nhân viên"}
             </p>
           </div>
           <Button
@@ -2448,7 +2446,7 @@ export default function PayrollDetail({
               disabled:hover:text-amber-800
             "
             onClick={() => setShowBatchMultiplierDialog(true)}
-            disabled={hourlyEntries.length === 0}
+            disabled={salaryEntries.length === 0}
           >
             Điều chỉnh
           </Button>
@@ -3826,8 +3824,8 @@ export default function PayrollDetail({
                   Hệ số lương cho toàn đợt
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Áp dụng một lần cho toàn bộ nhân viên theo giờ của bảng lương
-                  này. Không ảnh hưởng hồ sơ nhân viên hay các đợt lương cũ.
+                  Áp dụng một lần cho toàn bộ nhân viên trong bảng lương này.
+                  Không ảnh hưởng hồ sơ nhân viên hay các đợt lương cũ.
                 </p>
               </div>
               <button
@@ -3845,13 +3843,13 @@ export default function PayrollDetail({
 
             <div className="mt-5 space-y-4">
               <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {hourlyEntries.length === 0
-                  ? "Hiện không có nhân viên theo giờ trong đợt này."
-                  : uniformHourlyMultiplier === null
-                    ? `Đợt này đang có nhiều hệ số khác nhau trên ${hourlyEntries.length} nhân viên theo giờ.`
+                {salaryEntries.length === 0
+                  ? "Hiện không có nhân viên trong đợt này."
+                  : uniformSalaryMultiplier === null
+                    ? `Đợt này đang có nhiều hệ số khác nhau trên ${salaryEntries.length} nhân viên.`
                     : `Đợt này hiện đang dùng hệ số ${formatHours(
-                        uniformHourlyMultiplier,
-                      )} cho ${hourlyEntries.length} nhân viên theo giờ.`}
+                        uniformSalaryMultiplier,
+                      )} cho ${salaryEntries.length} nhân viên.`}
               </div>
 
               <Input
@@ -3859,9 +3857,9 @@ export default function PayrollDetail({
                 min="0"
                 step="0.1"
                 label="Hệ số áp dụng"
-                value={batchHourlyMultiplier}
+                value={batchSalaryMultiplier}
                 onChange={(event) =>
-                  setBatchHourlyMultiplier(Number(event.target.value) || 0)
+                  setBatchSalaryMultiplier(Number(event.target.value) || 0)
                 }
                 className="h-10 rounded-md bg-white text-right"
               />
@@ -3879,11 +3877,11 @@ export default function PayrollDetail({
               <Button
                 className="rounded-md px-5"
                 onClick={async () => {
-                  await handleApplyBatchHourlyMultiplier();
+                  await handleApplyBatchSalaryMultiplier();
                   setShowBatchMultiplierDialog(false);
                 }}
                 isLoading={isApplyingBatchMultiplier}
-                disabled={hourlyEntries.length === 0}
+                disabled={salaryEntries.length === 0}
               >
                 Áp dụng cho cả đợt
               </Button>

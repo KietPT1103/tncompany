@@ -122,8 +122,9 @@ function parseShiftDate(value?: string) {
 }
 
 function inferMonthlyExpectedWorkDays(entry: PayrollEntry) {
-  if ((entry.expectedWorkDays || 0) > 0) {
-    return Math.max(0, entry.expectedWorkDays || 0);
+  const configuredExpectedWorkDays = Math.max(0, entry.expectedWorkDays || 0);
+  if (configuredExpectedWorkDays > 0 && configuredExpectedWorkDays !== 30) {
+    return configuredExpectedWorkDays;
   }
 
   const monthCounts = new Map<string, number>();
@@ -147,7 +148,7 @@ function inferMonthlyExpectedWorkDays(entry: PayrollEntry) {
     }
   }
 
-  return 30;
+  return configuredExpectedWorkDays || 30;
 }
 
 export function getExpectedWorkDays(entry: PayrollEntry) {
