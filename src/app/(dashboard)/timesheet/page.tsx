@@ -276,6 +276,12 @@ export default function TimesheetPage() {
     return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
   };
 
+  const getSelectedMonthCalendarDays = () => {
+    const [year, month] = selectedMonth.split("-").map(Number);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return 0;
+    return new Date(year, month, 0).getDate();
+  };
+
   const handleSelectPeriod = (monthValue: string, period: 1 | 2) => {
     const [year, month] = monthValue.split("-").map(Number);
     const periodStart =
@@ -749,8 +755,10 @@ export default function TimesheetPage() {
           MonthlySalary: matchedDbEmployee?.monthlySalary || 0,
           ExpectedWorkDays: matchedDbEmployee?.expectedWorkDays || 30,
           PayrollPeriodDays:
-            useMonthlySalary && mode === "custom"
-              ? getSelectedCalendarDays()
+            useMonthlySalary
+              ? mode === "month"
+                ? getSelectedMonthCalendarDays()
+                : getSelectedCalendarDays()
               : 0,
           ProrateMonthlyByAttendance:
             useMonthlySalary && mode === "custom",
@@ -932,8 +940,10 @@ export default function TimesheetPage() {
                 ? targetConflict.existingEmployee.expectedWorkDays || 30
                 : targetConflict.existingEmployee.expectedWorkDays || 0,
             PayrollPeriodDays:
-              salaryType === "monthly" && mode === "custom"
-                ? getSelectedCalendarDays()
+              salaryType === "monthly"
+                ? mode === "month"
+                  ? getSelectedMonthCalendarDays()
+                  : getSelectedCalendarDays()
                 : 0,
             ProrateMonthlyByAttendance:
               salaryType === "monthly" && mode === "custom",

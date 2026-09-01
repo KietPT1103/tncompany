@@ -153,7 +153,6 @@ function inferMonthlyExpectedWorkDays(entry: PayrollEntry) {
 export function getExpectedWorkDays(entry: PayrollEntry) {
   if (
     resolvePayrollSalaryType(entry) === 'monthly' &&
-    entry.prorateMonthlyByAttendance &&
     (entry.payrollPeriodDays || 0) > 0
   ) {
     return Math.max(0, entry.payrollPeriodDays || 0);
@@ -475,7 +474,7 @@ export function getPayrollBreakdown(entry: PayrollEntry) {
   if (salaryType === "monthly") {
     const fullMonthlySalary = entry.monthlySalary || entry.fixedSalary || 0;
     baseSalary = entry.prorateMonthlyByAttendance
-      ? (fullMonthlySalary / 30) * expectedWorkDays
+      ? (fullMonthlySalary / 30) * Math.min(expectedWorkDays, 30)
       : fullMonthlySalary;
     deduction = Math.round(unpaidLeaveDays * (fullMonthlySalary / 30));
   } else {
