@@ -42,13 +42,15 @@ test("summarizes completed bills and keeps cancelled bills out of revenue", () =
     ],
     new Date("2026-08-17T00:00:00+07:00"),
     new Date("2026-08-18T23:59:59+07:00"),
-    new Set(),
+    new Set(["TRA01"]),
     new Set(["CF01", "TRA01"]),
   );
 
   assert.equal(snapshot.totalRevenue, 200_000);
   assert.equal(snapshot.orderCount, 2);
   assert.equal(snapshot.customerCount, 5);
+  assert.equal(snapshot.cupCount, 5);
+  assert.equal(snapshot.bakeryCount, 1);
   assert.equal(snapshot.cancelledCount, 1);
   assert.equal(snapshot.averageOrder, 100_000);
   assert.equal(snapshot.itemsSold, 5);
@@ -110,6 +112,7 @@ test("aggregates cup-based customer counts by hour and excludes cancelled bills"
   assert.equal(nineAm?.orders, 2);
   assert.equal(nineAm?.customers, 3);
   assert.equal(snapshot.customerCount, 3);
+  assert.equal(snapshot.cupCount, 3);
 });
 
 test("percentage change handles a zero comparison period", () => {

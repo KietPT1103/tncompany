@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowDownRight, ArrowUpRight, Banknote, CircleDollarSign, ClipboardList, CreditCard, PackageCheck, XCircle } from "lucide-react";
+import { ArrowDownLeft, ArrowDownRight, ArrowUpRight, Banknote, CakeSlice, CircleDollarSign, ClipboardList, CreditCard, CupSoda, PackageCheck, XCircle } from "lucide-react";
 import type { OverviewSnapshot, OverviewVoucherTotals } from "./overviewData";
 
 const formatMoney = (value: number) =>
@@ -47,6 +47,27 @@ export default function OverviewKpiBand({
           <p className="mt-1 text-sm text-slate-500">Tóm tắt theo khoảng thời gian đang chọn</p>
         </div>
         <span className="hidden text-xs font-medium text-slate-400 sm:inline">Đơn vị: VNĐ</span>
+      </div>
+
+      <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100" aria-label="Số lượng đồ uống và bánh đã bán">
+        <div className="flex min-w-0 items-center gap-3 bg-emerald-50/60 px-4 py-3 sm:px-5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+            <CupSoda className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium text-slate-500 sm:text-sm">Số ly đã bán</p>
+            <p className="mt-0.5 text-xl font-black tabular-nums text-emerald-900 sm:text-2xl">{formatNumber(snapshot.cupCount)}</p>
+          </div>
+        </div>
+        <div className="flex min-w-0 items-center gap-3 bg-amber-50/60 px-4 py-3 sm:px-5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <CakeSlice className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium text-slate-500 sm:text-sm">Số bánh đã bán</p>
+            <p className="mt-0.5 text-xl font-black tabular-nums text-amber-800 sm:text-2xl">{formatNumber(snapshot.bakeryCount)}</p>
+          </div>
+        </div>
       </div>
 
       <div className="grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">

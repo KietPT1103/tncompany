@@ -63,6 +63,8 @@ export type OverviewSnapshot = {
   totalRevenue: number;
   orderCount: number;
   customerCount: number;
+  cupCount: number;
+  bakeryCount: number;
   cancelledCount: number;
   averageOrder: number;
   itemsSold: number;
@@ -283,6 +285,7 @@ export function buildOverviewSnapshot(
   const bakeryProductTotals = new Map<string, ProductPerformance>();
   const paymentTotals = { cash: 0, transfer: 0 };
   let customerCount = 0;
+  let bakeryCount = 0;
 
   completedBills.forEach((bill) => {
     const billCustomerCount = bill.items.reduce((total, item) => {
@@ -324,8 +327,10 @@ export function buildOverviewSnapshot(
       current.revenue += Number(item.lineTotal || 0);
       productTotals.set(name, current);
       if (item.menuId && bakeryProductCodes.has(item.menuId)) {
+        const quantity = Number(item.quantity || 0);
+        if (Number.isFinite(quantity) && quantity > 0) bakeryCount += quantity;
         const bakeryCurrent = bakeryProductTotals.get(name) || { name, quantity: 0, revenue: 0 };
-        bakeryCurrent.quantity += Number(item.quantity || 0);
+        bakeryCurrent.quantity += quantity;
         bakeryCurrent.revenue += Number(item.lineTotal || 0);
         bakeryProductTotals.set(name, bakeryCurrent);
       }
@@ -346,6 +351,8 @@ export function buildOverviewSnapshot(
     totalRevenue,
     orderCount: completedBills.length,
     customerCount,
+    cupCount: customerCount,
+    bakeryCount,
     cancelledCount: scopedBills.length - completedBills.length,
     averageOrder: completedBills.length ? totalRevenue / completedBills.length : 0,
     itemsSold,
