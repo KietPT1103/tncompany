@@ -1,4 +1,4 @@
-import { CalendarRange, CakeSlice, CupSoda } from "lucide-react";
+import { CalendarRange, CakeSlice, CircleDollarSign, CupSoda } from "lucide-react";
 import type { OverviewWeeklyQuantityRow } from "@/services/overviewShiftService";
 
 const formatQuantity = (value: number) =>
@@ -12,8 +12,19 @@ const shiftColumns = [
   { key: "shift_3", label: "Ca 3" },
 ] as const;
 
-const getDailyRevenue = (row: OverviewWeeklyQuantityRow) =>
-  shiftColumns.reduce((total, shift) => total + row.shifts[shift.key].revenue, 0);
+const getDailyTotals = (row: OverviewWeeklyQuantityRow) =>
+  shiftColumns.reduce(
+    (totals, shift) => {
+      const quantity = row.shifts[shift.key];
+
+      return {
+        cups: totals.cups + quantity.cups,
+        bakery: totals.bakery + quantity.bakery,
+        revenue: totals.revenue + quantity.revenue,
+      };
+    },
+    { cups: 0, bakery: 0, revenue: 0 },
+  );
 
 export default function OverviewWeeklyQuantity({
   rows,
@@ -43,44 +54,68 @@ export default function OverviewWeeklyQuantity({
       ) : (
         <>
           <div className="divide-y divide-slate-100 md:hidden">
-            {rows.map((row) => (
-              <article key={row.dateKey}>
-                <div className="flex items-center justify-between bg-slate-50/80 px-4 py-2">
-                  <div className="flex min-w-0 items-baseline gap-2">
-                    <p className="shrink-0 text-sm font-semibold capitalize text-slate-900">
+            {rows.map((row) => {
+              const dailyTotals = getDailyTotals(row);
+
+              return (
+                <article key={row.dateKey} className="px-3 py-3">
+                  <div className="flex items-center justify-between px-1">
+                    <p className="text-sm font-semibold capitalize text-slate-900">
                       {row.date.toLocaleDateString("vi-VN", { weekday: "long" })}
                     </p>
-                    <p className="truncate text-[10px] font-bold tabular-nums text-sky-700">
-                      Tổng {formatRevenue(getDailyRevenue(row))}
+                    <p className="text-xs tabular-nums text-slate-500">
+                      {row.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}
                     </p>
                   </div>
-                  <p className="shrink-0 text-xs text-slate-500">
-                    {row.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 divide-x divide-slate-100">
-                  {shiftColumns.map((shift) => {
-                    const quantity = row.shifts[shift.key];
-                    return (
-                      <div key={shift.key} className="min-w-0 px-1.5 py-2.5 text-center">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{shift.label}</p>
-                        <p className="mt-1.5 flex items-center justify-center gap-1 whitespace-nowrap text-[11px] font-semibold tabular-nums text-emerald-800">
-                          <CupSoda className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          Nước {formatQuantity(quantity.cups)}
-                        </p>
-                        <p className="mt-1 flex items-center justify-center gap-1 whitespace-nowrap text-[11px] font-semibold tabular-nums text-amber-700">
-                          <CakeSlice className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          Bánh {formatQuantity(quantity.bakery)}
-                        </p>
-                        <p className="mt-1 whitespace-nowrap text-[10px] font-bold tabular-nums text-sky-700">
-                          DT {formatRevenue(quantity.revenue)}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </article>
-            ))}
+
+                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 shadow-sm">
+                    <div className="rounded-lg bg-white px-2.5 py-2">
+                      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        <CupSoda className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
+                        Tổng số ly
+                      </p>
+                      <p className="mt-0.5 text-base font-bold tabular-nums text-emerald-800">{formatQuantity(dailyTotals.cups)} ly</p>
+                    </div>
+                    <div className="rounded-lg bg-white px-2.5 py-2">
+                      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        <CakeSlice className="h-3.5 w-3.5 text-amber-700" aria-hidden="true" />
+                        Tổng số bánh
+                      </p>
+                      <p className="mt-0.5 text-base font-bold tabular-nums text-amber-700">{formatQuantity(dailyTotals.bakery)} bánh</p>
+                    </div>
+                    <div className="col-span-2 rounded-lg bg-sky-50 px-2.5 py-2 ring-1 ring-inset ring-sky-100">
+                      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                        <CircleDollarSign className="h-3.5 w-3.5" aria-hidden="true" />
+                        Tổng tiền trong ngày
+                      </p>
+                      <p className="mt-0.5 text-lg font-extrabold tabular-nums text-sky-700">{formatRevenue(dailyTotals.revenue)}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-3 divide-x divide-slate-100 rounded-lg border border-slate-100">
+                    {shiftColumns.map((shift) => {
+                      const quantity = row.shifts[shift.key];
+                      return (
+                        <div key={shift.key} className="min-w-0 px-1.5 py-2.5 text-center">
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{shift.label}</p>
+                          <p className="mt-1.5 flex items-center justify-center gap-1 whitespace-nowrap text-[11px] font-semibold tabular-nums text-emerald-800">
+                            <CupSoda className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            Nước {formatQuantity(quantity.cups)}
+                          </p>
+                          <p className="mt-1 flex items-center justify-center gap-1 whitespace-nowrap text-[11px] font-semibold tabular-nums text-amber-700">
+                            <CakeSlice className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            Bánh {formatQuantity(quantity.bakery)}
+                          </p>
+                          <p className="mt-1 whitespace-nowrap text-[10px] font-bold tabular-nums text-sky-700">
+                            DT {formatRevenue(quantity.revenue)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+              );
+            })}
           </div>
 
           <div className="hidden overflow-x-auto md:block">
@@ -92,33 +127,44 @@ export default function OverviewWeeklyQuantity({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {rows.map((row) => (
-                <tr key={row.dateKey} className="hover:bg-slate-50/70">
-                  <td className="whitespace-nowrap px-5 py-3">
-                    <p className="font-semibold capitalize text-slate-900">{row.date.toLocaleDateString("vi-VN", { weekday: "long" })}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{row.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
-                    <p className="mt-1 text-xs font-bold tabular-nums text-sky-700">Tổng ngày: {formatRevenue(getDailyRevenue(row))}</p>
-                  </td>
-                  {shiftColumns.map((shift) => {
-                    const quantity = row.shifts[shift.key];
-                    return (
-                      <td key={shift.key} className="px-5 py-3">
-                        <p className="flex items-center gap-1.5 font-semibold tabular-nums text-emerald-800">
-                          <CupSoda className="h-4 w-4" aria-hidden="true" />
-                          Nước: {formatQuantity(quantity.cups)} ly
-                        </p>
-                        <p className="mt-1 flex items-center gap-1.5 font-semibold tabular-nums text-amber-700">
-                          <CakeSlice className="h-4 w-4" aria-hidden="true" />
-                          Bánh: {formatQuantity(quantity.bakery)}
-                        </p>
-                        <p className="mt-1 font-bold tabular-nums text-sky-700">
-                          Doanh thu: {formatRevenue(quantity.revenue)}
-                        </p>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const dailyTotals = getDailyTotals(row);
+
+                return (
+                  <tr key={row.dateKey} className="hover:bg-slate-50/70">
+                    <td className="whitespace-nowrap px-5 py-3">
+                      <p className="font-semibold capitalize text-slate-900">{row.date.toLocaleDateString("vi-VN", { weekday: "long" })}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{row.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
+                      <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tổng trong ngày</p>
+                        <div className="mt-1 flex items-center gap-3 text-xs font-bold tabular-nums">
+                          <span className="text-emerald-800">{formatQuantity(dailyTotals.cups)} ly</span>
+                          <span className="text-amber-700">{formatQuantity(dailyTotals.bakery)} bánh</span>
+                        </div>
+                        <p className="mt-1 text-sm font-extrabold tabular-nums text-sky-700">{formatRevenue(dailyTotals.revenue)}</p>
+                      </div>
+                    </td>
+                    {shiftColumns.map((shift) => {
+                      const quantity = row.shifts[shift.key];
+                      return (
+                        <td key={shift.key} className="px-5 py-3">
+                          <p className="flex items-center gap-1.5 font-semibold tabular-nums text-emerald-800">
+                            <CupSoda className="h-4 w-4" aria-hidden="true" />
+                            Nước: {formatQuantity(quantity.cups)} ly
+                          </p>
+                          <p className="mt-1 flex items-center gap-1.5 font-semibold tabular-nums text-amber-700">
+                            <CakeSlice className="h-4 w-4" aria-hidden="true" />
+                            Bánh: {formatQuantity(quantity.bakery)}
+                          </p>
+                          <p className="mt-1 font-bold tabular-nums text-sky-700">
+                            Doanh thu: {formatRevenue(quantity.revenue)}
+                          </p>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           </div>
