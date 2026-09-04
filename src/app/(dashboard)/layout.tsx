@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import AdminSidebar from "@/AdminSidebar";
-import { AdminMobileHeader } from "@/components/admin/AdminMobileHeader";
 import { useAuth } from "@/context/AuthContext";
 
 const SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
@@ -42,7 +41,6 @@ export default function DashboardLayout({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        {!isCashierBillsPage && <AdminMobileHeader />}
         <main
           className={`flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC] ${
             isCashierBillsPage ? "pt-0" : "pt-16 lg:pt-0"

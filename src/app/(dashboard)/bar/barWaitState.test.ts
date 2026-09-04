@@ -11,13 +11,14 @@ test("bills from 0 through 5 minutes stay in the normal state", () => {
   assert.equal(getBarWaitState(5), "normal");
 });
 
-test("bills from 6 through 10 minutes enter the warning state", () => {
+test("bills from 6 through 11 minutes enter the warning state", () => {
   assert.equal(getBarWaitState(6), "warning");
   assert.equal(getBarWaitState(10), "warning");
+  assert.equal(getBarWaitState(11), "warning");
 });
 
-test("bills from 11 minutes enter the urgent state", () => {
-  assert.equal(getBarWaitState(11), "urgent");
+test("bills become urgent only after waiting more than 11 minutes", () => {
+  assert.equal(getBarWaitState(12), "urgent");
   assert.equal(getBarWaitState(60), "urgent");
 });
 

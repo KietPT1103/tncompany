@@ -22,20 +22,19 @@ import {
   Gauge,
   KeyRound,
   LogOut,
-  Menu,
   MessageSquareText,
   Package,
   PackageSearch,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Plus,
   ReceiptText,
   Tags,
   Tractor,
   Truck,
   UtensilsCrossed,
   Wallet,
-  X,
 } from "lucide-react";
+import { getAdminMobileHeaderAction } from "@/components/admin/adminMobileHeaderConfig";
+import DashboardSidebarShell from "@/components/dashboard/DashboardSidebarShell";
 import { useAuth } from "@/context/AuthContext";
 import { StoreType, useStore } from "@/context/StoreContext";
 import type { AppPermission, UserRole } from "@/types/auth";
@@ -317,7 +316,6 @@ export default function AdminSidebar({
   const userRole = user?.role || null;
   const { setStoreId, storeId, storeName } = useStore();
   const isStoreLocked = userRole === "user" || userRole === "server" || userRole === "bartender";
-  const [isOpen, setIsOpen] = useState(false);
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const storeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -356,17 +354,16 @@ export default function AdminSidebar({
   }, [showStoreMenu]);
 
   useEffect(() => {
-    if (!isOpen && !showStoreMenu) return;
+    if (!showStoreMenu) return;
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setIsOpen(false);
       setShowStoreMenu(false);
     };
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [isOpen, showStoreMenu]);
+  }, [showStoreMenu]);
 
   const canViewItem = (item: NavItem) => {
     if (item.roles?.length && (!userRole || !item.roles.includes(userRole))) {
@@ -422,191 +419,142 @@ export default function AdminSidebar({
   const currentStore =
     storeOptions.find((option) => option.id === storeId) || storeOptions[0];
   const CurrentStoreIcon = currentStore.icon;
-
-  return (
-    <>
-      {!isOpen ? (
-        <button
-          type="button"
-          className="fixed left-4 top-3 z-50 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-800 text-[#ffb800] shadow-[0_2px_8px_rgba(0,35,25,0.24)] transition-[background-color,color,transform] duration-150 ease-out hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-800 focus-visible:ring-offset-2 active:scale-[0.96] motion-reduce:transition-none lg:hidden"
-          onClick={() => setIsOpen(true)}
-          aria-label="Mở menu"
-          aria-controls="admin-sidebar"
-          aria-expanded="false"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      ) : null}
-
-      <aside
-        id="admin-sidebar"
-        aria-label="Điều hướng quản trị"
+  const mobileHeaderAction = getAdminMobileHeaderAction(pathname);
+  const storeSelector = (
+    <div ref={storeMenuRef} className="relative mt-3">
+      <button
+        type="button"
+        onClick={() => {
+          if (!isStoreLocked) setShowStoreMenu((value) => !value);
+        }}
+        disabled={isStoreLocked}
         className={cn(
-          "admin-sidebar admin-sidebar__ease fixed font-nunito inset-y-0 left-0 z-40 flex h-screen w-[280px] flex-col shadow-[0_8px_24px_rgba(0,35,25,0.24)] transition-[transform,width] duration-200 motion-reduce:transition-none lg:static lg:translate-x-0 lg:border-r lg:border-[#F6C85F]/20 lg:shadow-none",
-          isOpen ? "translate-x-0" : "-translate-x-full",
-          collapsed ? "lg:w-[72px]" : "lg:w-[248px]",
+          "flex h-14 w-full items-center justify-between rounded-lg bg-white/[0.06] px-2.5 text-left ring-1 ring-inset ring-white/15 transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none",
+          collapsed &&
+            "lg:mx-auto lg:h-10 lg:w-10 lg:justify-center lg:p-0",
         )}
+        aria-haspopup="listbox"
+        aria-expanded={showStoreMenu}
+        aria-label={`Khu vực hiện tại: ${currentStore.label}`}
+        title={collapsed ? currentStore.label : undefined}
       >
-        <div
-          className={cn(
-            "border-b border-white/10 px-3 py-3",
-            collapsed && "lg:px-2",
-          )}
-        >
-          <div
-            className={cn(
-              "flex items-center justify-between gap-2",
-              collapsed && "lg:flex-col lg:justify-center",
-            )}
-          >
-            <div
-              className={cn(
-                "flex min-w-0 items-center",
-                collapsed && "lg:hidden",
-              )}
-            >
-              <div className="flex h-14 w-[166px] shrink-0 items-center overflow-hidden">
-                <img
-                  src="/assets/tn_services.png"
-                  alt="TN Services"
-                  className="h-auto w-full max-w-none"
-                  draggable={false}
-                />
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[#FDE7A3] transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none lg:hidden"
-              aria-label="Đóng menu"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            {onToggleCollapsed ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowStoreMenu(false);
-                  onToggleCollapsed();
-                }}
-                className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#F6C85F] transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/10 hover:text-[#FDE7A3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none lg:inline-flex"
-                aria-label={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
-                title={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
-              >
-                {collapsed ? (
-                  <PanelLeftOpen className="h-4 w-4" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4" />
-                )}
-              </button>
-            ) : null}
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F6C85F]/15 text-[#F6C85F] ring-1 ring-inset ring-[#F6C85F]/25">
+            <CurrentStoreIcon className="h-4 w-4" />
           </div>
-
-          <div ref={storeMenuRef} className="relative mt-3">
-            <button
-              type="button"
-              onClick={() => {
-                if (!isStoreLocked) setShowStoreMenu((value) => !value);
-              }}
-              disabled={isStoreLocked}
-              className={cn(
-                "flex h-14 w-full items-center justify-between rounded-lg bg-white/[0.06] px-2.5 text-left ring-1 ring-inset ring-white/15 transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none",
-                collapsed &&
-                  "lg:mx-auto lg:h-10 lg:w-10 lg:justify-center lg:p-0",
-              )}
-              aria-haspopup="listbox"
-              aria-expanded={showStoreMenu}
-              aria-label={"Khu vực hiện tại: " + currentStore.label}
-              title={collapsed ? currentStore.label : undefined}
-            >
-              <div className="flex min-w-0 items-center gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F6C85F]/15 text-[#F6C85F] ring-1 ring-inset ring-[#F6C85F]/25">
-                  <CurrentStoreIcon className="h-4 w-4" />
-                </div>
-                <div className={cn("min-w-0", collapsed && "lg:hidden")}>
-                  <div className="truncate text-sm font-semibold text-white">
-                    {currentStore.label}
-                  </div>
-                  <div className="truncate text-xs text-[#B8D8CC]">
-                    {storeName}
-                  </div>
-                </div>
-              </div>
-              {!isStoreLocked && <ChevronsUpDown
-                className={cn(
-                  "h-4 w-4 shrink-0 text-[#F6C85F] transition-transform duration-200 ease-out motion-reduce:transition-none",
-                  showStoreMenu && "rotate-180",
-                  collapsed && "lg:hidden",
-                )}
-              />}
-            </button>
-
-            {showStoreMenu && !isStoreLocked ? (
-              <div
-                role="listbox"
-                aria-label="Chọn khu vực"
-                className={cn(
-                  "absolute left-0 top-[calc(100%+8px)] z-50 w-full animate-in rounded-lg bg-[#073D31] p-1.5 text-white shadow-[0_4px_8px_rgba(0,25,18,0.28)] ring-1 ring-white/15 duration-150 fade-in-0 zoom-in-95 motion-reduce:animate-none",
-                  collapsed && "lg:left-[calc(100%+12px)] lg:top-0 lg:w-60",
-                )}
-              >
-                {storeOptions.map((option) => {
-                  const Icon = option.icon;
-                  const active = option.id === storeId;
-
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      onClick={() => {
-                        if (active) {
-                          setShowStoreMenu(false);
-                          return;
-                        }
-                        setStoreId(option.id);
-                        window.location.assign("/admin");
-                      }}
-                      className={cn(
-                        "flex min-h-12 w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-[background-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white motion-reduce:transition-none",
-                        active
-                          ? "bg-[#F6C85F] text-[#063B2E]"
-                          : "text-[#D7EEE6] hover:bg-white/10 hover:text-white",
-                      )}
-                    >
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <div
-                          className={cn(
-                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
-                            active
-                              ? "bg-[#063B2E]/10 text-[#063B2E]"
-                              : "bg-white/10 text-[#F6C85F]",
-                          )}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold">
-                            {option.label}
-                          </div>
-                          <div className="truncate text-xs text-inherit/75">
-                            {option.note}
-                          </div>
-                        </div>
-                      </div>
-                      {active ? <Check className="h-4 w-4 shrink-0" /> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
+          <div className={cn("min-w-0", collapsed && "lg:hidden")}>
+            <div className="truncate text-sm font-semibold text-white">
+              {currentStore.label}
+            </div>
+            <div className="truncate text-xs text-[#B8D8CC]">{storeName}</div>
           </div>
         </div>
+        {!isStoreLocked ? (
+          <ChevronsUpDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-[#F6C85F] transition-transform duration-200 ease-out motion-reduce:transition-none",
+              showStoreMenu && "rotate-180",
+              collapsed && "lg:hidden",
+            )}
+          />
+        ) : null}
+      </button>
 
-        <nav
+      {showStoreMenu && !isStoreLocked ? (
+        <div
+          role="listbox"
+          aria-label="Chọn khu vực"
+          className={cn(
+            "absolute left-0 top-[calc(100%+8px)] z-50 w-full animate-in rounded-lg bg-[#073D31] p-1.5 text-white shadow-[0_4px_8px_rgba(0,25,18,0.28)] ring-1 ring-white/15 duration-150 fade-in-0 zoom-in-95 motion-reduce:animate-none",
+            collapsed && "lg:left-[calc(100%+12px)] lg:top-0 lg:w-60",
+          )}
+        >
+          {storeOptions.map((option) => {
+            const Icon = option.icon;
+            const active = option.id === storeId;
+
+            return (
+              <button
+                key={option.id}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  if (active) {
+                    setShowStoreMenu(false);
+                    return;
+                  }
+                  setStoreId(option.id);
+                  window.location.assign("/admin");
+                }}
+                className={cn(
+                  "flex min-h-12 w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-[background-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white motion-reduce:transition-none",
+                  active
+                    ? "bg-[#F6C85F] text-[#063B2E]"
+                    : "text-[#D7EEE6] hover:bg-white/10 hover:text-white",
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div
+                    className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                      active
+                        ? "bg-[#063B2E]/10 text-[#063B2E]"
+                        : "bg-white/10 text-[#F6C85F]",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">
+                      {option.label}
+                    </div>
+                    <div className="truncate text-xs text-inherit/75">
+                      {option.note}
+                    </div>
+                  </div>
+                </div>
+                {active ? <Check className="h-4 w-4 shrink-0" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <DashboardSidebarShell
+      collapsed={collapsed}
+      headerExtra={storeSelector}
+      mobileHeaderAction={
+        mobileHeaderAction ? (
+          <Link
+            href={mobileHeaderAction.href}
+            aria-label={mobileHeaderAction.label}
+            title={mobileHeaderAction.label}
+            className="absolute right-4 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md bg-emerald-800 text-[#ffb800] shadow-[0_2px_6px_rgba(0,25,18,0.22)] transition-[background-color,transform] duration-150 ease-out hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064E3B] active:-translate-y-1/2 active:scale-[0.96] motion-reduce:transition-none"
+          >
+            <Plus className="h-5 w-5" aria-hidden="true" />
+          </Link>
+        ) : null
+      }
+      mobileHeaderLabel="Thanh điều hướng quản trị"
+      mobileMenuLabel="menu quản trị"
+      onToggleCollapsed={
+        onToggleCollapsed
+          ? () => {
+              setShowStoreMenu(false);
+              onToggleCollapsed();
+            }
+          : undefined
+      }
+      sidebarId="admin-sidebar"
+      sidebarLabel="Điều hướng quản trị"
+    >
+      {({ closeMobileMenu }) => (
+        <>
+          <nav
           aria-label="Menu quản trị"
           className={cn(
             "flex-1 overflow-x-hidden overflow-y-auto px-3 py-3",
@@ -621,7 +569,7 @@ export default function AdminSidebar({
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setIsOpen(false)}
+                  onClick={closeMobileMenu}
                   aria-current={isActive ? "page" : undefined}
                   title={collapsed ? item.label : undefined}
                   className={cn(
@@ -735,7 +683,7 @@ export default function AdminSidebar({
                             <Link
                               key={item.href}
                               href={item.href}
-                              onClick={() => setIsOpen(false)}
+                              onClick={closeMobileMenu}
                               aria-current={isActive ? "page" : undefined}
                               tabIndex={isGroupOpen ? undefined : -1}
                               className={cn(
@@ -772,7 +720,10 @@ export default function AdminSidebar({
         >
           <button
             type="button"
-            onClick={logout}
+            onClick={() => {
+              closeMobileMenu();
+              void logout();
+            }}
             title={collapsed ? "Đăng xuất" : undefined}
             className={cn(
               "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold text-[#F6C85F] transition-[background-color,color,transform] duration-150 ease-out hover:bg-[#F6C85F] hover:text-[#063B2E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064E3B] active:scale-[0.96] motion-reduce:transition-none",
@@ -783,15 +734,8 @@ export default function AdminSidebar({
             <span className={cn(collapsed && "lg:sr-only")}>Đăng xuất</span>
           </button>
         </div>
-      </aside>
-
-      {isOpen ? (
-        <div
-          className="fixed inset-0 z-30 bg-[#032B22]/60 lg:hidden"
-          onClick={() => setIsOpen(false)}
-          aria-hidden="true"
-        />
-      ) : null}
-    </>
+        </>
+      )}
+    </DashboardSidebarShell>
   );
 }
