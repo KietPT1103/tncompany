@@ -13,3 +13,9 @@ export function getInitialBarSidebarCollapsed(
 export function getNextBarSidebarCollapsed(currentValue: boolean) {
   return !currentValue;
 }
+
+export function getBarSidebarContentPadding(collapsed: boolean) {
+  return collapsed
+    ? "pt-16 lg:pl-[72px] lg:pt-0"
+    : "pt-16 lg:pl-[248px] lg:pt-0";
+}

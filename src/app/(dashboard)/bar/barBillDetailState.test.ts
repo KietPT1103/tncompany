@@ -31,22 +31,25 @@ test("closes the detail dialog", () => {
   assert.equal(state, null);
 });
 
-test("moves a new bill to the preparing column from the dialog", () => {
+test("completes a new bill directly from the dialog", () => {
   assert.deepEqual(getBarBillDetailAdvance("new"), {
-    label: "Bắt đầu pha",
-    targetStatus: "preparing",
+    label: "Hoàn thành",
+    targetStatus: "collected",
   });
 });
 
-test("moves a preparing bill to the ready column from the dialog", () => {
+test("completes any legacy active bill directly from the dialog", () => {
   assert.deepEqual(getBarBillDetailAdvance("preparing"), {
-    label: "Đã pha xong",
-    targetStatus: "ready",
+    label: "Hoàn thành",
+    targetStatus: "collected",
+  });
+  assert.deepEqual(getBarBillDetailAdvance("ready"), {
+    label: "Hoàn thành",
+    targetStatus: "collected",
   });
 });
 
-test("does not show a transition action after the bill is ready", () => {
-  assert.equal(getBarBillDetailAdvance("ready"), null);
+test("does not show a completion action for collected bills", () => {
   assert.equal(getBarBillDetailAdvance("collected"), null);
 });
 

@@ -23,19 +23,11 @@ export function barBillDetailReducer(
 export function getBarBillDetailAdvance(
   status: BarBillWorkflowStatus,
 ): BarBillDetailAdvance | null {
-  if (status === "new") {
-    return {
-      label: "Bắt đầu pha",
-      targetStatus: "preparing",
-    };
-  }
-  if (status === "preparing") {
-    return {
-      label: "Đã pha xong",
-      targetStatus: "ready",
-    };
-  }
-  return null;
+  if (status === "collected") return null;
+  return {
+    label: "Hoàn thành",
+    targetStatus: "collected",
+  };
 }
 
 export function shouldOpenBarBillDetailFromCard(didDrag: boolean): boolean {
