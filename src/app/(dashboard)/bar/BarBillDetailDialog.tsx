@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, CheckCircle2, Clock3, Coffee, X } from "lucide-react";
+import { Check, Clock3, Coffee, Loader2, X } from "lucide-react";
 import type {
   BarPrintJob,
   BarWorkflowStatus,
@@ -27,13 +27,6 @@ const formatQuantity = (quantity: number) =>
 const getShortCode = (job: BarPrintJob) => {
   const value = job.sourceBillId || job.id;
   return (value.length > 10 ? value.slice(-8) : value).toUpperCase();
-};
-
-const statusLabel: Record<BarWorkflowStatus, string> = {
-  new: "Bill mới",
-  preparing: "Đang pha chế",
-  ready: "Chờ khách lấy",
-  collected: "Khách đã lấy",
 };
 
 export default function BarBillDetailDialog({
@@ -130,20 +123,9 @@ export default function BarBillDetailDialog({
   const urgent = waitState === "urgent";
   const status = displayJob.workflowStatus;
   const advance = getBarBillDetailAdvance(status);
-  const statusClasses = urgent
-    ? "bg-red-50 text-red-700 ring-red-200"
-    : status === "new"
-      ? "bg-[#FFF3D2] text-[#9A6700] ring-[#F6C85F]/60"
-      : status === "preparing"
-        ? "bg-[#EAF3FF] text-[#0D5DC4] ring-[#B9D5FA]"
-        : "bg-[#E8F3EE] text-[#064E3B] ring-[#B8D8CC]";
   const quantityClasses = urgent
     ? "bg-red-600 text-white"
-    : status === "preparing"
-      ? "bg-[#1265D6] text-white"
-      : status === "ready" || status === "collected"
-        ? "bg-[#064E3B] text-[#F6C85F]"
-        : "bg-slate-900 text-white";
+    : "bg-[#006B52] text-[#F6C85F]";
 
   return createPortal(
     <div
@@ -171,11 +153,7 @@ export default function BarBillDetailDialog({
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
                 urgent
                   ? "bg-red-600 text-white"
-                  : status === "preparing"
-                    ? "bg-[#1265D6] text-white"
-                    : status === "ready" || status === "collected"
-                      ? "bg-[#064E3B] text-[#F6C85F]"
-                      : "bg-[#FFF3D2] text-[#D89200]"
+                  : "bg-[#006B52] text-[#F6C85F]"
               }`}
             >
               <Coffee className="h-5 w-5" />
@@ -188,10 +166,6 @@ export default function BarBillDetailDialog({
                 #{getShortCode(displayJob)}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${statusClasses}`}>
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {statusLabel[status]}
-                </span>
                 <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${
                   urgent
                     ? "bg-red-50 text-red-700 ring-red-200"
@@ -255,16 +229,16 @@ export default function BarBillDetailDialog({
             className={`group/action inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 ${
               urgent && advance
                 ? "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500"
-                : status === "new" && advance
-                  ? "bg-[#161616] text-[#F6C85F] hover:bg-black focus-visible:ring-[#F6C85F]"
-                  : status === "preparing" && advance
-                    ? "bg-[#1265D6] text-white hover:bg-[#0D5DC4] focus-visible:ring-[#1265D6]"
-                    : "bg-[#064E3B] text-white hover:bg-[#043D30] focus-visible:ring-[#F6C85F]"
+                : "bg-[#006B52] text-[#F6C85F] hover:bg-[#005943] focus-visible:ring-[#F6C85F]"
             }`}
           >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : null}
+            {!busy && advance ? <Check className="h-4 w-4" /> : null}
             {advance?.label || "Đóng"}
             {advance ? (
-              <ArrowRight className="h-4 w-4 transition-transform duration-200 ease-out group-hover/action:translate-x-1 motion-reduce:transform-none motion-reduce:transition-none" />
+              <span className="sr-only">bill</span>
             ) : null}
           </button>
         </footer>

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type DragEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -14,100 +13,77 @@ import {
   BellRing,
   CheckCircle2,
   ChefHat,
-  Clock3,
-  Coffee,
-  GripVertical,
+  ChevronDown,
   History,
   Loader2,
-  Maximize2,
   Printer,
   RefreshCcw,
-  RotateCcw,
-  Sparkles,
+  Undo2,
   Volume2,
   VolumeX,
   X,
 } from "lucide-react";
 import AdminSidebar from "@/AdminSidebar";
-import { AdminMobileHeader } from "@/components/admin/AdminMobileHeader";
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import {
-  BarPrintJob,
-  BarWorkflowStatus,
+  type BarPrintJob,
   subscribeBarBoard,
   subscribeBarHistory,
   updateBarWorkflowStatus,
 } from "@/services/barPrintJobService";
-import BarNavigationSidebar from "./BarNavigationSidebar";
 import BarBillDetailDialog from "./BarBillDetailDialog";
+import {
+  getActiveBarQueue,
+  getBarQueueColumns,
+  getBarQueueNumber,
+  getBarQueueOverflowCount,
+  getMobileBarQueue,
+} from "./barBoardQueue";
 import {
   barBillDetailReducer,
   initialBarBillDetailState,
-  shouldOpenBarBillDetailFromCard,
 } from "./barBillDetailState";
-import { getBarSidebarVariant } from "./barSidebarState";
+import { toggleHistoryBillDisclosure } from "./barHistoryDisclosure";
+import BarNavigationSidebar from "./BarNavigationSidebar";
+import BarReceiptCard from "./BarReceiptCard";
 import {
-  BAR_URGENT_PULSE_INTERVAL_MS,
-  getBarUrgentPulsePhase,
+  BAR_SIDEBAR_STORAGE_KEY,
+  getBarSidebarContentPadding,
+  getBarSidebarVariant,
+  getInitialBarSidebarCollapsed,
+} from "./barSidebarState";
+import {
+  BAR_URGENT_REMINDER_INTERVAL_MS,
   getBarWaitState,
 } from "./barWaitState";
 
 const ADMIN_SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
-type ActiveStatus = Exclude<BarWorkflowStatus, "collected">;
+const UNDO_COMPLETION_WINDOW_MS = 5_000;
 type AlertKind = "new" | "urgent";
-
-const columns: Array<{
-  id: ActiveStatus;
-  title: string;
-  hint: string;
-  icon: typeof BellRing;
-  tone: string;
-  badge: string;
-}> = [
-  {
-    id: "new",
-    title: "Bill mới",
-    hint: "Chưa bắt đầu",
-    icon: BellRing,
-    tone: "border-amber-200 bg-amber-50/60",
-    badge: "bg-amber-100 text-amber-800",
-  },
-  {
-    id: "preparing",
-    title: "Đang pha chế",
-    hint: "Đã xem & đang làm",
-    icon: Coffee,
-    tone: "border-sky-200 bg-sky-50/60",
-    badge: "bg-sky-100 text-sky-800",
-  },
-  {
-    id: "ready",
-    title: "Chờ khách lấy",
-    hint: "Đã hoàn thành",
-    icon: CheckCircle2,
-    tone: "border-emerald-200 bg-emerald-50/60",
-    badge: "bg-emerald-100 text-emerald-800",
-  },
-];
 
 const getCreatedDate = (job: BarPrintJob) =>
   job.createdAt?.seconds ? new Date(job.createdAt.seconds * 1000) : new Date();
+
 const getCollectedDate = (job: BarPrintJob) =>
   job.collectedAt?.seconds
     ? new Date(job.collectedAt.seconds * 1000)
     : getCreatedDate(job);
+
+const elapsedMinutes = (job: BarPrintJob, now: number) =>
+  Math.max(0, Math.floor((now - getCreatedDate(job).getTime()) / 60_000));
+
 const shortCode = (job: BarPrintJob) => {
   const value = job.sourceBillId || job.id;
   return (value.length > 10 ? value.slice(-8) : value).toUpperCase();
 };
+
 const formatQuantity = (quantity: number) =>
   Number.isInteger(quantity)
     ? String(quantity)
     : quantity.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
-const elapsedMinutes = (job: BarPrintJob, now: number) =>
-  Math.max(0, Math.floor((now - getCreatedDate(job).getTime()) / 60000));
+
 const getInitialAdminSidebarCollapsed = () => {
   if (typeof window === "undefined") return false;
   try {
@@ -117,249 +93,16 @@ const getInitialAdminSidebarCollapsed = () => {
   }
 };
 
-function BillCard({
-  job,
-  now,
-  busy,
-  urgentPulseActive,
-  onMove,
-  onShowDetails,
-}: {
-  job: BarPrintJob;
-  now: number;
-  busy: boolean;
-  urgentPulseActive: boolean;
-  onMove: (job: BarPrintJob, status: BarWorkflowStatus) => void;
-  onShowDetails: (job: BarPrintJob) => void;
-}) {
-  const dragPreviewRef = useRef<HTMLElement | null>(null);
-  const nativeDragImageRef = useRef<HTMLCanvasElement | null>(null);
-  const didDragRef = useRef(false);
-  const dragPointerOffsetRef = useRef({ x: 0, y: 0 });
-  const minutes = elapsedMinutes(job, now);
-  const waitState = getBarWaitState(minutes);
-  const urgent = waitState === "urgent";
-  const warning = waitState === "warning";
-  const isNew = job.workflowStatus === "new";
-  const isPreparing = job.workflowStatus === "preparing";
-  const isReady = job.workflowStatus === "ready";
-  const nextStatus: BarWorkflowStatus =
-    job.workflowStatus === "new"
-      ? "preparing"
-      : job.workflowStatus === "preparing"
-        ? "ready"
-        : "collected";
-  const totalQuantity = job.items.reduce(
-    (total, item) => total + item.quantity,
-    0,
-  );
-  const actionLabel =
-    job.workflowStatus === "new"
-      ? "Bắt đầu pha"
-      : job.workflowStatus === "preparing"
-        ? "Đã pha xong"
-        : "Khách đã lấy";
-
-  const removeDragPreview = useCallback(() => {
-    dragPreviewRef.current?.remove();
-    nativeDragImageRef.current?.remove();
-    dragPreviewRef.current = null;
-    nativeDragImageRef.current = null;
-  }, []);
-
-  const positionDragPreview = useCallback((clientX: number, clientY: number) => {
-    const preview = dragPreviewRef.current;
-    if (!preview || (clientX === 0 && clientY === 0)) return;
-    const { x, y } = dragPointerOffsetRef.current;
-    preview.style.transform = `translate3d(${clientX - x}px, ${clientY - y}px, 0) rotate(0.6deg) scale(1.015)`;
-  }, []);
-
-  useEffect(() => removeDragPreview, [removeDragPreview]);
-
-  return (
-    <article
-      draggable={!busy}
-      data-urgent={urgent ? "true" : undefined}
-      data-urgent-pulse={urgent ? (urgentPulseActive ? "on" : "off") : undefined}
-      onClick={() => {
-        if (shouldOpenBarBillDetailFromCard(didDragRef.current)) {
-          onShowDetails(job);
-        }
-      }}
-      onDragStart={(event) => {
-        didDragRef.current = true;
-        event.dataTransfer.setData("text/bar-job", job.id);
-        event.dataTransfer.effectAllowed = "move";
-
-        removeDragPreview();
-        const source = event.currentTarget;
-        const bounds = source.getBoundingClientRect();
-        dragPointerOffsetRef.current = {
-          x: event.clientX - bounds.left,
-          y: event.clientY - bounds.top,
-        };
-
-        const nativeDragImage = document.createElement("canvas");
-        nativeDragImage.width = 1;
-        nativeDragImage.height = 1;
-        Object.assign(nativeDragImage.style, {
-          position: "fixed",
-          left: "-2px",
-          top: "-2px",
-          pointerEvents: "none",
-        });
-        document.body.appendChild(nativeDragImage);
-        nativeDragImageRef.current = nativeDragImage;
-        event.dataTransfer.setDragImage(nativeDragImage, 0, 0);
-
-        const preview = source.cloneNode(true) as HTMLElement;
-        preview.removeAttribute("draggable");
-        preview.setAttribute("aria-hidden", "true");
-        preview.dataset.barDragPreview = "true";
-        Object.assign(preview.style, {
-          position: "fixed",
-          inset: "0 auto auto 0",
-          zIndex: "9999",
-          width: `${bounds.width}px`,
-          maxHeight: `calc(100vh - 24px)`,
-          margin: "0",
-          overflow: "hidden",
-          pointerEvents: "none",
-          opacity: "1",
-          animation: "none",
-          filter: "none",
-          backgroundColor: "white",
-          boxShadow: "0 18px 44px rgba(15, 23, 42, 0.22)",
-          transformOrigin: "top left",
-          transition: "box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1)",
-          willChange: "transform",
-        });
-        document.body.appendChild(preview);
-        dragPreviewRef.current = preview;
-        positionDragPreview(event.clientX, event.clientY);
-      }}
-      onDrag={(event) => positionDragPreview(event.clientX, event.clientY)}
-      onDragEnd={() => {
-        removeDragPreview();
-        window.setTimeout(() => {
-          didDragRef.current = false;
-        }, 0);
-      }}
-      className={`group cursor-pointer transform-gpu border p-3 transition-[transform,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:shadow-[0_10px_22px_rgba(15,23,42,0.12)] motion-reduce:transform-none motion-reduce:transition-none ${urgent && urgentPulseActive ? "bg-red-50/60" : "bg-white"} ${isNew ? `rounded-xl border-l-[5px] ${urgent ? "border-l-red-500" : "border-l-[#F6C85F] shadow-[0_4px_14px_rgba(15,23,42,0.08)]"}` : isPreparing ? `rounded-xl border-l-4 ${urgent ? "border-l-red-500" : "border-l-[#1265D6] shadow-[0_4px_14px_rgba(18,101,214,0.09)]"}` : isReady ? `rounded-xl border-l-4 ${urgent ? "border-l-red-500" : "border-l-[#064E3B] shadow-[0_4px_14px_rgba(6,78,59,0.1)]"}` : "rounded-sm shadow-sm"} ${urgent ? `border-slate-200 ${urgentPulseActive ? "shadow-[0_10px_26px_rgba(220,38,38,0.24)]" : "shadow-[0_4px_14px_rgba(220,38,38,0.12)]"} motion-reduce:bg-white motion-reduce:shadow-[0_4px_14px_rgba(220,38,38,0.14)]` : warning ? "border-slate-200 ring-2 ring-slate-100" : "border-slate-200"}`}
-    >
-      <div>
-        <div>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-slate-300 active:cursor-grabbing" />
-                <h3 className="truncate text-lg font-black text-slate-900">
-                  {job.tableNumber || "Mang về"}
-                </h3>
-              </div>
-              <p className="mt-1 pl-6 text-xs font-bold uppercase tracking-wider text-slate-400">
-                #{shortCode(job)}
-              </p>
-            </div>
-            <div
-              className={`flex shrink-0 ${isPreparing || isReady ? "flex-col items-end gap-1" : ""}`}
-            >
-              <div
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${urgent ? "bg-rose-100 text-red-700 ring-1 ring-inset ring-red-200" : warning ? "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200" : "bg-white text-slate-700 ring-1 ring-inset ring-slate-200 shadow-sm"}`}
-              >
-                <Clock3 className="h-3.5 w-3.5" />
-                {minutes} phút
-              </div>
-              {isPreparing ? (
-                <span
-                  className={`flex items-center gap-1 text-[10px] font-bold ${urgent ? "text-red-700" : "text-[#315A8A]"}`}
-                >
-                  Đang pha chế
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${urgent ? "bg-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.14)]" : "bg-[#1265D6] shadow-[0_0_0_3px_rgba(18,101,214,0.12)]"}`}
-                  />
-                </span>
-              ) : isReady ? (
-                <span
-                  className={`flex items-center gap-1 text-[10px] font-bold ${urgent ? "text-red-700" : "text-[#16634F]"}`}
-                >
-                  Chờ khách lấy
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${urgent ? "bg-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.14)]" : "bg-[#F6C85F] shadow-[0_0_0_3px_rgba(246,200,95,0.2)]"}`}
-                  />
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <div
-            className={`mt-2 flex items-center justify-between border-t border-dashed border-slate-200 pl-6 pt-2 text-xs font-bold leading-5 transition hover:text-slate-900 ${isNew ? "text-slate-700" : "text-slate-500"}`}
-          >
-            <span className="flex items-center gap-1.5">
-              <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${urgent ? "bg-red-600 text-white" : isNew ? "bg-[#FFF3D2] text-[#D89200]" : isPreparing ? "bg-[#EAF3FF] text-[#1265D6]" : isReady ? "bg-[#FFF3D2] text-[#064E3B]" : "bg-slate-100 text-slate-600"}`}
-              >
-                <Coffee className="h-4 w-4 stroke-[2.4]" />
-              </span>
-              <span>
-                {job.items.length} món · {formatQuantity(totalQuantity)} phần
-              </span>
-            </span>
-            <button
-              type="button"
-              draggable={false}
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                onShowDetails(job);
-              }}
-              className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${urgent ? "hover:bg-red-50 focus-visible:ring-red-500" : isNew ? "hover:bg-[#FFF9EC] focus-visible:ring-[#F6C85F]" : isPreparing ? "hover:bg-[#EAF3FF] focus-visible:ring-[#1265D6]" : "hover:bg-[#E8F3EE] focus-visible:ring-[#064E3B]"}`}
-              aria-label={`Xem chi tiết bill ${job.tableNumber || "Mang về"}`}
-            >
-              Xem chi tiết{" "}
-              <Maximize2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="mt-3 flex gap-2">
-        {job.workflowStatus !== "new" ? (
-          <button
-            type="button"
-            draggable={false}
-            disabled={busy}
-            onClick={(event) => {
-              event.stopPropagation();
-              onMove(
-                job,
-                job.workflowStatus === "ready" ? "preparing" : "new",
-              );
-            }}
-            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 ${urgent ? "border-red-600 bg-red-600 text-white hover:border-red-700 hover:bg-red-700 focus-visible:ring-red-500" : isPreparing ? "border-[#B9D5FA] bg-white text-[#1265D6] hover:bg-[#EEF5FF] focus-visible:ring-[#1265D6]" : isReady ? "border-[#B8D8CC] bg-white text-[#064E3B] hover:bg-[#FFF8E5] focus-visible:ring-[#F6C85F]" : "border-slate-200 text-slate-500 hover:bg-slate-100 focus-visible:ring-slate-400"}`}
-            title="Chuyển lại"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </button>
-        ) : null}
-        <button
-          type="button"
-          draggable={false}
-          disabled={busy}
-          onClick={(event) => {
-            event.stopPropagation();
-            onMove(job, nextStatus);
-          }}
-          className={`group/action inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg px-3 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-[.98] disabled:opacity-60 ${urgent ? "bg-red-600 text-white shadow-[0_3px_8px_rgba(220,38,38,0.28)] hover:bg-red-700 focus-visible:ring-red-500" : isNew ? "bg-[#161616] text-[#F6C85F] shadow-[0_3px_8px_rgba(15,23,42,0.2)] hover:bg-black focus-visible:ring-[#F6C85F]" : isPreparing ? "bg-[#1265D6] text-white shadow-[0_3px_8px_rgba(18,101,214,0.22)] hover:bg-[#0D5DC4] focus-visible:ring-[#1265D6]" : isReady ? "bg-[#064E3B] text-[#F6C85F] shadow-[0_3px_8px_rgba(6,78,59,0.22)] hover:bg-[#043D30] focus-visible:ring-[#F6C85F]" : "bg-slate-900 text-white hover:bg-slate-800 focus-visible:ring-slate-600"}`}
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {actionLabel}
-          {!busy ? (
-            <ArrowRight className="h-4 w-4 transition-transform duration-200 ease-out group-hover/action:translate-x-1 motion-reduce:transform-none motion-reduce:transition-none" />
-          ) : null}
-        </button>
-      </div>
-    </article>
-  );
-}
+const getInitialBarSidebarCollapsedPreference = () => {
+  if (typeof window === "undefined") return true;
+  try {
+    return getInitialBarSidebarCollapsed(
+      window.localStorage.getItem(BAR_SIDEBAR_STORAGE_KEY),
+    );
+  } catch {
+    return true;
+  }
+};
 
 export default function BarBoardPage() {
   const { role, user } = useAuth();
@@ -376,16 +119,20 @@ export default function BarBoardPage() {
     assignedStore
       ? assignedStore
       : selectedStoreId;
+
   const [jobs, setJobs] = useState<BarPrintJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncError, setSyncError] = useState("");
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
-  const [dragOver, setDragOver] = useState<BarWorkflowStatus | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyJobs, setHistoryJobs] = useState<BarPrintJob[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [lastCompleted, setLastCompleted] = useState<BarPrintJob | null>(null);
   const [detailJobId, dispatchDetailJob] = useReducer(
     barBillDetailReducer,
     initialBarBillDetailState,
@@ -393,14 +140,39 @@ export default function BarBoardPage() {
   const [adminSidebarCollapsed, setAdminSidebarCollapsed] = useState(
     getInitialAdminSidebarCollapsed,
   );
-  const [now, setNow] = useState(Date.now());
-  const [urgentPulseActive, setUrgentPulseActive] = useState(() =>
-    getBarUrgentPulsePhase(Date.now()),
+  const [barSidebarCollapsed, setBarSidebarCollapsed] = useState(
+    getInitialBarSidebarCollapsedPreference,
   );
+  const [now, setNow] = useState(Date.now());
   const knownIds = useRef<Set<string> | null>(null);
   const alertAudio = useRef<Partial<Record<AlertKind, HTMLAudioElement>>>({});
   const urgentIds = useRef<Set<string> | null>(null);
   const sidebarVariant = getBarSidebarVariant(role);
+
+  const activeQueue = useMemo(() => getActiveBarQueue(jobs), [jobs]);
+  const queueColumns = useMemo(
+    () => getBarQueueColumns(activeQueue),
+    [activeQueue],
+  );
+  const mobileQueue = useMemo(
+    () => getMobileBarQueue(activeQueue),
+    [activeQueue],
+  );
+  const queueOverflowCount = useMemo(
+    () => getBarQueueOverflowCount(activeQueue),
+    [activeQueue],
+  );
+  const detailJob = useMemo(
+    () => activeQueue.find((job) => job.id === detailJobId) || null,
+    [activeQueue, detailJobId],
+  );
+  const hasUrgentJobs = useMemo(
+    () =>
+      activeQueue.some(
+        (job) => getBarWaitState(elapsedMinutes(job, now)) === "urgent",
+      ),
+    [activeQueue, now],
+  );
 
   const playAlert = useCallback(
     (kindOrForce: AlertKind | boolean = "new", force = false) => {
@@ -426,22 +198,10 @@ export default function BarBoardPage() {
   );
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => {
-    let timer = 0;
-    const synchronizePulse = () => {
-      const timestamp = Date.now();
-      setUrgentPulseActive(getBarUrgentPulsePhase(timestamp));
-      const nextBoundary =
-        BAR_URGENT_PULSE_INTERVAL_MS -
-        (timestamp % BAR_URGENT_PULSE_INTERVAL_MS);
-      timer = window.setTimeout(synchronizePulse, nextBoundary + 8);
-    };
-    synchronizePulse();
-    return () => window.clearTimeout(timer);
-  }, []);
+
   useEffect(() => {
     if (sidebarVariant !== "admin") return;
     try {
@@ -453,6 +213,19 @@ export default function BarBoardPage() {
       /* The admin sidebar still works without persisted preferences. */
     }
   }, [adminSidebarCollapsed, sidebarVariant]);
+
+  useEffect(() => {
+    if (sidebarVariant !== "bar") return;
+    try {
+      window.localStorage.setItem(
+        BAR_SIDEBAR_STORAGE_KEY,
+        barSidebarCollapsed ? "1" : "0",
+      );
+    } catch {
+      /* The bar sidebar still works without persisted preferences. */
+    }
+  }, [barSidebarCollapsed, sidebarVariant]);
+
   useEffect(() => {
     try {
       localStorage.removeItem(`pos:bar-auto-print:${storeId}`);
@@ -461,6 +234,7 @@ export default function BarBoardPage() {
       /* Ignore unavailable browser storage. */
     }
   }, [storeId]);
+
   useEffect(() => {
     setLoading(true);
     knownIds.current = null;
@@ -471,12 +245,10 @@ export default function BarBoardPage() {
         const nextIds = new Set(nextJobs.map((job) => job.id));
         if (
           knownIds.current &&
-          nextJobs.some(
-            (job) =>
-              job.workflowStatus === "new" && !knownIds.current?.has(job.id),
-          )
-        )
-          playAlert();
+          nextJobs.some((job) => !knownIds.current?.has(job.id))
+        ) {
+          playAlert("new");
+        }
         knownIds.current = nextIds;
         setJobs(nextJobs);
         setLoading(false);
@@ -488,9 +260,10 @@ export default function BarBoardPage() {
       },
     );
   }, [playAlert, storeId]);
+
   useEffect(() => {
     const nextUrgentIds = new Set(
-      jobs
+      activeQueue
         .filter(
           (job) => getBarWaitState(elapsedMinutes(job, now)) === "urgent",
         )
@@ -499,15 +272,30 @@ export default function BarBoardPage() {
     if (
       urgentIds.current &&
       [...nextUrgentIds].some((id) => !urgentIds.current?.has(id))
-    )
+    ) {
       playAlert("urgent");
+    }
     urgentIds.current = nextUrgentIds;
-  }, [jobs, now, playAlert]);
+  }, [activeQueue, now, playAlert]);
+
   useEffect(() => {
-    if (!jobs.some((job) => job.workflowStatus === "new")) return;
-    const reminder = window.setInterval(() => playAlert("new"), 2000);
+    if (!hasUrgentJobs) return;
+    const reminder = window.setInterval(
+      () => playAlert("urgent"),
+      BAR_URGENT_REMINDER_INTERVAL_MS,
+    );
     return () => window.clearInterval(reminder);
-  }, [jobs, playAlert]);
+  }, [hasUrgentJobs, playAlert]);
+
+  useEffect(() => {
+    if (!lastCompleted) return;
+    const timer = window.setTimeout(
+      () => setLastCompleted(null),
+      UNDO_COMPLETION_WINDOW_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [lastCompleted]);
+
   useEffect(() => {
     if (!historyOpen) return;
     setHistoryLoading(true);
@@ -524,67 +312,61 @@ export default function BarBoardPage() {
       },
     );
   }, [historyOpen, storeId]);
-  const grouped = useMemo(
-    () =>
-      Object.fromEntries(
-        columns.map((column) => [
-          column.id,
-          jobs.filter((job) => job.workflowStatus === column.id),
-        ]),
-      ) as Record<ActiveStatus, BarPrintJob[]>,
-    [jobs],
-  );
-  const detailJob = useMemo(
-    () => jobs.find((job) => job.id === detailJobId) || null,
-    [detailJobId, jobs],
-  );
-  const moveJob = async (job: BarPrintJob, status: BarWorkflowStatus) => {
-    if (job.workflowStatus === status || busyIds.has(job.id)) return;
-    const previous = job.workflowStatus;
-    setBusyIds((ids) => new Set(ids).add(job.id));
-    setJobs((items) =>
-      status === "collected"
-        ? items.filter((item) => item.id !== job.id)
-        : items.map((item) =>
-            item.id === job.id ? { ...item, workflowStatus: status } : item,
-          ),
-    );
+
+  const setJobBusy = (jobId: string, busy: boolean) => {
+    setBusyIds((ids) => {
+      const next = new Set(ids);
+      if (busy) next.add(jobId);
+      else next.delete(jobId);
+      return next;
+    });
+  };
+
+  const completeJob = async (job: BarPrintJob) => {
+    if (busyIds.has(job.id)) return;
+    setJobBusy(job.id, true);
+    setJobs((items) => items.filter((item) => item.id !== job.id));
     try {
-      await updateBarWorkflowStatus(job.id, status, storeId);
+      await updateBarWorkflowStatus(job.id, "collected", storeId);
+      setLastCompleted(job);
+      dispatchDetailJob({ type: "close" });
     } catch (error) {
       console.error(error);
-      setJobs((items) =>
-        [
-          ...items.filter((item) => item.id !== job.id),
-          { ...job, workflowStatus: previous },
-        ].sort(
-          (a, b) => getCreatedDate(a).getTime() - getCreatedDate(b).getTime(),
-        ),
-      );
-      setSyncError("Không cập nhật được bill. Vui lòng thử lại.");
+      setJobs((items) => getActiveBarQueue([...items, job]));
+      setSyncError("Không hoàn thành được bill. Vui lòng thử lại.");
     } finally {
-      setBusyIds((ids) => {
-        const next = new Set(ids);
-        next.delete(job.id);
-        return next;
-      });
+      setJobBusy(job.id, false);
     }
   };
-  const handleDrop = (event: DragEvent, status: BarWorkflowStatus) => {
-    event.preventDefault();
-    setDragOver(null);
-    const job = jobs.find(
-      (item) => item.id === event.dataTransfer.getData("text/bar-job"),
-    );
-    if (job) void moveJob(job, status);
+
+  const undoLastCompletion = async () => {
+    const job = lastCompleted;
+    if (!job || busyIds.has(job.id)) return;
+    setLastCompleted(null);
+    setJobBusy(job.id, true);
+    setJobs((items) => getActiveBarQueue([...items, job]));
+    try {
+      await updateBarWorkflowStatus(job.id, job.workflowStatus, storeId);
+    } catch (error) {
+      console.error(error);
+      setJobs((items) => items.filter((item) => item.id !== job.id));
+      setSyncError("Không hoàn tác được bill. Vui lòng thử lại.");
+    } finally {
+      setJobBusy(job.id, false);
+    }
   };
+
   return (
     <RoleGuard
       permission={role === "bartender" ? "bar.access" : "bills.access"}
     >
       <div className="flex h-screen overflow-hidden bg-[#F4F5F7]">
         {sidebarVariant === "bar" ? (
-          <BarNavigationSidebar onOpenHistory={() => setHistoryOpen(true)} />
+          <BarNavigationSidebar
+            collapsed={barSidebarCollapsed}
+            onCollapsedChange={setBarSidebarCollapsed}
+            onOpenHistory={() => setHistoryOpen(true)}
+          />
         ) : (
           <AdminSidebar
             collapsed={adminSidebarCollapsed}
@@ -593,17 +375,25 @@ export default function BarBoardPage() {
             }
           />
         )}
-        {sidebarVariant === "admin" ? <AdminMobileHeader /> : null}
+
         <main
-          className={`h-screen min-w-0 flex-1 overflow-y-auto bg-[#F4F5F7] text-slate-900 ${sidebarVariant === "bar" ? "pl-14 lg:pl-[72px]" : "pt-16 lg:pt-0"}`}
+          className={`h-screen min-w-0 flex-1 overflow-y-auto bg-[#F4F5F7] text-slate-900 ${
+            sidebarVariant === "bar"
+              ? getBarSidebarContentPadding(barSidebarCollapsed)
+              : "pt-16 lg:pt-0"
+          }`}
         >
           <header
-            className={`sticky z-20 border-b border-[#DDE1E7] bg-white/95 px-4 py-2 shadow-[0_2px_8px_rgba(15,23,42,0.05)] backdrop-blur md:px-5 ${sidebarVariant === "admin" ? "top-16 lg:top-0" : "top-0"}`}
+            className={`border-b border-[#DDE1E7] bg-white/95 px-4 py-2 shadow-[0_2px_8px_rgba(15,23,42,0.05)] backdrop-blur md:px-5 ${
+              sidebarVariant === "admin"
+                ? "relative z-10 lg:sticky lg:top-0 lg:z-20"
+                : "sticky top-0 z-20"
+            }`}
           >
             <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#064E3B] text-[#F6C85F]">
-                  <ChefHat className="h-5 w-5" />
+                  <ChefHat className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -619,13 +409,14 @@ export default function BarBoardPage() {
                   </p>
                 </div>
               </div>
+
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setHistoryOpen(true)}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#064E3B] focus-visible:ring-offset-2"
                 >
-                  <History className="h-4 w-4" />
+                  <History className="h-4 w-4" aria-hidden="true" />
                   <span className="hidden sm:inline">Lịch sử đã lấy</span>
                 </button>
                 <button
@@ -635,12 +426,17 @@ export default function BarBoardPage() {
                     setSoundEnabled(next);
                     if (next) window.setTimeout(() => playAlert(true), 0);
                   }}
-                  className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition ${soundEnabled ? "border-[#E9CAA0] bg-[#FCF7EF] text-[#8A5611]" : "border-slate-200 bg-white text-slate-600"}`}
+                  aria-pressed={soundEnabled}
+                  className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 ${
+                    soundEnabled
+                      ? "border-[#E9CAA0] bg-[#FCF7EF] text-[#8A5611]"
+                      : "border-slate-200 bg-white text-slate-600"
+                  }`}
                 >
                   {soundEnabled ? (
-                    <Volume2 className="h-4 w-4" />
+                    <Volume2 className="h-4 w-4" aria-hidden="true" />
                   ) : (
-                    <VolumeX className="h-4 w-4" />
+                    <VolumeX className="h-4 w-4" aria-hidden="true" />
                   )}
                   <span className="hidden sm:inline">Âm báo</span>
                 </button>
@@ -648,152 +444,286 @@ export default function BarBoardPage() {
                   className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#176A57] px-3 text-sm font-bold text-white"
                   title="Windows Print Agent gửi phiếu thẳng tới máy in LAN"
                 >
-                  <Printer className="h-4 w-4" />
+                  <Printer className="h-4 w-4" aria-hidden="true" />
                   In tự động qua agent
                 </span>
               </div>
             </div>
           </header>
-          <section className="mx-auto max-w-[1800px] overflow-x-auto p-4 md:p-6">
+
+          <section className="mx-auto max-w-[1800px] p-3 sm:p-4 md:p-6">
             {syncError ? (
               <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-                <RefreshCcw className="h-4 w-4 animate-spin" />
+                <RefreshCcw className="h-4 w-4 animate-spin" aria-hidden="true" />
                 {syncError}
               </div>
             ) : null}
-            <div className="mb-4 flex min-w-[980px] flex-wrap items-center justify-between gap-2">
-              <p className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-                <Sparkles className="h-4 w-4 text-amber-500" />
-                Kéo bill sang cột kế tiếp hoặc dùng nút trên từng bill.
-              </p>
-              <p className="text-sm font-bold text-slate-600">
-                {jobs.length} bill đang hoạt động
-              </p>
+
+            <div className="mb-3 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.05)] sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:border-0 sm:bg-transparent sm:px-1 sm:py-0 sm:shadow-none">
+              <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#E9F4F0] text-[#176A57] sm:mt-0.5 sm:h-7 sm:w-7 sm:rounded-full">
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 pt-0.5 sm:pt-0">
+                  <h2 className="text-sm font-black leading-5 text-slate-950">
+                    Bill xếp từ trái sang phải
+                  </h2>
+                  <p className="mt-0.5 text-xs font-semibold leading-[1.45] text-slate-600">
+                    Bill cũ nhất ở cột trái, sau đó tiếp tục sang cột kế bên
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 flex w-full shrink-0 items-center gap-2 border-t border-slate-100 pt-2.5 sm:mt-0 sm:w-auto sm:justify-end sm:border-0 sm:pt-0">
+                <span
+                  role="status"
+                  aria-live="polite"
+                  className="inline-flex h-9 min-w-0 flex-1 items-center justify-between rounded-lg bg-[#E6F3EE] pl-3 pr-1.5 text-xs font-bold text-[#315F53] sm:w-40 sm:flex-none"
+                >
+                  <span className="whitespace-nowrap">Bill đang xử lý:</span>
+                  <strong className="inline-flex h-7 min-w-8 items-center justify-center rounded-md bg-[#064E3B] px-2 text-sm font-black tabular-nums text-[#F6C85F]">
+                    {activeQueue.length}
+                  </strong>
+                </span>
+                <span
+                  role="status"
+                  aria-live="polite"
+                  className="inline-flex h-9 min-w-0 flex-1 items-center justify-between rounded-lg bg-[#FFF3D2] pl-2 pr-1.5 text-[11px] font-bold text-[#8A5611] sm:w-40 sm:flex-none sm:pl-3 sm:text-xs"
+                >
+                  <span className="whitespace-nowrap">Bill đang chờ:</span>
+                  <strong className="inline-flex h-7 min-w-8 items-center justify-center rounded-md bg-[#C87500] px-2 text-sm font-black tabular-nums text-white">
+                    {queueOverflowCount}
+                  </strong>
+                </span>
+              </div>
             </div>
-            <div className="grid min-w-[980px] grid-cols-3 gap-4 xl:gap-6">
-              {columns.map((column) => {
-                const Icon = column.icon;
-                const columnJobs = grouped[column.id];
-                const isNewColumn = column.id === "new";
-                const isPreparingColumn = column.id === "preparing";
-                const isReadyColumn = column.id === "ready";
-                const isDesignedColumn =
-                  isNewColumn || isPreparingColumn || isReadyColumn;
+
+            <section
+              aria-labelledby="bar-mobile-queue-title"
+              aria-busy={loading}
+              className="min-h-[240px] overflow-hidden rounded-xl border border-[#EED39C] bg-[#FFFCF6] shadow-[0_8px_22px_rgba(71,55,31,0.05)] md:hidden"
+            >
+              <header className="relative flex min-h-20 items-center justify-between overflow-hidden border-b border-slate-200 bg-white px-4 py-3">
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 h-4 w-24 rounded-br-full bg-[#F6C85F]"
+                />
+
+                <div className="relative flex items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F6C85F] text-slate-950 shadow-[0_3px_8px_rgba(246,200,95,0.25)]">
+                    <BellRing className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h3
+                      id="bar-mobile-queue-title"
+                      className="text-sm font-black uppercase leading-5 tracking-[-0.01em] text-slate-950"
+                    >
+                      Bill mới
+                    </h3>
+                    <p className="text-xs font-medium leading-4 text-slate-500">
+                      Chưa bắt đầu
+                    </p>
+                  </div>
+                </div>
+
+                <span
+                  aria-label={`${mobileQueue.length} bill đang hiển thị`}
+                  className="relative inline-flex h-7 min-w-8 items-center justify-center rounded-full bg-[#F6C85F] px-2 text-sm font-black tabular-nums text-slate-950 shadow-[0_3px_8px_rgba(246,200,95,0.22)]"
+                >
+                  {mobileQueue.length}
+                </span>
+              </header>
+
+              <div className="space-y-3 p-3">
+                {loading
+                  ? Array.from({ length: 3 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className="mx-auto h-44 w-full max-w-[440px] animate-pulse bg-[length:100%_100%] bg-no-repeat"
+                        style={{
+                          backgroundImage: "url('/assets/bar/bill-bg.png')",
+                        }}
+                      />
+                    ))
+                  : null}
+
+                {!loading
+                  ? mobileQueue.map((job, billIndex) => (
+                      <BarReceiptCard
+                        key={job.id}
+                        job={job}
+                        queueNumber={billIndex + 1}
+                        now={now}
+                        busy={busyIds.has(job.id)}
+                        onComplete={(selectedJob) => {
+                          void completeJob(selectedJob);
+                        }}
+                        onShowDetails={(selectedJob) =>
+                          dispatchDetailJob({
+                            type: "open",
+                            jobId: selectedJob.id,
+                          })
+                        }
+                      />
+                    ))
+                  : null}
+
+                {!loading && !activeQueue.length ? (
+                  <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFF3D2] text-[#A66B00]">
+                      <CheckCircle2
+                        className="h-6 w-6"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <h4 className="mt-3 text-base font-black text-slate-900">
+                      Chưa có bill cần pha chế
+                    </h4>
+                    <p className="mt-1 max-w-xs text-sm font-medium text-slate-500">
+                      Bill mới sẽ tự động xuất hiện tại đây theo thứ tự tạo.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <div
+              data-bar-queue="true"
+              aria-busy={loading}
+              className="hidden gap-4 md:grid md:grid-cols-2 lg:grid-cols-3 lg:gap-5"
+            >
+              {queueColumns.map((columnJobs, columnIndex) => {
+                const columnTitleId = `bar-queue-column-${columnIndex + 1}`;
+
                 return (
                   <section
-                    key={column.id}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                      setDragOver(column.id);
-                    }}
-                    onDragLeave={(event) => {
-                      if (
-                        !event.currentTarget.contains(
-                          event.relatedTarget as Node,
-                        )
-                      )
-                        setDragOver(null);
-                    }}
-                    onDrop={(event) => handleDrop(event, column.id)}
-                    className={`flex min-h-[calc(100vh-155px)] flex-col border transition-all ${isDesignedColumn ? `overflow-hidden rounded-xl bg-white p-0 ${isNewColumn ? "border-slate-200 shadow-[0_4px_18px_rgba(15,23,42,0.07)]" : isPreparingColumn ? "border-[#BCD7FA] shadow-[0_4px_18px_rgba(18,101,214,0.08)]" : "border-[#9FD4BE] shadow-[0_4px_18px_rgba(6,78,59,0.09)]"}` : `rounded-sm p-3 xl:p-4 ${column.tone}`} ${dragOver === column.id ? "scale-[1.005] border-emerald-500 ring-4 ring-emerald-200/70" : ""}`}
+                    key={columnTitleId}
+                    aria-labelledby={columnTitleId}
+                    className="min-h-[240px] overflow-hidden rounded-xl border border-[#EED39C] bg-[#FFFCF6] shadow-[0_8px_22px_rgba(71,55,31,0.05)] md:min-h-[360px] lg:min-h-[calc(100vh-178px)]"
                   >
-                    <div
-                      className={`flex items-center justify-between ${isDesignedColumn ? `relative min-h-[88px] overflow-hidden px-4 py-4 ${isNewColumn ? "border-b border-slate-200 bg-white text-slate-900" : isPreparingColumn ? "bg-[#0B3269] text-white" : "bg-[#064E3B] text-white"}` : "mb-4 px-1"}`}
-                    >
-                      {isDesignedColumn ? (
-                        <span
-                          aria-hidden="true"
-                          className={`absolute -left-8 -top-4 h-8 w-32 -skew-x-[28deg] rounded-br-xl ${isNewColumn || isReadyColumn ? "bg-[#F6C85F]" : "bg-[#2E85F4]"}`}
-                        />
-                      ) : null}
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`relative flex h-10 w-10 items-center justify-center rounded-xl shadow-sm ${isNewColumn ? "bg-[#F6C85F] text-[#171717] shadow-[0_3px_10px_rgba(246,200,95,0.24)]" : isPreparingColumn ? "bg-[#EAF3FF] text-[#1265D6] shadow-[0_3px_10px_rgba(18,101,214,0.22)]" : isReadyColumn ? "bg-[#F6C85F] text-[#064E3B] shadow-[0_3px_10px_rgba(246,200,95,0.24)]" : "bg-white"}`}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="relative">
-                          <h2
-                            className={`font-black ${isDesignedColumn ? `uppercase tracking-[-0.02em] ${isNewColumn ? "text-slate-900" : "text-white"}` : ""}`}
+                    <header className="relative flex min-h-20 items-center justify-between overflow-hidden border-b border-slate-200 bg-white px-4 py-3">
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-0 top-0 h-4 w-24 rounded-br-full bg-[#F6C85F]"
+                      />
+
+                      <div className="relative flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F6C85F] text-slate-950 shadow-[0_3px_8px_rgba(246,200,95,0.25)]">
+                          <BellRing className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                        <div>
+                          <h3
+                            id={columnTitleId}
+                            className="text-sm font-black uppercase leading-5 tracking-[-0.01em] text-slate-950"
                           >
-                            {column.title}
-                          </h2>
-                          <p
-                            className={`text-xs font-medium ${isNewColumn ? "text-slate-500" : isPreparingColumn ? "text-blue-50/75" : isReadyColumn ? "text-[#FDE7A3]" : "text-slate-500"}`}
-                          >
-                            {column.hint}
+                            Bill mới
+                          </h3>
+                          <p className="text-xs font-medium leading-4 text-slate-500">
+                            Chưa bắt đầu
                           </p>
                         </div>
                       </div>
+
                       <span
-                        className={`relative px-3 py-1 text-sm font-black ${isNewColumn ? "rounded-lg bg-[#F6C85F] text-[#171717] shadow-[0_3px_10px_rgba(246,200,95,0.2)]" : isPreparingColumn ? "rounded-lg bg-[#EAF3FF] text-[#0D5DC4] shadow-[0_3px_10px_rgba(18,101,214,0.18)]" : isReadyColumn ? "rounded-lg bg-[#F6C85F] text-[#064E3B] shadow-[0_3px_10px_rgba(246,200,95,0.2)]" : `rounded-full ${column.badge}`}`}
+                        aria-label={`${columnJobs.length} bill trong cột`}
+                        className="relative inline-flex h-7 min-w-8 items-center justify-center rounded-full bg-[#F6C85F] px-2 text-sm font-black tabular-nums text-slate-950 shadow-[0_3px_8px_rgba(246,200,95,0.22)]"
                       >
                         {columnJobs.length}
                       </span>
-                    </div>
-                    <div
-                      className={`space-y-3 ${isDesignedColumn ? `min-h-[calc(100vh-243px)] flex-1 p-3 xl:p-4 ${isNewColumn ? "bg-[#FAFAF8]" : isPreparingColumn ? "bg-[#F5F9FF]" : "bg-[#F2F8F5]"}` : ""}`}
-                    >
-                      {loading ? (
-                        Array.from({ length: 2 }).map((_, index) => (
-                          <div
-                            key={index}
-                            className={`h-44 animate-pulse bg-white/80 ${isDesignedColumn ? "rounded-xl" : "rounded-2xl"}`}
-                          />
-                        ))
-                      ) : columnJobs.length ? (
-                        columnJobs.map((job) => (
-                          <BillCard
-                            key={job.id}
-                            job={job}
-                            now={now}
-                            busy={busyIds.has(job.id)}
-                            urgentPulseActive={urgentPulseActive}
-                            onMove={moveJob}
-                            onShowDetails={(selectedJob) =>
-                              dispatchDetailJob({
-                                type: "open",
-                                jobId: selectedJob.id,
-                              })
-                            }
-                          />
-                        ))
-                      ) : (
-                        <div
-                          className={`flex min-h-44 flex-col items-center justify-center border border-dashed p-6 text-center ${isNewColumn ? "rounded-xl border-[#F6C85F]/50 bg-white" : isPreparingColumn ? "rounded-xl border-[#8EBBF4] bg-white" : isReadyColumn ? "rounded-xl border-[#9FD4BE] bg-white" : "rounded-sm border-slate-300 bg-white/50"}`}
-                        >
-                          <Icon
-                            className={`mb-3 h-8 w-8 ${isNewColumn ? "text-[#D89200]" : isPreparingColumn ? "text-[#1265D6]" : isReadyColumn ? "text-[#D8A400]" : "text-slate-300"}`}
-                          />
-                          <p
-                            className={`font-bold ${isReadyColumn ? "text-[#064E3B]" : isDesignedColumn ? "text-slate-700" : "text-slate-500"}`}
-                          >
-                            Chưa có bill
-                          </p>
-                          <p
-                            className={`mt-1 text-xs ${isReadyColumn ? "text-[#4B786B]" : isDesignedColumn ? "text-slate-500" : "text-slate-400"}`}
-                          >
-                            Thả bill vào đây
+                    </header>
+
+                    <div className="space-y-3 p-3 sm:p-4">
+                      {loading && columnIndex === 0
+                        ? Array.from({ length: 3 }).map((_, index) => (
+                            <div
+                              key={index}
+                              className="mx-auto h-44 w-full max-w-[440px] animate-pulse bg-[length:100%_100%] bg-no-repeat"
+                              style={{
+                                backgroundImage:
+                                  "url('/assets/bar/bill-bg.png')",
+                              }}
+                            />
+                          ))
+                        : null}
+
+                      {!loading
+                        ? columnJobs.map((job, billIndex) => (
+                            <BarReceiptCard
+                              key={job.id}
+                              job={job}
+                              queueNumber={getBarQueueNumber(
+                                columnIndex,
+                                billIndex,
+                              )}
+                              now={now}
+                              busy={busyIds.has(job.id)}
+                              onComplete={(selectedJob) => {
+                                void completeJob(selectedJob);
+                              }}
+                              onShowDetails={(selectedJob) =>
+                                dispatchDetailJob({
+                                  type: "open",
+                                  jobId: selectedJob.id,
+                                })
+                              }
+                            />
+                          ))
+                        : null}
+
+                      {!loading && !activeQueue.length && columnIndex === 0 ? (
+                        <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFF3D2] text-[#A66B00]">
+                            <CheckCircle2
+                              className="h-6 w-6"
+                              aria-hidden="true"
+                            />
+                          </div>
+                          <h4 className="mt-3 text-base font-black text-slate-900">
+                            Chưa có bill cần pha chế
+                          </h4>
+                          <p className="mt-1 max-w-xs text-sm font-medium text-slate-500">
+                            Bill mới sẽ tự động xuất hiện tại đây theo thứ tự tạo.
                           </p>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </section>
                 );
               })}
             </div>
           </section>
+
           <BarBillDetailDialog
             job={detailJob}
             minutes={detailJob ? elapsedMinutes(detailJob, now) : 0}
             open={Boolean(detailJob)}
             busy={detailJob ? busyIds.has(detailJob.id) : false}
-            onAdvance={(selectedJob, targetStatus) => {
-              void moveJob(selectedJob, targetStatus);
+            onAdvance={(selectedJob) => {
+              void completeJob(selectedJob);
             }}
             onClose={() => dispatchDetailJob({ type: "close" })}
           />
+
+          {lastCompleted ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="fixed bottom-4 right-4 z-[130] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-xl bg-slate-950 px-4 py-3 text-white shadow-[0_18px_42px_rgba(15,23,42,0.28)]"
+            >
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-[#F6C85F]" aria-hidden="true" />
+              <p className="min-w-0 text-sm font-bold">
+                Bill {lastCompleted.tableNumber || "mang về"} đã được xử lý
+              </p>
+              <button
+                type="button"
+                onClick={() => void undoLastCompletion()}
+                className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md bg-[#F6C85F] px-3 text-sm font-black text-slate-950 transition hover:bg-[#FFD976] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+              >
+                <Undo2 className="h-4 w-4" aria-hidden="true" />
+                Hoàn tác
+              </button>
+            </div>
+          ) : null}
+
           {historyOpen ? (
             <div
               className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-[2px]"
@@ -805,7 +735,7 @@ export default function BarBoardPage() {
                 <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
                   <div>
                     <h2 className="flex items-center gap-2 text-lg font-black">
-                      <History className="h-5 w-5 text-emerald-700" />
+                      <History className="h-5 w-5 text-emerald-700" aria-hidden="true" />
                       Lịch sử bill khách đã lấy
                     </h2>
                     <p className="mt-1 text-xs font-medium text-slate-500">
@@ -815,12 +745,13 @@ export default function BarBoardPage() {
                   <button
                     type="button"
                     onClick={() => setHistoryOpen(false)}
-                    className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#064E3B]"
                     aria-label="Đóng lịch sử"
                   >
-                    <X className="h-5 w-5" />
+                    <X className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
+
                 <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
                   {historyError ? (
                     <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
@@ -829,7 +760,7 @@ export default function BarBoardPage() {
                   ) : null}
                   {historyLoading ? (
                     <div className="flex h-40 items-center justify-center text-slate-500">
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
                       Đang tải lịch sử...
                     </div>
                   ) : historyJobs.length ? (
@@ -837,65 +768,103 @@ export default function BarBoardPage() {
                       {historyJobs.map((job) => (
                         <article
                           key={job.id}
-                          className="rounded-sm border border-slate-200 bg-white p-4 shadow-sm"
+                          className={`overflow-hidden rounded-sm border border-slate-200 bg-white transition-shadow duration-200 motion-reduce:transition-none ${
+                            expandedHistoryIds.has(job.id)
+                              ? "shadow-[0_12px_30px_rgba(15,23,42,0.16)]"
+                              : "shadow-[0_6px_18px_rgba(15,23,42,0.10)] hover:shadow-[0_10px_26px_rgba(15,23,42,0.14)]"
+                          }`}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h3 className="font-black text-slate-900">
-                                {job.tableNumber || "Mang về"}
-                              </h3>
-                              <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">
-                                #{shortCode(job)}
-                              </p>
+                          <button
+                            type="button"
+                            aria-expanded={expandedHistoryIds.has(job.id)}
+                            aria-controls={`history-items-${job.id}`}
+                            onClick={() =>
+                              setExpandedHistoryIds((current) =>
+                                toggleHistoryBillDisclosure(current, job.id),
+                              )
+                            }
+                            className="block w-full p-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#006B52]"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <h3 className="font-black text-slate-900">
+                                  {job.tableNumber || "Mang về"}
+                                </h3>
+                                <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+                                  #{shortCode(job)}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                  Đã lấy
+                                </span>
+                                <p className="mt-1 text-xs font-medium text-slate-500">
+                                  {getCollectedDate(job).toLocaleString("vi-VN", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                  })}
+                                </p>
+                              </div>
                             </div>
-                            <div className="text-right">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Đã lấy
+                            <div className="mt-3 flex items-center justify-between border-t border-dashed border-slate-200 pt-3 text-xs font-bold">
+                              <span className="text-slate-500">
+                                {job.items.length} món
                               </span>
-                              <p className="mt-1 text-xs font-medium text-slate-500">
-                                {getCollectedDate(job).toLocaleString("vi-VN", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                })}
-                              </p>
+                              <span className="inline-flex items-center gap-1 text-[#006B52]">
+                                {expandedHistoryIds.has(job.id)
+                                  ? "Ẩn món"
+                                  : "Xem món"}
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform duration-150 motion-reduce:transition-none ${
+                                    expandedHistoryIds.has(job.id)
+                                      ? "rotate-180"
+                                      : ""
+                                  }`}
+                                  aria-hidden="true"
+                                />
+                              </span>
                             </div>
-                          </div>
-                          <div className="my-3 border-t border-dashed border-slate-200" />
-                          <ul className="space-y-1.5">
-                            {job.items.map((item, index) => (
-                              <li
-                                key={`${job.id}-${item.menuId}-${index}`}
-                                className="flex justify-between gap-3 text-sm"
-                              >
-                                <span className="font-semibold text-slate-700">
-                                  {item.name}
-                                  {item.note ? (
-                                    <span className="ml-1 text-xs text-rose-600">
-                                      ({item.note})
+                          </button>
+                          {expandedHistoryIds.has(job.id) ? (
+                            <div
+                              id={`history-items-${job.id}`}
+                              className="border-t border-slate-200 bg-slate-50/70 px-4 py-3"
+                            >
+                              <ul className="space-y-1.5">
+                                {job.items.map((item, index) => (
+                                  <li
+                                    key={`${job.id}-${item.menuId}-${index}`}
+                                    className="flex justify-between gap-3 text-sm"
+                                  >
+                                    <span className="font-semibold text-slate-700">
+                                      {item.name}
+                                      {item.note ? (
+                                        <span className="ml-1 text-xs text-rose-600">
+                                          ({item.note})
+                                        </span>
+                                      ) : null}
                                     </span>
-                                  ) : null}
-                                </span>
-                                <span className="shrink-0 font-black text-slate-900">
-                                  ×{formatQuantity(item.quantity)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                                    <span className="shrink-0 font-black text-slate-900">
+                                      ×{formatQuantity(item.quantity)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
                         </article>
                       ))}
                     </div>
                   ) : (
                     <div className="flex h-48 flex-col items-center justify-center text-center text-slate-400">
-                      <History className="mb-3 h-9 w-9" />
-                      <p className="font-bold text-slate-500">
-                        Chưa có lịch sử
-                      </p>
+                      <History className="mb-3 h-9 w-9" aria-hidden="true" />
+                      <p className="font-bold text-slate-500">Chưa có lịch sử</p>
                       <p className="mt-1 text-xs">
-                        Bill sẽ xuất hiện sau khi xác nhận khách đã lấy.
+                        Bill sẽ xuất hiện sau khi được hoàn thành.
                       </p>
                     </div>
                   )}
