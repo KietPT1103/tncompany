@@ -117,24 +117,24 @@ export async function loadOverviewWeeklyQuantity(options: {
     ),
   );
   const shifts = shiftGroups.flat();
-  const shiftIds = shifts.map((shift) => shift.id);
-  const bills = shiftIds.length > 0
-    ? await getBills({
+  const billsByShift = new Map<string, Bill[]>();
+  // The bills endpoint caps each response at 2,000 rows. Fetching the whole
+  // week at once drops the oldest days during busy weeks, so scope each request
+  // to one shift and keep every day in the cross-month range complete.
+  const billGroups = await Promise.all(
+    shifts.map(async (shift) => ({
+      shiftId: shift.id,
+      bills: await getBills({
         storeId: options.storeId,
-        shiftIds,
+        shiftId: shift.id,
         startDate: options.startDate,
         endDate: options.endDate,
         includeCancelled: true,
-        limitCount: 5000,
-      })
-    : [];
-  const billsByShift = new Map<string, Bill[]>();
-  bills.forEach((bill) => {
-    if (!bill.shiftId) return;
-    const current = billsByShift.get(bill.shiftId) || [];
-    current.push(bill);
-    billsByShift.set(bill.shiftId, current);
-  });
+        limitCount: 2000,
+      }),
+    })),
+  );
+  billGroups.forEach(({ shiftId, bills }) => billsByShift.set(shiftId, bills));
 
   const rows = new Map<string, OverviewWeeklyQuantityRow>();
   for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
