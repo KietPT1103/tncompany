@@ -1,26 +1,76 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type {
+  BarPrintJob,
+  BarPrintJobItem,
+} from "../../../services/barPrintJobService.ts";
 import {
+  BAR_KDS_COLUMN_GAP,
+  BAR_KDS_RECEIPT_CONTENT_FOOTER_GAP_PX,
+  BAR_KDS_RECEIPT_FOOTER_SAFE_AREA_PX,
+  BAR_KDS_RECEIPT_HEADER_SAFE_AREA_PX,
+  BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX,
+  BAR_KDS_TICKET_WIDTH,
+  buildBarKdsColumns,
+  flattenBarKdsColumns,
   getActiveBarQueue,
-  getMobileBarQueue,
-  getBarQueueColumns,
-  getBarQueueNumber,
-  getBarQueueOverflowCount,
+  getBarKdsBoardContentHeight,
 } from "./barBoardQueue.ts";
+
+test("uses compact KDS ticket dimensions and gutters", () => {
+  assert.equal(BAR_KDS_TICKET_WIDTH, 300);
+  assert.equal(BAR_KDS_COLUMN_GAP, 8);
+  assert.equal(BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX, 20);
+});
+
+test("keeps receipt actions above the jagged paper safe area", () => {
+  assert.equal(BAR_KDS_RECEIPT_FOOTER_SAFE_AREA_PX, 40);
+});
+
+test("keeps receipt headers below the jagged paper safe area", () => {
+  assert.equal(BAR_KDS_RECEIPT_HEADER_SAFE_AREA_PX, 40);
+});
+
+test("keeps one consistent gap between the last item and the receipt footer", () => {
+  assert.equal(BAR_KDS_RECEIPT_CONTENT_FOOTER_GAP_PX, 12);
+});
+
+test("packs tickets inside the board content height without counting its padding", () => {
+  assert.equal(getBarKdsBoardContentHeight(547, 6, 6), 535);
+});
+
+const createItems = (count: number): BarPrintJobItem[] =>
+  Array.from({ length: count }, (_, index) => ({
+    menuId: `item-${index + 1}`,
+    name: `Món ${index + 1}`,
+    price: 20_000,
+    quantity: 1,
+  }));
 
 const createJob = (
   id: string,
   seconds: number,
   workflowStatus: "new" | "preparing" | "ready" | "collected",
-) => ({
+  itemCount = 1,
+): BarPrintJob => ({
   id,
   storeId: "cafe",
   tableNumber: id,
-  items: [],
-  status: "printed" as const,
+  items: createItems(itemCount),
+  status: "printed",
   workflowStatus,
   createdAt: { seconds },
 });
+
+const testLayout = {
+  columnHeight: 200,
+  columnGap: 10,
+  firstSegmentBaseHeight: 80,
+  continuationSegmentBaseHeight: 50,
+  completionActionHeight: 30,
+  continuationCueHeight: 0,
+  estimateItemHeight: () => 20,
+};
 
 test("keeps every active legacy workflow status in one queue", () => {
   const queue = getActiveBarQueue([
@@ -63,75 +113,120 @@ test("does not mutate the realtime job array while sorting", () => {
   );
 });
 
-test("keeps the first five bills together in the left column", () => {
-  const jobs = Array.from({ length: 5 }, (_, index) =>
-    createJob(`bill-${index + 1}`, index + 1, "new"),
+test("splits a long bill into a first ticket and a continuation ticket", () => {
+  const columns = buildBarKdsColumns(
+    [createJob("long", 1, "new", 8)],
+    testLayout,
   );
+  const segments = flattenBarKdsColumns(columns);
 
-  const columns = getBarQueueColumns(jobs);
-
+  assert.equal(columns.length, 2);
+  assert.equal(segments.length, 2);
   assert.deepEqual(
-    columns.map((column) => column.map((job) => job.id)),
-    [["bill-1", "bill-2", "bill-3", "bill-4", "bill-5"], [], []],
+    segments.map((segment) => segment.items.length),
+    [6, 2],
   );
+  assert.equal(segments[0].isContinuation, false);
+  assert.equal(segments[0].isFinal, false);
+  assert.equal(segments[1].isContinuation, true);
+  assert.equal(segments[1].isFinal, true);
+  assert.equal(segments[0].segmentCount, 2);
+  assert.equal(segments[1].segmentCount, 2);
 });
 
-test("fills each column with five bills before using the next column", () => {
-  const jobs = Array.from({ length: 12 }, (_, index) =>
-    createJob(`bill-${index + 1}`, index + 1, "new"),
+test("reserves vertical space for the continuation cue above the jagged edge", () => {
+  const segments = flattenBarKdsColumns(
+    buildBarKdsColumns([createJob("long", 1, "new", 8)], {
+      ...testLayout,
+      continuationCueHeight: 20,
+    }),
   );
 
-  const columns = getBarQueueColumns(jobs);
-
   assert.deepEqual(
-    columns.map((column) => column.map((job) => job.id)),
+    segments.map((segment) => segment.items.length),
+    [5, 3],
+  );
+  assert.equal(segments[0].estimatedHeight, 200);
+});
+
+test("keeps every segment of one bill consecutive before the next bill", () => {
+  const columns = buildBarKdsColumns(
     [
-      ["bill-1", "bill-2", "bill-3", "bill-4", "bill-5"],
-      ["bill-6", "bill-7", "bill-8", "bill-9", "bill-10"],
-      ["bill-11", "bill-12"],
+      createJob("long", 1, "new", 6),
+      createJob("short", 2, "new", 1),
     ],
+    testLayout,
+  );
+  const segments = flattenBarKdsColumns(columns);
+
+  assert.deepEqual(
+    segments.map((segment) => segment.job.id),
+    ["long", "long", "short"],
+  );
+  assert.deepEqual(
+    segments.map((segment) => segment.queueNumber),
+    [1, 1, 2],
   );
 });
 
-test("shows the first fifteen bills as one continuous mobile queue", () => {
+test("only the final continuation ticket can complete the whole bill", () => {
+  const segments = flattenBarKdsColumns(
+    buildBarKdsColumns([createJob("long", 1, "new", 8)], testLayout),
+  );
+
+  assert.deepEqual(
+    segments.map((segment) => segment.isFinal),
+    [false, true],
+  );
+  assert.ok(segments.every((segment) => segment.job.id === "long"));
+});
+
+test("fills the remaining vertical space before starting the next column", () => {
+  const columns = buildBarKdsColumns(
+    [
+      createJob("first", 1, "new", 1),
+      createJob("second", 2, "new", 1),
+      createJob("third", 3, "new", 1),
+    ],
+    { ...testLayout, columnHeight: 270 },
+  );
+
+  assert.deepEqual(
+    columns.map((column) => column.map((segment) => segment.job.id)),
+    [["first", "second"], ["third"]],
+  );
+});
+
+test("moves a short bill intact when only its completion action would overflow", () => {
+  const columns = buildBarKdsColumns(
+    [
+      createJob("first", 1, "new", 1),
+      createJob("second", 2, "new", 1),
+    ],
+    { ...testLayout, columnHeight: 250 },
+  );
+  const segments = flattenBarKdsColumns(columns);
+
+  assert.deepEqual(
+    columns.map((column) => column.map((segment) => segment.job.id)),
+    [["first"], ["second"]],
+  );
+  assert.equal(segments.length, 2);
+  assert.ok(segments.every((segment) => segment.isFinal));
+  assert.ok(segments.every((segment) => segment.items.length === 1));
+});
+
+test("mobile flow includes every ticket segment without the old fifteen-bill cap", () => {
   const jobs = Array.from({ length: 17 }, (_, index) =>
-    createJob(`bill-${index + 1}`, index + 1, "new"),
+    createJob(`bill-${index + 1}`, index + 1, "new", 1),
+  );
+  const segments = flattenBarKdsColumns(
+    buildBarKdsColumns(jobs, testLayout),
   );
 
-  const mobileQueue = getMobileBarQueue(jobs);
-
-  assert.deepEqual(mobileQueue, jobs.slice(0, 15));
-});
-
-test("shows at most five bills in the right column and reports the hidden queue", () => {
-  const jobs = Array.from({ length: 17 }, (_, index) =>
-    createJob(`bill-${index + 1}`, index + 1, "new"),
+  assert.equal(segments.length, 17);
+  assert.deepEqual(
+    segments.map((segment) => segment.queueNumber),
+    Array.from({ length: 17 }, (_, index) => index + 1),
   );
-
-  const columns = getBarQueueColumns(jobs);
-
-  assert.equal(columns[0].length, 5);
-  assert.equal(columns[1].length, 5);
-  assert.equal(columns[2].length, 5);
-  assert.deepEqual(columns.flat(), jobs.slice(0, 15));
-  assert.equal(getBarQueueOverflowCount(jobs), 2);
-});
-
-test("promotes the oldest hidden bill when a visible bill is completed", () => {
-  const jobs = Array.from({ length: 17 }, (_, index) =>
-    createJob(`bill-${index + 1}`, index + 1, "new"),
-  );
-  const jobsAfterCompletion = jobs.filter((job) => job.id !== "bill-1");
-
-  const visibleJobs = getBarQueueColumns(jobsAfterCompletion).flat();
-
-  assert.deepEqual(visibleJobs, jobs.slice(1, 16));
-  assert.equal(getBarQueueOverflowCount(jobsAfterCompletion), 1);
-});
-
-test("numbers visible bills continuously from the left column to the right column", () => {
-  assert.equal(getBarQueueNumber(0, 0), 1);
-  assert.equal(getBarQueueNumber(0, 4), 5);
-  assert.equal(getBarQueueNumber(1, 0), 6);
-  assert.equal(getBarQueueNumber(2, 4), 15);
 });

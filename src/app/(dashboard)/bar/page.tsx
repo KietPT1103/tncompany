@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -10,10 +11,9 @@ import {
 } from "react";
 import {
   ArrowRight,
-  BellRing,
   CheckCircle2,
-  ChefHat,
   ChevronDown,
+  Coffee,
   History,
   Loader2,
   Printer,
@@ -35,16 +35,24 @@ import {
 } from "@/services/barPrintJobService";
 import BarBillDetailDialog from "./BarBillDetailDialog";
 import {
+  BAR_KDS_COLUMN_GAP,
+  BAR_KDS_DEFAULT_COLUMN_HEIGHT,
+  BAR_KDS_MOBILE_SEGMENT_HEIGHT,
+  BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX,
+  BAR_KDS_TICKET_WIDTH,
+  buildBarKdsColumns,
+  flattenBarKdsColumns,
   getActiveBarQueue,
-  getBarQueueColumns,
-  getBarQueueNumber,
-  getBarQueueOverflowCount,
-  getMobileBarQueue,
+  getBarKdsBoardContentHeight,
 } from "./barBoardQueue";
 import {
   barBillDetailReducer,
   initialBarBillDetailState,
 } from "./barBillDetailState";
+import {
+  getBarKdsDragUpdate,
+  isBarKdsDragTargetAllowed,
+} from "./barKdsDragScroll";
 import { toggleHistoryBillDisclosure } from "./barHistoryDisclosure";
 import BarNavigationSidebar from "./BarNavigationSidebar";
 import BarReceiptCard from "./BarReceiptCard";
@@ -62,6 +70,13 @@ import {
 const ADMIN_SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
 const UNDO_COMPLETION_WINDOW_MS = 5_000;
 type AlertKind = "new" | "urgent";
+
+type BarKdsDragState = {
+  pointerId: number;
+  startClientX: number;
+  startScrollLeft: number;
+  hasDragged: boolean;
+};
 
 const getCreatedDate = (job: BarPrintJob) =>
   job.createdAt?.seconds ? new Date(job.createdAt.seconds * 1000) : new Date();
@@ -147,19 +162,29 @@ export default function BarBoardPage() {
   const knownIds = useRef<Set<string> | null>(null);
   const alertAudio = useRef<Partial<Record<AlertKind, HTMLAudioElement>>>({});
   const urgentIds = useRef<Set<string> | null>(null);
+  const kdsBoardRef = useRef<HTMLDivElement | null>(null);
+  const kdsDragStateRef = useRef<BarKdsDragState | null>(null);
+  const [kdsDragging, setKdsDragging] = useState(false);
+  const [kdsColumnHeight, setKdsColumnHeight] = useState(
+    BAR_KDS_DEFAULT_COLUMN_HEIGHT,
+  );
   const sidebarVariant = getBarSidebarVariant(role);
 
   const activeQueue = useMemo(() => getActiveBarQueue(jobs), [jobs]);
   const queueColumns = useMemo(
-    () => getBarQueueColumns(activeQueue),
-    [activeQueue],
+    () =>
+      buildBarKdsColumns(activeQueue, {
+        columnHeight: kdsColumnHeight,
+      }),
+    [activeQueue, kdsColumnHeight],
   );
-  const mobileQueue = useMemo(
-    () => getMobileBarQueue(activeQueue),
-    [activeQueue],
-  );
-  const queueOverflowCount = useMemo(
-    () => getBarQueueOverflowCount(activeQueue),
+  const mobileSegments = useMemo(
+    () =>
+      flattenBarKdsColumns(
+        buildBarKdsColumns(activeQueue, {
+          columnHeight: BAR_KDS_MOBILE_SEGMENT_HEIGHT,
+        }),
+      ),
     [activeQueue],
   );
   const detailJob = useMemo(
@@ -201,6 +226,98 @@ export default function BarBoardPage() {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const board = kdsBoardRef.current;
+    if (!board) return;
+
+    const updateColumnHeight = () => {
+      if (board.clientHeight > 0) {
+        const styles = window.getComputedStyle(board);
+        setKdsColumnHeight(
+          getBarKdsBoardContentHeight(
+            board.clientHeight,
+            Number.parseFloat(styles.paddingTop) || 0,
+            Number.parseFloat(styles.paddingBottom) || 0,
+          ),
+        );
+      }
+    };
+    updateColumnHeight();
+
+    const observer = new ResizeObserver(updateColumnHeight);
+    observer.observe(board);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleKdsPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const board = event.currentTarget;
+      if (
+        event.pointerType !== "mouse" ||
+        event.button !== 0 ||
+        !event.isPrimary ||
+        board.scrollWidth <= board.clientWidth ||
+        !isBarKdsDragTargetAllowed(event.target)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      kdsDragStateRef.current = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startScrollLeft: board.scrollLeft,
+        hasDragged: false,
+      };
+      try {
+        board.setPointerCapture(event.pointerId);
+      } catch {
+        // Dragging still works while the pointer remains inside the KDS board.
+      }
+    },
+    [],
+  );
+
+  const handleKdsPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const dragState = kdsDragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+      const dragUpdate = getBarKdsDragUpdate(
+        dragState.startClientX,
+        event.clientX,
+        dragState.startScrollLeft,
+      );
+      if (!dragUpdate.hasDragged) return;
+
+      event.preventDefault();
+      if (!dragState.hasDragged) {
+        dragState.hasDragged = true;
+        setKdsDragging(true);
+      }
+      event.currentTarget.scrollLeft = dragUpdate.scrollLeft;
+    },
+    [],
+  );
+
+  const stopKdsPointerDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const dragState = kdsDragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+      try {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {
+        // The pointer may already be released by the browser.
+      }
+      kdsDragStateRef.current = null;
+      setKdsDragging(false);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (sidebarVariant !== "admin") return;
@@ -377,14 +494,14 @@ export default function BarBoardPage() {
         )}
 
         <main
-          className={`h-screen min-w-0 flex-1 overflow-y-auto bg-[#F4F5F7] text-slate-900 ${
+          className={`h-screen min-w-0 flex-1 overflow-y-auto bg-[#F4F5F7] text-slate-900 md:overflow-hidden ${
             sidebarVariant === "bar"
               ? getBarSidebarContentPadding(barSidebarCollapsed)
               : "pt-16 lg:pt-0"
           }`}
         >
           <header
-            className={`border-b border-[#DDE1E7] bg-white/95 px-4 py-2 shadow-[0_2px_8px_rgba(15,23,42,0.05)] backdrop-blur md:px-5 ${
+            className={`border-b border-[#DDE1E7] bg-white/95 px-3 py-1.5 shadow-[0_2px_8px_rgba(15,23,42,0.05)] backdrop-blur sm:px-4 md:px-5 ${
               sidebarVariant === "admin"
                 ? "relative z-10 lg:sticky lg:top-0 lg:z-20"
                 : "sticky top-0 z-20"
@@ -392,12 +509,12 @@ export default function BarBoardPage() {
           >
             <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#064E3B] text-[#F6C85F]">
-                  <ChefHat className="h-5 w-5" aria-hidden="true" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#064E3B] text-[#F6C85F]">
+                  <Coffee className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h1 className="text-lg font-black tracking-[-0.02em]">
+                    <h1 className="text-base font-black tracking-[-0.02em] sm:text-lg">
                       Màn hình pha chế
                     </h1>
                     <span className="hidden rounded-md bg-[#DCEFE9] px-2 py-0.5 text-[11px] font-bold text-[#146B59] sm:inline">
@@ -414,7 +531,7 @@ export default function BarBoardPage() {
                 <button
                   type="button"
                   onClick={() => setHistoryOpen(true)}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#064E3B] focus-visible:ring-offset-2"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#064E3B] focus-visible:ring-offset-2 sm:text-sm"
                 >
                   <History className="h-4 w-4" aria-hidden="true" />
                   <span className="hidden sm:inline">Lịch sử đã lấy</span>
@@ -427,7 +544,7 @@ export default function BarBoardPage() {
                     if (next) window.setTimeout(() => playAlert(true), 0);
                   }}
                   aria-pressed={soundEnabled}
-                  className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 ${
+                  className={`inline-flex h-9 items-center gap-2 rounded-lg border px-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 sm:text-sm ${
                     soundEnabled
                       ? "border-[#E9CAA0] bg-[#FCF7EF] text-[#8A5611]"
                       : "border-slate-200 bg-white text-slate-600"
@@ -441,7 +558,7 @@ export default function BarBoardPage() {
                   <span className="hidden sm:inline">Âm báo</span>
                 </button>
                 <span
-                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#176A57] px-3 text-sm font-bold text-white"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#176A57] px-2.5 text-xs font-bold text-white sm:px-3 sm:text-sm"
                   title="Windows Print Agent gửi phiếu thẳng tới máy in LAN"
                 >
                   <Printer className="h-4 w-4" aria-hidden="true" />
@@ -451,94 +568,65 @@ export default function BarBoardPage() {
             </div>
           </header>
 
-          <section className="mx-auto max-w-[1800px] p-3 sm:p-4 md:p-6">
+          <section className="w-full px-0 pb-3 pt-0 sm:pb-4 md:flex md:h-[calc(100dvh-54px)] md:flex-col md:overflow-hidden md:pb-4">
             {syncError ? (
-              <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              <div className="mb-3 flex shrink-0 items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
                 <RefreshCcw className="h-4 w-4 animate-spin" aria-hidden="true" />
                 {syncError}
               </div>
             ) : null}
 
-            <div className="mb-3 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.05)] sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:border-0 sm:bg-transparent sm:px-1 sm:py-0 sm:shadow-none">
-              <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#E9F4F0] text-[#176A57] sm:mt-0.5 sm:h-7 sm:w-7 sm:rounded-full">
+            <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 bg-white px-3 py-2.5 shadow-[0_5px_16px_rgba(15,23,42,0.08)] md:px-3 md:py-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#E9F4F0] text-[#176A57]">
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </span>
-                <div className="min-w-0 pt-0.5 sm:pt-0">
+                <div className="min-w-0">
                   <h2 className="text-sm font-black leading-5 text-slate-950">
-                    Bill xếp từ trái sang phải
+                    Luồng pha chế
                   </h2>
-                  <p className="mt-0.5 text-xs font-semibold leading-[1.45] text-slate-600">
-                    Bill cũ nhất ở cột trái, sau đó tiếp tục sang cột kế bên
+                  <p className="text-[11px] font-semibold leading-4 text-slate-600 sm:text-xs">
+                    Bill cũ nhất ở bên trái · bill dài tiếp tục ở cột kế bên
                   </p>
                 </div>
               </div>
-              <div className="mt-3 flex w-full shrink-0 items-center gap-2 border-t border-slate-100 pt-2.5 sm:mt-0 sm:w-auto sm:justify-end sm:border-0 sm:pt-0">
+              <div className="flex w-full shrink-0 items-center gap-2 border-t border-slate-100 pt-2 sm:w-auto sm:border-0 sm:pt-0">
                 <span
                   role="status"
                   aria-live="polite"
-                  className="inline-flex h-9 min-w-0 flex-1 items-center justify-between rounded-lg bg-[#E6F3EE] pl-3 pr-1.5 text-xs font-bold text-[#315F53] sm:w-40 sm:flex-none"
+                  className="inline-flex h-8 min-w-0 flex-1 items-center justify-between rounded-lg bg-[#E6F3EE] pl-3 pr-1 text-xs font-bold text-[#315F53] sm:w-40 sm:flex-none"
                 >
-                  <span className="whitespace-nowrap">Bill đang xử lý:</span>
-                  <strong className="inline-flex h-7 min-w-8 items-center justify-center rounded-md bg-[#064E3B] px-2 text-sm font-black tabular-nums text-[#F6C85F]">
+                  <span className="whitespace-nowrap">Đang xử lý</span>
+                  <strong className="inline-flex h-6 min-w-7 items-center justify-center rounded-md bg-[#064E3B] px-2 text-xs font-black tabular-nums text-[#F6C85F]">
                     {activeQueue.length}
                   </strong>
                 </span>
                 <span
                   role="status"
                   aria-live="polite"
-                  className="inline-flex h-9 min-w-0 flex-1 items-center justify-between rounded-lg bg-[#FFF3D2] pl-2 pr-1.5 text-[11px] font-bold text-[#8A5611] sm:w-40 sm:flex-none sm:pl-3 sm:text-xs"
+                  className="inline-flex h-8 min-w-0 flex-1 items-center justify-between rounded-lg bg-[#FFF3D2] pl-3 pr-1 text-xs font-bold text-[#8A5611] sm:w-32 sm:flex-none"
                 >
-                  <span className="whitespace-nowrap">Bill đang chờ:</span>
-                  <strong className="inline-flex h-7 min-w-8 items-center justify-center rounded-md bg-[#C87500] px-2 text-sm font-black tabular-nums text-white">
-                    {queueOverflowCount}
+                  <span className="whitespace-nowrap md:hidden">Thẻ KDS</span>
+                  <span className="hidden whitespace-nowrap md:inline">Cột KDS</span>
+                  <strong className="inline-flex h-6 min-w-7 items-center justify-center rounded-md bg-[#C87500] px-2 text-xs font-black tabular-nums text-white">
+                    <span className="md:hidden">{mobileSegments.length}</span>
+                    <span className="hidden md:inline">{queueColumns.length}</span>
                   </strong>
                 </span>
               </div>
             </div>
 
             <section
-              aria-labelledby="bar-mobile-queue-title"
+              aria-label="Luồng bill pha chế trên thiết bị di động"
               aria-busy={loading}
-              className="min-h-[240px] overflow-hidden rounded-xl border border-[#EED39C] bg-[#FFFCF6] shadow-[0_8px_22px_rgba(71,55,31,0.05)] md:hidden"
+              className="flex flex-col pb-6 md:hidden"
+              style={{ gap: `${BAR_KDS_COLUMN_GAP}px` }}
             >
-              <header className="relative flex min-h-20 items-center justify-between overflow-hidden border-b border-slate-200 bg-white px-4 py-3">
-                <span
-                  aria-hidden="true"
-                  className="absolute left-0 top-0 h-4 w-24 rounded-br-full bg-[#F6C85F]"
-                />
-
-                <div className="relative flex items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F6C85F] text-slate-950 shadow-[0_3px_8px_rgba(246,200,95,0.25)]">
-                    <BellRing className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <h3
-                      id="bar-mobile-queue-title"
-                      className="text-sm font-black uppercase leading-5 tracking-[-0.01em] text-slate-950"
-                    >
-                      Bill mới
-                    </h3>
-                    <p className="text-xs font-medium leading-4 text-slate-500">
-                      Chưa bắt đầu
-                    </p>
-                  </div>
-                </div>
-
-                <span
-                  aria-label={`${mobileQueue.length} bill đang hiển thị`}
-                  className="relative inline-flex h-7 min-w-8 items-center justify-center rounded-full bg-[#F6C85F] px-2 text-sm font-black tabular-nums text-slate-950 shadow-[0_3px_8px_rgba(246,200,95,0.22)]"
-                >
-                  {mobileQueue.length}
-                </span>
-              </header>
-
-              <div className="space-y-3 p-3">
                 {loading
                   ? Array.from({ length: 3 }).map((_, index) => (
                       <div
                         key={index}
-                        className="mx-auto h-44 w-full max-w-[440px] animate-pulse bg-[length:100%_100%] bg-no-repeat"
+                        className="mx-auto h-52 w-full max-w-[440px] animate-pulse bg-[length:100%_100%] bg-no-repeat"
                         style={{
                           backgroundImage: "url('/assets/bar/bill-bg.png')",
                         }}
@@ -547,13 +635,12 @@ export default function BarBoardPage() {
                   : null}
 
                 {!loading
-                  ? mobileQueue.map((job, billIndex) => (
+                  ? mobileSegments.map((segment) => (
                       <BarReceiptCard
-                        key={job.id}
-                        job={job}
-                        queueNumber={billIndex + 1}
+                        key={`${segment.job.id}-${segment.segmentIndex}`}
+                        segment={segment}
                         now={now}
-                        busy={busyIds.has(job.id)}
+                        busy={busyIds.has(segment.job.id)}
                         onComplete={(selectedJob) => {
                           void completeJob(selectedJob);
                         }}
@@ -583,112 +670,90 @@ export default function BarBoardPage() {
                     </p>
                   </div>
                 ) : null}
-              </div>
             </section>
 
             <div
+              ref={kdsBoardRef}
               data-bar-queue="true"
+              data-dragging={kdsDragging ? "true" : "false"}
+              aria-label="Luồng bill pha chế KDS"
               aria-busy={loading}
-              className="hidden gap-4 md:grid md:grid-cols-2 lg:grid-cols-3 lg:gap-5"
+              onPointerDown={handleKdsPointerDown}
+              onPointerMove={handleKdsPointerMove}
+              onPointerUp={stopKdsPointerDrag}
+              onPointerCancel={stopKdsPointerDrag}
+              className="admin-list-scrollbar bar-kds-drag-scroll hidden min-h-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-lg bg-[#ECEEF1] px-1 py-1.5 md:block"
             >
-              {queueColumns.map((columnJobs, columnIndex) => {
-                const columnTitleId = `bar-queue-column-${columnIndex + 1}`;
-
-                return (
-                  <section
-                    key={columnTitleId}
-                    aria-labelledby={columnTitleId}
-                    className="min-h-[240px] overflow-hidden rounded-xl border border-[#EED39C] bg-[#FFFCF6] shadow-[0_8px_22px_rgba(71,55,31,0.05)] md:min-h-[360px] lg:min-h-[calc(100vh-178px)]"
-                  >
-                    <header className="relative flex min-h-20 items-center justify-between overflow-hidden border-b border-slate-200 bg-white px-4 py-3">
-                      <span
-                        aria-hidden="true"
-                        className="absolute left-0 top-0 h-4 w-24 rounded-br-full bg-[#F6C85F]"
+              <div
+                className="flex h-full w-max min-w-full items-start pb-2 pr-3"
+              >
+                {loading
+                  ? Array.from({ length: 4 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className="h-64 shrink-0 animate-pulse bg-[length:100%_100%] bg-no-repeat"
+                        style={{
+                          width: `${BAR_KDS_TICKET_WIDTH}px`,
+                          marginLeft:
+                            index === 0
+                              ? 0
+                              : `-${BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX}px`,
+                          backgroundImage: "url('/assets/bar/bill-bg.png')",
+                        }}
                       />
+                    ))
+                  : null}
 
-                      <div className="relative flex items-center gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F6C85F] text-slate-950 shadow-[0_3px_8px_rgba(246,200,95,0.25)]">
-                          <BellRing className="h-5 w-5" aria-hidden="true" />
-                        </span>
-                        <div>
-                          <h3
-                            id={columnTitleId}
-                            className="text-sm font-black uppercase leading-5 tracking-[-0.01em] text-slate-950"
-                          >
-                            Bill mới
-                          </h3>
-                          <p className="text-xs font-medium leading-4 text-slate-500">
-                            Chưa bắt đầu
-                          </p>
-                        </div>
-                      </div>
-
-                      <span
-                        aria-label={`${columnJobs.length} bill trong cột`}
-                        className="relative inline-flex h-7 min-w-8 items-center justify-center rounded-full bg-[#F6C85F] px-2 text-sm font-black tabular-nums text-slate-950 shadow-[0_3px_8px_rgba(246,200,95,0.22)]"
+                {!loading
+                  ? queueColumns.map((columnSegments, columnIndex) => (
+                      <section
+                        key={`bar-kds-column-${columnIndex + 1}`}
+                        aria-label={`Cột KDS ${columnIndex + 1}`}
+                        className="flex h-full shrink-0 flex-col"
+                        style={{
+                          width: `${BAR_KDS_TICKET_WIDTH}px`,
+                          marginLeft:
+                            columnIndex === 0
+                              ? 0
+                              : `-${BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX}px`,
+                          gap: `${BAR_KDS_COLUMN_GAP}px`,
+                        }}
                       >
-                        {columnJobs.length}
-                      </span>
-                    </header>
+                        {columnSegments.map((segment) => (
+                          <BarReceiptCard
+                            key={`${segment.job.id}-${segment.segmentIndex}`}
+                            segment={segment}
+                            now={now}
+                            busy={busyIds.has(segment.job.id)}
+                            onComplete={(selectedJob) => {
+                              void completeJob(selectedJob);
+                            }}
+                            onShowDetails={(selectedJob) =>
+                              dispatchDetailJob({
+                                type: "open",
+                                jobId: selectedJob.id,
+                              })
+                            }
+                          />
+                        ))}
+                      </section>
+                    ))
+                  : null}
 
-                    <div className="space-y-3 p-3 sm:p-4">
-                      {loading && columnIndex === 0
-                        ? Array.from({ length: 3 }).map((_, index) => (
-                            <div
-                              key={index}
-                              className="mx-auto h-44 w-full max-w-[440px] animate-pulse bg-[length:100%_100%] bg-no-repeat"
-                              style={{
-                                backgroundImage:
-                                  "url('/assets/bar/bill-bg.png')",
-                              }}
-                            />
-                          ))
-                        : null}
-
-                      {!loading
-                        ? columnJobs.map((job, billIndex) => (
-                            <BarReceiptCard
-                              key={job.id}
-                              job={job}
-                              queueNumber={getBarQueueNumber(
-                                columnIndex,
-                                billIndex,
-                              )}
-                              now={now}
-                              busy={busyIds.has(job.id)}
-                              onComplete={(selectedJob) => {
-                                void completeJob(selectedJob);
-                              }}
-                              onShowDetails={(selectedJob) =>
-                                dispatchDetailJob({
-                                  type: "open",
-                                  jobId: selectedJob.id,
-                                })
-                              }
-                            />
-                          ))
-                        : null}
-
-                      {!loading && !activeQueue.length && columnIndex === 0 ? (
-                        <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFF3D2] text-[#A66B00]">
-                            <CheckCircle2
-                              className="h-6 w-6"
-                              aria-hidden="true"
-                            />
-                          </div>
-                          <h4 className="mt-3 text-base font-black text-slate-900">
-                            Chưa có bill cần pha chế
-                          </h4>
-                          <p className="mt-1 max-w-xs text-sm font-medium text-slate-500">
-                            Bill mới sẽ tự động xuất hiện tại đây theo thứ tự tạo.
-                          </p>
-                        </div>
-                      ) : null}
+                {!loading && !activeQueue.length ? (
+                  <div className="flex h-full min-w-[min(720px,100%)] flex-1 flex-col items-center justify-center px-6 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFF3D2] text-[#A66B00]">
+                      <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
                     </div>
-                  </section>
-                );
-              })}
+                    <h4 className="mt-3 text-base font-black text-slate-900">
+                      Chưa có bill cần pha chế
+                    </h4>
+                    <p className="mt-1 max-w-xs text-sm font-medium text-slate-500">
+                      Bill mới sẽ tự động xuất hiện tại đây theo thứ tự tạo.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </section>
 

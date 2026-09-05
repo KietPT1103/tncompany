@@ -331,3 +331,17 @@ button:disabled {
 .admin-list-scrollbar::-webkit-scrollbar-corner {
   background: #ecfdf5;
 }
+
+.bar-kds-drag-scroll {
+  cursor: grab;
+}
+
+.bar-kds-drag-scroll [data-bar-receipt="true"] {
+  cursor: default;
+}
+
+.bar-kds-drag-scroll[data-dragging="true"],
+.bar-kds-drag-scroll[data-dragging="true"] * {
+  cursor: grabbing !important;
+  user-select: none;
+}
