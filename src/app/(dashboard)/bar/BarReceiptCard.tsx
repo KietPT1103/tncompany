@@ -6,6 +6,7 @@ import {
   BAR_KDS_RECEIPT_CONTENT_FOOTER_GAP_PX,
   BAR_KDS_RECEIPT_FOOTER_SAFE_AREA_PX,
   BAR_KDS_RECEIPT_HEADER_SAFE_AREA_PX,
+  BAR_KDS_TICKET_VERTICAL_OVERLAP_PX,
   type BarKdsTicketSegment,
 } from "./barBoardQueue";
 import { getBarWaitState } from "./barWaitState";
@@ -14,6 +15,7 @@ type BarReceiptCardProps = {
   segment: BarKdsTicketSegment;
   now: number;
   busy: boolean;
+  overlapPrevious?: boolean;
   onComplete: (job: BarPrintJob) => void;
   onShowDetails: (job: BarPrintJob) => void;
 };
@@ -38,6 +40,7 @@ export default function BarReceiptCard({
   segment,
   now,
   busy,
+  overlapPrevious = false,
   onComplete,
   onShowDetails,
 }: BarReceiptCardProps) {
@@ -59,6 +62,9 @@ export default function BarReceiptCard({
       style={{
         paddingTop: `${BAR_KDS_RECEIPT_HEADER_SAFE_AREA_PX}px`,
         paddingBottom: `${BAR_KDS_RECEIPT_FOOTER_SAFE_AREA_PX}px`,
+        marginTop: overlapPrevious
+          ? `-${BAR_KDS_TICKET_VERTICAL_OVERLAP_PX}px`
+          : undefined,
       }}
     >
       <div

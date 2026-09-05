@@ -777,12 +777,13 @@ export default function BarBoardPage() {
                           gap: `${BAR_KDS_COLUMN_GAP}px`,
                         }}
                       >
-                        {columnSegments.map((segment) => (
+                        {columnSegments.map((segment, segmentIndex) => (
                           <BarReceiptCard
                             key={`${segment.job.id}-${segment.segmentIndex}`}
                             segment={segment}
                             now={now}
                             busy={busyIds.has(segment.job.id)}
+                            overlapPrevious={segmentIndex > 0}
                             onComplete={(selectedJob) => {
                               void completeJob(selectedJob);
                             }}

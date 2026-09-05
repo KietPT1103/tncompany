@@ -10,6 +10,7 @@ import {
   BAR_KDS_RECEIPT_FOOTER_SAFE_AREA_PX,
   BAR_KDS_RECEIPT_HEADER_SAFE_AREA_PX,
   BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX,
+  BAR_KDS_TICKET_VERTICAL_OVERLAP_PX,
   BAR_KDS_TICKET_WIDTH,
   buildBarKdsColumns,
   flattenBarKdsColumns,
@@ -22,6 +23,7 @@ test("uses compact KDS ticket dimensions and gutters", () => {
   assert.equal(BAR_KDS_TICKET_WIDTH, 320);
   assert.equal(BAR_KDS_COLUMN_GAP, 4);
   assert.equal(BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX, 20);
+  assert.equal(BAR_KDS_TICKET_VERTICAL_OVERLAP_PX, 20);
 });
 
 test("keeps receipt actions above the jagged paper safe area", () => {
