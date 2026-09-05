@@ -9,6 +9,7 @@ import {
   BAR_KDS_TICKET_VERTICAL_OVERLAP_PX,
   type BarKdsTicketSegment,
 } from "./barBoardQueue";
+import { shouldShowBarReceiptPin } from "./barReceiptPin";
 import { getBarWaitState } from "./barWaitState";
 
 type BarReceiptCardProps = {
@@ -50,6 +51,7 @@ export default function BarReceiptCard({
   const createdAt = getCreatedDate(job);
   const queueLabel = String(segment.queueNumber).padStart(2, "0");
   const isFirstInQueue = segment.queueNumber === 1;
+  const showPin = shouldShowBarReceiptPin(segment);
 
   return (
     <article
@@ -96,6 +98,22 @@ export default function BarReceiptCard({
           borderImageRepeat: "stretch",
         }}
       />
+
+      {showPin ? (
+        <>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 top-7 z-20 hidden h-1 w-3.5 -translate-x-[35%] -rotate-12 rounded-full bg-slate-950/30 blur-[3px] md:block"
+          />
+          <img
+            src="/assets/bar/ghim-kds-piercing.png"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="pointer-events-none absolute -top-1 left-1/2 z-30 hidden h-10 w-10 -translate-x-1/2 select-none object-contain md:block"
+          />
+        </>
+      ) : null}
 
       <button
         type="button"

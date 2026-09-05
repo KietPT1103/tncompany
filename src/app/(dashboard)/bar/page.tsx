@@ -740,7 +740,7 @@ export default function BarBoardPage() {
               onPointerMove={handleKdsPointerMove}
               onPointerUp={stopKdsPointerDrag}
               onPointerCancel={stopKdsPointerDrag}
-              className="admin-list-scrollbar bar-kds-drag-scroll hidden min-h-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-lg bg-[#ECEEF1] px-1 py-1.5 md:block"
+              className="admin-list-scrollbar bar-kds-drag-scroll hidden min-h-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-lg bg-[#ECEEF1] px-1 pb-1.5 pt-5 md:block"
             >
               <div
                 className="flex h-full w-max min-w-full items-start pb-2 pr-3"
