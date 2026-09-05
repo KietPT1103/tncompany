@@ -28,7 +28,7 @@ import { SelectBox } from "@/components/ui/SelectBox";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { useStore } from "@/context/StoreContext";
 import { cn } from "@/lib/utils";
-import { getBills } from "@/services/billService";
+import { getAllBills } from "@/services/billService";
 import { getAllProducts } from "@/services/products";
 import {
   aggregateProductSales,
@@ -347,7 +347,7 @@ export default function ProductSalesReportPage() {
     setError("");
     try {
       const [bills, products] = await Promise.all([
-        getBills({ storeId, startDate: parseInputDate(startDate), endDate: parseInputDate(endDate, true), includeCancelled: true, limitCount: 5000 }),
+        getAllBills({ storeId, startDate: parseInputDate(startDate), endDate: parseInputDate(endDate, true), includeCancelled: true }),
         getAllProducts(storeId),
       ]);
       setRows(aggregateProductSales(bills, products));

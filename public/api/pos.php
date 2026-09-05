@@ -55,6 +55,11 @@ function pos_limit($value, int $fallback = 100): int
     return max(1, min(2000, (int) ($value ?: $fallback)));
 }
 
+function pos_offset($value): int
+{
+    return max(0, (int) ($value ?? 0));
+}
+
 function pos_ensure_default_tables(string $storeId): void
 {
     if (!in_array($storeId, ['cafe', 'restaurant', 'bakery'], true)) {
@@ -703,7 +708,8 @@ if ($method === 'GET' && $resource === 'bills') {
     if (!empty($_GET['startDate'])) { $where[] = 'created_at>=:start_date'; $params['start_date'] = pos_mysql_datetime($_GET['startDate']); }
     if (!empty($_GET['endDate'])) { $where[] = 'created_at<=:end_date'; $params['end_date'] = pos_mysql_datetime($_GET['endDate']); }
     $limit = pos_limit($_GET['limit'] ?? 100);
-    $statement = db()->prepare('SELECT * FROM bills WHERE ' . implode(' AND ', $where) . " ORDER BY created_at DESC LIMIT $limit");
+    $offset = pos_offset($_GET['offset'] ?? 0);
+    $statement = db()->prepare('SELECT * FROM bills WHERE ' . implode(' AND ', $where) . " ORDER BY created_at DESC, id DESC LIMIT $limit OFFSET $offset");
     $statement->execute($params);
     pos_polling_response(pos_map_bills($statement->fetchAll()));
 }
