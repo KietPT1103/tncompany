@@ -3,8 +3,8 @@ import type {
   BarPrintJobItem,
 } from "@/services/barPrintJobService";
 
-export const BAR_KDS_TICKET_WIDTH = 300;
-export const BAR_KDS_COLUMN_GAP = 8;
+export const BAR_KDS_TICKET_WIDTH = 320;
+export const BAR_KDS_COLUMN_GAP = 4;
 export const BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX = 20;
 export const BAR_KDS_DEFAULT_COLUMN_HEIGHT = 640;
 export const BAR_KDS_MOBILE_SEGMENT_HEIGHT = 560;
@@ -19,10 +19,10 @@ const BAR_KDS_PREVIOUS_HEADER_INSET = 24;
 const BAR_KDS_HEADER_INSET_GROWTH =
   BAR_KDS_RECEIPT_HEADER_SAFE_AREA_PX - BAR_KDS_PREVIOUS_HEADER_INSET;
 const BAR_KDS_FIRST_SEGMENT_BASE_HEIGHT =
-  178 + BAR_KDS_FOOTER_INSET_GROWTH + BAR_KDS_HEADER_INSET_GROWTH;
+  164 + BAR_KDS_FOOTER_INSET_GROWTH + BAR_KDS_HEADER_INSET_GROWTH;
 const BAR_KDS_CONTINUATION_SEGMENT_BASE_HEIGHT =
   100 + BAR_KDS_FOOTER_INSET_GROWTH + BAR_KDS_HEADER_INSET_GROWTH;
-const BAR_KDS_COMPLETION_ACTION_HEIGHT = 58;
+const BAR_KDS_COMPLETION_ACTION_HEIGHT = 48;
 const BAR_KDS_CONTINUATION_CUE_HEIGHT = 24;
 
 export type BarKdsTicketSegment = {
@@ -66,7 +66,21 @@ export const getBarKdsBoardContentHeight = (
   clientHeight: number,
   paddingTop: number,
   paddingBottom: number,
-) => Math.max(1, clientHeight - paddingTop - paddingBottom);
+  viewportHeight?: number,
+  boardTop?: number,
+) => {
+  const viewportAvailableHeight =
+    viewportHeight !== undefined && boardTop !== undefined
+      ? Math.max(0, viewportHeight - boardTop)
+      : 0;
+
+  return Math.max(
+    1,
+    Math.max(clientHeight, viewportAvailableHeight) -
+      paddingTop -
+      paddingBottom,
+  );
+};
 
 export function getActiveBarQueue(jobs: BarPrintJob[]): BarPrintJob[] {
   return jobs
@@ -224,4 +238,49 @@ export function flattenBarKdsColumns(
   columns: BarKdsTicketSegment[][],
 ): BarKdsTicketSegment[] {
   return columns.flat();
+}
+
+type BarKdsRenderedHeightPackingOptions = {
+  columnHeight: number;
+  columnGap?: number;
+  getRenderedHeight: (segment: BarKdsTicketSegment) => number | undefined;
+};
+
+export function repackBarKdsColumnsByRenderedHeight(
+  columns: BarKdsTicketSegment[][],
+  options: BarKdsRenderedHeightPackingOptions,
+): BarKdsTicketSegment[][] {
+  const segments = flattenBarKdsColumns(columns);
+  if (!segments.length) return [];
+
+  const columnHeight = Math.max(1, options.columnHeight);
+  const columnGap = options.columnGap ?? BAR_KDS_COLUMN_GAP;
+  const packedColumns: BarKdsTicketSegment[][] = [[]];
+  const usedHeights = [0];
+
+  for (const segment of segments) {
+    let columnIndex = packedColumns.length - 1;
+    const renderedHeight = options.getRenderedHeight(segment);
+    const segmentHeight =
+      renderedHeight && renderedHeight > 0
+        ? Math.floor(renderedHeight)
+        : segment.estimatedHeight;
+    const gap = packedColumns[columnIndex].length ? columnGap : 0;
+    const mustStartNextColumn =
+      packedColumns[columnIndex].length > 0 &&
+      (segment.isContinuation ||
+        usedHeights[columnIndex] + gap + segmentHeight > columnHeight);
+
+    if (mustStartNextColumn) {
+      packedColumns.push([]);
+      usedHeights.push(0);
+      columnIndex += 1;
+    }
+
+    const appliedGap = packedColumns[columnIndex].length ? columnGap : 0;
+    packedColumns[columnIndex].push(segment);
+    usedHeights[columnIndex] += appliedGap + segmentHeight;
+  }
+
+  return packedColumns;
 }

@@ -15,11 +15,12 @@ import {
   flattenBarKdsColumns,
   getActiveBarQueue,
   getBarKdsBoardContentHeight,
+  repackBarKdsColumnsByRenderedHeight,
 } from "./barBoardQueue.ts";
 
 test("uses compact KDS ticket dimensions and gutters", () => {
-  assert.equal(BAR_KDS_TICKET_WIDTH, 300);
-  assert.equal(BAR_KDS_COLUMN_GAP, 8);
+  assert.equal(BAR_KDS_TICKET_WIDTH, 320);
+  assert.equal(BAR_KDS_COLUMN_GAP, 4);
   assert.equal(BAR_KDS_TICKET_HORIZONTAL_OVERLAP_PX, 20);
 });
 
@@ -37,6 +38,10 @@ test("keeps one consistent gap between the last item and the receipt footer", ()
 
 test("packs tickets inside the board content height without counting its padding", () => {
   assert.equal(getBarKdsBoardContentHeight(547, 6, 6), 535);
+});
+
+test("uses the remaining desktop viewport when the flex board underreports its height", () => {
+  assert.equal(getBarKdsBoardContentHeight(547, 6, 6, 862, 136), 714);
 });
 
 const createItems = (count: number): BarPrintJobItem[] =>
@@ -194,6 +199,85 @@ test("fills the remaining vertical space before starting the next column", () =>
   assert.deepEqual(
     columns.map((column) => column.map((segment) => segment.job.id)),
     [["first", "second"], ["third"]],
+  );
+});
+
+test("packs two rendered-height short bills into one desktop KDS column", () => {
+  const columns = buildBarKdsColumns(
+    [
+      createJob("first-short", 1, "new", 2),
+      createJob("second-short", 2, "new", 2),
+    ],
+    { columnHeight: 598 },
+  );
+
+  assert.deepEqual(
+    columns.map((column) => column.map((segment) => segment.job.id)),
+    [["first-short", "second-short"]],
+  );
+  assert.ok(
+    columns[0].reduce(
+      (height, segment, index) =>
+        height + segment.estimatedHeight + (index ? BAR_KDS_COLUMN_GAP : 0),
+      0,
+    ) <= 598,
+  );
+});
+
+test("re-packs short bills using their rendered height when the estimate is too large", () => {
+  const estimatedColumns = buildBarKdsColumns(
+    [
+      createJob("first-short", 1, "new", 2),
+      createJob("second-short", 2, "new", 2),
+    ],
+    {
+      columnHeight: 598,
+      firstSegmentBaseHeight: 210,
+      completionActionHeight: 58,
+    },
+  );
+
+  assert.equal(estimatedColumns.length, 2);
+  assert.deepEqual(
+    repackBarKdsColumnsByRenderedHeight(estimatedColumns, {
+      columnHeight: 598,
+      getRenderedHeight: () => 288,
+    }).map((column) => column.map((segment) => segment.job.id)),
+    [["first-short", "second-short"]],
+  );
+});
+
+test("packs two short rendered bills at the compact 100-percent desktop height", () => {
+  const columns = buildBarKdsColumns(
+    [
+      createJob("first-short", 1, "new", 2),
+      createJob("second-short", 2, "new", 2),
+    ],
+    { columnHeight: 580 },
+  );
+
+  assert.deepEqual(
+    repackBarKdsColumnsByRenderedHeight(columns, {
+      columnHeight: 580,
+      getRenderedHeight: () => 288.1,
+    }).map((column) => column.map((segment) => segment.job.id)),
+    [["first-short", "second-short"]],
+  );
+});
+
+test("keeps continuation tickets at the start of the next KDS column", () => {
+  const estimatedColumns = buildBarKdsColumns(
+    [createJob("long", 1, "new", 8)],
+    testLayout,
+  );
+
+  assert.equal(flattenBarKdsColumns(estimatedColumns).length, 2);
+  assert.deepEqual(
+    repackBarKdsColumnsByRenderedHeight(estimatedColumns, {
+      columnHeight: 1_000,
+      getRenderedHeight: () => 80,
+    }).map((column) => column.map((segment) => segment.segmentIndex)),
+    [[0], [1]],
   );
 });
 

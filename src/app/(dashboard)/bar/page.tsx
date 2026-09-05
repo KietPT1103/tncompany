@@ -4,6 +4,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -44,6 +45,7 @@ import {
   flattenBarKdsColumns,
   getActiveBarQueue,
   getBarKdsBoardContentHeight,
+  repackBarKdsColumnsByRenderedHeight,
 } from "./barBoardQueue";
 import {
   barBillDetailReducer,
@@ -77,6 +79,10 @@ type BarKdsDragState = {
   startScrollLeft: number;
   hasDragged: boolean;
 };
+
+const getBarKdsSegmentRenderKey = (
+  segment: ReturnType<typeof flattenBarKdsColumns>[number],
+) => `${segment.job.id}:${segment.segmentIndex + 1}`;
 
 const getCreatedDate = (job: BarPrintJob) =>
   job.createdAt?.seconds ? new Date(job.createdAt.seconds * 1000) : new Date();
@@ -168,6 +174,9 @@ export default function BarBoardPage() {
   const [kdsColumnHeight, setKdsColumnHeight] = useState(
     BAR_KDS_DEFAULT_COLUMN_HEIGHT,
   );
+  const [kdsRenderedSegmentHeights, setKdsRenderedSegmentHeights] = useState<
+    Record<string, number>
+  >({});
   const sidebarVariant = getBarSidebarVariant(role);
 
   const activeQueue = useMemo(() => getActiveBarQueue(jobs), [jobs]);
@@ -177,6 +186,15 @@ export default function BarBoardPage() {
         columnHeight: kdsColumnHeight,
       }),
     [activeQueue, kdsColumnHeight],
+  );
+  const renderedQueueColumns = useMemo(
+    () =>
+      repackBarKdsColumnsByRenderedHeight(queueColumns, {
+        columnHeight: kdsColumnHeight,
+        getRenderedHeight: (segment) =>
+          kdsRenderedSegmentHeights[getBarKdsSegmentRenderKey(segment)],
+      }),
+    [kdsColumnHeight, kdsRenderedSegmentHeights, queueColumns],
   );
   const mobileSegments = useMemo(
     () =>
@@ -227,6 +245,44 @@ export default function BarBoardPage() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useLayoutEffect(() => {
+    const board = kdsBoardRef.current;
+    if (!board) return;
+
+    const receipts = Array.from(
+      board.querySelectorAll<HTMLElement>("[data-bar-receipt='true']"),
+    );
+
+    const updateRenderedHeights = () => {
+      const nextHeights: Record<string, number> = {};
+
+      for (const receipt of receipts) {
+        const jobId = receipt.dataset.barJobId;
+        const segmentNumber = receipt.dataset.barSegment;
+        const renderedHeight = receipt.getBoundingClientRect().height;
+        if (!jobId || !segmentNumber || renderedHeight <= 0) continue;
+        nextHeights[`${jobId}:${segmentNumber}`] = renderedHeight;
+      }
+
+      setKdsRenderedSegmentHeights((currentHeights) => {
+        const currentKeys = Object.keys(currentHeights);
+        const nextKeys = Object.keys(nextHeights);
+        const unchanged =
+          currentKeys.length === nextKeys.length &&
+          nextKeys.every(
+            (key) => currentHeights[key] === nextHeights[key],
+          );
+        return unchanged ? currentHeights : nextHeights;
+      });
+    };
+
+    updateRenderedHeights();
+
+    const observer = new ResizeObserver(updateRenderedHeights);
+    receipts.forEach((receipt) => observer.observe(receipt));
+    return () => observer.disconnect();
+  }, [renderedQueueColumns]);
+
   useEffect(() => {
     const board = kdsBoardRef.current;
     if (!board) return;
@@ -239,6 +295,8 @@ export default function BarBoardPage() {
             board.clientHeight,
             Number.parseFloat(styles.paddingTop) || 0,
             Number.parseFloat(styles.paddingBottom) || 0,
+            window.innerHeight,
+            board.getBoundingClientRect().top,
           ),
         );
       }
@@ -568,7 +626,7 @@ export default function BarBoardPage() {
             </div>
           </header>
 
-          <section className="w-full px-0 pb-3 pt-0 sm:pb-4 md:flex md:h-[calc(100dvh-54px)] md:flex-col md:overflow-hidden md:pb-4">
+          <section className="w-full px-0 pb-3 pt-0 sm:pb-4 md:flex md:h-[calc(100dvh-54px)] md:flex-col md:overflow-hidden md:pb-0">
             {syncError ? (
               <div className="mb-3 flex shrink-0 items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
                 <RefreshCcw className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -576,7 +634,7 @@ export default function BarBoardPage() {
               </div>
             ) : null}
 
-            <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 bg-white px-3 py-2.5 shadow-[0_5px_16px_rgba(15,23,42,0.08)] md:px-3 md:py-2">
+            <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 bg-white px-3 py-2.5 shadow-[0_5px_16px_rgba(15,23,42,0.08)] md:mb-1 md:px-3 md:py-2">
               <div className="flex min-w-0 flex-1 items-center gap-2.5">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#E9F4F0] text-[#176A57]">
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -610,7 +668,7 @@ export default function BarBoardPage() {
                   <span className="hidden whitespace-nowrap md:inline">Cột KDS</span>
                   <strong className="inline-flex h-6 min-w-7 items-center justify-center rounded-md bg-[#C87500] px-2 text-xs font-black tabular-nums text-white">
                     <span className="md:hidden">{mobileSegments.length}</span>
-                    <span className="hidden md:inline">{queueColumns.length}</span>
+                    <span className="hidden md:inline">{renderedQueueColumns.length}</span>
                   </strong>
                 </span>
               </div>
@@ -705,7 +763,7 @@ export default function BarBoardPage() {
                   : null}
 
                 {!loading
-                  ? queueColumns.map((columnSegments, columnIndex) => (
+                  ? renderedQueueColumns.map((columnSegments, columnIndex) => (
                       <section
                         key={`bar-kds-column-${columnIndex + 1}`}
                         aria-label={`Cột KDS ${columnIndex + 1}`}
