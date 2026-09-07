@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import Link from "next/link";
-import { Boxes, LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Boxes, Download, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { hasPermission } from "@/lib/permissions";
 import {
-  createIngredient, deleteIngredient, getIngredients, getNextIngredientCode,
+  createIngredient, deleteIngredient, getIngredients, getNextIngredientCode, migrateIngredientCategoryProducts,
   updateIngredient, type Ingredient,
 } from "@/services/ingredients";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
+import { exportIngredientsToExcel, parseIngredientWorkbook } from "@/services/catalogExcel";
 
 type Form = {
   code: string; name: string; unit: string; purchaseUnit: string; conversionFactor: string; stock: string; cost: string;
@@ -37,8 +38,10 @@ export default function IngredientsPage() {
   const [preparing, setPreparing] = useState(false);
   const [deleting, setDeleting] = useState("");
   const [error, setError] = useState("");
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   async function reload() {
+    await migrateIngredientCategoryProducts(storeId);
     const [ingredientResult, supplierResult] = await Promise.all([
       getIngredients(storeId), getSuppliers(storeId),
     ]);
@@ -73,11 +76,13 @@ export default function IngredientsPage() {
   }
   function startEdit(item: Ingredient) {
     setEditing(item);
+    const legacyFactor = item.purchaseToBaseFactor || 1;
     setForm({
       code: item.ingredientCode, name: item.ingredientName, unit: item.baseUnit || item.unit,
       purchaseUnit: item.purchaseUnit || item.unit,
-      conversionFactor: String(item.purchaseToBaseFactor || 1),
-      stock: String(item.stockQuantity), cost: String(item.cost ?? 0),
+      conversionFactor: String(legacyFactor),
+      stock: String(item.stockQuantity / legacyFactor),
+      cost: String(item.cost ?? 0),
       supplierId: item.supplierId || "", supplierItemCode: item.supplierItemCode,
       description: item.description,
     });
@@ -85,7 +90,7 @@ export default function IngredientsPage() {
   }
   async function save() {
     if (!form.code.trim() || !form.name.trim() || !form.unit.trim() || !form.purchaseUnit.trim() || decimal(form.conversionFactor) <= 0) {
-      setError(`Vui lòng nhập mã, tên và đơn vị ${itemLabel}.`);
+      setError(`Vui lòng nhập mã, tên, đơn vị thu ngân, đơn vị pha chế và hệ số quy đổi của ${itemLabel}.`);
       return;
     }
     setSaving(true);
@@ -122,11 +127,53 @@ export default function IngredientsPage() {
     }
   }
 
-  return <div className="min-h-screen bg-slate-50 p-4 md:p-8"><div className="mx-auto max-w-7xl">
+  async function importExcel(file: File) {
+    setSaving(true);
+    setError("");
+    try {
+      const rows = await parseIngredientWorkbook(file);
+      const existingCodes = new Set(items.map((item) => item.ingredientCode.toLocaleLowerCase("vi")));
+      let created = 0;
+      let updated = 0;
+      for (const row of rows) {
+        const payload = {
+          storeId,
+          ingredientName: row.ingredientName,
+          unit: row.baseUnit,
+          baseUnit: row.baseUnit,
+          purchaseUnit: row.purchaseUnit,
+          purchaseToBaseFactor: row.purchaseToBaseFactor,
+          cost: row.cost,
+          supplierItemCode: row.supplierItemCode,
+          description: row.description,
+          isActive: row.isActive,
+        };
+        if (existingCodes.has(row.ingredientCode.toLocaleLowerCase("vi"))) {
+          await updateIngredient(row.ingredientCode, payload);
+          updated += 1;
+        } else {
+          await createIngredient({ ...payload, ingredientCode: row.ingredientCode, stockQuantity: 0 });
+          existingCodes.add(row.ingredientCode.toLocaleLowerCase("vi"));
+          created += 1;
+        }
+      }
+      await reload();
+      window.alert(`Đã import ${rows.length} dòng: thêm mới ${created}, cập nhật ${updated}.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `Không thể import danh sách ${itemLabel}.`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="min-h-screen bg-slate-50 p-4 font-sans md:p-8"><div className="mx-auto max-w-7xl">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="text-3xl font-bold">{itemTitle}</h1><p className="mt-1 text-slate-500">{isConstructionWarehouse ? "Danh mục độc lập của kho thợ, phục vụ nhập, xuất và kiểm kê vật tư xây dựng." : "Dữ liệu riêng cho định mức, nhập hàng và kiểm kho."}</p></div>
       <div className="flex flex-wrap gap-2">
         {(hasPermission(user, "inventory_receipts.view") || hasPermission(user, "inventory_issues.access") || hasPermission(user, "inventory_checks.access")) && <Link href="/inventory" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 hover:bg-emerald-50"><Boxes className="h-4 w-4" /> Sổ kho</Link>}
+        <button disabled={saving || items.length === 0} onClick={() => exportIngredientsToExcel(items, storeId)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 disabled:opacity-50"><Download className="h-4 w-4" /> Xuất Excel</button>
+        <button disabled={saving} onClick={() => importInputRef.current?.click()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 disabled:opacity-50"><Upload className="h-4 w-4" /> Import Excel</button>
+        <input ref={importInputRef} type="file" accept=".xls,.xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importExcel(file); event.target.value = ""; }} />
         <button disabled={preparing} onClick={() => void startCreate()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">
           {preparing ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}{preparing ? "Đang chuẩn bị…" : `Thêm ${itemLabel}`}</button>
       </div>
@@ -136,12 +183,12 @@ export default function IngredientsPage() {
       <label className="relative block border-b p-5"><Search className="absolute left-9 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Tìm mã, tên ${itemLabel} hoặc nhà phân phối`} className="h-12 w-full rounded-xl border bg-slate-50 pl-12 pr-4" /></label>
       <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left">
-        <thead className="bg-slate-50 text-sm text-slate-600"><tr><th className="p-4">Mã</th><th className="p-4">Tên {itemLabel}</th><th className="p-4">Đơn vị</th><th className="p-4">Nhà phân phối</th><th className="p-4 text-right">Tồn kho</th><th className="p-4 text-right">Giá vốn</th><th className="p-4 text-right">Thao tác</th></tr></thead>
+        <thead className="bg-slate-50 text-sm text-slate-600"><tr><th className="p-4">Mã</th><th className="p-4">Tên {itemLabel}</th><th className="p-4">Nhà phân phối</th><th className="p-4 text-right">Tồn kho</th><th className="p-4">Đơn vị</th><th className="p-4 text-right">Giá vốn</th><th className="p-4 text-right">Thao tác</th></tr></thead>
         <tbody className="divide-y">{loading ? <tr><td colSpan={7} className="p-14 text-center"><LoaderCircle className="mx-auto animate-spin" /></td></tr>
           : filtered.length === 0 ? <tr><td colSpan={7} className="p-14 text-center text-slate-500"><Boxes className="mx-auto mb-2 text-slate-300" />Chưa có {itemLabel}.</td></tr>
           : filtered.map((item) => <tr key={item.id} className="hover:bg-slate-50">
             <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b><small className="block text-slate-500">{item.supplierItemCode}</small></td>
-            <td className="p-4"><b>{item.baseUnit || item.unit || "—"}</b><small className="block text-slate-500">1 {item.purchaseUnit || item.unit} = {item.purchaseToBaseFactor || 1} {item.baseUnit || item.unit}</small></td><td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{item.stockQuantity.toLocaleString("vi-VN")} {item.baseUnit || item.unit}</td><td className="p-4 text-right">{Number(item.cost || 0).toLocaleString("vi-VN", { maximumFractionDigits: 6 })} ₫</td>
+            <td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{(item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b><small className="block text-slate-500">1 {item.purchaseUnit || item.unit} = {item.purchaseToBaseFactor || 1} {item.baseUnit || item.unit}</small></td><td className="p-4 text-right">{Number(item.cost || 0).toLocaleString("vi-VN", { maximumFractionDigits: 6 })} ₫/{item.baseUnit || item.unit}</td>
             <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button><button disabled={Boolean(deleting)} onClick={() => void remove(item)} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
           </tr>)}</tbody>
       </table></div>
@@ -152,11 +199,11 @@ export default function IngredientsPage() {
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <Field label={`Mã ${itemLabel} *`}><input disabled={Boolean(editing)} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Field>
       <Field label={`Tên ${itemLabel} *`}><input value={form.name} placeholder={isConstructionWarehouse ? "Ví dụ: Xi măng, thép, dây điện" : "Ví dụ: Cà phê hạt"} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-      <Field label="Đơn vị nhập kho *"><input value={form.purchaseUnit} placeholder="túi, bịch, chai, thùng…" onChange={(e) => setForm({ ...form, purchaseUnit: e.target.value })} /></Field>
-      <Field label="Đơn vị sử dụng/công thức *"><input value={form.unit} placeholder="g, ml, cái…" onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
-      <Field label={`Số ${form.unit || "đơn vị sử dụng"} trong 1 ${form.purchaseUnit || "đơn vị nhập"} *`}><input inputMode="decimal" value={form.conversionFactor} placeholder="Ví dụ: 1000" onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })} /></Field>
-      <Field label="Tồn kho hiện tại"><input disabled value={form.stock} title="Tồn kho chỉ thay đổi qua phiếu nhập, phiếu xuất hoặc kiểm kho." /></Field>
-      <Field label={`Giá vốn / ${form.unit || "đơn vị sử dụng"}`}><input inputMode="decimal" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></Field>
+      <Field label="Đơn vị thu ngân/nhập kho *"><input value={form.purchaseUnit} placeholder="túi, bịch, chai, thùng…" onChange={(e) => setForm({ ...form, purchaseUnit: e.target.value })} /></Field>
+      <Field label="Đơn vị pha chế/công thức *"><input value={form.unit} placeholder="g, ml, cái…" onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
+      <Field label={`Số ${form.unit || "đơn vị pha chế"} trong 1 ${form.purchaseUnit || "đơn vị thu ngân"} *`}><input inputMode="decimal" value={form.conversionFactor} placeholder="Ví dụ: 1000" onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })} /></Field>
+      <Field label={`Tồn kho hiện tại (${form.purchaseUnit || "đơn vị thu ngân"})`}><input disabled value={form.stock} title="Tồn kho chỉ thay đổi qua phiếu nhập, phiếu xuất hoặc kiểm kho." /></Field>
+      <Field label={`Giá vốn / ${form.unit || "đơn vị pha chế"}`}><input inputMode="decimal" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></Field>
       <Field label="Nhà phân phối"><select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}><option value="">Chưa chọn</option>{suppliers.filter((s) => s.isActive).map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}</select></Field>
       <Field label="Mã tại nhà phân phối"><input value={form.supplierItemCode} placeholder="Mã hàng của nhà phân phối" onChange={(e) => setForm({ ...form, supplierItemCode: e.target.value })} /></Field>
       <Field label="Ghi chú"><input value={form.description} placeholder="Quy cách hoặc ghi chú bảo quản" onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>

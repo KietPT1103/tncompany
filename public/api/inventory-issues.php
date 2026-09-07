@@ -29,6 +29,9 @@ function inventory_issues_ensure_schema(): void
         CONSTRAINT fk_inventory_issue_items_issue FOREIGN KEY (issue_id) REFERENCES inventory_issues(id) ON DELETE CASCADE,
         CONSTRAINT fk_inventory_issue_items_ingredient FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE RESTRICT
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    auth_ensure_column('inventory_issue_items', 'base_quantity', 'DECIMAL(15,3) NULL AFTER quantity');
+    auth_ensure_column('inventory_issues', 'shift_id', 'VARCHAR(64) NULL AFTER created_by');
+    auth_ensure_column('inventory_issues', 'shift_type', 'VARCHAR(20) NULL AFTER shift_id');
 }
 
 function inventory_issues_actor(array $user): string
@@ -53,6 +56,7 @@ function inventory_issues_items(string $id): array
         'id' => (int) $row['id'], 'ingredientId' => (string) $row['ingredient_id'],
         'ingredientCode' => (string) $row['ingredient_code'], 'ingredientName' => (string) $row['ingredient_name'],
         'unit' => (string) ($row['unit'] ?? ''), 'quantity' => (float) $row['quantity'],
+        'baseQuantity' => $row['base_quantity'] !== null ? (float) $row['base_quantity'] : (float) $row['quantity'],
         'stockBefore' => $row['stock_before'] !== null ? (float) $row['stock_before'] : null,
         'stockAfter' => $row['stock_after'] !== null ? (float) $row['stock_after'] : null,
         'note' => (string) ($row['note'] ?? ''),
@@ -69,6 +73,7 @@ function inventory_issues_payload(array $row): array
         'note' => (string) ($row['note'] ?? ''), 'totalQuantity' => (float) $row['total_quantity'],
         'itemCount' => count($items), 'completedAt' => $row['completed_at'] ?: null,
         'completedBy' => $row['completed_by'] ?: null, 'createdBy' => (string) ($row['created_by'] ?? ''),
+        'shiftId' => $row['shift_id'] ?: null, 'shiftType' => $row['shift_type'] ?: null,
         'createdAt' => (string) $row['created_at'], 'updatedAt' => (string) $row['updated_at'], 'items' => $items,
     ];
 }
@@ -129,7 +134,23 @@ foreach ($rawItems as $raw) {
     $ingredient = $findIngredient->fetch();
     $findIngredient->closeCursor();
     if (!$ingredient) respond_error('Không tìm thấy nguyên liệu ' . $code . '.', 422);
-    $normalized[$code] = ['ingredient' => $ingredient, 'quantity' => $quantity, 'note' => trim((string) ($raw['note'] ?? ''))];
+    $conversionFactor = max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1));
+    $normalized[$code] = [
+        'ingredient' => $ingredient,
+        'quantity' => $quantity,
+        'baseQuantity' => round($quantity * $conversionFactor, 3),
+        'note' => trim((string) ($raw['note'] ?? '')),
+    ];
+}
+
+$shiftId = trim((string) ($body['shiftId'] ?? '')) ?: null;
+$shiftType = trim((string) ($body['shiftType'] ?? '')) ?: null;
+if ($shiftId !== null) {
+    $shift = db()->prepare('SELECT shift_type FROM cashier_shifts WHERE id=:id AND store_id=:store_id AND status="open" LIMIT 1');
+    $shift->execute(['id' => $shiftId, 'store_id' => $storeId]);
+    $activeShiftType = $shift->fetchColumn();
+    if ($activeShiftType === false) respond_error('Ca làm việc đã đóng hoặc không thuộc cửa hàng đang chọn.', 422);
+    $shiftType = (string) $activeShiftType;
 }
 
 $pdo = db();
@@ -140,16 +161,16 @@ try {
     if ($existing && $existing['status'] !== 'draft') throw new RuntimeException('Phiếu đã hoàn thành không thể chỉnh sửa.');
     if ($id === '') {
         $id = uuidv4();
-        $insert = $pdo->prepare('INSERT INTO inventory_issues (id,store_id,issue_code,issue_date,destination,issued_by,status,note,total_quantity,created_by) VALUES (:id,:store_id,:code,:date,:destination,:issued_by,"draft",:note,:total,:actor)');
-        $insert->execute(['id' => $id, 'store_id' => $storeId, 'code' => inventory_issues_code($storeId), 'date' => $issueDate, 'destination' => $destination, 'issued_by' => $issuedBy, 'note' => trim((string) ($body['note'] ?? '')), 'total' => array_sum(array_column($normalized, 'quantity')), 'actor' => inventory_issues_actor($user)]);
+        $insert = $pdo->prepare('INSERT INTO inventory_issues (id,store_id,issue_code,issue_date,destination,issued_by,status,note,total_quantity,created_by,shift_id,shift_type) VALUES (:id,:store_id,:code,:date,:destination,:issued_by,"draft",:note,:total,:actor,:shift_id,:shift_type)');
+        $insert->execute(['id' => $id, 'store_id' => $storeId, 'code' => inventory_issues_code($storeId), 'date' => $issueDate, 'destination' => $destination, 'issued_by' => $issuedBy, 'note' => trim((string) ($body['note'] ?? '')), 'total' => array_sum(array_column($normalized, 'quantity')), 'actor' => inventory_issues_actor($user), 'shift_id' => $shiftId, 'shift_type' => $shiftType]);
     } else {
         $pdo->prepare('UPDATE inventory_issues SET issue_date=:date,destination=:destination,issued_by=:issued_by,note=:note,total_quantity=:total,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'date' => $issueDate, 'destination' => $destination, 'issued_by' => $issuedBy, 'note' => trim((string) ($body['note'] ?? '')), 'total' => array_sum(array_column($normalized, 'quantity'))]);
         $pdo->prepare('DELETE FROM inventory_issue_items WHERE issue_id=:id')->execute(['id' => $id]);
     }
-    $insertItem = $pdo->prepare('INSERT INTO inventory_issue_items (issue_id,ingredient_id,ingredient_code,ingredient_name,unit,quantity,note) VALUES (:issue,:ingredient,:code,:name,:unit,:quantity,:note)');
+    $insertItem = $pdo->prepare('INSERT INTO inventory_issue_items (issue_id,ingredient_id,ingredient_code,ingredient_name,unit,quantity,base_quantity,note) VALUES (:issue,:ingredient,:code,:name,:unit,:quantity,:base_quantity,:note)');
     foreach ($normalized as $line) {
         $ingredient = $line['ingredient'];
-        $insertItem->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'code' => $ingredient['ingredient_code'], 'name' => $ingredient['ingredient_name'], 'unit' => $ingredient['unit'], 'quantity' => $line['quantity'], 'note' => $line['note']]);
+        $insertItem->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'code' => $ingredient['ingredient_code'], 'name' => $ingredient['ingredient_name'], 'unit' => $ingredient['purchase_unit'] ?: $ingredient['unit'], 'quantity' => $line['quantity'], 'base_quantity' => $line['baseQuantity'], 'note' => $line['note']]);
     }
     if ($status === 'completed') {
         $lock = $pdo->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');
@@ -162,11 +183,14 @@ try {
             $lock->execute(['id' => $ingredient['id']]);
             $before = (float) $lock->fetchColumn();
             $lock->closeCursor();
-            $after = round($before - $line['quantity'], 3);
-            if ($after < 0) throw new RuntimeException('Tồn kho ' . $ingredient['ingredient_code'] . ' chỉ còn ' . $before . ' ' . ($ingredient['unit'] ?? '') . '.');
+            $after = round($before - $line['baseQuantity'], 3);
+            if ($after < 0) {
+                $factor = max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1));
+                throw new RuntimeException('Tồn kho ' . $ingredient['ingredient_code'] . ' chỉ còn ' . round($before / $factor, 3) . ' ' . ($ingredient['purchase_unit'] ?: $ingredient['unit']) . '.');
+            }
             $deductParams = ['id' => $ingredient['id'], 'stock' => $after];
             if ($storeId !== 'warehouse') {
-                $deductParams['quantity'] = $line['quantity'];
+                $deductParams['quantity'] = $line['baseQuantity'];
             }
             $deduct->execute($deductParams);
             $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => $before, 'after' => $after]);

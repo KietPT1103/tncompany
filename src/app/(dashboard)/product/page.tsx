@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useRouter } from "next/navigation";
 import { getIngredients } from "@/services/ingredients";
+import { exportProductsToExcel } from "@/services/catalogExcel";
 
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Pagination } from "@/components/ui/Pagination";
@@ -42,6 +43,7 @@ import {
   Search,
   Trash2,
   Upload,
+  Download,
   X,
 } from "lucide-react";
 
@@ -69,6 +71,7 @@ type ProductAction =
   | "check"
   | "receipt"
   | "import"
+  | "export"
   | "categories"
   | "normalize";
 
@@ -100,6 +103,11 @@ const productActionOptions: readonly SelectBoxOption<
     value: "import",
     label: "Import món bán",
     icon: Upload,
+  },
+  {
+    value: "export",
+    label: "Xuất Excel",
+    icon: Download,
   },
   {
     value: "categories",
@@ -938,6 +946,10 @@ export default function ProductsPage() {
           importInputRef.current?.click();
           break;
 
+        case "export":
+          exportProductsToExcel(products, storeId);
+          break;
+
         case "categories":
           router.push("/categories");
           break;
@@ -977,7 +989,11 @@ export default function ProductsPage() {
 
   async function loadProducts() {
     const items = await getAllProducts(storeId);
-    setProducts(items);
+    setProducts(items.filter((item) => {
+      if (item.itemType === "ingredient") return false;
+      const category = normalizeExcelHeader(item.categoryName || item.category || "");
+      return category !== "nguyen lieu" && category !== "nguyenlieu";
+    }));
   }
 
   async function loadIngredients() {

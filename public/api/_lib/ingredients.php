@@ -44,6 +44,7 @@ function ingredients_ensure_packaging_columns(): void
     if (!$exists) {
         return;
     }
+    auth_ensure_column('ingredients', 'preparation_stock_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER stock_quantity');
     auth_ensure_column('ingredients', 'purchase_unit', 'VARCHAR(50) NULL AFTER unit');
     auth_ensure_column('ingredients', 'base_unit', 'VARCHAR(50) NULL AFTER purchase_unit');
     auth_ensure_column('ingredients', 'purchase_to_base_factor', 'DECIMAL(15,6) NOT NULL DEFAULT 1 AFTER base_unit');
@@ -154,7 +155,6 @@ function ingredients_ensure_schema(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
 
-    auth_ensure_column('ingredients', 'preparation_stock_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER stock_quantity');
     ingredients_ensure_packaging_columns();
 
     $existingTables = db()->query(

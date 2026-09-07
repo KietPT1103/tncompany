@@ -9,6 +9,7 @@ import {
   saveInventoryIssue,
   type InventoryIssue,
 } from "@/services/inventoryIssueService";
+import { getOpenShiftByCashier, type CashierShift } from "@/services/shiftService";
 
 type DraftLine = { key: string; ingredientCode: string; quantity: string; note: string };
 type FormState = {
@@ -41,17 +42,20 @@ export default function InventoryIssuesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [historySearch, setHistorySearch] = useState("");
-  const actor = user?.displayName || user?.username || user?.email || "";
+  const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
   const emptyForm = (): FormState => ({
-    issueDate: today(), destination: isConstructionWarehouse ? "Đội thợ / công trình" : "Quầy pha chế", issuedBy: actor,
+    issueDate: today(), destination: isConstructionWarehouse ? "Đội thợ / công trình" : "Quầy pha chế", issuedBy: "",
     note: "", items: [line()],
   });
   const [form, setForm] = useState<FormState>(emptyForm);
 
   useEffect(() => {
-    if (!actor) return;
-    setForm((current) => current.issuedBy ? current : { ...current, issuedBy: actor });
-  }, [actor]);
+    if (!user?.uid) {
+      setActiveShift(null);
+      return;
+    }
+    getOpenShiftByCashier(storeId, user.uid).then(setActiveShift).catch(() => setActiveShift(null));
+  }, [storeId, user?.uid]);
 
   async function reload() {
     const [ingredientResult, issueResult] = await Promise.all([
@@ -117,6 +121,7 @@ export default function InventoryIssuesPage() {
       await saveInventoryIssue({
         id: form.id, storeId, issueDate: form.issueDate, destination: form.destination.trim(),
         issuedBy: form.issuedBy.trim(), note: form.note.trim(), status, items,
+        shiftId: activeShift?.id || null, shiftType: activeShift?.shiftType || null,
       });
       await reload();
       setForm(emptyForm());
@@ -138,7 +143,7 @@ export default function InventoryIssuesPage() {
     }
   }
 
-  return <div className="min-h-screen bg-slate-50 p-4 text-slate-950 sm:p-6 2xl:p-8">
+  return <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-950 sm:p-6 2xl:p-8">
     <div className="mx-auto max-w-[1680px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div><div className="text-sm font-bold uppercase tracking-[.2em] text-amber-600">{isConstructionWarehouse ? "Kho vật tư xây dựng → đội thợ / công trình" : "Kho nguyên liệu → pha chế"}</div>
@@ -153,7 +158,7 @@ export default function InventoryIssuesPage() {
         <div className="grid gap-4 border-b bg-emerald-950 p-5 text-white md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm font-semibold">Ngày xuất<input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
           <label className="text-sm font-semibold">Nơi nhận<input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
-          <label className="text-sm font-semibold">Người xuất<input value={form.issuedBy} onChange={(e) => setForm({ ...form, issuedBy: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
+          <label className="text-sm font-semibold">Người xuất *<input required value={form.issuedBy} onChange={(e) => setForm({ ...form, issuedBy: e.target.value })} placeholder="Bắt buộc nhập tên người xuất" className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
           <label className="text-sm font-semibold">Ghi chú chung<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Ca, bộ phận nhận..." className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
         </div>
         {form.issueCode && <div className="border-b bg-amber-50 px-5 py-3 text-sm font-bold text-amber-900">Đang sửa phiếu nháp {form.issueCode}</div>}
@@ -163,14 +168,15 @@ export default function InventoryIssuesPage() {
             <tbody className="divide-y divide-slate-200">{form.items.map((item, index) => {
               const ingredient = ingredientByCode.get(item.ingredientCode);
               const requested = number(item.quantity);
-              const insufficient = Boolean(ingredient && requested > ingredient.stockQuantity);
+              const factor = ingredient?.purchaseToBaseFactor || 1;
+              const insufficient = Boolean(ingredient && requested * factor > ingredient.stockQuantity);
               return <tr key={item.key} className={insufficient ? "bg-rose-50" : "hover:bg-blue-50/40"}>
                 <td className="px-4 py-2 text-center font-semibold">{index + 1}</td>
                 <td className="px-4 py-2 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>
                 <td className="px-4 py-2"><select value={item.ingredientCode} onChange={(e) => updateLine(index, { ingredientCode: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="">Chọn {stockItemLabel}...</option>{ingredients.map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
                 <td className="px-4 py-2"><input inputMode="decimal" value={item.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} className={`h-10 w-full rounded-md border px-3 text-right font-bold ${insufficient ? "border-rose-500 text-rose-700" : "border-slate-300"}`} /></td>
-                <td className="px-4 py-2">{ingredient?.unit || "—"}</td>
-                <td className="px-4 py-2 text-right font-semibold">{ingredient ? quantity(ingredient.stockQuantity) : "—"}</td>
+                <td className="px-4 py-2">{ingredient?.purchaseUnit || ingredient?.unit || "—"}</td>
+                <td className="px-4 py-2 text-right font-semibold">{ingredient ? <>{quantity(ingredient.stockQuantity / factor)} {ingredient.purchaseUnit || ingredient.unit}<small className="block font-normal text-slate-500">{quantity(ingredient.stockQuantity)} {ingredient.baseUnit || ingredient.unit}</small></> : "—"}</td>
                 <td className="px-4 py-2"><input value={item.note} onChange={(e) => updateLine(index, { note: e.target.value })} placeholder="Người/bộ phận nhận" className="h-10 w-full rounded-md border border-slate-300 px-3" /></td>
                 <td className="px-2 py-2"><button aria-label="Xóa dòng" disabled={form.items.length === 1} onClick={() => setForm((current) => ({ ...current, items: current.items.filter((_, i) => i !== index) }))} className="rounded-md p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button></td>
               </tr>;
@@ -188,7 +194,7 @@ export default function InventoryIssuesPage() {
       <section className="mt-7 rounded-xl border bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div><h2 className="text-xl font-black text-emerald-950">Lịch sử xuất kho</h2><p className="text-sm text-slate-500">Mới nhất hiển thị trước</p></div>
           <label className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Tìm mã, nơi nhận..." className="h-10 rounded-md border pl-9 pr-3" /></label></div>
-        {loading ? <div className="p-12 text-center text-slate-500">Đang tải...</div> : filteredIssues.length === 0 ? <div className="p-12 text-center text-slate-500"><ClipboardList className="mx-auto mb-2 text-slate-300" />Chưa có phiếu xuất kho.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-4">Ngày</th><th className="p-4">Mã phiếu</th><th className="p-4">Nơi nhận</th><th className="p-4">Người xuất</th><th className="p-4 text-right">Số dòng</th><th className="p-4 text-right">Tổng lượng</th><th className="p-4">Trạng thái</th><th className="p-4"></th></tr></thead><tbody className="divide-y">{filteredIssues.map((issue) => <tr key={issue.id} className="hover:bg-slate-50"><td className="p-4">{new Date(`${issue.issueDate}T12:00:00`).toLocaleDateString("vi-VN")}</td><td className="p-4 font-bold text-emerald-800">{issue.issueCode}</td><td className="p-4">{issue.destination}</td><td className="p-4">{issue.issuedBy}</td><td className="p-4 text-right">{issue.itemCount}</td><td className="p-4 text-right font-bold">{quantity(issue.totalQuantity)}</td><td className="p-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${issue.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{issue.status === "completed" ? "Đã trừ kho" : "Phiếu nháp"}</span></td><td className="p-4 text-right">{issue.status === "draft" && <div className="flex justify-end gap-2"><button onClick={() => edit(issue)} className="font-bold text-emerald-700">Sửa</button><button onClick={() => void remove(issue)} className="font-bold text-rose-600">Xóa</button></div>}</td></tr>)}</tbody></table></div>}
+        {loading ? <div className="p-12 text-center text-slate-500">Đang tải...</div> : filteredIssues.length === 0 ? <div className="p-12 text-center text-slate-500"><ClipboardList className="mx-auto mb-2 text-slate-300" />Chưa có phiếu xuất kho.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-4">Thời gian tạo</th><th className="p-4">Mã phiếu</th><th className="p-4">Nơi nhận</th><th className="p-4">Người xuất</th><th className="p-4 text-right">Số dòng</th><th className="p-4 text-right">Tổng lượng</th><th className="p-4">Trạng thái</th><th className="p-4"></th></tr></thead><tbody className="divide-y">{filteredIssues.map((issue) => <tr key={issue.id} className="hover:bg-slate-50"><td className="p-4">{new Date(issue.createdAt).toLocaleString("vi-VN")}<small className="block font-semibold text-emerald-700">{issue.shiftType ? (issue.shiftType === "single" ? "Ca làm việc" : `Ca ${issue.shiftType.slice(-1)}`) : "Không theo ca"}</small></td><td className="p-4 font-bold text-emerald-800">{issue.issueCode}</td><td className="p-4">{issue.destination}</td><td className="p-4">{issue.issuedBy}</td><td className="p-4 text-right">{issue.itemCount}</td><td className="p-4 text-right font-bold">{quantity(issue.totalQuantity)}</td><td className="p-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${issue.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{issue.status === "completed" ? "Đã trừ kho" : "Phiếu nháp"}</span></td><td className="p-4 text-right">{issue.status === "draft" && <div className="flex justify-end gap-2"><button onClick={() => edit(issue)} className="font-bold text-emerald-700">Sửa</button><button onClick={() => void remove(issue)} className="font-bold text-rose-600">Xóa</button></div>}</td></tr>)}</tbody></table></div>}
       </section>
     </div>
   </div>;

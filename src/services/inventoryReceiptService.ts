@@ -18,6 +18,7 @@ export type InventoryReceipt = {
   imageCount: number; thumbnailUrl?: string | null; note: string;
   supplierId?: string | null; supplier?: { id: string; supplierCode: string; supplierName: string } | null;
   isLocked: boolean; lockedAt?: string | null; lockedBy?: string | null; unlockedAt?: string | null;
+  shiftId?: string | null; shiftType?: "shift_1" | "shift_2" | "shift_3" | "single" | null;
   canEdit: boolean; canUnlock: boolean; autoLockAt?: string | null;
   items: InventoryReceiptItem[]; images: InventoryReceiptImage[];
 };
@@ -94,6 +95,8 @@ export async function createManualInventoryReceipt(payload: {
   enteredBy: string;
   supplierId?: string | null;
   note?: string;
+  shiftId?: string | null;
+  shiftType?: "shift_1" | "shift_2" | "shift_3" | "single" | null;
   items: Array<{ ingredientCode: string; quantity: number; unitCost: number; note?: string }>;
 }) {
   const result = await apiRequest<{ item: InventoryReceipt }>("/inventory-manual-receipts.php", {

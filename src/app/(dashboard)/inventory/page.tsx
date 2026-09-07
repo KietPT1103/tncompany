@@ -29,7 +29,7 @@ export default function InventoryWorkspacePage(){
  useEffect(()=>{if(safeActive&&safeActive!==active)setActive(safeActive);},[active,safeActive]);
  function select(id:TabId){setActive(id);const next=new URLSearchParams(params);next.set('tab',id);setParams(next,{replace:true});}
  const body=safeActive==='receipts'?h(InventoryReceiptsPage):safeActive==='issues'?h(InventoryIssuesPage):safeActive==='stock'?h(InventoryStockTab):h('div',{className:'p-10 text-center text-slate-500'},'Tài khoản chưa được cấp quyền kho.');
- return h('div',{className:'min-h-screen bg-slate-50'},h(InventoryWorkspaceHeader,{active:safeActive??active,select,isConstructionWarehouse,visibleTabs}),body);
+ return h('div',{className:'min-h-screen bg-slate-50 font-sans'},h(InventoryWorkspaceHeader,{active:safeActive??active,select,isConstructionWarehouse,visibleTabs}),body);
 }
 function InventoryWorkspaceHeader({active,select,isConstructionWarehouse,visibleTabs}:{active:TabId;select:(id:TabId)=>void;isConstructionWarehouse:boolean;visibleTabs:typeof tabs}){
  return h('div',{className:'sticky top-0 z-20 border-b bg-white px-4 pt-4 shadow-sm'},

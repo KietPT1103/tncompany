@@ -6,6 +6,7 @@ import { useStore } from "@/context/StoreContext";
 import { getIngredients, type Ingredient } from "@/services/ingredients";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
 import { createManualInventoryReceipt } from "@/services/inventoryReceiptService";
+import { getOpenShiftByCashier, type CashierShift } from "@/services/shiftService";
 
 type DraftLine = {
   key: string;
@@ -40,10 +41,19 @@ export default function ManualInventoryReceiptPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
 
   useEffect(() => {
     if (actor && !enteredBy) setEnteredBy(actor);
   }, [actor, enteredBy]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setActiveShift(null);
+      return;
+    }
+    getOpenShiftByCashier(storeId, user.uid).then(setActiveShift).catch(() => setActiveShift(null));
+  }, [storeId, user?.uid]);
 
   useEffect(() => {
     setLoading(true);
@@ -103,6 +113,8 @@ export default function ManualInventoryReceiptPage() {
         enteredBy: enteredBy.trim(),
         supplierId: supplierId || null,
         note: note.trim(),
+        shiftId: activeShift?.id || null,
+        shiftType: activeShift?.shiftType || null,
         items: normalized,
       });
       navigate(`/admin/inventory-receipts/${receipt.id}`, { replace: true });
@@ -113,12 +125,13 @@ export default function ManualInventoryReceiptPage() {
     }
   }
 
-  return <div className="min-h-screen bg-slate-50 p-4 text-slate-950 sm:p-6 2xl:p-8">
+  return <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-950 sm:p-6 2xl:p-8">
     <div className="mx-auto max-w-[1680px]">
       <button onClick={() => navigate("/admin/inventory?tab=receipts")} className="inline-flex min-h-10 items-center gap-2 font-bold text-emerald-800 hover:text-emerald-950"><ArrowLeft className="h-4 w-4" /> Sổ kho</button>
       <header className="mt-4"><div className="text-sm font-bold uppercase tracking-[.2em] text-amber-600">Thu ngân ghi sổ</div>
         <h1 className="mt-2 text-3xl font-black text-emerald-950 sm:text-4xl">Nhập nguyên liệu vào kho</h1>
-        <p className="mt-2 text-slate-600">Dùng khi mua nguyên liệu về. Hoàn thành phiếu sẽ cộng tồn ngay và lưu lại người nhập liệu.</p></header>
+        <p className="mt-2 text-slate-600">Dùng khi mua nguyên liệu về. Hoàn thành phiếu sẽ cộng tồn ngay và lưu lại người nhập liệu.</p>
+        <p className="mt-1 text-sm font-semibold text-emerald-700">{activeShift ? `Đang ghi nhận theo ${activeShift.shiftType === "single" ? "ca làm việc" : `Ca ${activeShift.shiftType.slice(-1)}`}` : "Không có ca đang mở"}</p></header>
       {error && <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-3 font-semibold text-rose-700">{error}</div>}
       <section className="mt-6 overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="grid gap-4 border-b bg-emerald-950 p-5 text-white md:grid-cols-2 xl:grid-cols-4">
@@ -136,7 +149,7 @@ export default function ManualInventoryReceiptPage() {
             return <tr key={item.key} className="hover:bg-blue-50/40"><td className="p-3 text-center font-bold">{index + 1}</td><td className="p-3 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>
               <td className="p-2"><select disabled={loading} value={item.ingredientCode} onChange={(event) => { const selected = ingredientByCode.get(event.target.value); updateLine(index, { ingredientCode: event.target.value, unitCost: item.unitCost || String(selected?.cost || 0) }); }} className="h-10 w-full rounded-md border px-3"><option value="">Chọn nguyên liệu...</option>{ingredients.map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
               <td className="p-2"><input inputMode="decimal" value={item.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} className="h-10 w-full rounded-md border px-3 text-right font-bold" /></td><td className="p-3"><b>{ingredient?.purchaseUnit || ingredient?.unit || "—"}</b>{ingredient && ingredient.purchaseToBaseFactor !== 1 ? <small className="block text-slate-500">1 {ingredient.purchaseUnit} = {ingredient.purchaseToBaseFactor} {ingredient.baseUnit}</small> : null}</td>
-              <td className="p-3 text-right">{ingredient ? formatQuantity(ingredient.stockQuantity) : "—"}</td><td className="p-3 text-right font-bold text-emerald-800">{ingredient ? formatQuantity(ingredient.stockQuantity + itemQuantity) : "—"}</td>
+              <td className="p-3 text-right">{ingredient ? formatQuantity(ingredient.stockQuantity) : "—"}</td><td className="p-3 text-right font-bold text-emerald-800">{ingredient ? formatQuantity(ingredient.stockQuantity + itemQuantity * (ingredient.purchaseToBaseFactor || 1)) : "—"}</td>
               <td className="p-2"><input inputMode="decimal" value={item.unitCost} onChange={(event) => updateLine(index, { unitCost: event.target.value })} className="h-10 w-full rounded-md border px-3 text-right" /></td><td className="p-3 text-right font-bold">{formatMoney(itemQuantity * itemCost)} ₫</td>
               <td className="p-2"><input value={item.note} onChange={(event) => updateLine(index, { note: event.target.value })} className="h-10 w-full rounded-md border px-3" /></td><td className="p-2"><button disabled={items.length === 1} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-md p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button></td></tr>;
           })}</tbody>

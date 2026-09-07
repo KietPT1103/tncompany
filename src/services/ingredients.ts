@@ -55,6 +55,13 @@ export async function createIngredient(input: IngredientInput) {
   return apiRequest("/ingredients.php", { method: "POST", body: JSON.stringify(input) });
 }
 
+export async function migrateIngredientCategoryProducts(storeId: string) {
+  return apiRequest<{ migratedCount: number; movedCount: number }>("/ingredients.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "migrate-category", storeId }),
+  });
+}
+
 export async function updateIngredient(code: string, input: Partial<IngredientInput> & { storeId: string }) {
   return apiRequest("/ingredients.php", {
     method: "PATCH",

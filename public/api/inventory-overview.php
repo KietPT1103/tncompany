@@ -6,6 +6,8 @@ require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 
 products_inventory_ensure_schema();
+ingredients_ensure_schema();
+auth_ensure_column('inventory_issue_items', 'base_quantity', 'DECIMAL(15,3) NULL AFTER quantity');
 db()->exec('CREATE TABLE IF NOT EXISTS inventory_counter_counts (id VARCHAR(64) PRIMARY KEY,store_id VARCHAR(32) NOT NULL,count_date DATE NOT NULL,note TEXT NULL,created_by VARCHAR(255) NULL,created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,KEY idx_inventory_counter_counts_store_date (store_id,count_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
 db()->exec('CREATE TABLE IF NOT EXISTS inventory_counter_count_items (id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,count_id VARCHAR(64) NOT NULL,ingredient_id VARCHAR(64) NOT NULL,actual_quantity DECIMAL(15,3) NOT NULL DEFAULT 0,UNIQUE KEY uniq_inventory_counter_count_item (count_id,ingredient_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
 
@@ -48,7 +50,7 @@ $requiredOpeningDate=(new DateTimeImmutable($from))->modify('-1 day')->format('Y
 $hasExactOpening=($openingCount['count_date']??null)===$requiredOpeningDate;
 $hasExactClosing=($count['count_date']??null)===$to;
 $canCalculateLoss=$hasExactOpening&&$hasExactClosing;
-$s=db()->prepare('SELECT ii.ingredient_id,SUM(ii.quantity) quantity FROM inventory_issue_items ii JOIN inventory_issues i ON i.id=ii.issue_id WHERE i.store_id=:store AND i.status=completed AND i.issue_date BETWEEN :date_from AND :date_to GROUP BY ii.ingredient_id');
+$s=db()->prepare('SELECT ii.ingredient_id,SUM(COALESCE(ii.base_quantity,ii.quantity)) quantity FROM inventory_issue_items ii JOIN inventory_issues i ON i.id=ii.issue_id WHERE i.store_id=:store AND i.status=completed AND i.issue_date BETWEEN :date_from AND :date_to GROUP BY ii.ingredient_id');
 $s->execute(['store'=>$store,'date_from'=>$from,'date_to'=>$to]);$issued=[];foreach($s->fetchAll()as$row)$issued[(string)$row['ingredient_id']]=(float)$row['quantity'];
 $s=db()->prepare('SELECT bi.menu_id productCode,MAX(bi.name) productName,SUM(bi.quantity) quantity FROM bill_items bi JOIN bills b ON b.id=bi.bill_id WHERE b.store_id=:store AND b.status=completed AND DATE(b.created_at) BETWEEN :date_from AND :date_to GROUP BY bi.menu_id');
 $s->execute(['store'=>$store,'date_from'=>$from,'date_to'=>$to]);$sales=[];foreach($s->fetchAll()as$row)$sales[]=['productCode'=>(string)$row['productCode'],'productName'=>(string)$row['productName'],'quantity'=>(float)$row['quantity']];

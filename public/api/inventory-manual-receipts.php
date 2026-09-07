@@ -14,6 +14,8 @@ auth_ensure_column('inventory_receipts', 'entry_source', "ENUM('mobile_photo','w
 auth_ensure_column('inventory_receipts', 'order_creator_name', 'VARCHAR(255) NULL AFTER supplier_id');
 auth_ensure_column('inventory_receipts', 'total_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER note');
 auth_ensure_column('inventory_receipts', 'completed_by_user_id', 'VARCHAR(64) NULL AFTER completed_by');
+auth_ensure_column('inventory_receipts', 'shift_id', 'VARCHAR(64) NULL AFTER created_by');
+auth_ensure_column('inventory_receipts', 'shift_type', 'VARCHAR(20) NULL AFTER shift_id');
 
 db()->exec('CREATE TABLE IF NOT EXISTS inventory_stock_movements (
     id VARCHAR(64) PRIMARY KEY, receipt_id VARCHAR(64) NOT NULL, receipt_item_id BIGINT UNSIGNED NOT NULL,
@@ -103,6 +105,17 @@ $actorId = (string) $user['id'];
 $actorName = trim((string) ($user['displayName'] ?? $user['username'] ?? $user['email'] ?? $actorId));
 $totalQuantity = round(array_sum(array_column($items, 'quantity')), 3);
 $totalAmount = round(array_sum(array_column($items, 'lineTotal')), 2);
+$shiftId = trim((string) ($body['shiftId'] ?? '')) ?: null;
+$shiftType = trim((string) ($body['shiftType'] ?? '')) ?: null;
+if ($shiftId !== null) {
+    $shift = db()->prepare('SELECT shift_type FROM cashier_shifts WHERE id=:id AND store_id=:store_id AND status="open" LIMIT 1');
+    $shift->execute(['id' => $shiftId, 'store_id' => $storeId]);
+    $activeShiftType = $shift->fetchColumn();
+    if ($activeShiftType === false) {
+        respond_error('Ca làm việc đã đóng hoặc không thuộc cửa hàng đang chọn.', 422);
+    }
+    $shiftType = (string) $activeShiftType;
+}
 $pdo = db();
 $pdo->beginTransaction();
 
@@ -110,10 +123,10 @@ try {
     $insertReceipt = $pdo->prepare(
         'INSERT INTO inventory_receipts (
             id,store_id,supplier_id,order_creator_name,receipt_code,receipt_date,entry_source,status,note,
-            total_quantity,total_amount,completed_at,completed_by,completed_by_user_id,created_by
+            total_quantity,total_amount,completed_at,completed_by,completed_by_user_id,created_by,shift_id,shift_type
          ) VALUES (
             :id,:store_id,:supplier_id,:entered_by,:code,:receipt_date,"web_manual","completed",:note,
-            :total_quantity,:total_amount,NOW(),:completed_by,:completed_actor_id,:created_actor_id
+            :total_quantity,:total_amount,NOW(),:completed_by,:completed_actor_id,:created_actor_id,:shift_id,:shift_type
          )'
     );
     $insertReceipt->execute([
@@ -129,6 +142,8 @@ try {
         'completed_by' => $actorName,
         'completed_actor_id' => $actorId,
         'created_actor_id' => $actorId,
+        'shift_id' => $shiftId,
+        'shift_type' => $shiftType,
     ]);
 
     $lockIngredient = $pdo->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');

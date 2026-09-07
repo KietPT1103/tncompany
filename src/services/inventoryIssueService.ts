@@ -7,6 +7,7 @@ export type InventoryIssueItem = {
   ingredientName: string;
   unit: string;
   quantity: number;
+  baseQuantity?: number;
   stockBefore?: number | null;
   stockAfter?: number | null;
   note: string;
@@ -27,6 +28,8 @@ export type InventoryIssue = {
   completedBy?: string | null;
   completedAt?: string | null;
   createdAt: string;
+  shiftId?: string | null;
+  shiftType?: "shift_1" | "shift_2" | "shift_3" | "single" | null;
   updatedAt: string;
   items: InventoryIssueItem[];
 };
@@ -39,6 +42,8 @@ export type InventoryIssuePayload = {
   issuedBy: string;
   status: "draft" | "completed";
   note?: string;
+  shiftId?: string | null;
+  shiftType?: "shift_1" | "shift_2" | "shift_3" | "single" | null;
   items: Array<{ ingredientCode: string; quantity: number; note?: string }>;
 };
 

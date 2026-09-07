@@ -131,11 +131,13 @@ if ($method === 'GET') {
                   ON s.id COLLATE utf8mb4_unicode_ci = p.store_id COLLATE utf8mb4_unicode_ci';
         $params = ['rank_area_id' => $fieldAreaId, 'item_type' => $fieldItemType];
         if ($fieldSearch === '') {
-            $sql .= ' WHERE p.store_id=:filter_area_id AND p.item_type=:item_type';
+            $sql .= ' WHERE p.store_id=:filter_area_id AND p.item_type=:item_type
+                      AND LOWER(COALESCE(c.name,""))<>LOWER("Nguyên liệu")';
             $params['filter_area_id'] = $fieldAreaId;
         } else {
             $needle = '%' . $fieldSearch . '%';
             $sql .= ' WHERE p.item_type=:item_type
+                      AND LOWER(COALESCE(c.name,""))<>LOWER("Nguyên liệu")
                       AND (p.product_name LIKE :name_needle
                            OR p.product_code LIKE :code_needle
                            OR p.normalized_name LIKE :normalized_needle)';
@@ -173,6 +175,7 @@ if ($method === 'GET') {
          LEFT JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci = p.category_id
          WHERE p.store_id = :store_id
            AND p.item_type = :item_type
+           AND LOWER(COALESCE(c.name,""))<>LOWER("Nguyên liệu")
          ORDER BY p.product_name ASC'
     );
     $statement->execute([

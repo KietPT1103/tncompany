@@ -31,6 +31,8 @@ import {
   Wallet,
   LogOut,
   Pencil,
+  PackagePlus,
+  PackageMinus,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -98,6 +100,7 @@ import {
   updateSurcharge,
 } from "@/services/surchargeService";
 import { subscribeStoreEvents } from "@/services/realtimeService";
+import { hasPermission } from "@/lib/permissions";
 
 const ALL_CATEGORY = "Tất cả";
 const ALL_CATEGORY_ID = "ALL";
@@ -3555,6 +3558,24 @@ export default function CafePosPage() {
                     <NotebookTabs className="h-4 w-4" />
                     Thực đơn
                   </button>
+                  {hasPermission(user, "inventory_receipts.view") && (
+                    <Link
+                      href="/admin/inventory?tab=receipts"
+                      className="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-emerald-100 hover:text-emerald-800"
+                    >
+                      <PackagePlus className="h-4 w-4" />
+                      Nhập kho
+                    </Link>
+                  )}
+                  {hasPermission(user, "inventory_issues.access") && (
+                    <Link
+                      href="/admin/inventory?tab=issues"
+                      className="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-emerald-100 hover:text-emerald-800"
+                    >
+                      <PackageMinus className="h-4 w-4" />
+                      Xuất kho
+                    </Link>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <Search className="h-4 w-4" />

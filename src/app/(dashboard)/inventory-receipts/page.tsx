@@ -16,15 +16,12 @@ import {
   PackagePlus,
 } from "lucide-react";
 import {
-  getAreas,
   getInventoryReceipts,
-  type Area,
   type InventoryReceipt,
   type ReceiptFilters,
   type ReceiptStatus,
 } from "@/services/inventoryReceiptService";
 import PrivateApiImage from "@/components/PrivateApiImage";
-import { SelectBox } from "@/components/ui/SelectBox";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import {
   inventoryReceiptFiltersFromSearchParams,
@@ -76,7 +73,6 @@ export default function FieldInventoryReceiptsPage() {
     && hasPermission(user, "inventory_receipts.complete");
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [areas, setAreas] = useState<Area[]>([]);
   const [items, setItems] = useState<InventoryReceipt[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
@@ -90,15 +86,10 @@ export default function FieldInventoryReceiptsPage() {
     [searchKey],
   );
   const filters = useMemo(
-    () => isConstructionWarehouse ? { ...parsedFilters, areaId: "warehouse" } : parsedFilters,
-    [isConstructionWarehouse, parsedFilters],
+    () => ({ ...parsedFilters, areaId: storeId }),
+    [parsedFilters, storeId],
   );
   const key = useMemo(() => JSON.stringify(filters), [filters]);
-  useEffect(() => {
-    getAreas()
-      .then(setAreas)
-      .catch(() => setAreas([]));
-  }, []);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -195,21 +186,9 @@ export default function FieldInventoryReceiptsPage() {
               className={`${filterControlClassName} pl-10`}
             />
           </label>
-          {isConstructionWarehouse ? (
-            <div className={`${filterControlClassName} flex items-center`}>Khu: Kho thợ</div>
-          ) : <SelectBox
-            ariaLabel="Lọc theo khu vực"
-            value={filters.areaId || "all"}
-            options={[
-              { value: "all", label: "Tất cả khu vực" },
-              ...areas.map((area) => ({ value: area.id, label: area.name })),
-            ]}
-            onValueChange={(value) =>
-              change({ areaId: value === "all" ? "" : value })
-            }
-            className="w-full"
-            triggerClassName="h-11 rounded-sm border-emerald-900/25 bg-white text-emerald-950 shadow-none hover:border-emerald-700 hover:bg-slate-50 focus-visible:ring-[#F6C85F]/35"
-          />}
+          <div className={`${filterControlClassName} flex items-center`}>
+            Khu đang chọn: {isConstructionWarehouse ? "Kho thợ" : storeId}
+          </div>
           <DateRangePicker
             label="Khoảng thời gian"
             startDate={filters.dateFrom || ""}
@@ -241,6 +220,7 @@ export default function FieldInventoryReceiptsPage() {
               setSearchParams(
                 inventoryReceiptFiltersToSearchParams({
                   status: filters.status,
+                  areaId: storeId,
                   page: 1,
                   limit: 20,
                 }),
@@ -345,6 +325,9 @@ export default function FieldInventoryReceiptsPage() {
                   <div className="mt-1 text-xs text-slate-500">
                     {new Date(item.createdAt).toLocaleString("vi-VN")}
                   </div>
+                  {item.shiftType && <div className="mt-0.5 text-xs font-semibold text-emerald-700">
+                    {item.shiftType === "single" ? "Ca làm việc" : `Ca ${item.shiftType.slice(-1)}`}
+                  </div>}
                 </div>
                 <b className="text-slate-700">{item.area.name}</b>
                 <span className="text-sm font-medium text-slate-700">

@@ -77,11 +77,42 @@ if ($method === 'GET') {
 }
 
 $body = read_json_body();
-$user = auth_require_permission(['product.access', 'products.create', 'inventory_receipts.access', 'inventory_receipts.update']);
+$bodyAction = strtolower(trim((string) ($body['action'] ?? '')));
+$user = auth_require_permission($bodyAction === 'migrate-category'
+    ? ['product.access', 'inventory_checks.access', 'inventory_issues.access', 'inventory_receipts.access', 'inventory_receipts.view']
+    : ['product.access', 'products.create', 'inventory_receipts.access', 'inventory_receipts.update']);
 $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? $_GET['storeId'] ?? ''));
 field_inventory_require_store($user, $storeId);
 
 if ($method === 'POST') {
+    if ($bodyAction === 'migrate-category') {
+        $statement = db()->prepare(
+            'INSERT INTO ingredients (
+                id,store_id,ingredient_code,ingredient_name,normalized_name,unit,purchase_unit,base_unit,
+                purchase_to_base_factor,cost,stock_quantity,supplier_id,supplier_item_code,description,is_active
+             )
+             SELECT UUID(),p.store_id,p.product_code,p.product_name,p.normalized_name,
+                COALESCE(NULLIF(p.unit,""),"đơn vị"),COALESCE(NULLIF(p.unit,""),"đơn vị"),
+                COALESCE(NULLIF(p.unit,""),"đơn vị"),1,p.cost,p.stock_quantity,NULL,NULL,p.description,p.is_selling
+             FROM products p
+             INNER JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci=p.category_id COLLATE utf8mb4_unicode_ci
+             WHERE p.store_id=:store_id AND LOWER(c.name)=LOWER(:category_name)
+               AND NOT EXISTS (
+                 SELECT 1 FROM ingredients i
+                 WHERE i.store_id=p.store_id AND LOWER(i.ingredient_code)=LOWER(p.product_code)
+               )'
+        );
+        $statement->execute(['store_id' => $storeId, 'category_name' => 'Nguyên liệu']);
+        $migratedCount = $statement->rowCount();
+        $markMoved = db()->prepare(
+            'UPDATE products p
+             INNER JOIN categories c ON c.id COLLATE utf8mb4_unicode_ci=p.category_id COLLATE utf8mb4_unicode_ci
+             SET p.item_type="ingredient",p.is_selling=0
+             WHERE p.store_id=:store_id AND LOWER(c.name)=LOWER(:category_name)'
+        );
+        $markMoved->execute(['store_id' => $storeId, 'category_name' => 'Nguyên liệu']);
+        respond_ok(['migratedCount' => $migratedCount, 'movedCount' => $markMoved->rowCount()]);
+    }
     $code = trim((string) ($body['ingredientCode'] ?? $body['productCode'] ?? ''));
     $name = trim((string) ($body['ingredientName'] ?? $body['productName'] ?? ''));
     $purchaseUnit = trim((string) ($body['purchaseUnit'] ?? $body['unit'] ?? ''));

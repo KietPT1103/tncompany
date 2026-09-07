@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS inventory_receipts (
   completed_at DATETIME NULL,
   completed_by VARCHAR(255) NULL,
   created_by VARCHAR(255) NULL,
+  shift_id VARCHAR(64) NULL,
+  shift_type VARCHAR(20) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_inventory_receipts_code (store_id, receipt_code),
