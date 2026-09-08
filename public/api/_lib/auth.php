@@ -186,7 +186,18 @@ function auth_all_permissions(): array
         'reports.access',
         'cash_flow.access',
         'product.access',
+        'products.selling.view',
+        'products.components.update',
+        'ingredients.access',
+        'suppliers.access',
         'inventory_checks.access',
+        'inventory_stock.view',
+        'inventory_history.access',
+        'preparation_receipts.access',
+        'inventory_raw_closings.access',
+        'inventory_prepared_closings.access',
+        'inventory_closings.edit_past',
+        'preparation_inventory.access',
         'inventory_issues.access',
         'inventory_receipts.access',
         'inventory_receipts.view',
@@ -220,12 +231,16 @@ function auth_default_permissions_for_role(?string $role): array
         return ['payroll_estimate.access'];
     }
 
-    if ($normalizedRole === 'user' || $normalizedRole === 'server') {
+    if ($normalizedRole === 'user') {
+        return ['bills.access', 'inventory_receipts.access', 'inventory_issues.access'];
+    }
+
+    if ($normalizedRole === 'server') {
         return ['bills.access'];
     }
 
     if ($normalizedRole === 'bartender') {
-        return ['bar.access', 'bar.checkout'];
+        return ['bar.access', 'bar.checkout', 'preparation_receipts.access', 'inventory_raw_closings.access', 'inventory_prepared_closings.access'];
     }
 
     return [];
@@ -282,9 +297,33 @@ function auth_effective_permissions(array $row): array
 
     if (array_key_exists('permissions_json', $row) && $row['permissions_json'] !== null && $row['permissions_json'] !== '') {
         $permissions = auth_normalize_permissions($row['permissions_json']);
-        if (in_array($role, ['user', 'server'], true) && !in_array('bills.access', $permissions, true)) {
+        if ($role === 'user') {
+            $permissions = array_merge($permissions, [
+                'bills.access',
+                'inventory_receipts.access',
+                'inventory_issues.access',
+            ]);
+        } elseif ($role === 'server' && !in_array('bills.access', $permissions, true)) {
             $permissions[] = 'bills.access';
         }
+        if (in_array('inventory_receipts.access', $permissions, true)) {
+            $permissions = array_merge($permissions, [
+                'inventory_receipts.view', 'inventory_receipts.create', 'inventory_receipts.update',
+                'inventory_receipts.complete', 'inventory_receipts.cancel', 'inventory_receipts.upload_image',
+                'products.create', 'products.attach_area',
+            ]);
+        }
+        if (in_array('preparation_inventory.access', $permissions, true)) {
+            $permissions = array_merge($permissions, [
+                'preparation_receipts.access',
+                'inventory_raw_closings.access',
+                'inventory_prepared_closings.access',
+            ]);
+        }
+        if (in_array('products.components.update', $permissions, true)) {
+            $permissions[] = 'products.selling.view';
+        }
+        $permissions = array_values(array_unique($permissions));
         return $permissions;
     }
 

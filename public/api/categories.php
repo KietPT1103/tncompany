@@ -29,7 +29,7 @@ auth_ensure_column(
 );
 
 if ($method === 'GET') {
-    auth_require_permission(['categories.access', 'bills.access', 'bar.checkout']);
+    auth_require_permission(['categories.access', 'bills.access', 'bar.checkout', 'products.selling.view', 'products.components.update']);
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(

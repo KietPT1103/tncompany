@@ -44,7 +44,18 @@ import {
 } from "@/features/accounts/account-management-ui";
 
 const INVENTORY_ACCOUNT_PERMISSIONS = new Set<AppPermission>([
+  "products.selling.view",
+  "products.components.update",
   "inventory_checks.access",
+  "ingredients.access",
+  "suppliers.access",
+  "inventory_stock.view",
+  "inventory_history.access",
+  "preparation_receipts.access",
+  "inventory_raw_closings.access",
+  "inventory_prepared_closings.access",
+  "inventory_closings.edit_past",
+  "preparation_inventory.access",
   "inventory_issues.access",
   "inventory_receipts.access",
   "inventory_receipts.view",
@@ -82,7 +93,16 @@ function requiresAssignedStore(role: UserRole, permissions: AppPermission[]) {
 }
 
 function formFromUser(item: ManagedUser): AccountFormState {
-  const permissions = normalizePermissionList(item.permissions);
+  // The former combined preparation permission is expanded by the API. Remove
+  // the hidden legacy flag so an admin can revoke each new permission separately.
+  let permissions = normalizePermissionList(item.permissions).filter(
+    (permission) => permission !== "preparation_inventory.access",
+  );
+  if (item.role !== "admin" && permissions.some((permission) =>
+    permission === "products.selling.view" || permission === "products.components.update"
+  )) {
+    permissions = permissions.filter((permission) => permission !== "product.access");
+  }
   const storeIds = item.storeIds?.length
     ? item.storeIds
     : item.storeId
@@ -215,11 +235,17 @@ export default function AccountManagementPage() {
     if (form.role === "admin") return;
     setForm((current) => {
       const exists = current.permissions.includes(permission);
+      let permissions = exists
+        ? current.permissions.filter((item) => item !== permission)
+        : normalizePermissionList([...current.permissions, permission]);
+      if (!exists && permission === "product.access") {
+        permissions = permissions.filter((item) => item !== "products.selling.view" && item !== "products.components.update");
+      } else if (!exists && (permission === "products.selling.view" || permission === "products.components.update")) {
+        permissions = permissions.filter((item) => item !== "product.access");
+      }
       return {
         ...current,
-        permissions: exists
-          ? current.permissions.filter((item) => item !== permission)
-          : normalizePermissionList([...current.permissions, permission]),
+        permissions,
         storeIds: !exists && INVENTORY_ACCOUNT_PERMISSIONS.has(permission) && current.storeIds.length === 0
           ? INVENTORY_AREA_OPTIONS.map((option) => option.value)
           : current.storeIds,
@@ -235,7 +261,8 @@ export default function AccountManagementPage() {
     if (form.role === "admin") return;
     setForm((current) => ({
       ...current,
-      permissions: normalizePermissionList(MANAGED_PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.id))),
+      permissions: normalizePermissionList(MANAGED_PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.id)))
+        .filter((permission) => permission !== "products.selling.view" && permission !== "products.components.update"),
       storeIds: current.storeIds.length ? current.storeIds : INVENTORY_AREA_OPTIONS.map((option) => option.value),
     }));
   }

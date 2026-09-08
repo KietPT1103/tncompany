@@ -291,14 +291,33 @@ function products_inventory_load_components(string $storeId, array $productIds):
                 ingredient.ingredient_code AS component_product_code,
                 ingredient.ingredient_name AS component_product_name,
                 COALESCE(NULLIF(ingredient.base_unit,""),ingredient.unit) AS component_unit,
-                ingredient.cost AS component_cost,
+                CASE
+                  WHEN ingredient.conversion_output_quantity>0 AND EXISTS(
+                    SELECT 1 FROM ingredient_components cost_part WHERE cost_part.parent_ingredient_id=ingredient.id
+                  ) THEN (
+                    SELECT SUM(COALESCE(cost_source.cost,0)*cost_part.input_quantity)
+                    FROM ingredient_components cost_part
+                    JOIN ingredients cost_source ON cost_source.id=cost_part.component_ingredient_id
+                    WHERE cost_part.parent_ingredient_id=ingredient.id
+                  )/ingredient.conversion_output_quantity
+                  WHEN source.id IS NOT NULL AND ingredient.conversion_input_quantity>0 AND ingredient.conversion_output_quantity>0
+                  THEN source.cost*ingredient.conversion_input_quantity/ingredient.conversion_output_quantity
+                  ELSE ingredient.cost
+                END AS component_cost,
                 ingredient.stock_quantity AS component_stock_quantity,
+                source.ingredient_code AS conversion_source_code,
+                source.ingredient_name AS conversion_source_name,
+                COALESCE(NULLIF(source.base_unit,""),source.unit) AS conversion_source_unit,
+                ingredient.conversion_input_quantity,
+                ingredient.conversion_output_quantity,
                 pi.quantity
              FROM product_ingredients pi
              INNER JOIN products parent
                ON parent.id COLLATE utf8mb4_unicode_ci = pi.product_id COLLATE utf8mb4_unicode_ci
              INNER JOIN ingredients ingredient
                ON ingredient.id COLLATE utf8mb4_unicode_ci = pi.ingredient_id COLLATE utf8mb4_unicode_ci
+             LEFT JOIN ingredients source
+               ON source.id COLLATE utf8mb4_unicode_ci = ingredient.conversion_source_ingredient_id COLLATE utf8mb4_unicode_ci
              WHERE pi.store_id = ?
                AND pi.product_id IN (%s)
              ORDER BY ingredient.ingredient_name ASC',
@@ -321,6 +340,11 @@ function products_inventory_load_components(string $storeId, array $productIds):
             'quantity' => $quantity,
             'cost' => $cost,
             'stockQuantity' => $row['component_stock_quantity'] !== null ? (float) $row['component_stock_quantity'] : 0.0,
+            'conversionSourceCode' => $row['conversion_source_code'] ?? null,
+            'conversionSourceName' => $row['conversion_source_name'] ?? null,
+            'conversionSourceUnit' => $row['conversion_source_unit'] ?? null,
+            'conversionInputQuantity' => $row['conversion_input_quantity'] !== null ? (float) $row['conversion_input_quantity'] : null,
+            'conversionOutputQuantity' => $row['conversion_output_quantity'] !== null ? (float) $row['conversion_output_quantity'] : null,
             'lineTotal' => round($quantity * $cost, 2),
         ];
     }
@@ -596,10 +620,19 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
                 ingredient.ingredient_code AS product_code,
                 ingredient.ingredient_name AS product_name,
                 COALESCE(NULLIF(ingredient.base_unit,""),ingredient.unit) AS unit,
-                ingredient.cost,ingredient.preparation_stock_quantity AS stock_quantity,pi.quantity
+                ingredient.cost,ingredient.preparation_stock_quantity AS stock_quantity,pi.quantity,
+                source.id AS source_id,source.ingredient_code AS source_code,
+                source.ingredient_name AS source_name,
+                COALESCE(NULLIF(source.base_unit,""),source.unit) AS source_unit,
+                source.cost AS source_cost,source.preparation_stock_quantity AS source_stock_quantity,
+                COALESCE(recipe_part.input_quantity,ingredient.conversion_input_quantity) conversion_input_quantity,ingredient.conversion_output_quantity
          FROM product_ingredients pi
          INNER JOIN ingredients ingredient
            ON ingredient.id COLLATE utf8mb4_unicode_ci = pi.ingredient_id COLLATE utf8mb4_unicode_ci
+         LEFT JOIN ingredient_components recipe_part
+           ON recipe_part.parent_ingredient_id COLLATE utf8mb4_unicode_ci = ingredient.id COLLATE utf8mb4_unicode_ci
+         LEFT JOIN ingredients source
+           ON source.id COLLATE utf8mb4_unicode_ci = COALESCE(recipe_part.component_ingredient_id,ingredient.conversion_source_ingredient_id) COLLATE utf8mb4_unicode_ci
          WHERE pi.store_id = :store_id'
     );
     $componentStatement->execute([
@@ -610,13 +643,19 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
     foreach ($componentStatement->fetchAll() as $row) {
         $productId = (string) $row['product_id'];
         $componentsByProductId[$productId][] = [
-            'id' => (string) $row['component_id'],
-            'productCode' => (string) $row['product_code'],
-            'productName' => (string) $row['product_name'],
-            'unit' => (string) ($row['unit'] ?? ''),
-            'cost' => $row['cost'] !== null ? (float) $row['cost'] : 0.0,
-            'stockQuantity' => $row['stock_quantity'] !== null ? (float) $row['stock_quantity'] : 0.0,
-            'quantity' => (float) $row['quantity'],
+            'id' => $row['source_id'] ? (string) $row['source_id'] : (string) $row['component_id'],
+            'productCode' => $row['source_id'] ? (string) $row['source_code'] : (string) $row['product_code'],
+            'productName' => $row['source_id'] ? (string) $row['source_name'] : (string) $row['product_name'],
+            'unit' => $row['source_id'] ? (string) ($row['source_unit'] ?? '') : (string) ($row['unit'] ?? ''),
+            'cost' => $row['source_id']
+                ? ($row['source_cost'] !== null ? (float) $row['source_cost'] : 0.0)
+                : ($row['cost'] !== null ? (float) $row['cost'] : 0.0),
+            'stockQuantity' => $row['source_id']
+                ? ($row['source_stock_quantity'] !== null ? (float) $row['source_stock_quantity'] : 0.0)
+                : ($row['stock_quantity'] !== null ? (float) $row['stock_quantity'] : 0.0),
+            'quantity' => (float) $row['quantity'] * ($row['source_id']
+                ? (float) $row['conversion_input_quantity'] / (float) $row['conversion_output_quantity']
+                : 1),
         ];
     }
 

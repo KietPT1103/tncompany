@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Coffee, History, LogOut } from "lucide-react";
+import { ClipboardCheck, Coffee, CookingPot, History, LogOut, PackageCheck } from "lucide-react";
 import DashboardSidebarShell from "@/components/dashboard/DashboardSidebarShell";
 import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 import { getNextBarSidebarCollapsed } from "./barSidebarState";
 
 type BarNavigationSidebarProps = {
@@ -17,7 +18,7 @@ export default function BarNavigationSidebar({
   onCollapsedChange,
   onOpenHistory,
 }: BarNavigationSidebarProps) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const itemClassName = (active = false) =>
     `group flex h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold transition-[background-color,color,transform,box-shadow] duration-150 ease-out hover:translate-x-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none ${
       collapsed ? "lg:justify-center lg:px-0" : ""
@@ -79,6 +80,36 @@ export default function BarNavigationSidebar({
                 Lịch sử đã lấy
               </span>
             </button>
+
+            {hasPermission(user, "preparation_receipts.access") && <Link
+              href="/admin/inventory?tab=preparation-receipts"
+              onClick={closeMobileMenu}
+              title={collapsed ? "Nhập kho pha chế" : undefined}
+              className={itemClassName()}
+            >
+              <PackageCheck className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className={collapsed ? "truncate lg:sr-only" : "truncate"}>Nhập kho pha chế</span>
+            </Link>}
+
+            {hasPermission(user, "inventory_raw_closings.access") && <Link
+              href="/admin/inventory?tab=preparation"
+              onClick={closeMobileMenu}
+              title={collapsed ? "Kiểm tồn nguyên liệu" : undefined}
+              className={itemClassName()}
+            >
+              <ClipboardCheck className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className={collapsed ? "truncate lg:sr-only" : "truncate"}>Kiểm tồn nguyên liệu</span>
+            </Link>}
+
+            {hasPermission(user, "inventory_prepared_closings.access") && <Link
+              href="/admin/inventory?tab=prepared-stock"
+              onClick={closeMobileMenu}
+              title={collapsed ? "Kiểm tồn bán thành phẩm" : undefined}
+              className={itemClassName()}
+            >
+              <CookingPot className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className={collapsed ? "truncate lg:sr-only" : "truncate"}>Kiểm tồn bán thành phẩm</span>
+            </Link>}
           </nav>
 
           <div

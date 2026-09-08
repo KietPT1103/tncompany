@@ -30,11 +30,10 @@ export default function ManualInventoryReceiptPage() {
   const navigate = useNavigate();
   const { storeId } = useStore();
   const { user } = useAuth();
-  const actor = user?.displayName || user?.username || user?.email || "";
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [receiptDate, setReceiptDate] = useState(localToday());
-  const [enteredBy, setEnteredBy] = useState(actor);
+  const [enteredBy, setEnteredBy] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [note, setNote] = useState("");
   const [items, setItems] = useState<DraftLine[]>([emptyLine()]);
@@ -42,10 +41,6 @@ export default function ManualInventoryReceiptPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
-
-  useEffect(() => {
-    if (actor && !enteredBy) setEnteredBy(actor);
-  }, [actor, enteredBy]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -136,7 +131,7 @@ export default function ManualInventoryReceiptPage() {
       <section className="mt-6 overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="grid gap-4 border-b bg-emerald-950 p-5 text-white md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm font-semibold">Ngày nhập<input type="date" value={receiptDate} onChange={(event) => setReceiptDate(event.target.value)} className="mt-2 h-11 w-full rounded-md border bg-white px-3 text-slate-950" /></label>
-          <label className="text-sm font-semibold">Người nhập liệu<input value={enteredBy} onChange={(event) => setEnteredBy(event.target.value)} className="mt-2 h-11 w-full rounded-md border bg-white px-3 text-slate-950" /></label>
+          <label className="text-sm font-semibold">Người nhập liệu *<input required maxLength={255} autoComplete="off" placeholder="Bắt buộc nhập tên người nhập" value={enteredBy} onChange={(event) => setEnteredBy(event.target.value)} className="mt-2 h-11 w-full rounded-md border bg-white px-3 text-slate-950" /></label>
           <label className="text-sm font-semibold">Nhà phân phối<select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="mt-2 h-11 w-full rounded-md border bg-white px-3 text-slate-950"><option value="">Không chọn</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.supplierName}</option>)}</select></label>
           <label className="text-sm font-semibold">Ghi chú<input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Số hóa đơn, người giao..." className="mt-2 h-11 w-full rounded-md border bg-white px-3 text-slate-950" /></label>
         </div>
@@ -156,7 +151,7 @@ export default function ManualInventoryReceiptPage() {
           <tfoot className="bg-slate-50 font-black"><tr><td colSpan={3} className="p-3 text-right">Tổng</td><td className="p-3 text-right">{formatQuantity(totals.quantity)}</td><td colSpan={4}></td><td className="p-3 text-right">{formatMoney(totals.amount)} ₫</td><td colSpan={2}></td></tr></tfoot>
         </table></div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4"><button onClick={() => setItems((current) => [...current, emptyLine()])} className="inline-flex min-h-10 items-center gap-2 rounded-md border px-4 font-bold hover:bg-slate-50"><Plus className="h-4 w-4" /> Thêm dòng</button>
-          <button disabled={saving || loading} onClick={() => void submit()} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-emerald-800 px-5 font-bold text-white hover:bg-emerald-900 disabled:opacity-50"><PackagePlus className="h-4 w-4" /> {saving ? "Đang nhập kho..." : "Hoàn thành & cộng kho"}</button></div>
+          <button disabled={saving || loading || !enteredBy.trim()} onClick={() => void submit()} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-emerald-800 px-5 font-bold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"><PackagePlus className="h-4 w-4" /> {saving ? "Đang nhập kho..." : "Hoàn thành & cộng kho"}</button></div>
       </section>
     </div>
   </div>;

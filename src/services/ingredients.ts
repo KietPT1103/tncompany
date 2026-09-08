@@ -9,6 +9,14 @@ export type Ingredient = {
   baseUnit: string;
   purchaseToBaseFactor: number;
   cost: number | null;
+  directCost: number | null;
+  conversionSourceIngredientId: string | null;
+  conversionSourceCode?: string | null;
+  conversionSourceName?: string | null;
+  conversionSourceUnit?: string | null;
+  conversionInputQuantity: number | null;
+  conversionOutputQuantity: number | null;
+  conversionComponents: Array<{ ingredientId: string; ingredientCode: string; ingredientName: string; unit: string; inputQuantity: number; cost: number | null }>;
   stockQuantity: number;
   preparationStockQuantity: number;
   supplierId: string | null;
@@ -28,6 +36,10 @@ export type IngredientInput = {
   purchaseUnit?: string;
   baseUnit?: string;
   purchaseToBaseFactor?: number;
+  conversionSourceIngredientId?: string | null;
+  conversionInputQuantity?: number | null;
+  conversionOutputQuantity?: number | null;
+  conversionComponents?: Array<{ ingredientId: string; inputQuantity: number }>;
   cost?: number | null;
   stockQuantity?: number;
   supplierId?: string | null;
@@ -36,9 +48,10 @@ export type IngredientInput = {
   isActive?: boolean;
 };
 
-export async function getIngredients(storeId: string, search = "") {
+export async function getIngredients(storeId: string, search = "", context?: "stock") {
   const query = new URLSearchParams({ storeId });
   if (search) query.set("search", search);
+  if (context) query.set("context", context);
   return apiRequest<{ items: Ingredient[]; suggestedCode: string }>(
     `/ingredients.php?${query.toString()}`
   );

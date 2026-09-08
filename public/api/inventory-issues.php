@@ -32,6 +32,7 @@ function inventory_issues_ensure_schema(): void
     auth_ensure_column('inventory_issue_items', 'base_quantity', 'DECIMAL(15,3) NULL AFTER quantity');
     auth_ensure_column('inventory_issues', 'shift_id', 'VARCHAR(64) NULL AFTER created_by');
     auth_ensure_column('inventory_issues', 'shift_type', 'VARCHAR(20) NULL AFTER shift_id');
+    auth_ensure_column('inventory_issues', 'requires_preparation_receipt', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER shift_type');
 }
 
 function inventory_issues_actor(array $user): string
@@ -174,9 +175,7 @@ try {
     }
     if ($status === 'completed') {
         $lock = $pdo->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');
-        $deduct = $storeId === 'warehouse'
-            ? $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,updated_at=NOW() WHERE id=:id')
-            : $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,preparation_stock_quantity=preparation_stock_quantity+:quantity,updated_at=NOW() WHERE id=:id');
+        $deduct = $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,updated_at=NOW() WHERE id=:id');
         $snapshot = $pdo->prepare('UPDATE inventory_issue_items SET stock_before=:before,stock_after=:after WHERE issue_id=:issue AND ingredient_id=:ingredient');
         foreach ($normalized as $line) {
             $ingredient = $line['ingredient'];
@@ -188,14 +187,10 @@ try {
                 $factor = max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1));
                 throw new RuntimeException('Tồn kho ' . $ingredient['ingredient_code'] . ' chỉ còn ' . round($before / $factor, 3) . ' ' . ($ingredient['purchase_unit'] ?: $ingredient['unit']) . '.');
             }
-            $deductParams = ['id' => $ingredient['id'], 'stock' => $after];
-            if ($storeId !== 'warehouse') {
-                $deductParams['quantity'] = $line['baseQuantity'];
-            }
-            $deduct->execute($deductParams);
+            $deduct->execute(['id' => $ingredient['id'], 'stock' => $after]);
             $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => $before, 'after' => $after]);
         }
-        $pdo->prepare('UPDATE inventory_issues SET status="completed",completed_at=NOW(),completed_by=:actor,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'actor' => inventory_issues_actor($user)]);
+        $pdo->prepare('UPDATE inventory_issues SET status="completed",requires_preparation_receipt=:requires_receipt,completed_at=NOW(),completed_by=:actor,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'requires_receipt' => $storeId === 'warehouse' ? 0 : 1, 'actor' => inventory_issues_actor($user)]);
     }
     $pdo->commit();
 } catch (Throwable $exception) {

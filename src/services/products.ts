@@ -17,6 +17,11 @@ export type Product = {
   storeId?: string;
   unit?: string;
   description?: string;
+  conversionSourceCode?: string | null;
+  conversionSourceName?: string | null;
+  conversionSourceUnit?: string | null;
+  conversionInputQuantity?: number | null;
+  conversionOutputQuantity?: number | null;
   itemType?: "product" | "ingredient";
 };
 
@@ -28,6 +33,11 @@ export type ProductComponent = {
   cost: number;
   stockQuantity: number;
   lineTotal: number;
+  conversionSourceCode?: string | null;
+  conversionSourceName?: string | null;
+  conversionSourceUnit?: string | null;
+  conversionInputQuantity?: number | null;
+  conversionOutputQuantity?: number | null;
 };
 
 export type ProductPayload = {

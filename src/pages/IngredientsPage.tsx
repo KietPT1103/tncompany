@@ -13,10 +13,14 @@ import { exportIngredientsToExcel, parseIngredientWorkbook } from "@/services/ca
 
 type Form = {
   code: string; name: string; unit: string; purchaseUnit: string; conversionFactor: string; stock: string; cost: string;
+  conversionSourceIngredientId: string; conversionInputQuantity: string; conversionOutputQuantity: string;
+  conversionComponents: Array<{ ingredientId: string; inputQuantity: string }>;
   supplierId: string; supplierItemCode: string; description: string;
 };
 const blank = (): Form => ({
   code: "", name: "", unit: "", purchaseUnit: "", conversionFactor: "1", stock: "0", cost: "0",
+  conversionSourceIngredientId: "", conversionInputQuantity: "", conversionOutputQuantity: "",
+  conversionComponents: [],
   supplierId: "", supplierItemCode: "", description: "",
 });
 const decimal = (value: string) => Number(value.replace(",", ".")) || 0;
@@ -82,7 +86,13 @@ export default function IngredientsPage() {
       purchaseUnit: item.purchaseUnit || item.unit,
       conversionFactor: String(legacyFactor),
       stock: String(item.stockQuantity / legacyFactor),
-      cost: String(item.cost ?? 0),
+      cost: String(item.directCost ?? item.cost ?? 0),
+      conversionSourceIngredientId: item.conversionSourceIngredientId || "",
+      conversionInputQuantity: item.conversionInputQuantity ? String(item.conversionInputQuantity) : "",
+      conversionOutputQuantity: item.conversionOutputQuantity ? String(item.conversionOutputQuantity) : "",
+      conversionComponents: item.conversionComponents?.length
+        ? item.conversionComponents.map((component) => ({ ingredientId: component.ingredientId, inputQuantity: String(component.inputQuantity) }))
+        : item.conversionSourceIngredientId ? [{ ingredientId: item.conversionSourceIngredientId, inputQuantity: String(item.conversionInputQuantity || "") }] : [],
       supplierId: item.supplierId || "", supplierItemCode: item.supplierItemCode,
       description: item.description,
     });
@@ -93,6 +103,10 @@ export default function IngredientsPage() {
       setError(`Vui lòng nhập mã, tên, đơn vị thu ngân, đơn vị pha chế và hệ số quy đổi của ${itemLabel}.`);
       return;
     }
+    if (form.conversionComponents.length && (decimal(form.conversionOutputQuantity) <= 0 || form.conversionComponents.some((component) => !component.ingredientId || decimal(component.inputQuantity) <= 0))) {
+      setError("Vui lòng chọn đủ nguyên liệu đầu vào, nhập định lượng và lượng bán thành phẩm thu được lớn hơn 0.");
+      return;
+    }
     setSaving(true);
     setError("");
     const payload = {
@@ -100,6 +114,10 @@ export default function IngredientsPage() {
       purchaseUnit: form.purchaseUnit.trim(), baseUnit: form.unit.trim(),
       purchaseToBaseFactor: decimal(form.conversionFactor),
       cost: Math.max(0, decimal(form.cost)),
+      conversionSourceIngredientId: form.conversionComponents[0]?.ingredientId || null,
+      conversionInputQuantity: form.conversionComponents[0] ? decimal(form.conversionComponents[0].inputQuantity) : null,
+      conversionOutputQuantity: form.conversionComponents.length ? decimal(form.conversionOutputQuantity) : null,
+      conversionComponents: form.conversionComponents.map((component) => ({ ingredientId: component.ingredientId, inputQuantity: decimal(component.inputQuantity) })),
       supplierId: form.supplierId || null, supplierItemCode: form.supplierItemCode.trim(),
       description: form.description.trim(),
     };
@@ -188,7 +206,7 @@ export default function IngredientsPage() {
           : filtered.length === 0 ? <tr><td colSpan={7} className="p-14 text-center text-slate-500"><Boxes className="mx-auto mb-2 text-slate-300" />Chưa có {itemLabel}.</td></tr>
           : filtered.map((item) => <tr key={item.id} className="hover:bg-slate-50">
             <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b><small className="block text-slate-500">{item.supplierItemCode}</small></td>
-            <td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{(item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b><small className="block text-slate-500">1 {item.purchaseUnit || item.unit} = {item.purchaseToBaseFactor || 1} {item.baseUnit || item.unit}</small></td><td className="p-4 text-right">{Number(item.cost || 0).toLocaleString("vi-VN", { maximumFractionDigits: 6 })} ₫/{item.baseUnit || item.unit}</td>
+            <td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{(item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b></td><td className="p-4 text-right">{(Number(item.cost || 0) * (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ₫/{item.purchaseUnit || item.unit}</td>
             <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button><button disabled={Boolean(deleting)} onClick={() => void remove(item)} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
           </tr>)}</tbody>
       </table></div>
@@ -208,6 +226,36 @@ export default function IngredientsPage() {
       <Field label="Mã tại nhà phân phối"><input value={form.supplierItemCode} placeholder="Mã hàng của nhà phân phối" onChange={(e) => setForm({ ...form, supplierItemCode: e.target.value })} /></Field>
       <Field label="Ghi chú"><input value={form.description} placeholder="Quy cách hoặc ghi chú bảo quản" onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
     </div>
+    {!isConstructionWarehouse && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+      <label className="flex items-center gap-3 font-semibold text-amber-950">
+        <input
+          type="checkbox"
+          checked={form.conversionComponents.length > 0}
+          onChange={(event) => setForm({
+            ...form,
+            conversionComponents: event.target.checked
+              ? [{ ingredientId: items.find((item) => item.id !== editing?.id && !item.conversionComponents?.length && !item.conversionSourceIngredientId)?.id || "", inputQuantity: "" }]
+              : [],
+            conversionOutputQuantity: event.target.checked ? form.conversionOutputQuantity : "",
+          })}
+          className="h-4 w-4"
+        />
+        Đây là bán thành phẩm
+      </label>
+      {form.conversionComponents.length > 0 && <div className="mt-4 space-y-3">
+        <div className="grid gap-3 sm:grid-cols-[1fr_180px_44px]">{form.conversionComponents.map((component,index) => <div key={index} className="contents">
+          <Field label={index === 0 ? "Nguyên liệu đầu vào *" : "Nguyên liệu đầu vào"}><select value={component.ingredientId} onChange={(e) => setForm({ ...form, conversionComponents: form.conversionComponents.map((item,itemIndex) => itemIndex === index ? { ...item, ingredientId: e.target.value } : item) })}><option value="">Chọn nguyên liệu</option>{items.filter((item) => item.id !== editing?.id && !item.conversionComponents?.length && !item.conversionSourceIngredientId && !form.conversionComponents.some((selected,selectedIndex) => selectedIndex !== index && selected.ingredientId === item.id)).map((item) => <option key={item.id} value={item.id}>{item.ingredientName} ({item.baseUnit || item.unit})</option>)}</select></Field>
+          <Field label={index === 0 ? "Lượng đầu vào *" : "Định lượng"}><input inputMode="decimal" value={component.inputQuantity} placeholder="Ví dụ: 20" onChange={(e) => setForm({ ...form, conversionComponents: form.conversionComponents.map((item,itemIndex) => itemIndex === index ? { ...item, inputQuantity: e.target.value } : item) })} /></Field>
+          <button type="button" onClick={() => setForm({ ...form, conversionComponents: form.conversionComponents.filter((_,itemIndex) => itemIndex !== index) })} className="mt-7 h-11 rounded-lg border text-rose-600"><Trash2 className="mx-auto h-4 w-4" /></button>
+        </div>)}</div>
+        <button type="button" onClick={() => setForm({ ...form, conversionComponents: [...form.conversionComponents, { ingredientId: "", inputQuantity: "" }] })} className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-400 bg-white px-3 text-sm font-bold text-amber-900"><Plus className="h-4 w-4" /> Thêm nguyên liệu</button>
+        <Field label={'Tổng lượng bán thành phẩm thu được (' + (form.unit || 'đơn vị') + ') *'}><input inputMode="decimal" value={form.conversionOutputQuantity} placeholder="Ví dụ: 1000" onChange={(e) => setForm({ ...form, conversionOutputQuantity: e.target.value })} /></Field>
+        <p className="text-xs text-amber-800">Ví dụ: 100 g cà phê + 1.000 ml nước tạo ra 800 ml cốt. Giá cost và tồn nguyên liệu gốc được phân bổ theo toàn bộ công thức.</p>
+        <p className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-emerald-800">
+          Giá cost quy đổi: {(form.conversionComponents.reduce((sum,component) => sum + (items.find((item) => item.id === component.ingredientId)?.cost || 0) * decimal(component.inputQuantity), 0) / Math.max(decimal(form.conversionOutputQuantity), 1)).toLocaleString("vi-VN", { maximumFractionDigits: 6 })} ₫ / {form.unit || "đơn vị bán thành phẩm"}
+        </p>
+      </div>}
+    </div>}
     <div className="mt-6 flex justify-end gap-3"><button disabled={saving} onClick={() => setOpen(false)} className="px-5">Hủy</button><button disabled={saving} onClick={() => void save()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">{saving && <LoaderCircle className="h-5 w-5 animate-spin" />}{saving ? "Đang lưu…" : `Lưu ${itemLabel}`}</button></div>
   </div></div>}</div>;
 }

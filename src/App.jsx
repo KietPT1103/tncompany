@@ -72,11 +72,12 @@ function AdminLayout() {
   );
 }
 
-function InventoryAdminPage({ children, permission }) {
+function InventoryAdminPage({ children, permission, allowBartender = false }) {
+  const { role } = useAuth();
   return (
     <RoleGuard
       allowedRoles={["admin", "manager", "user", "server", "bartender"]}
-      permission={permission}
+      permission={allowBartender && role === "bartender" ? undefined : permission}
       inferPermission={false}
     >
       <DashboardLayout>{children}</DashboardLayout>
@@ -128,16 +129,32 @@ export function App() {
         <Route
           path="/admin/inventory"
           element={
-            <InventoryAdminPage permission={["inventory_receipts.view", "inventory_issues.access", "inventory_checks.access"]}>
+            <InventoryAdminPage permission={["inventory_receipts.view", "inventory_issues.access", "inventory_stock.view", "inventory_history.access", "preparation_receipts.access", "inventory_raw_closings.access", "inventory_prepared_closings.access", "preparation_inventory.access"]}>
               <InventoryWorkspacePage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
+          path="/admin/product"
+          element={
+            <InventoryAdminPage permission={["product.access", "products.selling.view"]}>
+              <ProductsPage />
             </InventoryAdminPage>
           }
         />
         <Route
           path="/admin/product/ingredients"
           element={
-            <InventoryAdminPage permission={["product.access", "inventory_checks.access", "inventory_issues.access", "inventory_receipts.view"]}>
+            <InventoryAdminPage permission="ingredients.access">
               <IngredientsPage />
+            </InventoryAdminPage>
+          }
+        />
+        <Route
+          path="/admin/product/suppliers"
+          element={
+            <InventoryAdminPage permission="suppliers.access">
+              <SuppliersPage />
             </InventoryAdminPage>
           }
         />

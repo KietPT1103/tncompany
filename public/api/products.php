@@ -105,16 +105,27 @@ function products_next_sp_code(): string
     return 'SP' . str_pad((string) $nextNumber, strlen($digits), '0', STR_PAD_LEFT);
 }
 
+function products_has_limited_catalog_access(array $user): bool
+{
+    return ($user['role'] ?? '') !== 'admin'
+        && (auth_has_permission($user, 'products.selling.view')
+            || auth_has_permission($user, 'products.components.update'));
+}
+
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 products_inventory_ensure_schema();
 
 if ($method === 'GET') {
-    $user = auth_require_permission(['product.access', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update', 'bills.access', 'bar.checkout']);
+    $user = auth_require_permission(['product.access', 'products.selling.view', 'products.components.update', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update', 'bills.access', 'bar.checkout']);
+    $sellingOnly = products_has_limited_catalog_access($user);
 
     $fieldAction = strtolower(trim((string) ($_GET['action'] ?? '')));
     $fieldSearch = trim((string) ($_GET['search'] ?? ''));
     $fieldAreaId = trim((string) ($_GET['areaId'] ?? ''));
     $fieldItemType = products_normalize_item_type((string) ($_GET['itemType'] ?? 'product'));
+    if ($sellingOnly && ($fieldAction !== '' || $fieldSearch !== '' || $fieldAreaId !== '')) {
+        respond_error('Quyền này chỉ được xem danh sách sản phẩm đang bán.', 403);
+    }
     if ($fieldAction === 'next-code') {
         require_once __DIR__ . '/_lib/field_inventory.php';
         field_inventory_require_store($user, $fieldAreaId);
@@ -168,6 +179,10 @@ if ($method === 'GET') {
     }
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
+    if ($sellingOnly) {
+        require_once __DIR__ . '/_lib/field_inventory.php';
+        field_inventory_require_store($user, $storeId);
+    }
     $itemType = products_normalize_item_type((string) ($_GET['itemType'] ?? 'product'));
     $statement = db()->prepare(
         'SELECT p.*, c.name AS category_name
@@ -176,6 +191,7 @@ if ($method === 'GET') {
          WHERE p.store_id = :store_id
            AND p.item_type = :item_type
            AND LOWER(COALESCE(c.name,""))<>LOWER("Nguyên liệu")
+           ' . ($sellingOnly ? 'AND p.is_selling=1' : '') . '
          ORDER BY p.product_name ASC'
     );
     $statement->execute([
@@ -222,6 +238,9 @@ if ($method === 'GET') {
 
 if ($method === 'POST') {
     $user = auth_require_permission(['product.access', 'dashboard.access', 'products.create']);
+    if (products_has_limited_catalog_access($user)) {
+        respond_error('Tài khoản chỉ được xem hoặc sửa thành phần, không được tạo sản phẩm.', 403);
+    }
 
     $body = read_json_body();
     $action = strtolower((string) ($body['action'] ?? 'create'));
@@ -460,10 +479,21 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PATCH') {
-    auth_require_permission(['product.access', 'dashboard.access']);
+    $user = auth_require_permission(['product.access', 'products.components.update', 'dashboard.access']);
 
     $body = read_json_body();
     $storeId = trim((string) ($body['storeId'] ?? 'cafe'));
+    $canManageProduct = !products_has_limited_catalog_access($user)
+        && (auth_has_permission($user, 'product.access') || auth_has_permission($user, 'dashboard.access'));
+    if (!$canManageProduct) {
+        require_once __DIR__ . '/_lib/field_inventory.php';
+        field_inventory_require_store($user, $storeId);
+        $allowedKeys = ['productCode' => true, 'storeId' => true, 'components' => true];
+        foreach (array_keys($body) as $key) {
+            if (!isset($allowedKeys[$key])) respond_error('Quyền này chỉ được phép sửa thành phần sản phẩm.', 403);
+        }
+        if (!array_key_exists('components', $body)) respond_error('Vui lòng gửi danh sách thành phần cần cập nhật.', 422);
+    }
     $productCode = trim((string) ($body['productCode'] ?? ''));
     if ($productCode === '') {
         respond_error('Product code is required', 422);
@@ -529,7 +559,7 @@ if ($method === 'PATCH') {
     }
 
     $findStatement = db()->prepare(
-        'SELECT id, product_code
+        'SELECT id, product_code, is_selling
          FROM products
          WHERE store_id = :store_id
            AND product_code = :product_code
@@ -543,6 +573,9 @@ if ($method === 'PATCH') {
 
     if (!$product) {
         respond_error('Không tìm thấy hàng hoá.', 404);
+    }
+    if (!$canManageProduct && empty($product['is_selling'])) {
+        respond_error('Chỉ được sửa thành phần của sản phẩm đang bán.', 403);
     }
 
     db()->beginTransaction();
@@ -583,7 +616,10 @@ if ($method === 'PATCH') {
 }
 
 if ($method === 'DELETE') {
-    auth_require_permission(['product.access', 'dashboard.access']);
+    $user = auth_require_permission(['product.access', 'dashboard.access']);
+    if (products_has_limited_catalog_access($user)) {
+        respond_error('Tài khoản không có quyền xóa sản phẩm.', 403);
+    }
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $productCode = trim((string) ($_GET['productCode'] ?? ''));

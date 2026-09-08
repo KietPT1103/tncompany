@@ -119,11 +119,89 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     path: "/product",
   },
   {
+    id: "products.selling.view",
+    label: "Xem sản phẩm đang bán",
+    description: "Xem danh sách các sản phẩm đang bán nhưng không được thay đổi thông tin.",
+    category: "Hàng hóa",
+    path: "/product",
+  },
+  {
+    id: "products.components.update",
+    label: "Sửa thành phần sản phẩm",
+    description: "Sửa nguyên liệu và định lượng trong sản phẩm đang bán; không được sửa giá, danh mục hoặc trạng thái.",
+    category: "Hàng hóa",
+    path: "/product",
+  },
+  {
+    id: "ingredients.access",
+    label: "Nguyên liệu",
+    description: "Xem và quản lý danh sách nguyên liệu, quy đổi và bán thành phẩm.",
+    category: "Kho và nguyên liệu",
+    path: "/product/ingredients",
+  },
+  {
+    id: "suppliers.access",
+    label: "Nhà phân phối",
+    description: "Xem và quản lý danh sách nhà phân phối nguyên liệu.",
+    category: "Kho và nguyên liệu",
+    path: "/product/suppliers",
+  },
+  {
     id: "inventory_checks.access",
     label: "Kiem kho",
     description: "Lap va quan ly phieu kiem kho.",
     category: "Hang hoa",
     path: "/product/checks",
+  },
+  {
+    id: "inventory_closings.edit_past",
+    label: "Sửa chốt kho quá ngày",
+    description: "Cho phép chỉnh lại tồn nguyên liệu và tồn bán thành phẩm sau khi ngày chốt đã kết thúc.",
+    category: "Kho và nguyên liệu",
+    path: "/inventory/closing-history",
+  },
+  {
+    id: "inventory_stock.view",
+    label: "Xem tồn kho",
+    description: "Xem tồn kho nguyên liệu tại kho và quầy pha chế.",
+    category: "Kho và nguyên liệu",
+    path: "/inventory",
+  },
+  {
+    id: "inventory_history.access",
+    label: "Lịch sử xuất nhập kho",
+    description: "Xem lịch sử và chi tiết các phiếu nhập, xuất kho.",
+    category: "Kho và nguyên liệu",
+    path: "/inventory",
+  },
+  {
+    id: "preparation_receipts.access",
+    label: "Nhập kho pha chế",
+    description: "Nhận nguyên liệu từ phiếu xuất kho vào quầy pha chế.",
+    category: "Kho và nguyên liệu",
+    path: "/inventory",
+  },
+  {
+    id: "inventory_raw_closings.access",
+    label: "Chốt tồn nguyên liệu pha chế",
+    description: "Nhập và chốt số lượng nguyên liệu còn lại tại quầy cuối ngày.",
+    category: "Kho và nguyên liệu",
+    path: "/inventory",
+  },
+  {
+    id: "inventory_prepared_closings.access",
+    label: "Chốt tồn bán thành phẩm",
+    description: "Nhập và chốt số lượng bán thành phẩm còn lại cuối ngày.",
+    category: "Kho và nguyên liệu",
+    path: "/inventory",
+  },
+  {
+    id: "preparation_inventory.access",
+    label: "Kho pha chế",
+    description: "Nhận nguyên liệu vào quầy và chốt tồn pha chế cuối ngày.",
+    category: "Hàng hóa",
+    path: "/inventory/preparation-stock",
+    hidden: true,
   },
   {
     id: "inventory_issues.access",
@@ -276,9 +354,15 @@ export const MANAGED_PERMISSION_GROUPS = PERMISSION_DEFINITIONS.filter(
 const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
   admin: [...ALL_APP_PERMISSIONS],
   manager: ["payroll_estimate.access"],
-  user: ["bills.access"],
+  user: ["bills.access", "inventory_receipts.access", "inventory_issues.access"],
   server: ["bills.access"],
-  bartender: ["bar.access", "bar.checkout"],
+  bartender: [
+    "bar.access",
+    "bar.checkout",
+    "preparation_receipts.access",
+    "inventory_raw_closings.access",
+    "inventory_prepared_closings.access",
+  ],
 };
 
 const PATH_PERMISSION_RULES = [...PERMISSION_DEFINITIONS]
@@ -343,21 +427,32 @@ export function getEffectivePermissions(
 
   if (Array.isArray(source.permissions)) {
     const normalized = normalizePermissionList(source.permissions);
-    if (
-      (source.role === "user" || source.role === "server") &&
-      !normalized.includes("bills.access")
-    ) {
+    if (source.role === "user") {
+      ["bills.access", "inventory_receipts.access", "inventory_issues.access"].forEach((permission) => {
+        if (!normalized.includes(permission as AppPermission)) normalized.push(permission as AppPermission);
+      });
+    } else if (source.role === "server" && !normalized.includes("bills.access")) {
       normalized.push("bills.access");
     }
+    const inherited = new Set<AppPermission>();
     if (normalized.includes("inventory_receipts.access")) {
-      const inherited: AppPermission[] = [
+      [
         "inventory_receipts.view", "inventory_receipts.create", "inventory_receipts.update",
         "inventory_receipts.complete", "inventory_receipts.cancel", "inventory_receipts.upload_image",
         "products.create", "products.attach_area",
-      ];
-      return ALL_APP_PERMISSIONS.filter((permission) => normalized.includes(permission) || inherited.includes(permission));
+      ].forEach((permission) => inherited.add(permission as AppPermission));
     }
-    return normalized;
+    if (normalized.includes("preparation_inventory.access")) {
+      [
+        "preparation_receipts.access",
+        "inventory_raw_closings.access",
+        "inventory_prepared_closings.access",
+      ].forEach((permission) => inherited.add(permission as AppPermission));
+    }
+    if (normalized.includes("products.components.update")) {
+      inherited.add("products.selling.view");
+    }
+    return ALL_APP_PERMISSIONS.filter((permission) => normalized.includes(permission) || inherited.has(permission));
   }
 
   return getDefaultPermissionsForRole(source.role);
@@ -432,6 +527,9 @@ const DEFAULT_ROUTE_ORDER = [
   "/timesheet",
   "/reports",
   "/cash-flow",
+  "/product/ingredients",
+  "/product/suppliers",
+  "/inventory",
   "/product",
   "/product/checks",
   "/product/receipts",
@@ -463,7 +561,19 @@ export function getDefaultRouteForUser(user: AppUser | null | undefined) {
   if (matchedPath) {
     return matchedPath;
   }
-  if (hasAnyPermission(user, ["inventory_issues.access", "inventory_checks.access"])) {
+  if (hasPermission(user, "products.selling.view")) {
+    return "/product";
+  }
+  if (hasAnyPermission(user, [
+    "inventory_receipts.view",
+    "inventory_issues.access",
+    "inventory_stock.view",
+    "inventory_history.access",
+    "preparation_receipts.access",
+    "inventory_raw_closings.access",
+    "inventory_prepared_closings.access",
+    "preparation_inventory.access",
+  ])) {
     return "/inventory";
   }
   return "/pos";

@@ -557,7 +557,15 @@ export function AccountEditorModal({
   onRoleChange,
   onSave,
 }: AccountEditorProps) {
-  const requiresAreas = form.role === "bartender" || form.permissions.some((permission) => permission.startsWith("inventory_"));
+  const requiresAreas = form.role === "bartender" || form.permissions.some((permission) =>
+    permission.startsWith("inventory_")
+    || permission === "products.selling.view"
+    || permission === "products.components.update"
+    || permission === "ingredients.access"
+    || permission === "suppliers.access"
+    || permission === "preparation_receipts.access"
+    || permission === "preparation_inventory.access"
+  );
   const permissionCount = form.role === "admin" ? MANAGED_PERMISSION_GROUPS.reduce((count, group) => count + group.items.length, 0) : normalizePermissionList(form.permissions).length;
   const warehouseQuickPermissions = [
     { id: "inventory_receipts.access" as const, label: "Nhập kho", description: "Lập và hoàn thành phiếu nhập kho." },

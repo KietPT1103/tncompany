@@ -18,6 +18,8 @@ import {
   getCategories,
 } from "@/services/categoryService";
 import { useStore } from "@/context/StoreContext";
+import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 import RoleGuard from "@/components/RoleGuard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -267,6 +269,7 @@ function ProductModal({
   newCategoryName,
   componentQuery,
   tab,
+  componentsOnly,
   onClose,
   onSubmit,
   onChange,
@@ -287,6 +290,7 @@ function ProductModal({
   newCategoryName: string;
   componentQuery: string;
   tab: ModalTab;
+  componentsOnly: boolean;
   onClose: () => void;
   onSubmit: () => void;
   onChange: (patch: Partial<ProductFormState>) => void;
@@ -360,6 +364,11 @@ function ProductModal({
           unit: matched?.unit || "",
           unitCost,
           stockQuantity: matched?.stockQuantity ?? 0,
+          conversionSourceCode: matched?.conversionSourceCode,
+          conversionSourceName: matched?.conversionSourceName,
+          conversionSourceUnit: matched?.conversionSourceUnit,
+          conversionInputQuantity: matched?.conversionInputQuantity,
+          conversionOutputQuantity: matched?.conversionOutputQuantity,
           lineTotal: quantity * unitCost,
         };
       }),
@@ -445,7 +454,7 @@ function ProductModal({
 
         <div className="border-b border-slate-200 bg-white px-5 sm:px-6">
           <div className="flex gap-2">
-            <button
+            {!componentsOnly && <button
               type="button"
               onClick={() => onTabChange("info")}
               className={`relative inline-flex min-h-12 items-center gap-2 px-3 text-sm font-semibold transition-colors ${tab === "info" ? "text-emerald-800" : "text-slate-500 hover:text-slate-900"}`}
@@ -455,7 +464,7 @@ function ProductModal({
               {tab === "info" ? (
                 <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-emerald-700" />
               ) : null}
-            </button>
+            </button>}
 
             <button
               type="button"
@@ -477,7 +486,7 @@ function ProductModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 sm:p-6">
-          {tab === "info" ? (
+          {tab === "info" && !componentsOnly ? (
             <div className="space-y-5">
               <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[6px_8px_14px_rgba(15,23,42,0.14)] sm:p-5">
                 <div className="mb-4">
@@ -830,7 +839,16 @@ const getCategoryBadgeClass = (categoryName: string) =>
 
 export default function ProductsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const { storeId } = useStore();
+  const hasLimitedProductAccess = user?.role !== "admin" && (
+    hasPermission(user, "products.selling.view")
+    || hasPermission(user, "products.components.update")
+  );
+  const canManageProducts = user?.role === "admin" || (
+    hasPermission(user, "product.access") && !hasLimitedProductAccess
+  );
+  const canEditComponents = canManageProducts || hasPermission(user, "products.components.update");
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const [selectedAction, setSelectedAction] = useState<ProductAction>("");
@@ -991,6 +1009,7 @@ export default function ProductsPage() {
     const items = await getAllProducts(storeId);
     setProducts(items.filter((item) => {
       if (item.itemType === "ingredient") return false;
+      if (!canManageProducts && item.isSelling === false) return false;
       const category = normalizeExcelHeader(item.categoryName || item.category || "");
       return category !== "nguyen lieu" && category !== "nguyenlieu";
     }));
@@ -1007,6 +1026,11 @@ export default function ProductsPage() {
       isSelling: item.isActive,
       stockQuantity: item.stockQuantity,
       unit: item.unit,
+      conversionSourceCode: item.conversionSourceCode,
+      conversionSourceName: item.conversionSourceName,
+      conversionSourceUnit: item.conversionSourceUnit,
+      conversionInputQuantity: item.conversionInputQuantity,
+      conversionOutputQuantity: item.conversionOutputQuantity,
       description: item.description,
       storeId: item.storeId,
     })));
@@ -1021,7 +1045,11 @@ export default function ProductsPage() {
     async function init() {
       setLoading(true);
       try {
-        await Promise.all([loadProducts(), loadIngredients(), loadCategories()]);
+        await Promise.all([
+          loadProducts(),
+          canEditComponents ? loadIngredients() : Promise.resolve(),
+          loadCategories(),
+        ]);
       } finally {
         setLoading(false);
       }
@@ -1052,6 +1080,7 @@ export default function ProductsPage() {
   };
 
   const openCreateModal = () => {
+    if (!canManageProducts) return;
     setModalMode("create");
     setFormState(createEmptyForm());
     setShowModal(true);
@@ -1062,6 +1091,7 @@ export default function ProductsPage() {
   };
 
   const openEditModal = (product: Product) => {
+    if (!canEditComponents) return;
     setModalMode("edit");
     setEditingProductCode(product.product_code);
     setFormState({
@@ -1084,7 +1114,7 @@ export default function ProductsPage() {
       })),
     });
     setShowModal(true);
-    setModalTab("info");
+    setModalTab(canManageProducts ? "info" : "components");
     setNewCategoryName("");
     setComponentQuery("");
   };
@@ -1276,6 +1306,18 @@ export default function ProductsPage() {
           "success",
           `${formState.name.trim()} đã được thêm vào danh sách.`,
         );
+      } else if (!canManageProducts) {
+        await updateProductCost(
+          editingProductCode,
+          { components: payloadComponents },
+          storeId,
+        );
+
+        showToast(
+          "Đã cập nhật thành phần",
+          "success",
+          `Công thức ${formState.name.trim()} đã được cập nhật.`,
+        );
       } else {
         await updateProductCost(
           editingProductCode,
@@ -1385,21 +1427,25 @@ export default function ProductsPage() {
   );
 
   return (
-    <RoleGuard allowedRoles={["admin"]}>
+    <RoleGuard permission={["product.access", "products.selling.view"]} inferPermission={false}>
       <main className="min-h-screen bg-slate-50 text-slate-950 antialiased">
         <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
           <header className="mb-5 flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="font-smooch text-5xl font-bold text-emerald-800">
-                Danh sách hàng hóa
+                {canManageProducts ? "Danh sách hàng hóa" : "Sản phẩm đang bán"}
               </h1>
 
               <p className="font-firasans mt-1 max-w-2xl text-pretty text-sm font-bold text-[#d6ba5d]">
-                Quản lý giá bán, giá vốn, tồn kho và thành phần cấu thành
+                {canManageProducts
+                  ? "Quản lý giá bán, giá vốn, tồn kho và thành phần cấu thành"
+                  : canEditComponents
+                    ? "Xem món đang bán và cập nhật nguyên liệu trong công thức"
+                    : "Danh sách các sản phẩm hiện đang bán"}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            {canManageProducts && <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 className="h-10 gap-1.5 rounded-[2px] border-2 border-slate-900 bg-emerald-700 px-3 text-sm font-semibold text-white shadow-[4px_4px_0_#0f172a] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:bg-emerald-800 hover:text-white hover:shadow-[6px_6px_0_#0f172a] active:translate-x-[2px] active:translate-y-[2px] active:scale-100 active:shadow-[2px_2px_0_#0f172a]"
@@ -1437,7 +1483,7 @@ export default function ProductsPage() {
                   event.target.value = "";
                 }}
               />
-            </div>
+            </div>}
           </header>
 
           <section className="overflow-hidden rounded border border-slate-200 bg-white">
@@ -1555,15 +1601,15 @@ export default function ProductsPage() {
                       return (
                         <tr
                           key={product.product_code}
-                          tabIndex={0}
-                          onClick={() => openEditModal(product)}
-                          onKeyDown={(event) => {
+                          tabIndex={canEditComponents ? 0 : undefined}
+                          onClick={canEditComponents ? () => openEditModal(product) : undefined}
+                          onKeyDown={canEditComponents ? (event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
                               openEditModal(product);
                             }
-                          }}
-                          className="cursor-pointer bg-white transition-[background-color,box-shadow] hover:bg-emerald-50/60 hover:shadow-[inset_3px_0_0_#047857] focus-visible:bg-emerald-50/60 focus-visible:outline-none focus-visible:shadow-[inset_3px_0_0_#047857]"
+                          } : undefined}
+                          className={`${canEditComponents ? "cursor-pointer hover:bg-emerald-50/60 hover:shadow-[inset_3px_0_0_#047857] focus-visible:bg-emerald-50/60 focus-visible:outline-none focus-visible:shadow-[inset_3px_0_0_#047857]" : ""} bg-white transition-[background-color,box-shadow]`}
                         >
                           <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">
                             {product.product_code}
@@ -1612,7 +1658,7 @@ export default function ProductsPage() {
                           </td>
 
                           <td className="px-4 py-3">
-                            <button
+                            {canManageProducts ? <button
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
@@ -1635,12 +1681,12 @@ export default function ProductsPage() {
                               {product.isSelling === false
                                 ? "Tạm dừng"
                                 : "Đang bán"}
-                            </button>
+                            </button> : <span className="inline-flex items-center gap-2 rounded-full bg-emerald-800 px-2.5 py-1 text-xs font-bold text-[#ffb800]"><span className="h-2 w-2 rounded-full bg-[#ffb800]" />Đang bán</span>}
                           </td>
 
                           <td className="px-4 py-3">
                             <div className="flex justify-end gap-1">
-                              <button
+                              {canEditComponents && <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -1651,9 +1697,9 @@ export default function ProductsPage() {
                                 className="inline-flex h-10 w-10 items-center justify-center rounded-md text-emerald-700 transition-[background-color,color,transform,box-shadow] duration-200 hover:bg-emerald-800 hover:text-[#ffb800] hover:shadow-sm active:scale-[0.96]"
                               >
                                 <Pencil className="h-4 w-4" />
-                              </button>
+                              </button>}
 
-                              <button
+                              {canManageProducts && <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -1664,7 +1710,8 @@ export default function ProductsPage() {
                                 className="inline-flex h-10 w-10 items-center justify-center rounded-md text-rose-600 transition-[background-color,color,transform] hover:bg-rose-600 hover:text-white active:scale-[0.96]"
                               >
                                 <Trash2 className="h-4 w-4" />
-                              </button>
+                              </button>}
+                              {!canEditComponents && !canManageProducts ? <span className="px-3 text-slate-400">—</span> : null}
                             </div>
                           </td>
                         </tr>
@@ -1740,6 +1787,7 @@ export default function ProductsPage() {
         newCategoryName={newCategoryName}
         componentQuery={componentQuery}
         tab={modalTab}
+        componentsOnly={!canManageProducts}
         onClose={closeModal}
         onSubmit={handleSaveProduct}
         onChange={(patch) =>

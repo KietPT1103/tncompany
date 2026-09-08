@@ -193,25 +193,25 @@ const navGroups: NavGroup[] = [
         href: "/product",
         label: "Sản phẩm",
         icon: Package,
-        permission: "product.access",
+        permissions: ["product.access", "products.selling.view"],
       },
       {
         href: "/product/ingredients",
         label: "Nguyên liệu",
         icon: Boxes,
-        permission: "product.access",
+        permission: "ingredients.access",
       },
       {
         href: "/product/suppliers",
         label: "Nhà phân phối",
         icon: Truck,
-        permission: "product.access",
+        permission: "suppliers.access",
       },
       {
         href: "/inventory",
         label: "Nhập · Xuất · Tồn kho",
         icon: Boxes,
-        permissions: ["inventory_receipts.view", "inventory_issues.access", "inventory_checks.access"],
+        permissions: ["inventory_receipts.view", "inventory_issues.access", "inventory_stock.view", "inventory_history.access", "preparation_receipts.access", "inventory_raw_closings.access", "inventory_prepared_closings.access", "preparation_inventory.access"],
       },
       {
         href: "/categories",
@@ -366,11 +366,14 @@ export default function AdminSidebar({
   }, [showStoreMenu]);
 
   const canViewItem = (item: NavItem) => {
+    if (userRole === "bartender" && (item.href === "/bar" || item.href === "/inventory")) {
+      return true;
+    }
     if (item.roles?.length && (!userRole || !item.roles.includes(userRole))) {
       return false;
     }
     if (storeId === "warehouse" && item.href === "/product/ingredients") {
-      return ["product.access", "inventory_checks.access", "inventory_issues.access", "inventory_receipts.view"]
+      return ["ingredients.access", "inventory_checks.access", "inventory_issues.access", "inventory_receipts.view", "inventory_stock.view", "inventory_history.access", "preparation_receipts.access", "inventory_raw_closings.access", "inventory_prepared_closings.access", "preparation_inventory.access"]
         .some((permission) => hasPermission(user, permission as AppPermission));
     }
     if (item.permission) return hasPermission(user, item.permission);

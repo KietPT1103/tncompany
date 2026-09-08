@@ -61,7 +61,16 @@ function users_requires_store_access(string $role, array $permissions): bool
     }
 
     $inventoryPermissions = [
+        'products.selling.view',
+        'products.components.update',
+        'ingredients.access',
+        'suppliers.access',
         'inventory_checks.access',
+        'inventory_stock.view',
+        'inventory_history.access',
+        'preparation_receipts.access',
+        'inventory_raw_closings.access',
+        'inventory_prepared_closings.access',
         'inventory_issues.access',
         'inventory_receipts.access',
         'inventory_receipts.view',

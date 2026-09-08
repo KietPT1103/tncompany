@@ -30,6 +30,7 @@ function supplier_payload(array $row): array
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if ($method === 'GET') {
     $user = auth_require_permission([
+        'suppliers.access',
         'product.access',
         'inventory_receipts.access',
         'inventory_receipts.view',
@@ -61,7 +62,7 @@ if ($method === 'GET') {
 }
 
 $body = read_json_body();
-$user = auth_require_permission(['product.access', 'products.create', 'inventory_receipts.access', 'inventory_receipts.update']);
+$user = auth_require_permission(['suppliers.access', 'product.access', 'products.create', 'inventory_receipts.access', 'inventory_receipts.update']);
 $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? $_GET['storeId'] ?? ''));
 field_inventory_require_store($user, $storeId);
 

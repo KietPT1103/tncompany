@@ -3440,6 +3440,21 @@ export default function CafePosPage() {
                         <CalendarClock className="h-4 w-4 text-emerald-700" />
                         Đơn đã bán
                       </button>
+                      {isCashierAccount && (
+                        hasPermission(user, "inventory_receipts.create")
+                        || hasPermission(user, "inventory_issues.access")
+                      ) && (
+                        <Link
+                          href={hasPermission(user, "inventory_receipts.create")
+                            ? "/admin/inventory?tab=receipts"
+                            : "/admin/inventory?tab=issues"}
+                          className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"
+                          onClick={() => setShowActionMenu(false)}
+                        >
+                          <PackagePlus className="h-4 w-4 text-emerald-700" />
+                          Tạo phiếu nhập/xuất
+                        </Link>
+                      )}
                       {role === "admin" && !isFarmStore && (
                         <button
                           className="flex w-full cursor-pointer items-center gap-2 border-b px-4 py-3 text-left text-sm hover:bg-slate-50"

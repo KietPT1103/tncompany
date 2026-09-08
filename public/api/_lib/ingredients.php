@@ -48,6 +48,19 @@ function ingredients_ensure_packaging_columns(): void
     auth_ensure_column('ingredients', 'purchase_unit', 'VARCHAR(50) NULL AFTER unit');
     auth_ensure_column('ingredients', 'base_unit', 'VARCHAR(50) NULL AFTER purchase_unit');
     auth_ensure_column('ingredients', 'purchase_to_base_factor', 'DECIMAL(15,6) NOT NULL DEFAULT 1 AFTER base_unit');
+    auth_ensure_column('ingredients', 'conversion_source_ingredient_id', 'VARCHAR(64) NULL AFTER purchase_to_base_factor');
+    auth_ensure_column('ingredients', 'conversion_input_quantity', 'DECIMAL(15,6) NULL AFTER conversion_source_ingredient_id');
+    auth_ensure_column('ingredients', 'conversion_output_quantity', 'DECIMAL(15,6) NULL AFTER conversion_input_quantity');
+    db()->exec('CREATE TABLE IF NOT EXISTS ingredient_components (
+        id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,parent_ingredient_id VARCHAR(64) NOT NULL,
+        component_ingredient_id VARCHAR(64) NOT NULL,input_quantity DECIMAL(15,6) NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_ingredient_component(parent_ingredient_id,component_ingredient_id),
+        KEY idx_ingredient_components_component(component_ingredient_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    db()->exec('INSERT IGNORE INTO ingredient_components(parent_ingredient_id,component_ingredient_id,input_quantity)
+        SELECT id,conversion_source_ingredient_id,conversion_input_quantity FROM ingredients
+        WHERE conversion_source_ingredient_id IS NOT NULL AND conversion_input_quantity>0');
     $costScale = db()->query("SELECT numeric_scale FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ingredients' AND column_name='cost' LIMIT 1")->fetchColumn();
     if ($costScale !== false && (int) $costScale < 6) {
         db()->exec('ALTER TABLE ingredients MODIFY cost DECIMAL(15,6) NULL');
@@ -269,10 +282,21 @@ function ingredients_find(string $storeId, string $idOrCode): ?array
 {
     ingredients_ensure_schema();
     $statement = db()->prepare(
-        'SELECT i.*,s.supplier_code,s.supplier_name
+        'SELECT i.*,s.supplier_code,s.supplier_name,
+                source.ingredient_code AS conversion_source_code,
+                source.ingredient_name AS conversion_source_name,
+                COALESCE(NULLIF(source.base_unit,""),source.unit) AS conversion_source_unit,
+                source.cost AS conversion_source_cost,
+                CASE
+                  WHEN source.id IS NOT NULL AND i.conversion_input_quantity>0 AND i.conversion_output_quantity>0
+                  THEN source.cost*i.conversion_input_quantity/i.conversion_output_quantity
+                  ELSE i.cost
+                END AS effective_cost
          FROM ingredients i
          LEFT JOIN suppliers s
            ON s.id COLLATE utf8mb4_unicode_ci=i.supplier_id COLLATE utf8mb4_unicode_ci
+         LEFT JOIN ingredients source
+           ON source.id COLLATE utf8mb4_unicode_ci=i.conversion_source_ingredient_id COLLATE utf8mb4_unicode_ci
          WHERE i.store_id=:store_id
            AND (i.id=:value_id OR i.ingredient_code=:value_code)
          LIMIT 1'
