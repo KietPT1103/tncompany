@@ -324,12 +324,18 @@ if (in_array($method, ['PUT', 'PATCH'], true)) {
 
 if ($method === 'DELETE') {
     $used = db()->prepare(
-        'SELECT (SELECT COUNT(*) FROM product_ingredients WHERE ingredient_id=:id)
-              + (SELECT COUNT(*) FROM ingredients WHERE conversion_source_ingredient_id=:id)
-              + (SELECT COUNT(*) FROM ingredient_components WHERE component_ingredient_id=:id OR parent_ingredient_id=:id)
-              + (SELECT COUNT(*) FROM inventory_receipt_items WHERE product_id=:id)'
+        'SELECT (SELECT COUNT(*) FROM product_ingredients WHERE ingredient_id=:product_ingredient_id)
+              + (SELECT COUNT(*) FROM ingredients WHERE conversion_source_ingredient_id=:conversion_source_id)
+              + (SELECT COUNT(*) FROM ingredient_components WHERE component_ingredient_id=:component_id OR parent_ingredient_id=:parent_id)
+              + (SELECT COUNT(*) FROM inventory_receipt_items WHERE product_id=:receipt_product_id)'
     );
-    $used->execute(['id' => $existing['id']]);
+    $used->execute([
+        'product_ingredient_id' => $existing['id'],
+        'conversion_source_id' => $existing['id'],
+        'component_id' => $existing['id'],
+        'parent_id' => $existing['id'],
+        'receipt_product_id' => $existing['id'],
+    ]);
     if ((int) $used->fetchColumn() > 0) {
         db()->prepare('UPDATE ingredients SET is_active=0,updated_at=NOW() WHERE id=:id')
             ->execute(['id' => $existing['id']]);
