@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, RefreshCw, Store } from "lucide-react";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
-import { getBills } from "@/services/billService";
+import { getAllBills } from "@/services/billService";
 import { getCashVouchers } from "@/services/cashVoucherService";
 import { getAllProducts, type Product } from "@/services/products";
 import { getCategories, type Category } from "@/services/categoryService";
@@ -146,12 +146,11 @@ export default function OverviewPage() {
 
     try {
       const [bills, vouchers, products, categories] = await Promise.all([
-        getBills({
+        getAllBills({
           storeId,
           startDate: ranges.previousStartDate,
           endDate: ranges.endDate,
           includeCancelled: true,
-          limitCount: 5000,
         }),
         getCashVouchers({
           storeId,
