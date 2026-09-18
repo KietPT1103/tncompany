@@ -285,6 +285,38 @@ export function buildVoucherExportWorkbook(vouchers: CashVoucher[], options: Rep
   return workbook;
 }
 
+
+export function buildCashFlowExportWorkbook(bills: Bill[], vouchers: CashVoucher[], options: ReportOptions) {
+  const workbook = createReportWorkbook();
+  const validBills = bills.filter((bill) => bill.status !== "cancelled");
+  const cashVouchers = vouchers.filter((voucher) => !voucher.isCancelled && voucher.includeInCashFlow !== false);
+  const customerIncome = validBills.reduce((sum, bill) => sum + (bill.total || 0), 0);
+  const otherIncome = cashVouchers.filter((voucher) => voucher.type === "income").reduce((sum, voucher) => sum + (voucher.amount || 0), 0);
+  const expenses = cashVouchers.filter((voucher) => voucher.type === "expense").reduce((sum, voucher) => sum + (voucher.amount || 0), 0);
+  const summary = workbook.addWorksheet("Tổng hợp", { properties: { defaultRowHeight: 22 } });
+  summary.columns = [{ width: 34 }, { width: 22 }];
+  summary.mergeCells("A1:B1");
+  summary.getCell("A1").value = "TỔNG HỢP THU CHI";
+  summary.getCell("A1").style = { fill: { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.emerald } }, font: { name: "Aptos Display", size: 18, bold: true, color: { argb: COLORS.white } }, alignment: { vertical: "middle", horizontal: "left" } };
+  summary.getRow(1).height = 34;
+  summary.mergeCells("A2:B2");
+  summary.getCell("A2").value = `Khoảng thời gian: ${options.startDate} - ${options.endDate}`;
+  const summaryRows: Array<[string, number]> = [["Thu từ hóa đơn khách hàng", customerIncome], ["Thu khác", otherIncome], ["TỔNG TIỀN THU", customerIncome + otherIncome], ["TỔNG TIỀN CHI", expenses], ["THU CHI RÒNG", customerIncome + otherIncome - expenses]];
+  summaryRows.forEach(([label, value], index) => { const row = index + 5; summary.getCell(`A${row}`).value = label; summary.getCell(`B${row}`).value = value; summary.getCell(`B${row}`).numFmt = '#,##0 "VND"'; summary.getRow(row).font = { name: "Aptos", size: index >= 2 ? 11 : 10, bold: index >= 2, color: { argb: index === 3 ? COLORS.roseText : COLORS.emeraldText } }; summary.getRow(row).fill = { type: "pattern", pattern: "solid", fgColor: { argb: index >= 2 ? COLORS.goldLight : COLORS.emeraldLight } }; });
+  summary.views = [{ state: "frozen", ySplit: 4, showGridLines: false }];
+  const incomeSheet = workbook.addWorksheet("Hóa đơn thu", { properties: { defaultRowHeight: 20 } });
+  const billColumns: ReportColumn[] = [{ header: "Mã hóa đơn", key: "code", width: 18 }, { header: "Thời gian", key: "time", width: 21, numFmt: "dd/mm/yyyy hh:mm" }, { header: "Bàn", key: "table", width: 14 }, { header: "Thanh toán", key: "payment", width: 18 }, { header: "Tổng tiền", key: "amount", width: 19, numFmt: '#,##0 "VND"' }, { header: "Trạng thái", key: "status", width: 16 }, { header: "Ghi chú", key: "note", width: 38 }];
+  applyColumns(incomeSheet, billColumns); applyReportBase(incomeSheet, "HÓA ĐƠN THU KHÁCH HÀNG", options, billColumns.length);
+  buildBillExportRows(bills).forEach((item) => incomeSheet.addRow({ code: item["Mã hóa đơn"], time: item["Thời gian"], table: item["Bàn"], payment: item["Thanh toán"], amount: item["Tổng tiền (VND)"], status: item["Trạng thái"], note: item["Ghi chú"] }));
+  if (bills.length) styleDataRows(incomeSheet, 7, 6 + bills.length, 6); incomeSheet.autoFilter = { from: "A6", to: `G${Math.max(7, 6 + bills.length)}` };
+  const voucherSheet = workbook.addWorksheet("Phiếu thu chi", { properties: { defaultRowHeight: 20 } });
+  const voucherColumns: ReportColumn[] = [{ header: "Mã phiếu", key: "code", width: 18 }, { header: "Thời gian", key: "time", width: 21, numFmt: "dd/mm/yyyy hh:mm" }, { header: "Loại", key: "type", width: 14 }, { header: "Nội dung", key: "category", width: 28 }, { header: "Người nộp/nhận", key: "person", width: 24 }, { header: "Tính dòng tiền", key: "included", width: 16 }, { header: "Giá trị", key: "amount", width: 20, numFmt: '#,##0 "VND"' }, { header: "Trạng thái", key: "status", width: 16 }];
+  applyColumns(voucherSheet, voucherColumns); applyReportBase(voucherSheet, "PHIẾU THU / CHI", options, voucherColumns.length);
+  buildVoucherExportRows(vouchers).forEach((item) => voucherSheet.addRow({ code: item["Mã phiếu"], time: item["Thời gian"], type: item["Loại"], category: item["Nội dung"], person: item["Người nộp/nhận"], included: item["Tính vào dòng tiền"], amount: item["Giá trị (VND)"], status: item["Trạng thái"] }));
+  if (vouchers.length) styleDataRows(voucherSheet, 7, 6 + vouchers.length, 8); voucherSheet.autoFilter = { from: "A6", to: `H${Math.max(7, 6 + vouchers.length)}` };
+  return workbook;
+}
+
 export async function downloadExcelWorkbook(workbook: ExcelJS.Workbook, fileName: string) {
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

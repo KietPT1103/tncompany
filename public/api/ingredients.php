@@ -323,26 +323,29 @@ if (in_array($method, ['PUT', 'PATCH'], true)) {
 }
 
 if ($method === 'DELETE') {
+    $mode = strtolower(trim((string) ($_GET['mode'] ?? 'hide')));
+    if ($mode !== 'hard') {
+        db()->prepare('UPDATE ingredients SET is_active=0,updated_at=NOW() WHERE id=:id')->execute(['id' => $existing['id']]);
+        respond_ok(['deleted' => false, 'deactivated' => true]);
+    }
     $used = db()->prepare(
         'SELECT (SELECT COUNT(*) FROM product_ingredients WHERE ingredient_id=:product_ingredient_id)
               + (SELECT COUNT(*) FROM ingredients WHERE conversion_source_ingredient_id=:conversion_source_id)
               + (SELECT COUNT(*) FROM ingredient_components WHERE component_ingredient_id=:component_id OR parent_ingredient_id=:parent_id)
-              + (SELECT COUNT(*) FROM inventory_receipt_items WHERE product_id=:receipt_product_id)'
+              + (SELECT COUNT(*) FROM inventory_receipt_items WHERE ingredient_id=:receipt_ingredient_id OR product_id=:receipt_product_id)
+              + (SELECT COUNT(*) FROM inventory_issue_items WHERE ingredient_id=:issue_ingredient_id)'
     );
     $used->execute([
-        'product_ingredient_id' => $existing['id'],
-        'conversion_source_id' => $existing['id'],
-        'component_id' => $existing['id'],
-        'parent_id' => $existing['id'],
-        'receipt_product_id' => $existing['id'],
+        'product_ingredient_id' => $existing['id'], 'conversion_source_id' => $existing['id'],
+        'component_id' => $existing['id'], 'parent_id' => $existing['id'],
+        'receipt_ingredient_id' => $existing['id'], 'receipt_product_id' => $existing['id'],
+        'issue_ingredient_id' => $existing['id'],
     ]);
     if ((int) $used->fetchColumn() > 0) {
-        db()->prepare('UPDATE ingredients SET is_active=0,updated_at=NOW() WHERE id=:id')
-            ->execute(['id' => $existing['id']]);
-        respond_ok(['deleted' => false, 'deactivated' => true]);
+        respond_error('Nguyen lieu da co lich su su dung. Hay dung Tam an de giu chung tu cu.', 409);
     }
     db()->prepare('DELETE FROM ingredients WHERE id=:id')->execute(['id' => $existing['id']]);
-    respond_ok(['deleted' => true]);
+    respond_ok(['deleted' => true, 'deactivated' => false]);
 }
 
 respond_error('Method not allowed', 405);

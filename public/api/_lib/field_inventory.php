@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/ingredients.php';
 
-const FIELD_RECEIPT_STATUSES = ['pending_explanation', 'draft', 'completed', 'cancelled'];
+const FIELD_RECEIPT_STATUSES = ['pending_explanation', 'draft', 'completed', 'cancelled', 'deleted'];
 
 function field_inventory_has_permission(array $user, string $permission): bool
 {
@@ -164,6 +164,9 @@ function field_inventory_require_receipt(array $user, string $id, bool $lock = f
         respond_error('Không tìm thấy phiếu nhập.', 404);
     }
     field_inventory_require_store($user, (string) $receipt['store_id']);
+    if (($receipt['status'] ?? '') === 'deleted' && !field_inventory_is_admin($user)) {
+        respond_error('Khong tim thay phieu nhap.', 404);
+    }
     return $receipt;
 }
 
@@ -220,6 +223,9 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
         'completedAt' => $row['completed_at'] ?: null,
         'cancelledAt' => $row['cancelled_at'] ?: null,
         'cancelReason' => $row['cancel_reason'] ?: null,
+        'deletedAt' => ($row['deleted_at'] ?? null) ?: null,
+        'deletedBy' => ($row['deleted_by'] ?? null) ?: null,
+        'previousStatus' => ($row['previous_status'] ?? null) ?: null,
         'createdAt' => (string) $row['created_at'],
         'updatedAt' => (string) $row['updated_at'],
         'itemCount' => count($items),
@@ -243,6 +249,7 @@ function field_inventory_load_items(string $receiptId): array
         'id' => (int) $row['id'],
         'productId' => (string) ($row['ingredient_id'] ?: $row['product_id']),
         'ingredientId' => (string) ($row['ingredient_id'] ?: $row['product_id']),
+        'itemType' => (string) ($row['item_type'] ?? 'ingredient'),
         'productCode' => (string) $row['product_code'],
         'productName' => (string) $row['product_name'],
         'unit' => $row['unit'] ?: ($row['current_unit'] ?: ''),

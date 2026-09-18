@@ -7,6 +7,7 @@ require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
 
+auth_ensure_column('inventory_receipt_items', 'item_type', "ENUM('ingredient','equipment') NOT NULL DEFAULT 'ingredient' AFTER ingredient_id");
 auth_ensure_column('inventory_receipts', 'order_creator_name', 'VARCHAR(255) NULL AFTER supplier_id');
 auth_ensure_column('inventory_receipts', 'locked_at', 'DATETIME NULL AFTER order_creator_name');
 auth_ensure_column('inventory_receipts', 'locked_by', 'VARCHAR(64) NULL AFTER locked_at');
@@ -15,6 +16,13 @@ auth_ensure_column('inventory_receipts', 'unlocked_by', 'VARCHAR(64) NULL AFTER 
 auth_ensure_column('inventory_receipts', 'entry_source', "ENUM('mobile_photo','web_manual') NOT NULL DEFAULT 'mobile_photo' AFTER receipt_date");
 auth_ensure_column('inventory_receipts', 'shift_id', 'VARCHAR(64) NULL AFTER created_by');
 auth_ensure_column('inventory_receipts', 'shift_type', 'VARCHAR(20) NULL AFTER shift_id');
+auth_ensure_column('inventory_receipts', 'deleted_at', 'DATETIME NULL AFTER cancelled_at');
+auth_ensure_column('inventory_receipts', 'deleted_by', 'VARCHAR(64) NULL AFTER deleted_at');
+auth_ensure_column('inventory_receipts', 'previous_status', 'VARCHAR(32) NULL AFTER deleted_by');
+$statusColumn = db()->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_receipts' AND COLUMN_NAME='status' LIMIT 1")->fetchColumn();
+if (is_string($statusColumn) && strpos($statusColumn, "'deleted'") === false) {
+    db()->exec("ALTER TABLE inventory_receipts MODIFY status ENUM('pending_explanation','draft','completed','cancelled','deleted') NOT NULL DEFAULT 'draft'");
+}
 
 final class ReceiptValidationException extends RuntimeException
 {
@@ -71,6 +79,9 @@ function receipts_list(): void
         $params[$key] = $value;
     }
     $where[] = 'r.store_id IN (' . implode(',', $allowedSql) . ')';
+    if (!field_inventory_is_admin($user)) {
+        $where[] = 'r.status <> "deleted"';
+    }
 
     $storeId = receipts_store();
     if ($storeId !== '') {
@@ -158,6 +169,9 @@ function receipts_list(): void
     $counts = array_fill_keys(FIELD_RECEIPT_STATUSES, 0);
     $allowedParams = array_filter($params, static fn(string $key): bool => strpos($key, 'area_') === 0, ARRAY_FILTER_USE_KEY);
     $countWhere = 'r.store_id IN (' . implode(',', $allowedSql) . ')';
+    if (!field_inventory_is_admin($user)) {
+        $countWhere .= ' AND r.status <> "deleted"';
+    }
     if ($storeId !== '') {
         $countWhere .= ' AND r.store_id = :count_store_id';
         $allowedParams['count_store_id'] = $storeId;
@@ -309,10 +323,10 @@ function receipts_complete(array $body): void
             throw new ReceiptValidationException('Cần ít nhất một ảnh watermark.');
         }
         $query = db()->prepare(
-            'SELECT i.id,i.ingredient_id,i.quantity,i.unit_cost,p.stock_quantity,p.store_id,
+            'SELECT i.id,i.ingredient_id,i.item_type,i.quantity,i.unit_cost,p.stock_quantity,p.store_id,
                     COALESCE(NULLIF(p.base_unit,""),p.unit) base_unit,
                     GREATEST(COALESCE(p.purchase_to_base_factor,1),0.000001) conversion_factor
-             FROM inventory_receipt_items i INNER JOIN ingredients p ON p.id=i.ingredient_id
+             FROM inventory_receipt_items i LEFT JOIN ingredients p ON p.id=i.ingredient_id
              WHERE i.receipt_id=:id ORDER BY i.id FOR UPDATE'
         );
         $query->execute(['id' => $id]);
@@ -333,13 +347,21 @@ function receipts_complete(array $body): void
             $quantity = (float) $item['quantity'];
             $baseQuantity = round($quantity * (float) $item['conversion_factor'], 3);
             $price = (float) $item['unit_cost'];
-            if ($quantity <= 0 || $price < 0 || $item['store_id'] !== $receipt['store_id']) {
+            if ($quantity <= 0 || $price < 0) {
                 throw new ReceiptValidationException('Dòng hàng không hợp lệ hoặc sản phẩm không thuộc khu vực.');
             }
             $lineTotal = round($quantity * $price, 2);
+            $updateLine->execute(['id' => $item['id'], 'total' => $lineTotal]);
+            if (($item['item_type'] ?? 'ingredient') === 'equipment') {
+                $totalQuantity += $quantity;
+                $totalAmount += $lineTotal;
+                continue;
+            }
+            if (!$item['ingredient_id'] || $item['store_id'] !== $receipt['store_id']) {
+                throw new ReceiptValidationException('Nguyen lieu khong con ton tai hoac khong thuoc khu vuc.');
+            }
             $after = round((float) $item['stock_quantity'] + $baseQuantity, 3);
             $baseCost = round($price / (float) $item['conversion_factor'], 6);
-            $updateLine->execute(['id' => $item['id'], 'total' => $lineTotal]);
             $updateStock->execute(['id' => $item['ingredient_id'], 'stock' => $after, 'cost' => $baseCost]);
             $movement->execute([
                 'id' => uuidv4(), 'receipt' => $id, 'item' => $item['id'], 'store' => $receipt['store_id'],
@@ -420,10 +442,9 @@ if ($method === 'DELETE') {
     $user = field_inventory_require_permission('inventory_receipts.cancel');
     $id = trim((string) ($_GET['id'] ?? $body['id'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $id);
-    field_inventory_assert_receipt_editable($user, $receipt);
-    if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) respond_error('Chỉ có thể xóa phiếu chưa hoàn thành.', 409);
-    $delete = db()->prepare('DELETE FROM inventory_receipts WHERE id=:id');
-    $delete->execute(['id' => $id]);
-    respond_ok(['deleted' => true]);
+    if (($receipt['status'] ?? '') === 'deleted') respond_ok(['deleted' => true, 'softDeleted' => true, 'idempotent' => true]);
+    $delete = db()->prepare('UPDATE inventory_receipts SET previous_status=status,status="deleted",deleted_at=NOW(),deleted_by=:actor,updated_at=NOW() WHERE id=:id');
+    $delete->execute(['id' => $id, 'actor' => $user['id']]);
+    respond_ok(['deleted' => true, 'softDeleted' => true]);
 }
 respond_error('Method not allowed', 405);

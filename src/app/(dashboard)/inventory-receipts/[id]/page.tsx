@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { AlertCircle, ArrowLeft, Camera, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, PackageOpen, Pencil, Plus, RefreshCw, Store, Trash2, UserRound, X, ZoomIn } from "lucide-react";
 import {
   addInventoryReceiptItem, attachReceiptProduct, completeInventoryReceipt, createReceiptProduct,
-  cancelInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchReceiptProducts,
+  cancelInventoryReceipt, deleteInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchReceiptProducts,
   unlockInventoryReceipt, updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ProductResult, type ReceiptStatus
 } from "@/services/inventoryReceiptService";
 import PrivateApiImage from "@/components/PrivateApiImage";
@@ -16,6 +16,7 @@ const statusLabels: Record<ReceiptStatus, string> = {
   draft: "Đang giải trình",
   completed: "Đã hoàn thành",
   cancelled: "Đã hủy",
+  deleted: "Đã xóa",
 };
 
 const statusClasses: Record<ReceiptStatus, string> = {
@@ -23,6 +24,7 @@ const statusClasses: Record<ReceiptStatus, string> = {
   draft: "bg-sky-100 text-sky-800",
   completed: "bg-emerald-100 text-emerald-800",
   cancelled: "bg-rose-100 text-rose-700",
+  deleted: "bg-slate-200 text-slate-800",
 };
 
 export default function FieldInventoryReceiptDetailPage() {
@@ -144,7 +146,10 @@ export default function FieldInventoryReceiptDetailPage() {
     setBusy(true);
     try {
       await updateInventoryReceiptItem(editingItem.id, {
+        itemType: editingItem.itemType || "ingredient",
         productId: editingItem.productId,
+        productName: editingItem.productName,
+        unit: editingItem.unit,
         quantity: Number(editQuantity),
         unitPrice: Number(editUnitPrice),
         note: editNote,
@@ -165,6 +170,13 @@ export default function FieldInventoryReceiptDetailPage() {
     setBusy(true);
     try { setReceipt(await cancelInventoryReceipt(receipt.id, reason.trim())); }
     catch (error) { alert(error instanceof Error ? error.message : "Không thể hủy phiếu."); }
+    finally { setBusy(false); }
+  }
+  async function deleteReceipt() {
+    if (!confirm("Xóa phiếu này khỏi danh sách? Phiếu vẫn được lưu và chỉ admin xem được.")) return;
+    setBusy(true);
+    try { await deleteInventoryReceipt(receipt.id); navigate(listReturnTo, { replace: true }); }
+    catch (error) { alert(error instanceof Error ? error.message : "Không thể xóa phiếu."); }
     finally { setBusy(false); }
   }
   async function unlockReceipt() {
@@ -227,16 +239,14 @@ export default function FieldInventoryReceiptDetailPage() {
                 {new Date(receipt.createdAt).toLocaleString("vi-VN")}
               </p>
             </div>
-            {editable && (
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={cancelReceipt}
-                className="border-rose-200 font-semibold text-rose-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800"
-              >
-                Hủy phiếu
-              </Button>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {editable && (
+                <Button variant="outline" disabled={busy} onClick={cancelReceipt} className="border-rose-200 font-semibold text-rose-700 hover:bg-rose-50">Hủy phiếu</Button>
+              )}
+              {receipt.status !== "deleted" && (
+                <Button variant="outline" disabled={busy} onClick={deleteReceipt} className="gap-2 border-rose-300 font-semibold text-rose-700 hover:bg-rose-50"><Trash2 className="h-4 w-4" /> Xóa phiếu</Button>
+              )}
+            </div>
           </div>
 
           <dl className="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">

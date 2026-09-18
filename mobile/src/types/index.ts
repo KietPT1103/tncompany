@@ -24,6 +24,7 @@ export type ReceiptImage = {
 export type ReceiptItem = {
   id: number;
   productId: string;
+  itemType?: "ingredient" | "equipment";
   productCode: string;
   productName: string;
   unit: string;

@@ -65,6 +65,7 @@ import {
 } from "./billRowInteraction";
 import {
   buildBillExportWorkbook,
+  buildCashFlowExportWorkbook,
   buildVoucherExportWorkbook,
   downloadExcelWorkbook,
 } from "./billExcelExport";
@@ -284,7 +285,7 @@ export default function BillsPage() {
 
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState<"bills" | "vouchers" | null>(null);
+  const [exporting, setExporting] = useState<"bills" | "vouchers" | "combined" | null>(null);
   const [billSearch, setBillSearch] = useState("");
   const [voucherSearch, setVoucherSearch] = useState("");
   const [billSortKey, setBillSortKey] = useState<BillSortKey>("time");
@@ -550,6 +551,19 @@ export default function BillsPage() {
     .filter((voucher) => !voucher.isCancelled && voucher.includeInCashFlow !== false && voucher.type === "expense")
     .reduce((sum, voucher) => sum + (voucher.amount || 0), 0);
   const netDailyCashFlow = totalAmount + totalIncomeVouchers - totalExpenseVouchers;
+
+  const handleExportCombined = async () => {
+    setExporting("combined");
+    try {
+      await downloadExcelWorkbook(
+        buildCashFlowExportWorkbook(filteredBills, filteredVouchers, { startDate, endDate }),
+        `tong-hop-thu-chi_${startDate}_${endDate}.xlsx`,
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Không thể tạo file Excel tổng hợp thu chi.");
+    } finally { setExporting(null); }
+  };
 
   const handleExportBills = async () => {
     setExporting("bills");
@@ -822,6 +836,12 @@ export default function BillsPage() {
               </div>
             </div>
             <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[auto_auto] xl:flex xl:items-center">
+              {role === "admin" && (
+                <Button variant="outline" size="sm" onClick={handleExportCombined} disabled={loading || exporting !== null || (filteredBills.length === 0 && filteredVouchers.length === 0)} className="h-10 gap-1.5 border-emerald-700 bg-white px-3 font-semibold text-emerald-900 hover:bg-emerald-50 sm:h-9" title="Xuất toàn bộ thu chi theo bộ lọc hiện tại">
+                  {exporting === "combined" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  {exporting === "combined" ? "Đang xuất..." : "Excel thu chi"}
+                </Button>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   size="sm"

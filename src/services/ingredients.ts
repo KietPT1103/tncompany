@@ -82,9 +82,9 @@ export async function updateIngredient(code: string, input: Partial<IngredientIn
   });
 }
 
-export async function deleteIngredient(storeId: string, code: string) {
-  return apiRequest(
-    `/ingredients.php?storeId=${encodeURIComponent(storeId)}&ingredientCode=${encodeURIComponent(code)}`,
+export async function deleteIngredient(storeId: string, code: string, mode: "hide" | "hard" = "hide") {
+  return apiRequest<{ deleted: boolean; deactivated?: boolean }>(
+    `/ingredients.php?storeId=${encodeURIComponent(storeId)}&ingredientCode=${encodeURIComponent(code)}&mode=${mode}`,
     { method: "DELETE" }
   );
 }

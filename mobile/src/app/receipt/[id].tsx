@@ -26,6 +26,8 @@ export default function ReceiptDetailScreen() {
   const [searchError, setSearchError] = useState("");
   const [selectingProductId, setSelectingProductId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ProductSearchResult | null>(null);
+  const [itemType, setItemType] = useState<"ingredient" | "equipment">("ingredient");
+  const [equipmentUnit, setEquipmentUnit] = useState("");
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
   const [note, setNote] = useState("");
@@ -71,7 +73,7 @@ export default function ReceiptDetailScreen() {
     return () => { active = false; };
   }, [receipt]);
   useEffect(() => {
-    if (!area || !suggestionsOpen) return;
+    if (!area || !suggestionsOpen || itemType === "equipment") return;
     const timer = setTimeout(() => {
       setSuggestionsLoading(true);
       searchProducts(query.trim(), area.id).then((r) => {
@@ -84,7 +86,7 @@ export default function ReceiptDetailScreen() {
       }).finally(() => setSuggestionsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [query, area, suggestionsOpen]);
+  }, [query, area, suggestionsOpen, itemType]);
   useEffect(() => {
     if (!area || !supplierOpen) return;
     const timer = setTimeout(() => {
@@ -206,12 +208,15 @@ export default function ReceiptDetailScreen() {
     finally { setSelectingProductId(null); }
   }
   async function addItem() {
-    if (!selected) return Alert.alert("Chưa chọn nguyên liệu");
+    if (itemType === "ingredient" && !selected) return Alert.alert("Chưa chọn nguyên liệu");
+    if (itemType === "equipment" && (!query.trim() || !equipmentUnit.trim())) return Alert.alert("Nhập tên và đơn vị vật dụng");
     try {
       setPendingAction("add");
-      await addReceiptItem({ receiptId: currentReceipt.id, productId: selected.id, quantity: Number(quantity), unitPrice: Number(price), note });
-      setQuery(""); setSelected(null); setQuantity(""); setPrice(""); setNote(""); await reload();
-    } catch (e) { Alert.alert("Không thể thêm nguyên liệu", e instanceof Error ? e.message : "Vui lòng thử lại."); }
+      await addReceiptItem(itemType === "ingredient"
+        ? { receiptId: currentReceipt.id, itemType, productId: selected!.id, quantity: Number(quantity), unitPrice: Number(price), note }
+        : { receiptId: currentReceipt.id, itemType, productName: query.trim(), unit: equipmentUnit.trim(), quantity: Number(quantity), unitPrice: Number(price), note });
+      setQuery(""); setSelected(null); setEquipmentUnit(""); setQuantity(""); setPrice(""); setNote(""); await reload();
+    } catch (e) { Alert.alert("Không thể thêm hàng", e instanceof Error ? e.message : "Vui lòng thử lại."); }
     finally { setPendingAction(null); }
   }
   async function createNew() {
@@ -336,26 +341,30 @@ export default function ReceiptDetailScreen() {
       <Text style={styles.detailValue}>{receipt.supplier?.supplierName}</Text>
     </View>}
 
-    <Text style={styles.section}>Các nguyên liệu đã nhập</Text>
+    <Text style={styles.section}>Các hàng đã nhập</Text>
     {receipt.items.map((item) => <View key={item.id} style={styles.item}><View style={{ flex: 1 }}><Text style={styles.itemName}>{item.productName}</Text>
       <Text style={styles.itemMeta}>{item.quantity} {item.unit} × {item.unitPrice.toLocaleString("vi-VN")} ₫</Text></View>
       <Text style={styles.itemTotal}>{item.lineTotal.toLocaleString("vi-VN")} ₫</Text></View>)}
-    {receipt.items.length === 0 && <Text style={styles.empty}>Chưa có nguyên liệu nào.</Text>}
+    {receipt.items.length === 0 && <Text style={styles.empty}>Chưa có hàng nào.</Text>}
 
-    {editable && <View style={styles.form}><Text style={styles.section}>Thêm nguyên liệu</Text>
-      <View style={styles.productPicker}>
-        <Text style={styles.fieldLabel}>Nguyên liệu <Text style={styles.required}>*</Text></Text>
-        <Pressable onPress={openProductSuggestions} style={({ pressed }) => [styles.productSelectButton, pressed && styles.pressed]}>
-          <View style={styles.productSelectCopy}>
-            <Text numberOfLines={1} style={selected ? styles.supplierValue : styles.supplierPlaceholder}>
-              {selected?.productName || "Chạm để tìm và chọn nguyên liệu"}
-            </Text>
-            {selected && <Text style={styles.productSelectMeta}>{selected.productCode} • {selected.unit || "Chưa có đơn vị"}</Text>}
-          </View>
-          <Text style={styles.selectArrow}>⌄</Text>
-        </Pressable>
+    {editable && <View style={styles.form}><Text style={styles.section}>Thêm hàng nhập</Text>
+      <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+        <Pressable onPress={() => { setItemType("ingredient"); setQuery(""); setEquipmentUnit(""); }} style={{ flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: itemType === "ingredient" ? "#047857" : "#cbd5e1", backgroundColor: itemType === "ingredient" ? "#ecfdf5" : "white" }}><Text style={{ textAlign: "center", fontWeight: "700", color: "#065f46" }}>Nguyên liệu</Text></Pressable>
+        <Pressable onPress={() => { setItemType("equipment"); setSelected(null); setQuery(""); setSuggestionsOpen(false); }} style={{ flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: itemType === "equipment" ? "#047857" : "#cbd5e1", backgroundColor: itemType === "equipment" ? "#ecfdf5" : "white" }}><Text style={{ textAlign: "center", fontWeight: "700", color: "#065f46" }}>Vật dụng / dụng cụ</Text></Pressable>
       </View>
-      <Text style={styles.fieldHint}>Danh sách mở toàn màn hình để dễ tìm và cuộn trên điện thoại.</Text>
+      {itemType === "ingredient" ? <>
+        <View style={styles.productPicker}>
+          <Text style={styles.fieldLabel}>Nguyên liệu <Text style={styles.required}>*</Text></Text>
+          <Pressable onPress={openProductSuggestions} style={({ pressed }) => [styles.productSelectButton, pressed && styles.pressed]}>
+            <View style={styles.productSelectCopy}><Text numberOfLines={1} style={selected ? styles.supplierValue : styles.supplierPlaceholder}>{selected?.productName || "Chạm để tìm và chọn nguyên liệu"}</Text>{selected && <Text style={styles.productSelectMeta}>{selected.productCode} - {selected.unit || "Chưa có đơn vị"}</Text>}</View><Text style={styles.selectArrow}>v</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.fieldHint}>Danh sách nguyên liệu sẽ được cộng tồn khi hoàn thành phiếu.</Text>
+      </> : <>
+        <FormField label="Tên vật dụng / dụng cụ" required value={query} onChangeText={setQuery} placeholder="Ví dụ: Cây chổi" />
+        <FormField label="Đơn vị" required value={equipmentUnit} onChangeText={setEquipmentUnit} placeholder="Ví dụ: cái, bộ" />
+        <Text style={styles.fieldHint}>Vật dụng được ghi nhận trên phiếu nhưng không cộng vào kho nguyên liệu.</Text>
+      </>}
       <View style={styles.row}>
         <FormField
           label="Số lượng"
@@ -388,13 +397,13 @@ export default function ReceiptDetailScreen() {
         numberOfLines={3}
       />
       <Text style={styles.provisional}>Thành tiền: {lineTotal.toLocaleString("vi-VN")} ₫</Text>
-      <PrimaryButton title="Thêm nguyên liệu" loadingTitle="Đang thêm nguyên liệu…" onPress={addItem} loading={pendingAction === "add"} disabled={pendingAction !== null || !selected || Number(quantity) <= 0 || Number(price) < 0 || price === ""} />
+      <PrimaryButton title="Thêm hàng" loadingTitle="Đang thêm hàng…" onPress={addItem} loading={pendingAction === "add"} disabled={pendingAction !== null || (itemType === "ingredient" ? !selected : !query.trim() || !equipmentUnit.trim()) || Number(quantity) <= 0 || Number(price) < 0 || price === ""} />
     </View>}
   </ScrollView></KeyboardAvoidingView>
 
   <View style={styles.stickyFooter}>
     <View style={styles.stickySummary}>
-      <View><Text style={styles.stickyLabel}>{receipt.itemCount} nguyên liệu • {receipt.totalQuantity} đơn vị</Text>
+      <View><Text style={styles.stickyLabel}>{receipt.itemCount} dòng hàng • {receipt.totalQuantity} đơn vị</Text>
         <Text style={styles.stickyTotal}>{receipt.totalAmount.toLocaleString("vi-VN")} ₫</Text></View>
       {!editable && <Text style={[styles.badge, receipt.status === "completed" && styles.done]}>{receipt.status}</Text>}
     </View>

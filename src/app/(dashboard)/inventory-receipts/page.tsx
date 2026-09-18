@@ -36,6 +36,7 @@ const tabs: Array<{ status?: ReceiptStatus; label: string }> = [
   { status: "draft", label: "Đang giải trình" },
   { status: "completed", label: "Đã hoàn thành" },
   { status: "cancelled", label: "Đã hủy" },
+  { status: "deleted", label: "Đã xóa" },
   { label: "Tất cả" },
 ];
 const labels: Record<ReceiptStatus, string> = {
@@ -43,12 +44,14 @@ const labels: Record<ReceiptStatus, string> = {
   draft: "Đang giải trình",
   completed: "Đã hoàn thành",
   cancelled: "Đã hủy",
+  deleted: "Đã xóa",
 };
 const badges: Record<ReceiptStatus, string> = {
   pending_explanation: "bg-amber-100 text-amber-800",
   draft: "bg-blue-100 text-blue-800",
   completed: "bg-emerald-100 text-emerald-800",
   cancelled: "bg-slate-100 text-slate-700",
+  deleted: "bg-rose-100 text-rose-800",
 };
 const tabClassName = (active: boolean) =>
   active
@@ -154,7 +157,7 @@ export default function FieldInventoryReceiptsPage() {
         </div>
         <div className="mt-7 overflow-x-auto rounded-sm border border-slate-200 bg-white p-1.5 shadow-sm">
           <div className="flex min-w-max gap-1.5">
-            {tabs.map((tab) => {
+            {tabs.filter((tab) => tab.status !== "deleted" || user?.role === "admin").map((tab) => {
               const active = filters.status === tab.status;
               return (
                 <button

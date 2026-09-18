@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardList, PackageMinus, Plus, Save, Search, Trash2 } from "lucide-react";
+import { ClipboardList, PackageMinus, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { getIngredients, type Ingredient } from "@/services/ingredients";
@@ -10,6 +10,7 @@ import {
   type InventoryIssue,
 } from "@/services/inventoryIssueService";
 import { getOpenShiftByCashier, type CashierShift } from "@/services/shiftService";
+import { openInventoryIssuePrintWindow, printInventoryIssue } from "./inventoryIssuePrint";
 
 type DraftLine = { key: string; ingredientCode: string; quantity: string; note: string };
 type FormState = {
@@ -115,17 +116,20 @@ export default function InventoryIssuesPage() {
       return;
     }
     if (status === "completed" && !window.confirm("Hoàn thành phiếu sẽ trừ tồn kho ngay và không thể sửa. Tiếp tục?")) return;
+    const printWindow = status === "completed" ? openInventoryIssuePrintWindow() : null;
     setSaving(true);
     setError("");
     try {
-      await saveInventoryIssue({
+      const savedIssue = await saveInventoryIssue({
         id: form.id, storeId, issueDate: form.issueDate, destination: form.destination.trim(),
         issuedBy: form.issuedBy.trim(), note: form.note.trim(), status, items,
         shiftId: activeShift?.id || null, shiftType: activeShift?.shiftType || null,
       });
+      if (status === "completed") printInventoryIssue(savedIssue, printWindow);
       await reload();
       setForm(emptyForm());
     } catch (reason) {
+      printWindow?.close();
       setError(reason instanceof Error ? reason.message : "Không thể lưu phiếu xuất kho.");
     } finally {
       setSaving(false);
@@ -194,7 +198,7 @@ export default function InventoryIssuesPage() {
       <section className="mt-7 rounded-xl border bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div><h2 className="text-xl font-black text-emerald-950">Lịch sử xuất kho</h2><p className="text-sm text-slate-500">Mới nhất hiển thị trước</p></div>
           <label className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Tìm mã, nơi nhận..." className="h-10 rounded-md border pl-9 pr-3" /></label></div>
-        {loading ? <div className="p-12 text-center text-slate-500">Đang tải...</div> : filteredIssues.length === 0 ? <div className="p-12 text-center text-slate-500"><ClipboardList className="mx-auto mb-2 text-slate-300" />Chưa có phiếu xuất kho.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-4">Thời gian tạo</th><th className="p-4">Mã phiếu</th><th className="p-4">Nơi nhận</th><th className="p-4">Người xuất</th><th className="p-4 text-right">Số dòng</th><th className="p-4 text-right">Tổng lượng</th><th className="p-4">Trạng thái</th><th className="p-4"></th></tr></thead><tbody className="divide-y">{filteredIssues.map((issue) => <tr key={issue.id} className="hover:bg-slate-50"><td className="p-4">{new Date(issue.createdAt).toLocaleString("vi-VN")}<small className="block font-semibold text-emerald-700">{issue.shiftType ? (issue.shiftType === "single" ? "Ca làm việc" : `Ca ${issue.shiftType.slice(-1)}`) : "Không theo ca"}</small></td><td className="p-4 font-bold text-emerald-800">{issue.issueCode}</td><td className="p-4">{issue.destination}</td><td className="p-4">{issue.issuedBy}</td><td className="p-4 text-right">{issue.itemCount}</td><td className="p-4 text-right font-bold">{quantity(issue.totalQuantity)}</td><td className="p-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${issue.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{issue.status === "completed" ? "Đã trừ kho" : "Phiếu nháp"}</span></td><td className="p-4 text-right">{issue.status === "draft" && <div className="flex justify-end gap-2"><button onClick={() => edit(issue)} className="font-bold text-emerald-700">Sửa</button><button onClick={() => void remove(issue)} className="font-bold text-rose-600">Xóa</button></div>}</td></tr>)}</tbody></table></div>}
+        {loading ? <div className="p-12 text-center text-slate-500">Đang tải...</div> : filteredIssues.length === 0 ? <div className="p-12 text-center text-slate-500"><ClipboardList className="mx-auto mb-2 text-slate-300" />Chưa có phiếu xuất kho.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-4">Thời gian tạo</th><th className="p-4">Mã phiếu</th><th className="p-4">Nơi nhận</th><th className="p-4">Người xuất</th><th className="p-4 text-right">Số dòng</th><th className="p-4 text-right">Tổng lượng</th><th className="p-4">Trạng thái</th><th className="p-4"></th></tr></thead><tbody className="divide-y">{filteredIssues.map((issue) => <tr key={issue.id} className="hover:bg-slate-50"><td className="p-4">{new Date(issue.createdAt).toLocaleString("vi-VN")}<small className="block font-semibold text-emerald-700">{issue.shiftType ? (issue.shiftType === "single" ? "Ca làm việc" : `Ca ${issue.shiftType.slice(-1)}`) : "Không theo ca"}</small></td><td className="p-4 font-bold text-emerald-800">{issue.issueCode}</td><td className="p-4">{issue.destination}</td><td className="p-4">{issue.issuedBy}</td><td className="p-4 text-right">{issue.itemCount}</td><td className="p-4 text-right font-bold">{quantity(issue.totalQuantity)}</td><td className="p-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${issue.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{issue.status === "completed" ? "Đã trừ kho" : "Phiếu nháp"}</span></td><td className="p-4 text-right"><div className="flex justify-end gap-3"><button onClick={() => printInventoryIssue(issue)} className="inline-flex items-center gap-1 font-bold text-emerald-700"><Printer className="h-4 w-4" /> In</button>{issue.status === "draft" && <div className="flex justify-end gap-2"><button onClick={() => edit(issue)} className="font-bold text-emerald-700">Sửa</button><button onClick={() => void remove(issue)} className="font-bold text-rose-600">Xóa</button></div>}</div></td></tr>)}</tbody></table></div>}
       </section>
     </div>
   </div>;

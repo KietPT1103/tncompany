@@ -172,6 +172,23 @@ type MenuItem = {
 };
 
 type CartItem = MenuItem & { quantity: number; note?: string };
+
+function CartItemNoteInput({ value, onCommit }: { value: string; onCommit: (value: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const composing = useRef(false);
+  useEffect(() => { if (!composing.current) setDraft(value); }, [value]);
+  return (
+    <input
+      value={draft}
+      onCompositionStart={() => { composing.current = true; }}
+      onCompositionEnd={(event) => { composing.current = false; const next = event.currentTarget.value; setDraft(next); onCommit(next); }}
+      onChange={(event) => { const next = event.target.value; setDraft(next); if (!composing.current) onCommit(next); }}
+      onBlur={() => onCommit(draft)}
+      placeholder="Ghi chú..."
+      className="block h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs leading-5 text-slate-700 focus:border-sky-400 focus:outline-none"
+    />
+  );
+}
 type OrderDraft = {
   items: Record<string, CartItem>;
 };
@@ -4005,13 +4022,9 @@ export default function CafePosPage() {
                         <p className="font-semibold text-slate-900">
                           {item.name}
                         </p>
-                        <input
+                        <CartItemNoteInput
                           value={item.note || ""}
-                          onChange={(e) =>
-                            handleItemNoteChange(item.id, e.target.value)
-                          }
-                          placeholder="Ghi chú..."
-                          className="block h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs leading-5 text-slate-700 focus:border-sky-400 focus:outline-none"
+                          onCommit={(value) => handleItemNoteChange(item.id, value)}
                         />
                         <div className="space-y-0.5">
                           <p className="text-sm text-slate-500">

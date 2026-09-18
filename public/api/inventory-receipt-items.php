@@ -7,6 +7,7 @@ require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 
 products_inventory_ensure_schema();
+auth_ensure_column('inventory_receipt_items', 'item_type', "ENUM('ingredient','equipment') NOT NULL DEFAULT 'ingredient' AFTER ingredient_id");
 
 function receipt_item_body(): array
 {
@@ -28,18 +29,23 @@ function receipt_item_find(array $user, int $id): array
 
 function receipt_item_product(string $storeId, array $body): array
 {
+    $itemType = strtolower(trim((string) ($body['itemType'] ?? 'ingredient')));
+    if ($itemType === 'equipment') {
+        $name = trim((string) ($body['productName'] ?? $body['itemName'] ?? ''));
+        $unit = trim((string) ($body['unit'] ?? ''));
+        if ($name === '' || $unit === '') respond_error('Ten va don vi vat dung la bat buoc.', 422);
+        return ['id' => null, 'product_code' => trim((string) ($body['productCode'] ?? '')), 'product_name' => $name, 'unit' => $unit, 'item_type' => 'equipment'];
+    }
     $productId = trim((string) ($body['ingredientId'] ?? $body['productId'] ?? ''));
     $productCode = trim((string) ($body['ingredientCode'] ?? $body['productCode'] ?? ''));
     $statement = db()->prepare(
         'SELECT id,ingredient_code AS product_code,ingredient_name AS product_name,COALESCE(NULLIF(purchase_unit,""),unit) AS unit FROM ingredients
-         WHERE store_id=:store_id
-           AND is_active=1
-           AND (id=:product_id OR ingredient_code=:product_code)
-         LIMIT 1'
+         WHERE store_id=:store_id AND is_active=1 AND (id=:product_id OR ingredient_code=:product_code) LIMIT 1'
     );
     $statement->execute(['store_id' => $storeId, 'product_id' => $productId, 'product_code' => $productCode]);
     $product = $statement->fetch();
-    if (!$product) respond_error('Sản phẩm không tồn tại tại khu vực này.', 422);
+    if (!$product) respond_error('Nguyen lieu khong ton tai tai khu vuc nay.', 422);
+    $product['item_type'] = 'ingredient';
     return $product;
 }
 
@@ -79,11 +85,11 @@ if ($method === 'POST') {
     [$quantity, $unitPrice, $lineTotal] = receipt_item_values($body);
     $statement = db()->prepare(
         'INSERT INTO inventory_receipt_items
-         (receipt_id,product_id,ingredient_id,product_code,product_name,unit,quantity,unit_cost,line_total,note)
-         VALUES (:receipt,NULL,:ingredient,:code,:name,:unit,:quantity,:price,:total,:note)'
+         (receipt_id,product_id,ingredient_id,item_type,product_code,product_name,unit,quantity,unit_cost,line_total,note)
+         VALUES (:receipt,NULL,:ingredient,:item_type,:code,:name,:unit,:quantity,:price,:total,:note)'
     );
     $statement->execute([
-        'receipt' => $receiptId, 'ingredient' => $product['id'], 'code' => $product['product_code'],
+        'receipt' => $receiptId, 'ingredient' => $product['id'], 'item_type' => $product['item_type'], 'code' => $product['product_code'],
         'name' => $product['product_name'], 'unit' => $product['unit'], 'quantity' => $quantity,
         'price' => $unitPrice, 'total' => $lineTotal, 'note' => trim((string) ($body['note'] ?? '')) ?: null,
     ]);
@@ -109,11 +115,11 @@ if (in_array($method, ['PUT', 'PATCH'], true)) {
         'quantity' => $existing['quantity'], 'unitPrice' => $existing['unit_cost'],
     ]);
     $statement = db()->prepare(
-        'UPDATE inventory_receipt_items SET product_id=NULL,ingredient_id=:ingredient,product_code=:code,product_name=:name,
+        'UPDATE inventory_receipt_items SET product_id=NULL,ingredient_id=:ingredient,item_type=:item_type,product_code=:code,product_name=:name,
          unit=:unit,quantity=:quantity,unit_cost=:price,line_total=:total,note=:note,updated_at=NOW() WHERE id=:id'
     );
     $statement->execute([
-        'id' => $id, 'ingredient' => $product['id'], 'code' => $product['product_code'], 'name' => $product['product_name'],
+        'id' => $id, 'ingredient' => $product['id'], 'item_type' => $product['item_type'], 'code' => $product['product_code'], 'name' => $product['product_name'],
         'unit' => $product['unit'], 'quantity' => $quantity, 'price' => $unitPrice, 'total' => $lineTotal,
         'note' => trim((string) ($body['note'] ?? $existing['note'])) ?: null,
     ]);

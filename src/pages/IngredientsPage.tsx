@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import Link from "next/link";
-import { Boxes, Download, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { Boxes, Download, EyeOff, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { hasPermission } from "@/lib/permissions";
@@ -132,17 +132,17 @@ export default function IngredientsPage() {
       setSaving(false);
     }
   }
-  async function remove(item: Ingredient) {
-    if (!window.confirm(`Xóa ${itemLabel} “${item.ingredientName}”?`)) return;
+  async function remove(item: Ingredient, mode: "hide" | "hard") {
+    const action = mode === "hard" ? "xóa vĩnh viễn" : "tạm ẩn";
+    if (!window.confirm(`${action} ${itemLabel} "${item.ingredientName}"?`)) return;
     setDeleting(item.ingredientCode);
     try {
-      await deleteIngredient(storeId, item.ingredientCode);
+      const result = await deleteIngredient(storeId, item.ingredientCode, mode);
       await reload();
+      window.alert(result.deleted ? `Đã xóa vĩnh viễn ${item.ingredientName}.` : `Đã tạm ẩn ${item.ingredientName}.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Không thể xóa ${itemLabel}.`);
-    } finally {
-      setDeleting("");
-    }
+      setError(e instanceof Error ? e.message : `Không thể ${action} ${itemLabel}.`);
+    } finally { setDeleting(""); }
   }
 
   async function importExcel(file: File) {
@@ -207,7 +207,7 @@ export default function IngredientsPage() {
           : filtered.map((item) => <tr key={item.id} className="hover:bg-slate-50">
             <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b><small className="block text-slate-500">{item.supplierItemCode}</small></td>
             <td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{(item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b></td><td className="p-4 text-right">{(Number(item.cost || 0) * (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ₫/{item.purchaseUnit || item.unit}</td>
-            <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button><button disabled={Boolean(deleting)} onClick={() => void remove(item)} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
+            <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button><button title="Tạm ẩn" disabled={Boolean(deleting)} onClick={() => void remove(item, "hide")} className="p-2 text-amber-600 disabled:opacity-50"><EyeOff className="h-4 w-4" /></button><button title="Xóa vĩnh viễn" disabled={Boolean(deleting)} onClick={() => void remove(item, "hard")} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
           </tr>)}</tbody>
       </table></div>
     </div>

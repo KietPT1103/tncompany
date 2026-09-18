@@ -6,6 +6,7 @@ import ExcelJS from "exceljs";
 import {
   buildBillExportRows,
   buildBillExportWorkbook,
+  buildCashFlowExportWorkbook,
   buildVoucherExportRows,
 } from "./billExcelExport.ts";
 
@@ -55,7 +56,32 @@ test("builds cash voucher export rows and keeps expense values negative", () => 
     "Người nộp/nhận": "Duy Phúc",
     "Tính vào dòng tiền": "Không",
     "Giá trị (VND)": -250000,
+    "Trạng thái": "Hợp lệ",
+    "Lý do hủy": "",
   }]);
+});
+
+test("creates one filtered cash-flow workbook with customer income, other income and expenses", () => {
+  const bills: Bill[] = [{
+    id: "CF0001", tableNumber: "T01", total: 125000, items: [], paymentMethod: "cash",
+    status: "completed", createdAt: { seconds: 1_725_180_000, nanoseconds: 0 },
+  }];
+  const vouchers: CashVoucher[] = [
+    { id: "income-1", code: "PT001", type: "income", amount: 25000, includeInCashFlow: true, category: "Thu khác", happenedAt: { seconds: 1_725_180_000, nanoseconds: 0 } } as CashVoucher,
+    { id: "expense-1", code: "PC001", type: "expense", amount: 50000, includeInCashFlow: true, category: "Mua hàng", happenedAt: { seconds: 1_725_180_000, nanoseconds: 0 } } as CashVoucher,
+    { id: "ignored", code: "PC002", type: "expense", amount: 99999, includeInCashFlow: false, category: "Không tính", happenedAt: { seconds: 1_725_180_000, nanoseconds: 0 } } as CashVoucher,
+  ];
+  const workbook = buildCashFlowExportWorkbook(bills, vouchers, { startDate: "2026-08-01", endDate: "2026-08-21" });
+  const summary = workbook.getWorksheet("Tổng hợp");
+  assert.ok(summary);
+  assert.equal(workbook.worksheets.length, 3);
+  assert.equal(summary.getCell("B5").value, 125000);
+  assert.equal(summary.getCell("B6").value, 25000);
+  assert.equal(summary.getCell("B7").value, 150000);
+  assert.equal(summary.getCell("B8").value, 50000);
+  assert.equal(summary.getCell("B9").value, 100000);
+  assert.equal(workbook.getWorksheet("Hóa đơn thu")?.rowCount, 7);
+  assert.equal(workbook.getWorksheet("Phiếu thu chi")?.rowCount, 9);
 });
 
 test("creates a polished invoice workbook with report structure and durable formatting", async () => {

@@ -1,8 +1,8 @@
 import { apiRequest } from "@/lib/api";
 
-export type ReceiptStatus = "pending_explanation" | "draft" | "completed" | "cancelled";
+export type ReceiptStatus = "pending_explanation" | "draft" | "completed" | "cancelled" | "deleted";
 export type InventoryReceiptItem = {
-  id: number; productId: string; productCode: string; productName: string; unit: string;
+  id: number; productId: string; itemType?: "ingredient" | "equipment"; productCode: string; productName: string; unit: string;
   quantity: number; unitPrice: number; unitCost: number; lineTotal: number; note?: string;
 };
 export type InventoryReceiptImage = {
@@ -20,6 +20,7 @@ export type InventoryReceipt = {
   isLocked: boolean; lockedAt?: string | null; lockedBy?: string | null; unlockedAt?: string | null;
   shiftId?: string | null; shiftType?: "shift_1" | "shift_2" | "shift_3" | "single" | null;
   canEdit: boolean; canUnlock: boolean; autoLockAt?: string | null;
+  deletedAt?: string | null; deletedBy?: string | null; previousStatus?: string | null;
   items: InventoryReceiptItem[]; images: InventoryReceiptImage[];
 };
 export type ReceiptCounts = Record<ReceiptStatus | "all", number>;
