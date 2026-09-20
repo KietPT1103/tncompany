@@ -4,6 +4,8 @@ import { Boxes, Download, EyeOff, LoaderCircle, Pencil, Plus, Search, Trash2, Up
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { hasPermission } from "@/lib/permissions";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import {
   createIngredient, deleteIngredient, getIngredients, getNextIngredientCode,
   updateIngredient, type Ingredient,
@@ -17,6 +19,13 @@ type Form = {
   conversionComponents: Array<{ ingredientId: string; inputQuantity: string }>;
   supplierId: string; supplierItemCode: string; description: string;
 };
+type ToastState = {
+  open: boolean;
+  title: string;
+  description?: string;
+  variant: ToastVariant;
+};
+type PendingDelete = { item: Ingredient; mode: "hide" | "hard" };
 const blank = (): Form => ({
   code: "", name: "", unit: "", purchaseUnit: "", conversionFactor: "1", stock: "0", cost: "0",
   conversionSourceIngredientId: "", conversionInputQuantity: "", conversionOutputQuantity: "",
@@ -41,8 +50,17 @@ export default function IngredientsPage() {
   const [saving, setSaving] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [deleting, setDeleting] = useState("");
-  const [error, setError] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [toast, setToast] = useState<ToastState>({
+    open: false,
+    title: "",
+    variant: "info",
+  });
   const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  function showToast(title: string, variant: ToastVariant, description?: string) {
+    setToast({ open: true, title, description, variant });
+  }
 
   async function reload() {
     const [ingredientResult, supplierResult] = await Promise.all([
@@ -53,7 +71,11 @@ export default function IngredientsPage() {
   }
   useEffect(() => {
     setLoading(true);
-    reload().catch((e) => setError(e instanceof Error ? e.message : "Không thể tải dữ liệu."))
+    reload().catch((e) => showToast(
+      `Không thể tải danh sách ${itemLabel}`,
+      "error",
+      e instanceof Error ? e.message : "Không thể tải dữ liệu.",
+    ))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId]);
@@ -66,13 +88,16 @@ export default function IngredientsPage() {
 
   async function startCreate() {
     setPreparing(true);
-    setError("");
     try {
       setEditing(null);
       setForm({ ...blank(), code: await getNextIngredientCode(storeId) });
       setOpen(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Không thể lấy mã ${itemLabel}.`);
+      showToast(
+        `Không thể tạo ${itemLabel}`,
+        "error",
+        e instanceof Error ? e.message : `Không thể lấy mã ${itemLabel}.`,
+      );
     } finally {
       setPreparing(false);
     }
@@ -99,15 +124,14 @@ export default function IngredientsPage() {
   }
   async function save() {
     if (!form.code.trim() || !form.name.trim() || !form.unit.trim() || !form.purchaseUnit.trim() || decimal(form.conversionFactor) <= 0) {
-      setError(`Vui lòng nhập mã, tên, đơn vị thu ngân, đơn vị pha chế và hệ số quy đổi của ${itemLabel}.`);
+      showToast("Thông tin chưa đầy đủ", "warning", `Vui lòng nhập mã, tên, đơn vị thu ngân, đơn vị pha chế và hệ số quy đổi của ${itemLabel}.`);
       return;
     }
     if (form.conversionComponents.length && (decimal(form.conversionOutputQuantity) <= 0 || form.conversionComponents.some((component) => !component.ingredientId || decimal(component.inputQuantity) <= 0))) {
-      setError("Vui lòng chọn đủ nguyên liệu đầu vào, nhập định lượng và lượng bán thành phẩm thu được lớn hơn 0.");
+      showToast("Công thức chưa hợp lệ", "warning", "Vui lòng chọn đủ nguyên liệu đầu vào, nhập định lượng và lượng bán thành phẩm thu được lớn hơn 0.");
       return;
     }
     setSaving(true);
-    setError("");
     const payload = {
       storeId, ingredientName: form.name.trim(), unit: form.unit.trim(),
       purchaseUnit: form.purchaseUnit.trim(), baseUnit: form.unit.trim(),
@@ -125,28 +149,53 @@ export default function IngredientsPage() {
       else await createIngredient({ ...payload, ingredientCode: form.code.trim(), stockQuantity: 0 });
       await reload();
       setOpen(false);
+      showToast(
+        editing ? `Đã cập nhật ${itemLabel}` : `Đã thêm ${itemLabel}`,
+        "success",
+        `${form.name.trim()} đã được lưu thành công.`,
+      );
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Không thể lưu ${itemLabel}.`);
+      showToast(
+        `Không thể lưu ${itemLabel}`,
+        "error",
+        e instanceof Error ? e.message : `Không thể lưu ${itemLabel}.`,
+      );
     } finally {
       setSaving(false);
     }
   }
-  async function remove(item: Ingredient, mode: "hide" | "hard") {
+  function requestRemove(item: Ingredient, mode: "hide" | "hard") {
+    setPendingDelete({ item, mode });
+  }
+
+  async function confirmRemove() {
+    if (!pendingDelete) return;
+    const { item, mode } = pendingDelete;
     const action = mode === "hard" ? "xóa vĩnh viễn" : "tạm ẩn";
-    if (!window.confirm(`${action} ${itemLabel} "${item.ingredientName}"?`)) return;
     setDeleting(item.ingredientCode);
     try {
       const result = await deleteIngredient(storeId, item.ingredientCode, mode);
       await reload();
-      window.alert(result.deleted ? `Đã xóa vĩnh viễn ${item.ingredientName}.` : `Đã tạm ẩn ${item.ingredientName}.`);
+      setPendingDelete(null);
+      showToast(
+        result.deleted ? `Đã xóa ${itemLabel}` : `Đã tạm ẩn ${itemLabel}`,
+        "success",
+        result.deleted
+          ? `${item.ingredientName} đã được xóa vĩnh viễn.`
+          : `${item.ingredientName} đã được ẩn khỏi danh sách.`,
+      );
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Không thể ${action} ${itemLabel}.`);
+      setPendingDelete(null);
+      showToast(
+        `Không thể ${action} ${itemLabel}`,
+        "error",
+        e instanceof Error ? e.message : `Không thể ${action} ${itemLabel}.`,
+      );
     } finally { setDeleting(""); }
   }
 
   async function importExcel(file: File) {
     setSaving(true);
-    setError("");
     try {
       const rows = await parseIngredientWorkbook(file);
       const existingCodes = new Set(items.map((item) => item.ingredientCode.toLocaleLowerCase("vi")));
@@ -175,9 +224,13 @@ export default function IngredientsPage() {
         }
       }
       await reload();
-      window.alert(`Đã import ${rows.length} dòng: thêm mới ${created}, cập nhật ${updated}.`);
+      showToast("Import thành công", "success", `Đã xử lý ${rows.length} dòng: thêm mới ${created}, cập nhật ${updated}.`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : `Không thể import danh sách ${itemLabel}.`);
+      showToast(
+        "Import không thành công",
+        "error",
+        reason instanceof Error ? reason.message : `Không thể import danh sách ${itemLabel}.`,
+      );
     } finally {
       setSaving(false);
     }
@@ -195,7 +248,6 @@ export default function IngredientsPage() {
           {preparing ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}{preparing ? "Đang chuẩn bị…" : `Thêm ${itemLabel}`}</button>
       </div>
     </header>
-    {error && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700">{error}</div>}
     <div className="mt-6 rounded-3xl border bg-white shadow-sm">
       <label className="relative block border-b p-5"><Search className="absolute left-9 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Tìm mã, tên ${itemLabel} hoặc nhà phân phối`} className="h-12 w-full rounded-xl border bg-slate-50 pl-12 pr-4" /></label>
@@ -206,7 +258,7 @@ export default function IngredientsPage() {
           : filtered.map((item) => <tr key={item.id} className="hover:bg-slate-50">
             <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b><small className="block text-slate-500">{item.supplierItemCode}</small></td>
             <td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{(item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b></td><td className="p-4 text-right">{(Number(item.cost || 0) * (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ₫/{item.purchaseUnit || item.unit}</td>
-            <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button><button title="Tạm ẩn" disabled={Boolean(deleting)} onClick={() => void remove(item, "hide")} className="p-2 text-amber-600 disabled:opacity-50"><EyeOff className="h-4 w-4" /></button><button title="Xóa vĩnh viễn" disabled={Boolean(deleting)} onClick={() => void remove(item, "hard")} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
+            <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button><button title="Tạm ẩn" disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hide")} className="p-2 text-amber-600 disabled:opacity-50"><EyeOff className="h-4 w-4" /></button><button title="Xóa vĩnh viễn" disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hard")} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
           </tr>)}</tbody>
       </table></div>
     </div>
@@ -256,7 +308,36 @@ export default function IngredientsPage() {
       </div>}
     </div>}
     <div className="mt-6 flex justify-end gap-3"><button disabled={saving} onClick={() => setOpen(false)} className="px-5">Hủy</button><button disabled={saving} onClick={() => void save()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">{saving && <LoaderCircle className="h-5 w-5 animate-spin" />}{saving ? "Đang lưu…" : `Lưu ${itemLabel}`}</button></div>
-  </div></div>}</div>;
+  </div></div>}
+  <ConfirmDialog
+    open={Boolean(pendingDelete)}
+    title={pendingDelete?.mode === "hard" ? `Xóa vĩnh viễn ${itemLabel}?` : `Tạm ẩn ${itemLabel}?`}
+    description={pendingDelete ? (
+      <div className="space-y-2">
+        <p>Bạn có muốn {pendingDelete.mode === "hard" ? "xóa vĩnh viễn" : "tạm ẩn"} <strong className="font-semibold text-slate-900">{pendingDelete.item.ingredientName}</strong> không?</p>
+        <p className={pendingDelete.mode === "hard" ? "text-xs font-medium text-rose-700" : "text-xs font-medium text-amber-700"}>
+          {pendingDelete.mode === "hard"
+            ? "Hành động này không thể hoàn tác. Nguyên liệu đã có lịch sử sử dụng sẽ không thể xóa vĩnh viễn."
+            : `${itemTitle} này sẽ không còn xuất hiện trong danh sách đang sử dụng.`}
+        </p>
+      </div>
+    ) : null}
+    confirmLabel={pendingDelete?.mode === "hard" ? "Xóa vĩnh viễn" : "Tạm ẩn"}
+    cancelLabel="Hủy"
+    variant={pendingDelete?.mode === "hard" ? "destructive" : "default"}
+    icon={pendingDelete?.mode === "hard" ? Trash2 : EyeOff}
+    isLoading={Boolean(deleting)}
+    onCancel={() => setPendingDelete(null)}
+    onConfirm={() => void confirmRemove()}
+  />
+  <Toast
+    open={toast.open}
+    title={toast.title}
+    description={toast.description}
+    variant={toast.variant}
+    onDismiss={() => setToast((current) => ({ ...current, open: false }))}
+  />
+  </div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactElement }) {
