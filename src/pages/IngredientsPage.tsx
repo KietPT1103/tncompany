@@ -5,7 +5,7 @@ import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { hasPermission } from "@/lib/permissions";
 import {
-  createIngredient, deleteIngredient, getIngredients, getNextIngredientCode, migrateIngredientCategoryProducts,
+  createIngredient, deleteIngredient, getIngredients, getNextIngredientCode,
   updateIngredient, type Ingredient,
 } from "@/services/ingredients";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
@@ -45,11 +45,10 @@ export default function IngredientsPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   async function reload() {
-    await migrateIngredientCategoryProducts(storeId);
     const [ingredientResult, supplierResult] = await Promise.all([
       getIngredients(storeId), getSuppliers(storeId),
     ]);
-    setItems(ingredientResult.items);
+    setItems(ingredientResult.items.filter((item) => item.isActive));
     setSuppliers(supplierResult.items);
   }
   useEffect(() => {
