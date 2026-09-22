@@ -206,22 +206,11 @@ if ($method === 'POST') {
     $purchaseUnit = trim((string) ($body['purchaseUnit'] ?? $body['unit'] ?? ''));
     $baseUnit = trim((string) ($body['baseUnit'] ?? $body['unit'] ?? ''));
     $conversionFactor = is_numeric($body['purchaseToBaseFactor'] ?? null) ? (float) $body['purchaseToBaseFactor'] : 1.0;
-    if ($code === '' || $name === '') {
-        respond_error('Vui lòng nhập mã và tên nguyên liệu.', 422);
+    if ($name === '') {
+        respond_error('Vui lòng nhập tên nguyên liệu.', 422);
     }
     if ($purchaseUnit === '' || $baseUnit === '' || $conversionFactor <= 0) {
         respond_error('Vui lòng nhập đơn vị nhập, đơn vị sử dụng và hệ số quy đổi lớn hơn 0.', 422);
-    }
-    $duplicate = db()->prepare(
-        'SELECT id FROM ingredients
-         WHERE store_id=:store_id AND
-           (LOWER(ingredient_code)=LOWER(:code) OR normalized_name=:normalized) LIMIT 1'
-    );
-    $duplicate->execute([
-        'store_id' => $storeId, 'code' => $code, 'normalized' => ingredients_normalized_name($name),
-    ]);
-    if ($duplicate->fetchColumn()) {
-        respond_error('Mã hoặc tên nguyên liệu đã tồn tại trong khu vực.', 409);
     }
     $supplierId = trim((string) ($body['supplierId'] ?? '')) ?: null;
     if ($supplierId) {
@@ -232,8 +221,27 @@ if ($method === 'POST') {
     $conversion = ingredient_conversion_values($storeId, $body);
     $id = uuidv4();
     $pdo = db();
-    $pdo->beginTransaction();
+    $lock = $pdo->query("SELECT GET_LOCK('tn_company_ingredient_code_create', 10)")->fetchColumn();
+    if ((int) $lock !== 1) {
+        respond_error('Hệ thống đang cấp mã nguyên liệu. Vui lòng thử lại.', 503);
+    }
     try {
+        if ($code === '') {
+            $code = ingredients_next_code($storeId === 'warehouse' ? 'VT' : 'NL', 'ingredients', 'ingredient_code');
+        }
+        $duplicate = $pdo->prepare(
+            'SELECT id FROM ingredients
+             WHERE store_id=:store_id AND
+               (LOWER(ingredient_code)=LOWER(:code) OR normalized_name=:normalized) LIMIT 1'
+        );
+        $duplicate->execute([
+            'store_id' => $storeId, 'code' => $code, 'normalized' => ingredients_normalized_name($name),
+        ]);
+        if ($duplicate->fetchColumn()) {
+            $pdo->query("SELECT RELEASE_LOCK('tn_company_ingredient_code_create')");
+            respond_error('Mã hoặc tên nguyên liệu đã tồn tại trong khu vực.', 409);
+        }
+        $pdo->beginTransaction();
         $statement = $pdo->prepare(
             'INSERT INTO ingredients
              (id,store_id,ingredient_code,ingredient_name,normalized_name,unit,purchase_unit,base_unit,purchase_to_base_factor,
@@ -271,6 +279,8 @@ if ($method === 'POST') {
             $pdo->rollBack();
         }
         throw $exception;
+    } finally {
+        $pdo->query("SELECT RELEASE_LOCK('tn_company_ingredient_code_create')");
     }
     respond_ok(['created' => true, 'item' => ingredient_payload($created)], 201);
 }
@@ -278,6 +288,12 @@ if ($method === 'POST') {
 $code = trim((string) ($body['ingredientCode'] ?? $_GET['ingredientCode'] ?? ''));
 $existing = ingredients_find($storeId, $code);
 if (!$existing) respond_error('Không tìm thấy nguyên liệu.', 404);
+
+if ($method === 'PATCH' && $bodyAction === 'restore') {
+    db()->prepare('UPDATE ingredients SET is_active=1,updated_at=NOW() WHERE id=:id')
+        ->execute(['id' => $existing['id']]);
+    respond_ok(['restored' => true]);
+}
 
 if (in_array($method, ['PUT', 'PATCH'], true)) {
     $name = trim((string) ($body['ingredientName'] ?? $existing['ingredient_name']));

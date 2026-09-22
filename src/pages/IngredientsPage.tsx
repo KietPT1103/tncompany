@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import Link from "next/link";
-import { Boxes, Download, EyeOff, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { Boxes, Download, Eye, EyeOff, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { hasPermission } from "@/lib/permissions";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import {
-  createIngredient, deleteIngredient, getIngredients, getNextIngredientCode,
+  createIngredient, deleteIngredient, getIngredients, restoreIngredient,
   updateIngredient, type Ingredient,
 } from "@/services/ingredients";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
@@ -43,13 +43,14 @@ export default function IngredientsPage() {
   const [items, setItems] = useState<Ingredient[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
+  const [visibility, setVisibility] = useState<"active" | "hidden" | "all">("active");
   const [form, setForm] = useState<Form>(blank());
   const [editing, setEditing] = useState<Ingredient | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [preparing, setPreparing] = useState(false);
   const [deleting, setDeleting] = useState("");
+  const [restoring, setRestoring] = useState("");
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [toast, setToast] = useState<ToastState>({
     open: false,
@@ -66,7 +67,7 @@ export default function IngredientsPage() {
     const [ingredientResult, supplierResult] = await Promise.all([
       getIngredients(storeId), getSuppliers(storeId),
     ]);
-    setItems(ingredientResult.items.filter((item) => item.isActive));
+    setItems(ingredientResult.items);
     setSuppliers(supplierResult.items);
   }
   useEffect(() => {
@@ -81,26 +82,16 @@ export default function IngredientsPage() {
   }, [storeId]);
   const filtered = useMemo(() => {
     const q = search.trim().toLocaleLowerCase("vi");
-    return q ? items.filter((item) =>
-      `${item.ingredientCode} ${item.ingredientName} ${item.supplierName || ""}`.toLocaleLowerCase("vi").includes(q)
-    ) : items;
-  }, [items, search]);
+    return items.filter((item) =>
+      (visibility === "all" || item.isActive === (visibility === "active")) &&
+      (!q || `${item.ingredientCode} ${item.ingredientName} ${item.supplierName || ""}`.toLocaleLowerCase("vi").includes(q))
+    );
+  }, [items, search, visibility]);
 
-  async function startCreate() {
-    setPreparing(true);
-    try {
-      setEditing(null);
-      setForm({ ...blank(), code: await getNextIngredientCode(storeId) });
-      setOpen(true);
-    } catch (e) {
-      showToast(
-        `Không thể tạo ${itemLabel}`,
-        "error",
-        e instanceof Error ? e.message : `Không thể lấy mã ${itemLabel}.`,
-      );
-    } finally {
-      setPreparing(false);
-    }
+  function startCreate() {
+    setEditing(null);
+    setForm(blank());
+    setOpen(true);
   }
   function startEdit(item: Ingredient) {
     setEditing(item);
@@ -123,8 +114,8 @@ export default function IngredientsPage() {
     setOpen(true);
   }
   async function save() {
-    if (!form.code.trim() || !form.name.trim() || !form.unit.trim() || !form.purchaseUnit.trim() || decimal(form.conversionFactor) <= 0) {
-      showToast("Thông tin chưa đầy đủ", "warning", `Vui lòng nhập mã, tên, đơn vị thu ngân, đơn vị pha chế và hệ số quy đổi của ${itemLabel}.`);
+    if (!form.name.trim() || !form.unit.trim() || !form.purchaseUnit.trim() || decimal(form.conversionFactor) <= 0) {
+      showToast("Thông tin chưa đầy đủ", "warning", `Vui lòng nhập tên, đơn vị thu ngân, đơn vị pha chế và hệ số quy đổi của ${itemLabel}.`);
       return;
     }
     if (form.conversionComponents.length && (decimal(form.conversionOutputQuantity) <= 0 || form.conversionComponents.some((component) => !component.ingredientId || decimal(component.inputQuantity) <= 0))) {
@@ -146,7 +137,7 @@ export default function IngredientsPage() {
     };
     try {
       if (editing) await updateIngredient(editing.ingredientCode, payload);
-      else await createIngredient({ ...payload, ingredientCode: form.code.trim(), stockQuantity: 0 });
+      else await createIngredient({ ...payload, stockQuantity: 0 });
       await reload();
       setOpen(false);
       showToast(
@@ -192,6 +183,19 @@ export default function IngredientsPage() {
         e instanceof Error ? e.message : `Không thể ${action} ${itemLabel}.`,
       );
     } finally { setDeleting(""); }
+  }
+
+  async function restore(item: Ingredient) {
+    setRestoring(item.ingredientCode);
+    try {
+      await restoreIngredient(storeId, item.ingredientCode);
+      await reload();
+      showToast(`Đã hiện lại ${itemLabel}`, "success", `${item.ingredientName} đã trở lại danh sách đang sử dụng.`);
+    } catch (e) {
+      showToast(`Không thể hiện lại ${itemLabel}`, "error", e instanceof Error ? e.message : "Vui lòng thử lại.");
+    } finally {
+      setRestoring("");
+    }
   }
 
   async function importExcel(file: File) {
@@ -241,24 +245,29 @@ export default function IngredientsPage() {
       <div><h1 className="text-3xl font-bold">{itemTitle}</h1><p className="mt-1 text-slate-500">{isConstructionWarehouse ? "Danh mục độc lập của kho thợ, phục vụ nhập, xuất và kiểm kê vật tư xây dựng." : "Dữ liệu riêng cho định mức, nhập hàng và kiểm kho."}</p></div>
       <div className="flex flex-wrap gap-2">
         {(hasPermission(user, "inventory_receipts.view") || hasPermission(user, "inventory_issues.access") || hasPermission(user, "inventory_checks.access")) && <Link href="/inventory" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 hover:bg-emerald-50"><Boxes className="h-4 w-4" /> Sổ kho</Link>}
-        <button disabled={saving || items.length === 0} onClick={() => exportIngredientsToExcel(items, storeId)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 disabled:opacity-50"><Download className="h-4 w-4" /> Xuất Excel</button>
+        <button disabled={saving || !items.some((item) => item.isActive)} onClick={() => exportIngredientsToExcel(items.filter((item) => item.isActive), storeId)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 disabled:opacity-50"><Download className="h-4 w-4" /> Xuất Excel</button>
         <button disabled={saving} onClick={() => importInputRef.current?.click()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 disabled:opacity-50"><Upload className="h-4 w-4" /> Import Excel</button>
         <input ref={importInputRef} type="file" accept=".xls,.xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importExcel(file); event.target.value = ""; }} />
-        <button disabled={preparing} onClick={() => void startCreate()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">
-          {preparing ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}{preparing ? "Đang chuẩn bị…" : `Thêm ${itemLabel}`}</button>
+        <button onClick={startCreate} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">
+          <Plus className="h-5 w-5" />{`Thêm ${itemLabel}`}</button>
       </div>
     </header>
     <div className="mt-6 rounded-3xl border bg-white shadow-sm">
-      <label className="relative block border-b p-5"><Search className="absolute left-9 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+      <div className="flex flex-wrap items-center gap-3 border-b p-5"><label className="relative block min-w-[260px] flex-1"><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Tìm mã, tên ${itemLabel} hoặc nhà phân phối`} className="h-12 w-full rounded-xl border bg-slate-50 pl-12 pr-4" /></label>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">Trạng thái
+          <select aria-label="Lọc trạng thái nguyên liệu" value={visibility} onChange={(event) => setVisibility(event.target.value as "active" | "hidden" | "all")} className="h-12 rounded-xl border bg-white px-3">
+            <option value="active">Đang sử dụng</option><option value="hidden">Đã ẩn</option><option value="all">Tất cả</option>
+          </select>
+        </label></div>
       <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left">
         <thead className="bg-slate-50 text-sm text-slate-600"><tr><th className="p-4">Mã</th><th className="p-4">Tên {itemLabel}</th><th className="p-4">Nhà phân phối</th><th className="p-4 text-right">Tồn kho</th><th className="p-4">Đơn vị</th><th className="p-4 text-right">Giá vốn</th><th className="p-4 text-right">Thao tác</th></tr></thead>
         <tbody className="divide-y">{loading ? <tr><td colSpan={7} className="p-14 text-center"><LoaderCircle className="mx-auto animate-spin" /></td></tr>
-          : filtered.length === 0 ? <tr><td colSpan={7} className="p-14 text-center text-slate-500"><Boxes className="mx-auto mb-2 text-slate-300" />Chưa có {itemLabel}.</td></tr>
-          : filtered.map((item) => <tr key={item.id} className="hover:bg-slate-50">
-            <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b><small className="block text-slate-500">{item.supplierItemCode}</small></td>
+          : filtered.length === 0 ? <tr><td colSpan={7} className="p-14 text-center text-slate-500"><Boxes className="mx-auto mb-2 text-slate-300" />{visibility === "hidden" ? `Không có ${itemLabel} đã ẩn.` : `Không có ${itemLabel} phù hợp.`}</td></tr>
+          : filtered.map((item) => <tr key={item.id} className={item.isActive ? "hover:bg-slate-50" : "bg-slate-50/70 text-slate-500"}>
+            <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b>{!item.isActive && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Đã ẩn</span>}<small className="block text-slate-500">{item.supplierItemCode}</small></td>
             <td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{(item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b></td><td className="p-4 text-right">{(Number(item.cost || 0) * (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ₫/{item.purchaseUnit || item.unit}</td>
-            <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button><button title="Tạm ẩn" disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hide")} className="p-2 text-amber-600 disabled:opacity-50"><EyeOff className="h-4 w-4" /></button><button title="Xóa vĩnh viễn" disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hard")} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
+            <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button>{item.isActive ? <button title="Tạm ẩn" aria-label={`Tạm ẩn ${item.ingredientName}`} disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hide")} className="p-2 text-amber-600 disabled:opacity-50"><EyeOff className="h-4 w-4" /></button> : <button title="Hiện lại" aria-label={`Hiện lại ${item.ingredientName}`} disabled={Boolean(restoring)} onClick={() => void restore(item)} className="p-2 text-emerald-700 disabled:opacity-50">{restoring === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}</button>}<button title="Xóa vĩnh viễn" disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hard")} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
           </tr>)}</tbody>
       </table></div>
     </div>
@@ -266,7 +275,7 @@ export default function IngredientsPage() {
   {open && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/55 p-4"><div className="w-full max-w-2xl rounded-3xl bg-white p-6">
     <div className="flex justify-between"><h2 className="text-2xl font-bold">{editing ? `Sửa ${itemLabel}` : `Thêm ${itemLabel}`}</h2><button disabled={saving} onClick={() => setOpen(false)}><X /></button></div>
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
-      <Field label={`Mã ${itemLabel} *`}><input disabled={Boolean(editing)} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Field>
+      <Field label={`Mã ${itemLabel}`}><input readOnly value={editing ? form.code : "Tự tạo khi lưu"} className="bg-slate-50" /></Field>
       <Field label={`Tên ${itemLabel} *`}><input value={form.name} placeholder={isConstructionWarehouse ? "Ví dụ: Xi măng, thép, dây điện" : "Ví dụ: Cà phê hạt"} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
       <Field label="Đơn vị thu ngân/nhập kho *"><input value={form.purchaseUnit} placeholder="túi, bịch, chai, thùng…" onChange={(e) => setForm({ ...form, purchaseUnit: e.target.value })} /></Field>
       <Field label="Đơn vị pha chế/công thức *"><input value={form.unit} placeholder="g, ml, cái…" onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
@@ -285,7 +294,7 @@ export default function IngredientsPage() {
           onChange={(event) => setForm({
             ...form,
             conversionComponents: event.target.checked
-              ? [{ ingredientId: items.find((item) => item.id !== editing?.id && !item.conversionComponents?.length && !item.conversionSourceIngredientId)?.id || "", inputQuantity: "" }]
+              ? [{ ingredientId: items.find((item) => item.isActive && item.id !== editing?.id && !item.conversionComponents?.length && !item.conversionSourceIngredientId)?.id || "", inputQuantity: "" }]
               : [],
             conversionOutputQuantity: event.target.checked ? form.conversionOutputQuantity : "",
           })}
@@ -295,7 +304,7 @@ export default function IngredientsPage() {
       </label>
       {form.conversionComponents.length > 0 && <div className="mt-4 space-y-3">
         <div className="grid gap-3 sm:grid-cols-[1fr_180px_44px]">{form.conversionComponents.map((component,index) => <div key={index} className="contents">
-          <Field label={index === 0 ? "Nguyên liệu đầu vào *" : "Nguyên liệu đầu vào"}><select value={component.ingredientId} onChange={(e) => setForm({ ...form, conversionComponents: form.conversionComponents.map((item,itemIndex) => itemIndex === index ? { ...item, ingredientId: e.target.value } : item) })}><option value="">Chọn nguyên liệu</option>{items.filter((item) => item.id !== editing?.id && !item.conversionComponents?.length && !item.conversionSourceIngredientId && !form.conversionComponents.some((selected,selectedIndex) => selectedIndex !== index && selected.ingredientId === item.id)).map((item) => <option key={item.id} value={item.id}>{item.ingredientName} ({item.baseUnit || item.unit})</option>)}</select></Field>
+          <Field label={index === 0 ? "Nguyên liệu đầu vào *" : "Nguyên liệu đầu vào"}><select value={component.ingredientId} onChange={(e) => setForm({ ...form, conversionComponents: form.conversionComponents.map((item,itemIndex) => itemIndex === index ? { ...item, ingredientId: e.target.value } : item) })}><option value="">Chọn nguyên liệu</option>{items.filter((item) => item.isActive && item.id !== editing?.id && !item.conversionComponents?.length && !item.conversionSourceIngredientId && !form.conversionComponents.some((selected,selectedIndex) => selectedIndex !== index && selected.ingredientId === item.id)).map((item) => <option key={item.id} value={item.id}>{item.ingredientName} ({item.baseUnit || item.unit})</option>)}</select></Field>
           <Field label={index === 0 ? "Lượng đầu vào *" : "Định lượng"}><input inputMode="decimal" value={component.inputQuantity} placeholder="Ví dụ: 20" onChange={(e) => setForm({ ...form, conversionComponents: form.conversionComponents.map((item,itemIndex) => itemIndex === index ? { ...item, inputQuantity: e.target.value } : item) })} /></Field>
           <button type="button" onClick={() => setForm({ ...form, conversionComponents: form.conversionComponents.filter((_,itemIndex) => itemIndex !== index) })} className="mt-7 h-11 rounded-lg border text-rose-600"><Trash2 className="mx-auto h-4 w-4" /></button>
         </div>)}</div>

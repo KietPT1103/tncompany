@@ -30,7 +30,7 @@ export type Ingredient = {
 
 export type IngredientInput = {
   storeId: string;
-  ingredientCode: string;
+  ingredientCode?: string;
   ingredientName: string;
   unit?: string;
   purchaseUnit?: string;
@@ -87,4 +87,11 @@ export async function deleteIngredient(storeId: string, code: string, mode: "hid
     `/ingredients.php?storeId=${encodeURIComponent(storeId)}&ingredientCode=${encodeURIComponent(code)}&mode=${mode}`,
     { method: "DELETE" }
   );
+}
+
+export async function restoreIngredient(storeId: string, code: string) {
+  return apiRequest("/ingredients.php", {
+    method: "PATCH",
+    body: JSON.stringify({ action: "restore", storeId, ingredientCode: code }),
+  });
 }
