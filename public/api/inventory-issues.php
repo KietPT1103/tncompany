@@ -6,6 +6,7 @@ require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
+require_once __DIR__ . '/_lib/inventory_issue_print_jobs.php';
 
 function inventory_issues_ensure_schema(): void
 {
@@ -76,6 +77,7 @@ function inventory_issues_payload(array $row): array
         'completedBy' => $row['completed_by'] ?: null, 'createdBy' => (string) ($row['created_by'] ?? ''),
         'shiftId' => $row['shift_id'] ?: null, 'shiftType' => $row['shift_type'] ?: null,
         'createdAt' => (string) $row['created_at'], 'updatedAt' => (string) $row['updated_at'], 'items' => $items,
+        'printJob' => inventory_issue_print_jobs_latest((string) $row['id']),
     ];
 }
 
@@ -88,6 +90,7 @@ function inventory_issues_find(string $id, string $storeId): ?array
 }
 
 inventory_issues_ensure_schema();
+inventory_issue_print_jobs_ensure_schema();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $user = auth_require_permission('inventory_issues.access');
 
@@ -191,6 +194,7 @@ try {
             $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => $before, 'after' => $after]);
         }
         $pdo->prepare('UPDATE inventory_issues SET status="completed",requires_preparation_receipt=:requires_receipt,completed_at=NOW(),completed_by=:actor,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'requires_receipt' => $storeId === 'warehouse' ? 0 : 1, 'actor' => inventory_issues_actor($user)]);
+        inventory_issue_print_jobs_create_initial($pdo, $id, $storeId);
     }
     $pdo->commit();
 } catch (Throwable $exception) {

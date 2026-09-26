@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS inventory_issue_print_jobs (
+  id VARCHAR(64) PRIMARY KEY,
+  store_id VARCHAR(32) NOT NULL,
+  issue_id VARCHAR(64) NOT NULL,
+  attempt_number INT UNSIGNED NOT NULL DEFAULT 1,
+  status ENUM('pending','processing','printed','failed','cancelled','uncertain') NOT NULL DEFAULT 'pending',
+  retry_count INT UNSIGNED NOT NULL DEFAULT 0,
+  claimed_by VARCHAR(255) NULL,
+  claim_token VARCHAR(128) NULL,
+  claimed_at DATETIME NULL,
+  lease_expires_at DATETIME NULL,
+  next_attempt_at DATETIME NULL,
+  terminal_name VARCHAR(255) NULL,
+  printed_at DATETIME NULL,
+  last_error VARCHAR(500) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_inventory_issue_print_attempt (issue_id, attempt_number),
+  KEY idx_inventory_issue_print_store_status (store_id, status, next_attempt_at, created_at),
+  KEY idx_inventory_issue_print_lease (status, lease_expires_at),
+  CONSTRAINT fk_inventory_issue_print_job_issue FOREIGN KEY (issue_id) REFERENCES inventory_issues(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
