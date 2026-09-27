@@ -25,6 +25,9 @@ const localToday = () => {
 const parseNumber = (value: string) => Number(value.replace(",", ".")) || 0;
 const formatQuantity = (value: number) => value.toLocaleString("vi-VN", { maximumFractionDigits: 3 });
 const formatMoney = (value: number) => value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
+const getPurchaseUnitCost = (ingredient?: Ingredient) => ingredient?.cost == null
+  ? 0
+  : Math.round(ingredient.cost * (ingredient.purchaseToBaseFactor || 1) * 100) / 100;
 
 export default function ManualInventoryReceiptPage() {
   const navigate = useNavigate();
@@ -142,7 +145,7 @@ export default function ManualInventoryReceiptPage() {
             const itemQuantity = parseNumber(item.quantity);
             const itemCost = parseNumber(item.unitCost);
             return <tr key={item.key} className="hover:bg-blue-50/40"><td className="p-3 text-center font-bold">{index + 1}</td><td className="p-3 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>
-              <td className="p-2"><select disabled={loading} value={item.ingredientCode} onChange={(event) => { const selected = ingredientByCode.get(event.target.value); updateLine(index, { ingredientCode: event.target.value, unitCost: item.unitCost || String(selected?.cost || 0) }); }} className="h-10 w-full rounded-md border px-3"><option value="">Chọn nguyên liệu...</option>{ingredients.map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
+              <td className="p-2"><select disabled={loading} value={item.ingredientCode} onChange={(event) => { const selected = ingredientByCode.get(event.target.value); updateLine(index, { ingredientCode: event.target.value, unitCost: selected ? String(getPurchaseUnitCost(selected)) : "" }); }} className="h-10 w-full rounded-md border px-3"><option value="">Chọn nguyên liệu...</option>{ingredients.map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
               <td className="p-2"><input inputMode="decimal" value={item.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} className="h-10 w-full rounded-md border px-3 text-right font-bold" /></td><td className="p-3"><b>{ingredient?.purchaseUnit || ingredient?.unit || "—"}</b>{ingredient && ingredient.purchaseToBaseFactor !== 1 ? <small className="block text-slate-500">1 {ingredient.purchaseUnit} = {ingredient.purchaseToBaseFactor} {ingredient.baseUnit}</small> : null}</td>
               <td className="p-3 text-right">{ingredient ? formatQuantity(ingredient.stockQuantity) : "—"}</td><td className="p-3 text-right font-bold text-emerald-800">{ingredient ? formatQuantity(ingredient.stockQuantity + itemQuantity * (ingredient.purchaseToBaseFactor || 1)) : "—"}</td>
               <td className="p-2"><input inputMode="decimal" value={item.unitCost} onChange={(event) => updateLine(index, { unitCost: event.target.value })} className="h-10 w-full rounded-md border px-3 text-right" /></td><td className="p-3 text-right font-bold">{formatMoney(itemQuantity * itemCost)} ₫</td>
