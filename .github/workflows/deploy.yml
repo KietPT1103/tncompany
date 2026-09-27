@@ -42,6 +42,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test inventory print queue and Windows helper
+        shell: powershell
+        run: |
+          php scripts/inventory-issue-print-jobs-domain-test.php
+          if ($LASTEXITCODE -ne 0) { throw "Inventory print domain tests failed" }
+          php -l public/api/inventory-issues.php
+          php -l public/api/inventory-issue-print-jobs.php
+          php -l public/api/download-inventory-print-helper.php
+          dotnet run --project agent/windows/InventoryPrintHelper.Tests/InventoryPrintHelper.Tests.csproj
+          if ($LASTEXITCODE -ne 0) { throw "Inventory Print Helper tests failed" }
+          node --test src/app/download-inventory-print-helper/downloadConfig.test.ts
+          if ($LASTEXITCODE -ne 0) { throw "Inventory Print Helper download tests failed" }
+
       - name: Test print agent
         run: npm run test:bar-print-agent
 

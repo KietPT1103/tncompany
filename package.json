@@ -15,7 +15,9 @@
     "worker:tiktok-social-listening": "php scripts/tiktok-social-listening-worker.php --daemon 5",
     "print:bar-agent": "node scripts/bar-print-agent.cjs",
     "print:bar-agent:test": "node scripts/bar-print-agent.cjs --test --once",
-    "test:bar-print-agent": "node --test scripts/bar-print-agent.test.cjs"
+    "test:bar-print-agent": "node --test scripts/bar-print-agent.test.cjs",
+    "test:inventory-print-helper": "dotnet run --project agent/windows/InventoryPrintHelper.Tests/InventoryPrintHelper.Tests.csproj",
+    "publish:inventory-print-helper": "powershell -ExecutionPolicy Bypass -File agent/windows/InventoryPrintHelper/publish.ps1"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

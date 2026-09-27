@@ -33,6 +33,7 @@ import GestureStudioPage from "./app/(dashboard)/gesture-studio/page";
 import DustRitualPage from "./app/dust-ritual/page";
 import DownloadAppPage from "./app/download-app/page";
 import DownloadAdminAppPage from "./app/download-admin-app/page";
+import DownloadInventoryPrintHelperPage from "./app/download-inventory-print-helper/page";
 import EditSeoArticlePage from "./app/(dashboard)/seo-articles/[id]/page";
 import NewSeoArticlePage from "./app/(dashboard)/seo-articles/new/page";
 import SeoArticlesPage from "./app/(dashboard)/seo-articles/page";
@@ -126,6 +127,7 @@ export function App() {
         <Route path="/dust-ritual" element={<DustRitualPage />} />
         <Route path="/tai-app" element={<DownloadAppPage />} />
         <Route path="/tai-app-admin" element={<DownloadAdminAppPage />} />
+        <Route path="/tai-cai-dat-may-in" element={<DownloadInventoryPrintHelperPage />} />
         <Route
           path="/admin/inventory"
           element={
