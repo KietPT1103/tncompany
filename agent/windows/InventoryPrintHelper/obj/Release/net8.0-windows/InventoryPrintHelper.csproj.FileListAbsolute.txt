@@ -1,0 +1,12 @@
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\bin\Release\net8.0-windows\InventoryPrintHelper.deps.json
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\bin\Release\net8.0-windows\InventoryPrintHelper.dll
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\bin\Release\net8.0-windows\InventoryPrintHelper.pdb
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\InventoryPrintHelper.GeneratedMSBuildEditorConfig.editorconfig
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\InventoryPrintHelper.AssemblyInfoInputs.cache
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\InventoryPrintHelper.AssemblyInfo.cs
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\InventoryPrintHelper.csproj.CoreCompileInputs.cache
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\InventoryPrintHelper.sourcelink.json
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\InventoryPrintHelper.dll
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\refint\InventoryPrintHelper.dll
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\InventoryPrintHelper.pdb
+D:\Workspace\Work\tn-company\agent\windows\InventoryPrintHelper\obj\Release\net8.0-windows\ref\InventoryPrintHelper.dll

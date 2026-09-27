@@ -1,0 +1,36 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "InventoryPrintHelper.Tests/1.0.0": {
+        "dependencies": {
+          "InventoryPrintHelper": "1.0.0"
+        },
+        "runtime": {
+          "InventoryPrintHelper.Tests.dll": {}
+        }
+      },
+      "InventoryPrintHelper/1.0.0": {
+        "runtime": {
+          "InventoryPrintHelper.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "InventoryPrintHelper.Tests/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "InventoryPrintHelper/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
