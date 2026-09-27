@@ -9,6 +9,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("missing printer pauses worker", MissingPrinterPausesWorker),
     ("reconnect backoff is bounded", ReconnectBackoffIsBounded),
     ("A4 pagination is deterministic", A4PaginationIsDeterministic),
+    ("A4 quantities keep small decimals", A4QuantitiesKeepSmallDecimals),
     ("settings protect credentials", SettingsProtectCredentials),
     ("startup task is interactive and restartable", StartupTaskIsInteractiveAndRestartable),
     ("single instance name is stable", SingleInstanceNameIsStable),
@@ -99,6 +100,12 @@ static Task A4PaginationIsDeterministic()
     Equal(3, pages.Count, "page count");
     Equal("NL1", pages[0][0].IngredientCode, "first row");
     Equal("NL7", pages[2][0].IngredientCode, "last page row");
+    return Task.CompletedTask;
+}
+
+static Task A4QuantitiesKeepSmallDecimals()
+{
+    Equal("0,0004", PrintLayout.FormatQuantity(0.0004m), "small kg quantity");
     return Task.CompletedTask;
 }
 

@@ -69,7 +69,7 @@ public sealed class InventoryIssuePrinter : IInventoryIssuePrinter
         {
             rowNumber++;
             DrawRow(graphics, pen, font, bounds.Left, ref y, 25, widths,
-                [rowNumber.ToString(CultureInfo.InvariantCulture), item.IngredientCode, item.IngredientName, item.Quantity.ToString("0.###", CultureInfo.GetCultureInfo("vi-VN")), item.Unit, item.Note]);
+                [rowNumber.ToString(CultureInfo.InvariantCulture), item.IngredientCode, item.IngredientName, PrintLayout.FormatQuantity(item.Quantity), item.Unit, item.Note]);
         }
         y += 20;
         if (!string.IsNullOrWhiteSpace(data.Note)) graphics.DrawString("Ghi chú: " + data.Note, font, Brushes.Black, bounds.Left, y);

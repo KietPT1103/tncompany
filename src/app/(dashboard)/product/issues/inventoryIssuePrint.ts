@@ -4,7 +4,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(
   /[&<>"']/g,
   (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char] || char,
 );
-const formatQuantity = (value: number) => value.toLocaleString("vi-VN", { maximumFractionDigits: 3 });
+import { formatInventoryQuantity as formatQuantity } from "./quantityPrecision.ts";
 
 export function buildInventoryIssuePrintHtml(issue: InventoryIssue) {
   const timestamp = new Date(issue.completedAt || issue.createdAt);

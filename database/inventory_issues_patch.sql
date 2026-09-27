@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS inventory_issues (
   issued_by VARCHAR(255) NULL,
   status ENUM('draft','completed','cancelled') NOT NULL DEFAULT 'draft',
   note TEXT NULL,
-  total_quantity DECIMAL(15,3) NOT NULL DEFAULT 0,
+  total_quantity DECIMAL(18,6) NOT NULL DEFAULT 0,
   completed_at DATETIME NULL,
   completed_by VARCHAR(255) NULL,
   created_by VARCHAR(255) NULL,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS inventory_issue_items (
   ingredient_code VARCHAR(100) NOT NULL,
   ingredient_name VARCHAR(255) NOT NULL,
   unit VARCHAR(50) NULL,
-  quantity DECIMAL(15,3) NOT NULL,
+  quantity DECIMAL(18,6) NOT NULL,
   base_quantity DECIMAL(15,3) NULL,
   stock_before DECIMAL(15,3) NULL,
   stock_after DECIMAL(15,3) NULL,
@@ -38,3 +38,9 @@ CREATE TABLE IF NOT EXISTS inventory_issue_items (
   CONSTRAINT fk_inventory_issue_items_issue FOREIGN KEY (issue_id) REFERENCES inventory_issues(id) ON DELETE CASCADE,
   CONSTRAINT fk_inventory_issue_items_ingredient FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE inventory_issues
+  MODIFY COLUMN total_quantity DECIMAL(18,6) NOT NULL DEFAULT 0;
+
+ALTER TABLE inventory_issue_items
+  MODIFY COLUMN quantity DECIMAL(18,6) NOT NULL;

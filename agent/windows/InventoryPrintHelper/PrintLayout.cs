@@ -2,6 +2,8 @@ namespace InventoryPrintHelper;
 
 public static class PrintLayout
 {
+    public static string FormatQuantity(decimal quantity) => quantity.ToString("0.######", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"));
+
     public static IReadOnlyList<IReadOnlyList<PrintDocumentItem>> Paginate(IReadOnlyList<PrintDocumentItem> items, int rowsPerPage)
     {
         if (rowsPerPage < 1) throw new ArgumentOutOfRangeException(nameof(rowsPerPage));

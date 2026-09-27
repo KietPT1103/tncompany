@@ -7,6 +7,7 @@ require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
 require_once __DIR__ . '/_lib/inventory_issue_print_jobs.php';
+require_once __DIR__ . '/_lib/inventory_issue_quantities.php';
 
 function inventory_issues_ensure_schema(): void
 {
@@ -15,7 +16,7 @@ function inventory_issues_ensure_schema(): void
         id VARCHAR(64) PRIMARY KEY, store_id VARCHAR(32) NOT NULL, issue_code VARCHAR(100) NOT NULL,
         issue_date DATE NOT NULL, destination VARCHAR(255) NOT NULL DEFAULT "Nơi sử dụng", issued_by VARCHAR(255) NULL,
         status ENUM("draft","completed","cancelled") NOT NULL DEFAULT "draft", note TEXT NULL,
-        total_quantity DECIMAL(15,3) NOT NULL DEFAULT 0, completed_at DATETIME NULL, completed_by VARCHAR(255) NULL,
+        total_quantity DECIMAL(18,6) NOT NULL DEFAULT 0, completed_at DATETIME NULL, completed_by VARCHAR(255) NULL,
         created_by VARCHAR(255) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_inventory_issues_code (store_id,issue_code), KEY idx_inventory_issues_store_date (store_id,issue_date),
@@ -24,7 +25,7 @@ function inventory_issues_ensure_schema(): void
     db()->exec('CREATE TABLE IF NOT EXISTS inventory_issue_items (
         id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT, issue_id VARCHAR(64) NOT NULL, ingredient_id VARCHAR(64) NOT NULL,
         ingredient_code VARCHAR(100) NOT NULL, ingredient_name VARCHAR(255) NOT NULL, unit VARCHAR(50) NULL,
-        quantity DECIMAL(15,3) NOT NULL, stock_before DECIMAL(15,3) NULL, stock_after DECIMAL(15,3) NULL,
+        quantity DECIMAL(18,6) NOT NULL, stock_before DECIMAL(15,3) NULL, stock_after DECIMAL(15,3) NULL,
         note TEXT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_inventory_issue_items_issue (issue_id), KEY idx_inventory_issue_items_ingredient (ingredient_id),
         CONSTRAINT fk_inventory_issue_items_issue FOREIGN KEY (issue_id) REFERENCES inventory_issues(id) ON DELETE CASCADE,
@@ -34,6 +35,7 @@ function inventory_issues_ensure_schema(): void
     auth_ensure_column('inventory_issues', 'shift_id', 'VARCHAR(64) NULL AFTER created_by');
     auth_ensure_column('inventory_issues', 'shift_type', 'VARCHAR(20) NULL AFTER shift_id');
     auth_ensure_column('inventory_issues', 'requires_preparation_receipt', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER shift_type');
+    inventory_issue_ensure_quantity_precision(db());
 }
 
 function inventory_issues_actor(array $user): string
@@ -131,7 +133,7 @@ $findIngredient = db()->prepare('SELECT * FROM ingredients WHERE store_id=:store
 $normalized = [];
 foreach ($rawItems as $raw) {
     $code = trim((string) ($raw['ingredientCode'] ?? ''));
-    $quantity = round((float) str_replace(',', '.', (string) ($raw['quantity'] ?? 0)), 3);
+    $quantity = inventory_issue_parse_quantity($raw['quantity'] ?? 0);
     if ($code === '' || $quantity <= 0) respond_error('Mỗi dòng phải có nguyên liệu và số lượng lớn hơn 0.', 422);
     if (isset($normalized[$code])) respond_error('Nguyên liệu ' . $code . ' bị lặp trong phiếu.', 422);
     $findIngredient->execute(['store_id' => $storeId, 'code' => $code]);
@@ -142,7 +144,7 @@ foreach ($rawItems as $raw) {
     $normalized[$code] = [
         'ingredient' => $ingredient,
         'quantity' => $quantity,
-        'baseQuantity' => round($quantity * $conversionFactor, 3),
+        'baseQuantity' => inventory_issue_base_quantity($quantity, $conversionFactor),
         'note' => trim((string) ($raw['note'] ?? '')),
     ];
 }
@@ -188,7 +190,7 @@ try {
             $after = round($before - $line['baseQuantity'], 3);
             if ($after < 0) {
                 $factor = max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1));
-                throw new RuntimeException('Tồn kho ' . $ingredient['ingredient_code'] . ' chỉ còn ' . round($before / $factor, 3) . ' ' . ($ingredient['purchase_unit'] ?: $ingredient['unit']) . '.');
+                throw new RuntimeException('Tồn kho ' . $ingredient['ingredient_code'] . ' chỉ còn ' . inventory_issue_format_quantity($before / $factor) . ' ' . ($ingredient['purchase_unit'] ?: $ingredient['unit']) . '.');
             }
             $deduct->execute(['id' => $ingredient['id'], 'stock' => $after]);
             $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => $before, 'after' => $after]);

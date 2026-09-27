@@ -13,6 +13,7 @@ import { getOpenShiftByCashier, type CashierShift } from "@/services/shiftServic
 import { requestInventoryIssueReprint } from "@/services/inventoryIssuePrintJobService";
 import { printInventoryIssue } from "./inventoryIssuePrint";
 import { canManualPrintInventoryIssue, getPrintStatusPresentation } from "./printStatus";
+import { formatInventoryQuantity, isInventoryIssueQuantityInsufficient } from "./quantityPrecision";
 
 type DraftLine = { key: string; ingredientCode: string; quantity: string; note: string };
 type FormState = {
@@ -32,7 +33,7 @@ const today = () => {
 const key = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 const line = (): DraftLine => ({ key: key(), ingredientCode: "", quantity: "", note: "" });
 const number = (value: string) => Number(value.replace(",", ".")) || 0;
-const quantity = (value: number) => value.toLocaleString("vi-VN", { maximumFractionDigits: 3 });
+const quantity = formatInventoryQuantity;
 
 export default function InventoryIssuesPage() {
   const { storeId } = useStore();
@@ -186,7 +187,7 @@ export default function InventoryIssuesPage() {
               const ingredient = ingredientByCode.get(item.ingredientCode);
               const requested = number(item.quantity);
               const factor = ingredient?.purchaseToBaseFactor || 1;
-              const insufficient = Boolean(ingredient && requested * factor > ingredient.stockQuantity);
+              const insufficient = Boolean(ingredient && isInventoryIssueQuantityInsufficient(requested, factor, ingredient.stockQuantity));
               return <tr key={item.key} className={insufficient ? "bg-rose-50" : "hover:bg-blue-50/40"}>
                 <td className="px-4 py-2 text-center font-semibold">{index + 1}</td>
                 <td className="px-4 py-2 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>

@@ -57,7 +57,10 @@ jobs:
         run: |
           php scripts/inventory-issue-print-jobs-domain-test.php
           if ($LASTEXITCODE -ne 0) { throw "Inventory print domain tests failed" }
+          php scripts/inventory-issue-quantity-precision-test.php
+          if ($LASTEXITCODE -ne 0) { throw "Inventory issue quantity precision tests failed" }
           php -l public/api/inventory-issues.php
+          php -l public/api/_lib/inventory_issue_quantities.php
           php -l public/api/inventory-issue-print-jobs.php
           php -l public/api/download-inventory-print-helper.php
           dotnet run --project agent/windows/InventoryPrintHelper.Tests/InventoryPrintHelper.Tests.csproj
