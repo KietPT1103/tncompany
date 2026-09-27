@@ -15,6 +15,10 @@ dist-ssr/
 artifacts/
 agent/windows/CashierMonitor/bin/
 agent/windows/CashierMonitor/obj/
+agent/windows/InventoryPrintHelper/bin/
+agent/windows/InventoryPrintHelper/obj/
+agent/windows/InventoryPrintHelper.Tests/bin/
+agent/windows/InventoryPrintHelper.Tests/obj/
 public/uploads/activity-screenshots/
 public/uploads/invoices/
 .codegraph
