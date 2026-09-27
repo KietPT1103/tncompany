@@ -42,10 +42,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
+      - name: Verify .NET 8
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sdkVersion = (& dotnet --version).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sdkVersion -notmatch '^8\.') {
+            throw "The self-hosted runner requires .NET SDK 8.x; found '$sdkVersion'."
+          }
+          Write-Host "Using .NET SDK $sdkVersion"
 
       - name: Test inventory print queue and Windows helper
         shell: powershell
