@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api";
+import type { InventoryIssuePrintJob } from "@/services/inventoryIssuePrintJobService";
 
 export type InventoryIssueItem = {
   id?: number;
@@ -32,6 +33,7 @@ export type InventoryIssue = {
   shiftType?: "shift_1" | "shift_2" | "shift_3" | "single" | null;
   updatedAt: string;
   items: InventoryIssueItem[];
+  printJob?: InventoryIssuePrintJob | null;
 };
 
 export type InventoryIssuePayload = {

@@ -43,7 +43,13 @@ try {
         respond_ok(['item' => $item]);
     }
     if ($action === 'retry') {
-        if ($id === '') respond_error('Thiếu mã lệnh in.', 422);
+        if ($id === '') {
+            $issueId = trim((string) ($body['issueId'] ?? ''));
+            $latestStatement = db()->prepare('SELECT id FROM inventory_issue_print_jobs WHERE issue_id=:issue_id AND store_id=:store_id ORDER BY attempt_number DESC LIMIT 1');
+            $latestStatement->execute(['issue_id' => $issueId, 'store_id' => $storeId]);
+            $id = (string) ($latestStatement->fetchColumn() ?: '');
+        }
+        if ($id === '') respond_error('Không tìm thấy lệnh in của phiếu xuất kho.', 422);
         respond_ok(['item' => inventory_issue_print_jobs_retry($storeId, $id)]);
     }
     if ($action === 'cancel') {
