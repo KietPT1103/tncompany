@@ -9,6 +9,11 @@ var tests = new (string Name, Func<Task> Run)[]
     ("missing printer pauses worker", MissingPrinterPausesWorker),
     ("reconnect backoff is bounded", ReconnectBackoffIsBounded),
     ("A4 pagination is deterministic", A4PaginationIsDeterministic),
+    ("settings protect credentials", SettingsProtectCredentials),
+    ("startup task is interactive and restartable", StartupTaskIsInteractiveAndRestartable),
+    ("single instance name is stable", SingleInstanceNameIsStable),
+    ("removed printer requires selection", RemovedPrinterRequiresSelection),
+    ("queue and close UI rules are safe", QueueAndCloseUiRulesAreSafe),
 };
 
 var failures = 0;
@@ -94,6 +99,60 @@ static Task A4PaginationIsDeterministic()
     Equal(3, pages.Count, "page count");
     Equal("NL1", pages[0][0].IngredientCode, "first row");
     Equal("NL7", pages[2][0].IngredientCode, "last page row");
+    return Task.CompletedTask;
+}
+
+static Task SettingsProtectCredentials()
+{
+    var directory = Path.Combine(Path.GetTempPath(), "tn-print-helper-test-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var path = Path.Combine(directory, "settings.json");
+        var settings = new AppSettings("https://example.test/api", "cafe", "PC-01", "A4 Printer", false);
+        SettingsStore.Save(path, settings, "secret-password");
+        var raw = File.ReadAllText(path);
+        Equal(false, raw.Contains("secret-password", StringComparison.Ordinal), "plaintext credential leaked");
+        var loaded = SettingsStore.Load(path);
+        Equal(settings, loaded.Settings, "settings round trip");
+        Equal("secret-password", loaded.Credential, "credential round trip");
+    }
+    finally
+    {
+        Directory.Delete(directory, true);
+    }
+    return Task.CompletedTask;
+}
+
+static Task StartupTaskIsInteractiveAndRestartable()
+{
+    var xml = StartupRegistrar.BuildTaskXml(@"C:\Program Files\TNCompany\InventoryPrintHelper\InventoryPrintHelper.exe", "S-1-5-21-test");
+    Equal(true, xml.Contains("<LogonType>InteractiveToken</LogonType>", StringComparison.Ordinal), "interactive logon type");
+    Equal(true, xml.Contains("<RestartOnFailure>", StringComparison.Ordinal), "restart settings");
+    Equal(true, xml.Contains("--background", StringComparison.Ordinal), "background startup argument");
+    return Task.CompletedTask;
+}
+
+static Task SingleInstanceNameIsStable()
+{
+    Equal("Local\\TNCompany.InventoryPrintHelper.cafe.Cashier_User", SingleInstance.MutexName("cafe", "Cashier User"), "mutex name");
+    return Task.CompletedTask;
+}
+
+static Task RemovedPrinterRequiresSelection()
+{
+    var selection = PrinterSelection.Resolve("Removed", [new PrinterInfo("Available", true, true)]);
+    Equal(true, selection.NeedsSelection, "missing saved printer");
+    Equal("Available", selection.SuggestedPrinter, "default printer suggestion");
+    return Task.CompletedTask;
+}
+
+static Task QueueAndCloseUiRulesAreSafe()
+{
+    Equal(false, QueueUiRules.RequiresCancelAllConfirmation(0), "empty queue confirmation");
+    Equal(true, QueueUiRules.RequiresCancelAllConfirmation(2), "non-empty queue confirmation");
+    Equal(false, WindowCloseBehavior.ShouldExit(false), "window close hides to tray");
+    Equal(true, WindowCloseBehavior.ShouldExit(true), "explicit exit closes app");
     return Task.CompletedTask;
 }
 

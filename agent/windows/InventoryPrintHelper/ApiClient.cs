@@ -26,6 +26,17 @@ public sealed class ApiClient : IPrintJobApi, IDisposable
         _terminalName = terminalName;
     }
 
+    public static async Task<string> LoginAsync(string apiBaseUrl, string login, string password, CancellationToken cancellationToken)
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBaseUrl.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(15) };
+        using var response = await http.PostAsJsonAsync("auth.php?action=login", new { login, password }, cancellationToken);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true };
+        var envelope = await response.Content.ReadFromJsonAsync<ApiEnvelope<LoginData>>(options, cancellationToken);
+        if (!response.IsSuccessStatusCode || envelope is null || !envelope.Ok || string.IsNullOrWhiteSpace(envelope.Data?.Token))
+            throw new HttpRequestException(envelope?.Error ?? "Đăng nhập API thất bại.");
+        return envelope.Data.Token;
+    }
+
     public async Task<ClaimedPrintJob?> ClaimAsync(CancellationToken cancellationToken)
     {
         var data = await PostAsync<ClaimData>(new { action = "claim", storeId = _storeId, terminalName = _terminalName }, cancellationToken);
@@ -82,4 +93,5 @@ public sealed class ApiClient : IPrintJobApi, IDisposable
     private sealed record ClaimData(PrintJob? Item, string? ClaimToken);
     private sealed record ListData(IReadOnlyList<PrintJob> Items);
     private sealed record CancelAllData(int Cancelled);
+    private sealed record LoginData(string Token);
 }
