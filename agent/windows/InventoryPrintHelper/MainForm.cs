@@ -46,9 +46,9 @@ public sealed class MainForm : Form
 
         _pause.Click += (_, _) => { _worker.Pause(); UpdateState(new(WorkerState.Paused, "Đang tạm dừng.", DateTimeOffset.Now)); };
         resume.Click += (_, _) => { _worker.Resume(); UpdateState(new(WorkerState.Idle, "Đã tiếp tục nhận phiếu.", DateTimeOffset.Now)); };
-        retry.Click += async (_, _) => await WithSelectedJob(job => _api.RetryAsync(job.Id, CancellationToken.None));
-        cancel.Click += async (_, _) => await WithSelectedJob(job => _api.CancelAsync(job.Id, CancellationToken.None));
-        cancelAll.Click += async (_, _) => await CancelAllAsync();
+        retry.Click += async (_, _) => await RunMutationAsync(retry, () => WithSelectedJob(job => _api.RetryAsync(job.Id, CancellationToken.None)));
+        cancel.Click += async (_, _) => await RunMutationAsync(cancel, () => WithSelectedJob(job => _api.CancelAsync(job.Id, CancellationToken.None)));
+        cancelAll.Click += async (_, _) => await RunMutationAsync(cancelAll, CancelAllAsync);
         test.Click += (_, _) => PrintTest();
         settingsButton.Click += (_, _) => _openSettings();
         _worker.SnapshotChanged += snapshot => BeginInvoke(() => UpdateState(snapshot));
@@ -87,6 +87,13 @@ public sealed class MainForm : Form
         if (_queue.CurrentRow?.DataBoundItem is not QueueRow row) return;
         try { await action(row.Job); await RefreshQueueAsync(); }
         catch (Exception exception) { MessageBox.Show(this, exception.Message, "Không thực hiện được", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+    }
+
+    private static async Task RunMutationAsync(Button button, Func<Task> action)
+    {
+        button.Enabled = false;
+        try { await action(); }
+        finally { button.Enabled = true; }
     }
 
     private async Task CancelAllAsync()
