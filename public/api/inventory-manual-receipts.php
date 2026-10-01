@@ -69,7 +69,7 @@ if ($rawItems === []) {
 }
 
 $findIngredient = db()->prepare(
-    'SELECT id,ingredient_code,ingredient_name,unit,purchase_unit,base_unit,purchase_to_base_factor,stock_quantity,cost
+    'SELECT id,ingredient_code,ingredient_name,unit,purchase_unit,base_unit,purchase_to_base_factor,stock_quantity,cost,item_kind
      FROM ingredients WHERE store_id=:store_id AND ingredient_code=:code AND is_active=1 LIMIT 1'
 );
 $items = [];
@@ -185,6 +185,9 @@ try {
             'note' => $line['note'] ?: null,
         ]);
         $receiptItemId = (int) $pdo->lastInsertId();
+        if (($ingredient['item_kind'] ?? 'ingredient') === 'fresh') {
+            continue;
+        }
         $updateIngredient->execute([
             'id' => $ingredient['id'],
             'stock' => $stockAfter,

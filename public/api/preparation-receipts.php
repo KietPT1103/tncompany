@@ -54,7 +54,7 @@ function preparation_issue_items(string $issueId): array
         COALESCE(ii.base_quantity,ii.quantity) expected_quantity
         FROM inventory_issue_items ii
         LEFT JOIN ingredients i ON i.id=ii.ingredient_id
-        WHERE ii.issue_id=:issue ORDER BY ii.id');
+        WHERE ii.issue_id=:issue AND COALESCE(i.item_kind,"ingredient")<>"fresh" ORDER BY ii.id');
     $statement->execute(['issue' => $issueId]);
     return array_map(static fn(array $row): array => [
         'ingredientId' => (string) $row['ingredient_id'],

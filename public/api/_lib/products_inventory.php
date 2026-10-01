@@ -620,11 +620,11 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
                 ingredient.ingredient_code AS product_code,
                 ingredient.ingredient_name AS product_name,
                 COALESCE(NULLIF(ingredient.base_unit,""),ingredient.unit) AS unit,
-                ingredient.cost,ingredient.preparation_stock_quantity AS stock_quantity,pi.quantity,
+                ingredient.cost,ingredient.preparation_stock_quantity AS stock_quantity,ingredient.item_kind,pi.quantity,
                 source.id AS source_id,source.ingredient_code AS source_code,
                 source.ingredient_name AS source_name,
                 COALESCE(NULLIF(source.base_unit,""),source.unit) AS source_unit,
-                source.cost AS source_cost,source.preparation_stock_quantity AS source_stock_quantity,
+                source.cost AS source_cost,source.preparation_stock_quantity AS source_stock_quantity,source.item_kind AS source_item_kind,
                 COALESCE(recipe_part.input_quantity,ingredient.conversion_input_quantity) conversion_input_quantity,ingredient.conversion_output_quantity
          FROM product_ingredients pi
          INNER JOIN ingredients ingredient
@@ -653,6 +653,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
             'stockQuantity' => $row['source_id']
                 ? ($row['source_stock_quantity'] !== null ? (float) $row['source_stock_quantity'] : 0.0)
                 : ($row['stock_quantity'] !== null ? (float) $row['stock_quantity'] : 0.0),
+            'itemKind' => $row['source_id'] ? (string) ($row['source_item_kind'] ?? 'ingredient') : (string) ($row['item_kind'] ?? 'ingredient'),
             'quantity' => (float) $row['quantity'] * ($row['source_id']
                 ? (float) $row['conversion_input_quantity'] / (float) $row['conversion_output_quantity']
                 : 1),
@@ -694,6 +695,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
                     'quantity' => 0.0,
                     'stockBefore' => (float) $component['stockQuantity'],
                     'costUnit' => (float) $component['cost'],
+                    'itemKind' => $component['itemKind'] ?? 'ingredient',
                 ];
             }
             $aggregated[$ingredientId]['quantity'] += $quantity * (float) $component['quantity'];
@@ -752,7 +754,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
                 $quantity = round((float) $item['quantity'], 3);
                 $stockBefore = round((float) $item['stockBefore'], 3);
                 $costUnit = round((float) $item['costUnit'], 2);
-                $stockAfter = round($stockBefore - $quantity, 3);
+                $stockAfter = ($item['itemKind'] ?? 'ingredient') === 'fresh' ? $stockBefore : round($stockBefore - $quantity, 3);
 
                 return [
                     'productId' => $item['productId'],
@@ -764,6 +766,7 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
                     'stockAfter' => $stockAfter,
                     'costUnit' => $costUnit,
                     'lineCost' => round($quantity * $costUnit, 2),
+                    'itemKind' => $item['itemKind'] ?? 'ingredient',
                 ];
             },
             $aggregated
@@ -899,7 +902,7 @@ function products_inventory_apply_sales_consumption(
          )'
     );
     $lockProduct = db()->prepare(
-        'SELECT id, preparation_stock_quantity AS stock_quantity
+        'SELECT id, preparation_stock_quantity AS stock_quantity, item_kind
          FROM ingredients
          WHERE id = :id
          LIMIT 1
@@ -940,14 +943,17 @@ function products_inventory_apply_sales_consumption(
             }
 
             $stockBefore = $productRow['stock_quantity'] !== null ? (float) $productRow['stock_quantity'] : 0.0;
-            $stockAfter = round($stockBefore - (float) $item['quantity'], 3);
-            if ($stockAfter < 0) {
+            $isFresh = ($productRow['item_kind'] ?? $item['itemKind'] ?? 'ingredient') === 'fresh';
+            $stockAfter = $isFresh ? $stockBefore : round($stockBefore - (float) $item['quantity'], 3);
+            if (!$isFresh && $stockAfter < 0) {
                 throw new RuntimeException(sprintf('Tồn quầy %s chỉ còn %s.', $item['productCode'], $stockBefore));
             }
-            $updatePreparationStock->execute([
-                'id' => (string) $item['productId'],
-                'stock' => $stockAfter,
-            ]);
+            if (!$isFresh) {
+                $updatePreparationStock->execute([
+                    'id' => (string) $item['productId'],
+                    'stock' => $stockAfter,
+                ]);
+            }
 
             $insertConsumptionItem->execute([
                 'consumption_id' => $consumptionId,

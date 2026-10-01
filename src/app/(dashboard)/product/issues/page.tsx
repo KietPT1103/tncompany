@@ -34,6 +34,7 @@ const key = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.ran
 const line = (): DraftLine => ({ key: key(), ingredientCode: "", quantity: "", note: "" });
 const number = (value: string) => Number(value.replace(",", ".")) || 0;
 const quantity = formatInventoryQuantity;
+const destinations = ["Quầy pha chế", "Farm", "Lẩu", "Phục vụ", "Khác"];
 
 export default function InventoryIssuesPage() {
   const { storeId } = useStore();
@@ -175,7 +176,7 @@ export default function InventoryIssuesPage() {
       <section className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="grid gap-4 border-b bg-emerald-950 p-5 text-white md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm font-semibold">Ngày xuất<input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
-          <label className="text-sm font-semibold">Nơi nhận<input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
+          <label className="text-sm font-semibold">Nơi nhận<select value={destinations.includes(form.destination) ? form.destination : "Khác"} onChange={(e) => setForm({ ...form, destination: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950">{destinations.map((destination) => <option key={destination} value={destination}>{destination}</option>)}</select></label>
           <label className="text-sm font-semibold">Người xuất *<input required value={form.issuedBy} onChange={(e) => setForm({ ...form, issuedBy: e.target.value })} placeholder="Bắt buộc nhập tên người xuất" className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
           <label className="text-sm font-semibold">Ghi chú chung<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Ca, bộ phận nhận..." className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
         </div>
@@ -187,14 +188,14 @@ export default function InventoryIssuesPage() {
               const ingredient = ingredientByCode.get(item.ingredientCode);
               const requested = number(item.quantity);
               const factor = ingredient?.purchaseToBaseFactor || 1;
-              const insufficient = Boolean(ingredient && isInventoryIssueQuantityInsufficient(requested, factor, ingredient.stockQuantity));
+              const insufficient = Boolean(ingredient && ingredient.itemKind !== "fresh" && isInventoryIssueQuantityInsufficient(requested, factor, ingredient.stockQuantity));
               return <tr key={item.key} className={insufficient ? "bg-rose-50" : "hover:bg-blue-50/40"}>
                 <td className="px-4 py-2 text-center font-semibold">{index + 1}</td>
                 <td className="px-4 py-2 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>
                 <td className="px-4 py-2"><select value={item.ingredientCode} onChange={(e) => updateLine(index, { ingredientCode: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="">Chọn {stockItemLabel}...</option>{ingredients.map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
                 <td className="px-4 py-2"><input inputMode="decimal" value={item.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} className={`h-10 w-full rounded-md border px-3 text-right font-bold ${insufficient ? "border-rose-500 text-rose-700" : "border-slate-300"}`} /></td>
                 <td className="px-4 py-2">{ingredient?.purchaseUnit || ingredient?.unit || "—"}</td>
-                <td className="px-4 py-2 text-right font-semibold">{ingredient ? <>{quantity(ingredient.stockQuantity / factor)} {ingredient.purchaseUnit || ingredient.unit}<small className="block font-normal text-slate-500">{quantity(ingredient.stockQuantity)} {ingredient.baseUnit || ingredient.unit}</small></> : "—"}</td>
+                <td className="px-4 py-2 text-right font-semibold">{ingredient ? ingredient.itemKind === "fresh" ? <span className="text-sky-700">Không tồn kho</span> : <>{quantity(ingredient.stockQuantity / factor)} {ingredient.purchaseUnit || ingredient.unit}<small className="block font-normal text-slate-500">{quantity(ingredient.stockQuantity)} {ingredient.baseUnit || ingredient.unit}</small></> : "—"}</td>
                 <td className="px-4 py-2"><input value={item.note} onChange={(e) => updateLine(index, { note: e.target.value })} placeholder="Người/bộ phận nhận" className="h-10 w-full rounded-md border border-slate-300 px-3" /></td>
                 <td className="px-2 py-2"><button aria-label="Xóa dòng" disabled={form.items.length === 1} onClick={() => setForm((current) => ({ ...current, items: current.items.filter((_, i) => i !== index) }))} className="rounded-md p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button></td>
               </tr>;

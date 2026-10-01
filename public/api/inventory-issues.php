@@ -184,6 +184,10 @@ try {
         $snapshot = $pdo->prepare('UPDATE inventory_issue_items SET stock_before=:before,stock_after=:after WHERE issue_id=:issue AND ingredient_id=:ingredient');
         foreach ($normalized as $line) {
             $ingredient = $line['ingredient'];
+            if (($ingredient['item_kind'] ?? 'ingredient') === 'fresh') {
+                $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => null, 'after' => null]);
+                continue;
+            }
             $lock->execute(['id' => $ingredient['id']]);
             $before = (float) $lock->fetchColumn();
             $lock->closeCursor();
@@ -195,7 +199,8 @@ try {
             $deduct->execute(['id' => $ingredient['id'], 'stock' => $after]);
             $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => $before, 'after' => $after]);
         }
-        $pdo->prepare('UPDATE inventory_issues SET status="completed",requires_preparation_receipt=:requires_receipt,completed_at=NOW(),completed_by=:actor,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'requires_receipt' => $storeId === 'warehouse' ? 0 : 1, 'actor' => inventory_issues_actor($user)]);
+        $hasStockedItems = count(array_filter($normalized, static fn(array $line): bool => ($line['ingredient']['item_kind'] ?? 'ingredient') !== 'fresh')) > 0;
+        $pdo->prepare('UPDATE inventory_issues SET status="completed",requires_preparation_receipt=:requires_receipt,completed_at=NOW(),completed_by=:actor,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'requires_receipt' => $storeId === 'warehouse' || !$hasStockedItems ? 0 : 1, 'actor' => inventory_issues_actor($user)]);
         inventory_issue_print_jobs_create_initial($pdo, $id, $storeId);
     }
     $pdo->commit();

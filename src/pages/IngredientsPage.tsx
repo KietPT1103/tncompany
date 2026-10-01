@@ -14,6 +14,7 @@ import { getSuppliers, type Supplier } from "@/services/suppliers";
 import { exportIngredientsToExcel, parseIngredientWorkbook } from "@/services/catalogExcel";
 
 type Form = {
+  itemKind: "ingredient" | "consumable" | "fresh";
   code: string; name: string; unit: string; purchaseUnit: string; conversionFactor: string; stock: string; cost: string;
   conversionSourceIngredientId: string; conversionInputQuantity: string; conversionOutputQuantity: string;
   conversionComponents: Array<{ ingredientId: string; inputQuantity: string }>;
@@ -27,12 +28,19 @@ type ToastState = {
 };
 type PendingDelete = { item: Ingredient; mode: "hide" | "hard" };
 const blank = (): Form => ({
+  itemKind: "ingredient",
   code: "", name: "", unit: "", purchaseUnit: "", conversionFactor: "1", stock: "0", cost: "0",
   conversionSourceIngredientId: "", conversionInputQuantity: "", conversionOutputQuantity: "",
   conversionComponents: [],
   supplierId: "", supplierItemCode: "", description: "",
 });
 const decimal = (value: string) => Number(value.replace(",", ".")) || 0;
+const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const defaultPeriod = () => {
+  const now = new Date();
+  return { dateFrom: localDate(new Date(now.getFullYear(), now.getMonth(), 1)), dateTo: localDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
+};
+const kindLabels = { ingredient: "Nguyên liệu", consumable: "Vật liệu tiêu hao", fresh: "Nguyên liệu tươi" } as const;
 
 export default function IngredientsPage() {
   const { storeId } = useStore();
@@ -44,6 +52,10 @@ export default function IngredientsPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
   const [visibility, setVisibility] = useState<"active" | "hidden" | "all">("active");
+  const initialPeriod = useMemo(defaultPeriod, []);
+  const [dateFrom, setDateFrom] = useState(initialPeriod.dateFrom);
+  const [dateTo, setDateTo] = useState(initialPeriod.dateTo);
+  const [kind, setKind] = useState<"all" | "ingredient" | "consumable" | "fresh">("all");
   const [form, setForm] = useState<Form>(blank());
   const [editing, setEditing] = useState<Ingredient | null>(null);
   const [open, setOpen] = useState(false);
@@ -65,7 +77,7 @@ export default function IngredientsPage() {
 
   async function reload() {
     const [ingredientResult, supplierResult] = await Promise.all([
-      getIngredients(storeId), getSuppliers(storeId),
+      getIngredients(storeId, "", undefined, { dateFrom, dateTo }), getSuppliers(storeId),
     ]);
     setItems(ingredientResult.items);
     setSuppliers(supplierResult.items);
@@ -84,9 +96,10 @@ export default function IngredientsPage() {
     const q = search.trim().toLocaleLowerCase("vi");
     return items.filter((item) =>
       (visibility === "all" || item.isActive === (visibility === "active")) &&
+      (kind === "all" || item.itemKind === kind) &&
       (!q || `${item.ingredientCode} ${item.ingredientName} ${item.supplierName || ""}`.toLocaleLowerCase("vi").includes(q))
     );
-  }, [items, search, visibility]);
+  }, [items, search, visibility, kind]);
 
   function startCreate() {
     setEditing(null);
@@ -97,6 +110,7 @@ export default function IngredientsPage() {
     setEditing(item);
     const legacyFactor = item.purchaseToBaseFactor || 1;
     setForm({
+      itemKind: item.itemKind || "ingredient",
       code: item.ingredientCode, name: item.ingredientName, unit: item.baseUnit || item.unit,
       purchaseUnit: item.purchaseUnit || item.unit,
       conversionFactor: String(legacyFactor),
@@ -124,7 +138,7 @@ export default function IngredientsPage() {
     }
     setSaving(true);
     const payload = {
-      storeId, ingredientName: form.name.trim(), unit: form.unit.trim(),
+      storeId, itemKind: form.itemKind, ingredientName: form.name.trim(), unit: form.unit.trim(),
       purchaseUnit: form.purchaseUnit.trim(), baseUnit: form.unit.trim(),
       purchaseToBaseFactor: decimal(form.conversionFactor),
       cost: Math.max(0, decimal(form.cost)),
@@ -208,6 +222,7 @@ export default function IngredientsPage() {
       for (const row of rows) {
         const payload = {
           storeId,
+          itemKind: row.itemKind,
           ingredientName: row.ingredientName,
           unit: row.baseUnit,
           baseUnit: row.baseUnit,
@@ -255,18 +270,24 @@ export default function IngredientsPage() {
     <div className="mt-6 rounded-3xl border bg-white shadow-sm">
       <div className="flex flex-wrap items-center gap-3 border-b p-5"><label className="relative block min-w-[260px] flex-1"><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Tìm mã, tên ${itemLabel} hoặc nhà phân phối`} className="h-12 w-full rounded-xl border bg-slate-50 pl-12 pr-4" /></label>
+        <label className="text-sm font-semibold text-slate-700">Từ ngày<input aria-label="Từ ngày" type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 block h-12 rounded-xl border px-3" /></label>
+        <label className="text-sm font-semibold text-slate-700">Đến ngày<input aria-label="Đến ngày" type="date" value={dateTo} min={dateFrom} onChange={(e) => setDateTo(e.target.value)} className="mt-1 block h-12 rounded-xl border px-3" /></label>
+        <button disabled={loading || !dateFrom || !dateTo || dateFrom > dateTo} onClick={() => { setLoading(true); reload().catch((e) => showToast("Không thể tải số liệu theo kỳ", "error", e instanceof Error ? e.message : undefined)).finally(() => setLoading(false)); }} className="mt-5 h-12 rounded-xl bg-emerald-700 px-4 font-bold text-white disabled:opacity-50">Xem</button>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">Loại
+          <select aria-label="Lọc loại nguyên vật liệu" value={kind} onChange={(event) => setKind(event.target.value as typeof kind)} className="h-12 rounded-xl border bg-white px-3"><option value="all">Tất cả</option><option value="ingredient">Nguyên liệu</option><option value="consumable">Vật liệu tiêu hao</option><option value="fresh">Nguyên liệu tươi</option></select>
+        </label>
         <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">Trạng thái
           <select aria-label="Lọc trạng thái nguyên liệu" value={visibility} onChange={(event) => setVisibility(event.target.value as "active" | "hidden" | "all")} className="h-12 rounded-xl border bg-white px-3">
             <option value="active">Đang sử dụng</option><option value="hidden">Đã ẩn</option><option value="all">Tất cả</option>
           </select>
         </label></div>
       <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left">
-        <thead className="bg-slate-50 text-sm text-slate-600"><tr><th className="p-4">Mã</th><th className="p-4">Tên {itemLabel}</th><th className="p-4">Nhà phân phối</th><th className="p-4 text-right">Tồn kho</th><th className="p-4">Đơn vị</th><th className="p-4 text-right">Giá vốn</th><th className="p-4 text-right">Thao tác</th></tr></thead>
-        <tbody className="divide-y">{loading ? <tr><td colSpan={7} className="p-14 text-center"><LoaderCircle className="mx-auto animate-spin" /></td></tr>
-          : filtered.length === 0 ? <tr><td colSpan={7} className="p-14 text-center text-slate-500"><Boxes className="mx-auto mb-2 text-slate-300" />{visibility === "hidden" ? `Không có ${itemLabel} đã ẩn.` : `Không có ${itemLabel} phù hợp.`}</td></tr>
+        <thead className="bg-slate-50 text-sm text-slate-600"><tr><th className="p-4">Mã</th><th className="p-4">Tên {itemLabel}</th><th className="p-4">Loại</th><th className="p-4">Nhà phân phối</th><th className="p-4 text-right">Nhập tổng</th><th className="p-4 text-right">Xuất tổng</th><th className="p-4 text-right">Tồn hiện tại</th><th className="p-4">Đơn vị</th><th className="p-4 text-right">Giá vốn</th><th className="p-4 text-right">Thao tác</th></tr></thead>
+        <tbody className="divide-y">{loading ? <tr><td colSpan={10} className="p-14 text-center"><LoaderCircle className="mx-auto animate-spin" /></td></tr>
+          : filtered.length === 0 ? <tr><td colSpan={10} className="p-14 text-center text-slate-500"><Boxes className="mx-auto mb-2 text-slate-300" />{visibility === "hidden" ? `Không có ${itemLabel} đã ẩn.` : `Không có ${itemLabel} phù hợp.`}</td></tr>
           : filtered.map((item) => <tr key={item.id} className={item.isActive ? "hover:bg-slate-50" : "bg-slate-50/70 text-slate-500"}>
             <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b>{!item.isActive && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Đã ẩn</span>}<small className="block text-slate-500">{item.supplierItemCode}</small></td>
-            <td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{(item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b></td><td className="p-4 text-right">{(Number(item.cost || 0) * (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ₫/{item.purchaseUnit || item.unit}</td>
+            <td className="p-4"><span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${item.itemKind === "fresh" ? "bg-sky-100 text-sky-800" : item.itemKind === "consumable" ? "bg-violet-100 text-violet-800" : "bg-emerald-100 text-emerald-800"}`}>{kindLabels[item.itemKind || "ingredient"]}</span></td><td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold text-emerald-700">{item.periodReceivedQuantity.toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4 text-right font-semibold text-amber-700">{item.periodIssuedQuantity.toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4 text-right font-semibold">{item.itemKind === "fresh" ? "—" : (item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b></td><td className="p-4 text-right">{(Number(item.cost || 0) * (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ₫/{item.purchaseUnit || item.unit}</td>
             <td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button>{item.isActive ? <button title="Tạm ẩn" aria-label={`Tạm ẩn ${item.ingredientName}`} disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hide")} className="p-2 text-amber-600 disabled:opacity-50"><EyeOff className="h-4 w-4" /></button> : <button title="Hiện lại" aria-label={`Hiện lại ${item.ingredientName}`} disabled={Boolean(restoring)} onClick={() => void restore(item)} className="p-2 text-emerald-700 disabled:opacity-50">{restoring === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}</button>}<button title="Xóa vĩnh viễn" disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hard")} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
           </tr>)}</tbody>
       </table></div>
@@ -275,6 +296,7 @@ export default function IngredientsPage() {
   {open && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/55 p-4"><div className="w-full max-w-2xl rounded-3xl bg-white p-6">
     <div className="flex justify-between"><h2 className="text-2xl font-bold">{editing ? `Sửa ${itemLabel}` : `Thêm ${itemLabel}`}</h2><button disabled={saving} onClick={() => setOpen(false)}><X /></button></div>
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <Field label="Loại nguyên vật liệu *"><select value={form.itemKind} onChange={(e) => setForm({ ...form, itemKind: e.target.value as Form["itemKind"] })}><option value="ingredient">Nguyên liệu</option><option value="consumable">Vật liệu tiêu hao (tính tồn kho)</option><option value="fresh">Nguyên liệu tươi (không tồn kho)</option></select></Field>
       <Field label={`Mã ${itemLabel}`}><input readOnly value={editing ? form.code : "Tự tạo khi lưu"} className="bg-slate-50" /></Field>
       <Field label={`Tên ${itemLabel} *`}><input value={form.name} placeholder={isConstructionWarehouse ? "Ví dụ: Xi măng, thép, dây điện" : "Ví dụ: Cà phê hạt"} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
       <Field label="Đơn vị thu ngân/nhập kho *"><input value={form.purchaseUnit} placeholder="túi, bịch, chai, thùng…" onChange={(e) => setForm({ ...form, purchaseUnit: e.target.value })} /></Field>

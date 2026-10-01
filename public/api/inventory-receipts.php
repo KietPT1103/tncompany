@@ -7,6 +7,8 @@ require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
 
+ingredients_ensure_schema();
+
 auth_ensure_column('inventory_receipt_items', 'item_type', "ENUM('ingredient','equipment') NOT NULL DEFAULT 'ingredient' AFTER ingredient_id");
 auth_ensure_column('inventory_receipts', 'order_creator_name', 'VARCHAR(255) NULL AFTER supplier_id');
 auth_ensure_column('inventory_receipts', 'locked_at', 'DATETIME NULL AFTER order_creator_name');
@@ -323,7 +325,7 @@ function receipts_complete(array $body): void
             throw new ReceiptValidationException('Cần ít nhất một ảnh watermark.');
         }
         $query = db()->prepare(
-            'SELECT i.id,i.ingredient_id,i.item_type,i.quantity,i.unit_cost,p.stock_quantity,p.store_id,
+            'SELECT i.id,i.ingredient_id,i.item_type,i.quantity,i.unit_cost,p.stock_quantity,p.store_id,p.item_kind,
                     COALESCE(NULLIF(p.base_unit,""),p.unit) base_unit,
                     GREATEST(COALESCE(p.purchase_to_base_factor,1),0.000001) conversion_factor
              FROM inventory_receipt_items i LEFT JOIN ingredients p ON p.id=i.ingredient_id
@@ -359,6 +361,11 @@ function receipts_complete(array $body): void
             }
             if (!$item['ingredient_id'] || $item['store_id'] !== $receipt['store_id']) {
                 throw new ReceiptValidationException('Nguyen lieu khong con ton tai hoac khong thuoc khu vuc.');
+            }
+            if (($item['item_kind'] ?? 'ingredient') === 'fresh') {
+                $totalQuantity += $quantity;
+                $totalAmount += $lineTotal;
+                continue;
             }
             $after = round((float) $item['stock_quantity'] + $baseQuantity, 3);
             $baseCost = round($price / (float) $item['conversion_factor'], 6);

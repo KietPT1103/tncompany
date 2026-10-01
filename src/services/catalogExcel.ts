@@ -5,6 +5,7 @@ import type { Product } from "@/services/products";
 export type IngredientImportRow = {
   ingredientCode: string; ingredientName: string; purchaseUnit: string; baseUnit: string;
   purchaseToBaseFactor: number; cost: number; supplierItemCode: string; description: string; isActive: boolean;
+  itemKind: "ingredient" | "consumable" | "fresh";
 };
 
 const normalize = (value: unknown) => String(value ?? "").trim().normalize("NFD")
@@ -17,6 +18,7 @@ const numberValue = (value: unknown, fallback = 0) => {
   return Number.isFinite(result) ? result : fallback;
 };
 const booleanValue = (value: unknown) => !["0", "false", "khong", "ngung", "tamdung"].includes(normalize(value));
+const kindLabels = { ingredient: "Nguyên liệu", consumable: "Vật liệu tiêu hao", fresh: "Nguyên liệu tươi" } as const;
 
 const downloadWorkbook = (rows: Record<string, unknown>[], sheetName: string, fileName: string) => {
   const workbook = XLSX.utils.book_new();
@@ -40,6 +42,7 @@ export function exportProductsToExcel(products: Product[], storeId: string) {
 export function exportIngredientsToExcel(items: Ingredient[], storeId: string) {
   downloadWorkbook(items.map((item) => ({
     "Mã nguyên liệu": item.ingredientCode, "Tên nguyên liệu": item.ingredientName,
+    "Loại": kindLabels[item.itemKind || "ingredient"], "Nhập tổng": item.periodReceivedQuantity, "Xuất tổng": item.periodIssuedQuantity,
     "Đơn vị thu ngân": item.purchaseUnit || item.unit,
     "Đơn vị pha chế": item.baseUnit || item.unit,
     "Hệ số quy đổi": item.purchaseToBaseFactor || 1,
@@ -64,6 +67,7 @@ export async function parseIngredientWorkbook(file: File): Promise<IngredientImp
     supplierItemCode: ["matanhaphanphoi", "supplieritemcode"],
     description: ["mota", "ghichu", "description"],
     isActive: ["dangsudung", "hoatdong", "isactive"],
+    itemKind: ["loai", "phanloai", "itemkind"],
   };
   const headerIndex = rows.findIndex((row) => {
     const headers = row.map(normalize);
@@ -80,8 +84,13 @@ export async function parseIngredientWorkbook(file: File): Promise<IngredientImp
     const purchaseUnit = String(cell("purchaseUnit") || cell("baseUnit") || "").trim();
     const baseUnit = String(cell("baseUnit") || cell("purchaseUnit") || "").trim();
     const factor = Math.max(0, numberValue(cell("purchaseToBaseFactor"), 1));
+    const normalizedKind = normalize(cell("itemKind"));
+    const itemKind: IngredientImportRow["itemKind"] = normalizedKind.includes("tuoi") || normalizedKind === "fresh"
+      ? "fresh"
+      : normalizedKind.includes("tieuhao") || normalizedKind === "consumable" ? "consumable" : "ingredient";
     return {
       ingredientCode: String(cell("ingredientCode")).trim(), ingredientName: String(cell("ingredientName")).trim(),
+      itemKind,
       purchaseUnit, baseUnit, purchaseToBaseFactor: factor,
       cost: Math.max(0, numberValue(cell("cost"))), supplierItemCode: String(cell("supplierItemCode")).trim(),
       description: String(cell("description")).trim(), isActive: indexes.isActive < 0 || booleanValue(cell("isActive")),

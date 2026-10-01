@@ -57,6 +57,10 @@ function ingredient_payload(array $row): array
         'preparationStockQuantity' => (string) $row['store_id'] === 'warehouse'
             ? 0.0
             : (float) ($row['preparation_stock_quantity'] ?? 0),
+        'itemKind' => in_array(($row['item_kind'] ?? 'ingredient'), ['ingredient', 'consumable', 'fresh'], true)
+            ? (string) $row['item_kind'] : 'ingredient',
+        'periodReceivedQuantity' => (float) ($row['period_received_quantity'] ?? 0),
+        'periodIssuedQuantity' => (float) ($row['period_issued_quantity'] ?? 0),
         'supplierId' => $row['supplier_id'] ?: null,
         'supplierCode' => $row['supplier_code'] ?? null,
         'supplierName' => $row['supplier_name'] ?? null,
@@ -117,8 +121,18 @@ if ($method === 'GET') {
         respond_ok(['suggestedCode' => ingredients_next_code($prefix, 'ingredients', 'ingredient_code')]);
     }
     $search = trim((string) ($_GET['search'] ?? ''));
-    $params = ['store_id' => $storeId];
+    $stockContext = strtolower(trim((string) ($_GET['context'] ?? ''))) === 'stock';
+    $dateFrom = trim((string) ($_GET['dateFrom'] ?? date('Y-m-01')));
+    $dateTo = trim((string) ($_GET['dateTo'] ?? date('Y-m-t')));
+    $fromDate = DateTimeImmutable::createFromFormat('!Y-m-d', $dateFrom);
+    $toDate = DateTimeImmutable::createFromFormat('!Y-m-d', $dateTo);
+    if (!$fromDate || $fromDate->format('Y-m-d') !== $dateFrom || !$toDate || $toDate->format('Y-m-d') !== $dateTo || $dateFrom > $dateTo) {
+        respond_error('Khoảng thời gian không hợp lệ.', 422);
+    }
+    $params = ['store_id' => $storeId, 'date_from_receipt' => $dateFrom, 'date_to_receipt' => $dateTo, 'date_from_issue' => $dateFrom, 'date_to_issue' => $dateTo];
     $sql = 'SELECT i.*,s.supplier_code,s.supplier_name,
+                   COALESCE(received.total,0) AS period_received_quantity,
+                   COALESCE(issued.total,0) AS period_issued_quantity,
                    source.ingredient_code AS conversion_source_code,
                    source.ingredient_name AS conversion_source_name,
                    COALESCE(NULLIF(source.base_unit,""),source.unit) AS conversion_source_unit,
@@ -133,7 +147,22 @@ if ($method === 'GET') {
               ON s.id COLLATE utf8mb4_unicode_ci=i.supplier_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN ingredients source
               ON source.id COLLATE utf8mb4_unicode_ci=i.conversion_source_ingredient_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN (
+              SELECT rii.ingredient_id,SUM(rii.quantity) total
+              FROM inventory_receipt_items rii JOIN inventory_receipts ir ON ir.id=rii.receipt_id
+              WHERE ir.status="completed" AND ir.receipt_date BETWEEN :date_from_receipt AND :date_to_receipt
+              GROUP BY rii.ingredient_id
+            ) received ON received.ingredient_id=i.id
+            LEFT JOIN (
+              SELECT iii.ingredient_id,SUM(iii.quantity) total
+              FROM inventory_issue_items iii JOIN inventory_issues ii ON ii.id=iii.issue_id
+              WHERE ii.status="completed" AND ii.issue_date BETWEEN :date_from_issue AND :date_to_issue
+              GROUP BY iii.ingredient_id
+            ) issued ON issued.ingredient_id=i.id
             WHERE i.store_id=:store_id';
+    if ($stockContext) {
+        $sql .= ' AND COALESCE(i.item_kind,"ingredient")<>"fresh"';
+    }
     if ($search !== '') {
         $sql .= ' AND (i.ingredient_code LIKE :needle_code OR i.ingredient_name LIKE :needle_name
                        OR i.normalized_name LIKE :normalized OR s.supplier_name LIKE :needle_supplier)';
@@ -147,7 +176,6 @@ if ($method === 'GET') {
     $statement = db()->prepare($sql);
     $statement->execute($params);
     $items = array_map('ingredient_payload', $statement->fetchAll());
-    $stockContext = strtolower(trim((string) ($_GET['context'] ?? ''))) === 'stock';
     if ($stockContext && ($user['role'] ?? '') !== 'admin') {
         foreach ($items as &$item) {
             $item['cost'] = null;
@@ -159,6 +187,7 @@ if ($method === 'GET') {
     }
     respond_ok([
         'items' => $items,
+        'period' => ['dateFrom' => $dateFrom, 'dateTo' => $dateTo],
         'canCreate' => field_inventory_has_permission($user, 'products.create'),
         'suggestedCode' => ingredients_next_code($storeId === 'warehouse' ? 'VT' : 'NL', 'ingredients', 'ingredient_code'),
     ]);
@@ -206,6 +235,8 @@ if ($method === 'POST') {
     $purchaseUnit = trim((string) ($body['purchaseUnit'] ?? $body['unit'] ?? ''));
     $baseUnit = trim((string) ($body['baseUnit'] ?? $body['unit'] ?? ''));
     $conversionFactor = is_numeric($body['purchaseToBaseFactor'] ?? null) ? (float) $body['purchaseToBaseFactor'] : 1.0;
+    $itemKind = strtolower(trim((string) ($body['itemKind'] ?? 'ingredient')));
+    if (!in_array($itemKind, ['ingredient', 'consumable', 'fresh'], true)) respond_error('Loại nguyên vật liệu không hợp lệ.', 422);
     if ($name === '') {
         respond_error('Vui lòng nhập tên nguyên liệu.', 422);
     }
@@ -246,10 +277,10 @@ if ($method === 'POST') {
             'INSERT INTO ingredients
              (id,store_id,ingredient_code,ingredient_name,normalized_name,unit,purchase_unit,base_unit,purchase_to_base_factor,
               conversion_source_ingredient_id,conversion_input_quantity,conversion_output_quantity,cost,stock_quantity,
-              supplier_id,supplier_item_code,description,is_active)
+              supplier_id,supplier_item_code,description,is_active,item_kind)
              VALUES
              (:id,:store_id,:code,:name,:normalized,:unit,:purchase_unit,:base_unit,:conversion_factor,
-              :conversion_source,:conversion_input,:conversion_output,:cost,:stock,:supplier,:supplier_item_code,:description,:active)'
+              :conversion_source,:conversion_input,:conversion_output,:cost,:stock,:supplier,:supplier_item_code,:description,:active,:item_kind)'
         );
         $statement->execute([
             'id' => $id, 'store_id' => $storeId, 'code' => $code, 'name' => $name,
@@ -267,6 +298,7 @@ if ($method === 'POST') {
             'supplier_item_code' => trim((string) ($body['supplierItemCode'] ?? '')) ?: null,
             'description' => trim((string) ($body['description'] ?? '')) ?: null,
             'active' => array_key_exists('isActive', $body) && !$body['isActive'] ? 0 : 1,
+            'item_kind' => $itemKind,
         ]);
         ingredient_replace_components($id,$conversion['components']);
         $created = ingredients_find($storeId, $id);
@@ -301,6 +333,8 @@ if (in_array($method, ['PUT', 'PATCH'], true)) {
     $baseUnit = trim((string) ($body['baseUnit'] ?? $existing['base_unit'] ?? $existing['unit'] ?? ''));
     $conversionFactor = is_numeric($body['purchaseToBaseFactor'] ?? $existing['purchase_to_base_factor'] ?? 1)
         ? (float) ($body['purchaseToBaseFactor'] ?? $existing['purchase_to_base_factor'] ?? 1) : 1.0;
+    $itemKind = strtolower(trim((string) ($body['itemKind'] ?? $existing['item_kind'] ?? 'ingredient')));
+    if (!in_array($itemKind, ['ingredient', 'consumable', 'fresh'], true)) respond_error('Loại nguyên vật liệu không hợp lệ.', 422);
     if ($purchaseUnit === '' || $baseUnit === '' || $conversionFactor <= 0) {
         respond_error('Quy cách nguyên liệu không hợp lệ.', 422);
     }
@@ -314,7 +348,7 @@ if (in_array($method, ['PUT', 'PATCH'], true)) {
           conversion_source_ingredient_id=:conversion_source,conversion_input_quantity=:conversion_input,
           conversion_output_quantity=:conversion_output,cost=:cost,
           stock_quantity=:stock,supplier_id=:supplier,supplier_item_code=:supplier_item_code,
-          description=:description,is_active=:active,updated_at=NOW()
+          description=:description,is_active=:active,item_kind=:item_kind,updated_at=NOW()
          WHERE id=:id'
     );
     $statement->execute([
@@ -333,6 +367,7 @@ if (in_array($method, ['PUT', 'PATCH'], true)) {
         'supplier_item_code' => trim((string) ($body['supplierItemCode'] ?? $existing['supplier_item_code'])) ?: null,
         'description' => trim((string) ($body['description'] ?? $existing['description'])) ?: null,
         'active' => array_key_exists('isActive', $body) ? ($body['isActive'] ? 1 : 0) : (int) $existing['is_active'],
+        'item_kind' => $itemKind,
     ]);
     ingredient_replace_components((string)$existing['id'],$conversion['components']);
     respond_ok(['updated' => true, 'item' => ingredient_payload(ingredients_find($storeId, (string) $existing['id']) ?: $existing)]);

@@ -1,6 +1,7 @@
 import { apiRequest } from "@/lib/api";
 
 export type Ingredient = {
+  itemKind: "ingredient" | "consumable" | "fresh";
   id: string;
   ingredientCode: string;
   ingredientName: string;
@@ -19,6 +20,8 @@ export type Ingredient = {
   conversionComponents: Array<{ ingredientId: string; ingredientCode: string; ingredientName: string; unit: string; inputQuantity: number; cost: number | null }>;
   stockQuantity: number;
   preparationStockQuantity: number;
+  periodReceivedQuantity: number;
+  periodIssuedQuantity: number;
   supplierId: string | null;
   supplierCode?: string | null;
   supplierName?: string | null;
@@ -45,14 +48,17 @@ export type IngredientInput = {
   supplierId?: string | null;
   supplierItemCode?: string;
   description?: string;
+  itemKind?: "ingredient" | "consumable" | "fresh";
   isActive?: boolean;
 };
 
-export async function getIngredients(storeId: string, search = "", context?: "stock") {
+export async function getIngredients(storeId: string, search = "", context?: "stock", period?: { dateFrom: string; dateTo: string }) {
   const query = new URLSearchParams({ storeId });
   if (search) query.set("search", search);
   if (context) query.set("context", context);
-  return apiRequest<{ items: Ingredient[]; suggestedCode: string }>(
+  if (period?.dateFrom) query.set("dateFrom", period.dateFrom);
+  if (period?.dateTo) query.set("dateTo", period.dateTo);
+  return apiRequest<{ items: Ingredient[]; suggestedCode: string; period: { dateFrom: string; dateTo: string } }>(
     `/ingredients.php?${query.toString()}`
   );
 }
