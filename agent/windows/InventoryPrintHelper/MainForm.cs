@@ -21,7 +21,7 @@ public sealed class MainForm : Form
         _printService = printService;
         _settings = settings;
         _openSettings = openSettings;
-        Text = "TN Company - Máy in phiếu xuất kho A4";
+        Text = "TN Company - Máy in phiếu xuất kho";
         Width = 1040;
         Height = 620;
         StartPosition = FormStartPosition.CenterScreen;
@@ -33,12 +33,12 @@ public sealed class MainForm : Form
         _queue.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Máy xử lý", DataPropertyName = "Terminal", Width = 130 });
         _queue.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Thông báo", DataPropertyName = "Error", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 
-        var top = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(10), AutoSize = false };
+        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(10), WrapContents = true };
         var resume = new Button { Text = "In tiếp", AutoSize = true };
         var retry = new Button { Text = "In lại phiếu", AutoSize = true };
         var cancel = new Button { Text = "Hủy phiếu", AutoSize = true };
         var cancelAll = new Button { Text = "Hủy toàn bộ đang chờ/lỗi", AutoSize = true };
-        var test = new Button { Text = "In thử A4", AutoSize = true };
+        var test = new Button { Text = "In thử", AutoSize = true };
         var settingsButton = new Button { Text = "Đổi máy in / Cấu hình", AutoSize = true };
         top.Controls.AddRange([_state, _printer, _pause, resume, retry, cancel, cancelAll, test, settingsButton]);
         Controls.Add(_queue);
@@ -51,7 +51,7 @@ public sealed class MainForm : Form
         cancelAll.Click += async (_, _) => await RunMutationAsync(cancelAll, CancelAllAsync);
         test.Click += (_, _) => PrintTest();
         settingsButton.Click += (_, _) => _openSettings();
-        _worker.SnapshotChanged += snapshot => BeginInvoke(() => UpdateState(snapshot));
+        _worker.SnapshotChanged += OnSnapshotChanged;
         _refreshTimer.Tick += async (_, _) => await RefreshQueueAsync();
         Shown += async (_, _) => { _refreshTimer.Start(); await RefreshQueueAsync(); };
         FormClosing += OnFormClosing;
@@ -107,14 +107,20 @@ public sealed class MainForm : Form
 
     public void PrintTest()
     {
-        var document = new PrintDocumentData("IN-THU", DateTime.Today.ToString("yyyy-MM-dd"), "Quầy pha chế", Environment.UserName, "Trang kiểm tra máy in A4", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), [new("TEST", "Dòng kiểm tra", "đơn vị", 1, "Nếu đọc được dòng này, máy in hoạt động bình thường")]);
+        var document = new PrintDocumentData("IN-THU", DateTime.Today.ToString("yyyy-MM-dd"), "Quầy pha chế", Environment.UserName, "Trang kiểm tra máy in", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), [new("TEST", "Dòng kiểm tra", "đơn vị", 1, "Nếu đọc được dòng này, máy in hoạt động bình thường")]);
         var job = new PrintJob("test", "test", _settings().StoreId, 1, PrintJobStatus.Processing, 0, _settings().TerminalName, null, "", "", "", document);
         var result = _printService.Print(job, _settings().PrinterName);
         MessageBox.Show(this, result.Accepted ? "Đã gửi trang in thử." : result.Error, "In thử", MessageBoxButtons.OK, result.Accepted ? MessageBoxIcon.Information : MessageBoxIcon.Error);
     }
 
     private void UpdateState(WorkerSnapshot snapshot) => _state.Text = snapshot.Message + "   ";
-    private void UpdatePrinter() => _printer.Text = $"Máy in: {_settings().PrinterName}   ";
+    private void OnSnapshotChanged(WorkerSnapshot snapshot)
+    {
+        if (IsDisposed || Disposing) return;
+        if (!InvokeRequired) UpdateState(snapshot);
+        else if (IsHandleCreated) BeginInvoke(() => UpdateState(snapshot));
+    }
+    private void UpdatePrinter() => _printer.Text = $"Máy in: {_settings().PrinterName} | Khổ giấy: {_settings().PaperSize}   ";
 
     private void OnFormClosing(object? sender, FormClosingEventArgs eventArgs)
     {

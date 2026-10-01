@@ -3,12 +3,14 @@ using InventoryPrintHelper;
 var tests = new (string Name, Func<Task> Run)[]
 {
     ("paused worker does not claim", PausedWorkerDoesNotClaim),
+    ("worker survives unexpected claim failure", WorkerSurvivesUnexpectedClaimFailure),
     ("successful spool is acknowledged", SuccessfulSpoolIsAcknowledged),
     ("printer failure is reported", PrinterFailureIsReported),
     ("callback failure after spool becomes uncertain", CallbackFailureBecomesUncertain),
     ("missing printer pauses worker", MissingPrinterPausesWorker),
     ("reconnect backoff is bounded", ReconnectBackoffIsBounded),
     ("A4 pagination is deterministic", A4PaginationIsDeterministic),
+    ("paper choice controls pagination and fits A5", PaperChoiceControlsPagination),
     ("A4 quantities keep small decimals", A4QuantitiesKeepSmallDecimals),
     ("settings protect credentials", SettingsProtectCredentials),
     ("startup task is interactive and restartable", StartupTaskIsInteractiveAndRestartable),
@@ -46,6 +48,23 @@ static async Task PausedWorkerDoesNotClaim()
     var snapshot = await worker.ProcessOnceAsync(CancellationToken.None);
     Equal(0, api.ClaimCalls, "paused worker claimed a job");
     Equal(WorkerState.Paused, snapshot.State, "paused state");
+}
+
+static async Task WorkerSurvivesUnexpectedClaimFailure()
+{
+    var api = new FakeApi(Job()) { ThrowOnFirstClaim = true };
+    var worker = new PrintJobWorker(api, new FakePrinter(PrintResult.Printed()), () => "A4 Printer", _ => true);
+    using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var warnings = 0;
+    worker.SnapshotChanged += snapshot =>
+    {
+        if (snapshot.State == WorkerState.Warning) warnings++;
+        if (api.PrintedCalls == 1) stop.Cancel();
+    };
+    try { await worker.RunAsync(TimeSpan.FromMilliseconds(10), stop.Token); }
+    catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+    Equal(1, warnings, "unexpected failure is visible");
+    Equal(1, api.PrintedCalls, "worker resumes processing after failure");
 }
 
 static async Task SuccessfulSpoolIsAcknowledged()
@@ -103,6 +122,19 @@ static Task A4PaginationIsDeterministic()
     return Task.CompletedTask;
 }
 
+static Task PaperChoiceControlsPagination()
+{
+    var items = Enumerable.Range(1, 27).Select(index => new PrintDocumentItem("NL", "Item", "kg", index, "")).ToArray();
+    Equal(2, PrintLayout.Paginate(items, PrintLayout.RowsForPaper("A5")).Count, "A5 page count");
+    Equal(2, PrintLayout.Paginate(items, PrintLayout.RowsForPaper("A4")).Count, "A4 page count");
+    Equal(14, PrintLayout.RowsForPaper("A5"), "A5 row capacity");
+    Equal(26, PrintLayout.RowsForPaper("A4"), "A4 row capacity");
+    var widths = PrintLayout.ColumnWidths(503);
+    Equal(503, widths.Sum(), "columns fit A5 printable width");
+    Equal(true, widths.All(width => width > 0), "all columns have positive width");
+    return Task.CompletedTask;
+}
+
 static Task A4QuantitiesKeepSmallDecimals()
 {
     Equal("0,0004", PrintLayout.FormatQuantity(0.0004m), "small kg quantity");
@@ -116,7 +148,7 @@ static Task SettingsProtectCredentials()
     try
     {
         var path = Path.Combine(directory, "settings.json");
-        var settings = new AppSettings("https://example.test/api", "cafe", "PC-01", "A4 Printer", false);
+        var settings = new AppSettings("https://example.test/api", "cafe", "PC-01", "A4 Printer", false, "A4");
         SettingsStore.Save(path, settings, "secret-password");
         var raw = File.ReadAllText(path);
         Equal(false, raw.Contains("secret-password", StringComparison.Ordinal), "plaintext credential leaked");
@@ -183,10 +215,12 @@ sealed class FakeApi(PrintJob job) : IPrintJobApi
     public int UncertainCalls { get; private set; }
     public string LastError { get; private set; } = "";
     public bool ThrowOnPrinted { get; init; }
+    public bool ThrowOnFirstClaim { get; init; }
 
     public Task<ClaimedPrintJob?> ClaimAsync(CancellationToken cancellationToken)
     {
         ClaimCalls++;
+        if (ThrowOnFirstClaim && ClaimCalls == 1) throw new System.Text.Json.JsonException("invalid claim response");
         var claimed = _next is null ? null : new ClaimedPrintJob(_next, "claim-token");
         _next = null;
         return Task.FromResult(claimed);

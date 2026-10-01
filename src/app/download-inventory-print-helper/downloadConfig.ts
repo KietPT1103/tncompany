@@ -2,7 +2,7 @@ export const DOWNLOAD_PAGE_PATH = "/tai-cai-dat-may-in";
 
 export const INVENTORY_PRINT_HELPER_COPY = {
   platform: "Dành cho Windows 10/11 64-bit",
-  usbPrerequisite: "Cắm máy in A4 qua USB và cài driver để Windows nhận máy in trước khi thiết lập.",
+  usbPrerequisite: "Cắm máy in A4/A5 qua USB và cài driver để Windows nhận máy in trước khi thiết lập.",
   autoStart: "Sau khi cài, ứng dụng tự động mở khi đăng nhập Windows và chạy ở khay hệ thống.",
 } as const;
 

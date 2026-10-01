@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace InventoryPrintHelper;
 
-public sealed record AppSettings(string ApiBaseUrl, string StoreId, string TerminalName, string PrinterName, bool StartPaused);
+public sealed record AppSettings(string ApiBaseUrl, string StoreId, string TerminalName, string PrinterName, bool StartPaused, string PaperSize = "A5");
 public sealed record LoadedSettings(AppSettings Settings, string Credential);
 
 public static class SettingsStore

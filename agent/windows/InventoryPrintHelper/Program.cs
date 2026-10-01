@@ -5,6 +5,16 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        var waitIndex = Array.IndexOf(args, "--wait-for-exit");
+        if (waitIndex >= 0 && waitIndex + 1 < args.Length && int.TryParse(args[waitIndex + 1], out var previousPid))
+        {
+            try
+            {
+                using var previous = System.Diagnostics.Process.GetProcessById(previousPid);
+                if (!previous.WaitForExit(15000)) return;
+            }
+            catch (ArgumentException) { } // The previous instance has already exited.
+        }
         ApplicationConfiguration.Initialize();
         var dryRun = args.Contains("--dry-run", StringComparer.OrdinalIgnoreCase);
         AppLog.LogPath = dryRun ? Path.Combine(Path.GetTempPath(), "tn-inventory-print-helper-dry-run.log") : AppPaths.LogFile;
@@ -50,7 +60,7 @@ internal static class Program
             using var single = new SingleInstance(loaded.Settings.StoreId, Environment.UserName);
             if (!single.IsOwner)
             {
-                MessageBox.Show("Ứng dụng máy in A4 đã chạy trên tài khoản Windows này.", "TN Print Helper", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Ứng dụng máy in đã chạy trên tài khoản Windows này.", "TN Print Helper", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             Application.Run(new TrayApplicationContext(loaded, dryRun));

@@ -22,7 +22,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             var client = new ApiClient(settings.ApiBaseUrl, loaded.Credential, settings.StoreId, settings.TerminalName);
             api = client;
             _apiDisposable = client;
-            printer = new InventoryIssuePrinter();
+            printer = new InventoryIssuePrinter(() => settings.PaperSize);
         }
 
         var worker = new PrintJobWorker(api, printer, () => settings.PrinterName, PrinterCatalog.IsInstalled);
@@ -32,10 +32,10 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("Mở quản lý", null, (_, _) => _window.ShowFromTray());
         menu.Items.Add("Tạm dừng", null, (_, _) => worker.Pause());
         menu.Items.Add("In tiếp", null, (_, _) => worker.Resume());
-        menu.Items.Add("In thử A4", null, (_, _) => _window.PrintTest());
+        menu.Items.Add("In thử", null, (_, _) => _window.PrintTest());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Thoát", null, (_, _) => Exit());
-        _tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "TN - In phiếu xuất kho A4", ContextMenuStrip = menu, Visible = true };
+        _tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "TN - In phiếu xuất kho", ContextMenuStrip = menu, Visible = true };
         _tray.DoubleClick += (_, _) => _window.ShowFromTray();
         _ = RunWorkerAsync(worker);
         if (!Environment.GetCommandLineArgs().Contains("--background", StringComparer.OrdinalIgnoreCase)) _window.ShowFromTray();
@@ -56,7 +56,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         if (wizard.ShowDialog(_window) != DialogResult.OK || wizard.Result is null) return;
         SettingsStore.Save(AppPaths.SettingsFile, wizard.Result.Settings, wizard.Result.Credential);
         MessageBox.Show(_window, "Đã lưu cấu hình. Ứng dụng sẽ khởi động lại.", "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, "--background") { UseShellExecute = true });
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, $"--background --wait-for-exit {Environment.ProcessId}") { UseShellExecute = true });
         Exit();
     }
 

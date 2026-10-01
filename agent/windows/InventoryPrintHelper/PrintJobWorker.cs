@@ -69,7 +69,20 @@ public sealed class PrintJobWorker
         var failures = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var snapshot = await ProcessOnceAsync(cancellationToken);
+            WorkerSnapshot snapshot;
+            try
+            {
+                snapshot = await ProcessOnceAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("Print worker iteration failed", exception);
+                snapshot = Publish(WorkerState.Warning, "Lỗi xử lý phiếu in: " + exception.Message);
+            }
             failures = snapshot.State == WorkerState.Warning ? failures + 1 : 0;
             var delay = snapshot.State == WorkerState.Warning ? ReconnectDelay(failures - 1) : pollInterval;
             await Task.Delay(delay, cancellationToken);

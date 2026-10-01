@@ -2,9 +2,9 @@ import { Archive, Download, MonitorDown, Power, Printer, ShieldCheck, Usb } from
 import { INVENTORY_PRINT_HELPER_COPY, inventoryPrintHelperDownloads } from "./downloadConfig";
 
 const steps = [
-  "Cắm máy in A4 qua USB, cài driver và in thử từ Windows.",
+  "Cắm máy in A4/A5 qua USB, cài driver và in thử từ Windows.",
   "Tải bộ cài EXE, mở file và chấp nhận yêu cầu quyền Administrator.",
-  "Đăng nhập, chọn cửa hàng, tên máy thu ngân và đúng máy in A4.",
+  "Đăng nhập, chọn cửa hàng, tên máy thu ngân và đúng máy in A4/A5.",
   "In thử một trang; sau đó ứng dụng sẽ nằm ở khay hệ thống và tự mở cùng Windows.",
 ];
 
@@ -20,7 +20,7 @@ export default function DownloadInventoryPrintHelperPage() {
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-extrabold uppercase tracking-[.16em] text-emerald-300">
               <MonitorDown className="h-4 w-4" /> Windows Print Helper
             </div>
-            <h1 className="mt-6 text-3xl font-black tracking-tight sm:text-5xl">Cài máy in phiếu xuất kho A4</h1>
+            <h1 className="mt-6 text-3xl font-black tracking-tight sm:text-5xl">Cài máy in phiếu xuất kho A4/A5</h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300">
               Ứng dụng dành riêng cho phiếu xuất kho. Chức năng in bill của thu ngân vẫn dùng máy in bill mặc định như hiện tại.
             </p>
@@ -37,7 +37,7 @@ export default function DownloadInventoryPrintHelperPage() {
 
           <div className="grid gap-3 self-center">
             <Feature icon={<Usb />} text={INVENTORY_PRINT_HELPER_COPY.usbPrerequisite} />
-            <Feature icon={<Printer />} text="Tự nhận các máy in đã cài trên Windows và lưu riêng máy in A4 cho máy thu ngân này." />
+            <Feature icon={<Printer />} text="Tự nhận các máy in đã cài trên Windows và lưu riêng máy in A4/A5 cho máy thu ngân này." />
             <Feature icon={<Power />} text={INVENTORY_PRINT_HELPER_COPY.autoStart} />
             <Feature icon={<ShieldCheck />} text="Thông tin kết nối được bảo vệ bằng Windows DPAPI; có hàng đợi, in tiếp, in lại và hủy." />
           </div>
