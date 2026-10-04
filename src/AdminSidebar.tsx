@@ -31,6 +31,7 @@ import {
   Tractor,
   Truck,
   UtensilsCrossed,
+  Users,
   Wallet,
 } from "lucide-react";
 import { getAdminMobileHeaderAction } from "@/components/admin/adminMobileHeaderConfig";
@@ -47,6 +48,7 @@ type NavItem = {
   permissions?: AppPermission[];
   roles?: UserRole[];
   exact?: boolean;
+  hidden?: boolean;
 };
 
 type NavGroup = {
@@ -79,6 +81,13 @@ const standaloneNavItems: NavItem[] = [
     label: "Tài khoản",
     icon: KeyRound,
     permission: "accounts.access",
+  },
+  {
+    href: "/employees",
+    label: "Nhân sự",
+    icon: Users,
+    roles: ["admin"],
+    hidden: true,
   },
 ];
 
@@ -366,6 +375,7 @@ export default function AdminSidebar({
   }, [showStoreMenu]);
 
   const canViewItem = (item: NavItem) => {
+    if (item.hidden) return false;
     if (userRole === "bartender" && (item.href === "/bar" || item.href === "/inventory")) {
       return true;
     }

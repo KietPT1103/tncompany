@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
-import { getEmployees, Employee } from "@/services/employees";
+import { getEmployeeRoleNames, getEmployees, Employee } from "@/services/employees";
+import { getEmployeeRoles } from "@/services/employeeRoles";
 import {
   addPayrollEntry,
   deletePayrollEntry,
@@ -31,6 +32,8 @@ import {
   CalendarRange,
   Check,
   Clock3,
+  ImageDown,
+  Loader2,
   Search,
   Save,
   Users,
@@ -39,7 +42,6 @@ import {
 } from "lucide-react";
 
 const CAFE_ESTIMATE_ROLES = ["Thu ngân", "Phục vụ", "Pha chế"];
-const MAX_VISIBLE_EMPLOYEES = 3;
 const SHIFT_DEFINITIONS = [
   { id: "shift_1", label: "Ca 1", hours: 5 },
   { id: "shift_2", label: "Ca 2", hours: 5 },
@@ -54,6 +56,9 @@ const SHIFT_TIME_RANGES: Record<ShiftId, { start: string; end: string }> = {
 
 const ROLE_THEME =
   "from-[#FFC107] via-[#FFE6A0] via-30% to-white to-60% text-[#064E3B] border-[#E5AE21]";
+
+const WEEK_SHORTCUT_BUTTON_CLASS =
+  "h-10 self-end gap-2 rounded-lg border-slate-200 bg-white px-3.5 text-xs font-semibold text-[#064E3B] shadow-sm transition-[background-color,border-color,box-shadow,color,transform] duration-150 hover:border-[#064E3B] hover:bg-emerald-50/70 hover:text-[#064E3B] hover:shadow-md focus-visible:border-[#D6A621] focus-visible:ring-[#E1B23D]/35 active:scale-[0.97] [&_svg]:text-[#064E3B]";
 
 const SHIFT_THEME: Record<ShiftId, { badge: string; surface: string }> = {
   shift_1: {
@@ -126,6 +131,8 @@ type WeekSegment = {
 type EstimateSummary = {
   employeeKey: string;
   employee: Employee;
+  assignedRoles: string[];
+  roleTotals: Record<string, { hours: number; salary: number; shiftCount: number }>;
   totalHours: number;
   totalSalary: number;
   shiftCount: number;
@@ -185,6 +192,31 @@ function formatShiftTime(value: string) {
   return minute === "00" ? `${Number(hour)}h` : `${Number(hour)}h${minute}`;
 }
 
+function isVisibleEstimateRole(role: string) {
+  return role.trim().toLocaleLowerCase("vi") !== "mkt";
+}
+
+function isFixedSalaryEmployee(employee: Employee) {
+  return resolveEmployeeSalaryType(employee) === "monthly";
+}
+
+function getEstimatedHourlyRate(employee: Employee) {
+  return isFixedSalaryEmployee(employee) ? 0 : employee.hourlyRate || 0;
+}
+
+function getScheduleCellHeight(employeeCount: number) {
+  return Math.max(142, 52 + employeeCount * 30);
+}
+
+function sanitizeFileName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLocaleLowerCase("vi");
+}
+
 function getEstimateRolesForStore(storeId: string) {
   if (storeId === "cafe" || storeId === "bakery") {
     return CAFE_ESTIMATE_ROLES;
@@ -193,7 +225,8 @@ function getEstimateRolesForStore(storeId: string) {
   const roleGroups = getRoleGroupsForStore(storeId);
   return Object.entries(roleGroups)
     .filter(([groupName]) => groupName !== "Chung")
-    .flatMap(([, roles]) => roles);
+    .flatMap(([, roles]) => roles)
+    .filter(isVisibleEstimateRole);
 }
 
 function getEmployeeKey(employee: Employee) {
@@ -288,20 +321,23 @@ function buildEstimateEntryPayload(
   startDate: string,
   endDate: string,
 ) {
+  const salaryType = resolveEmployeeSalaryType(item.employee);
+  const isMonthly = salaryType === "monthly";
+
   return {
     employeeId: item.employee.id || `manual_${item.employeeKey}`,
     employeeCode: item.employee.employeeCode || "",
     employeeName: item.employee.name,
-    role: item.employee.role,
-    hourlyRate: item.employee.hourlyRate || 0,
+    role: item.assignedRoles[0] || item.employee.role,
+    hourlyRate: isMonthly ? 0 : item.employee.hourlyRate || 0,
     totalHours: item.totalHours,
     weekendHours: 0,
-    salary: item.totalSalary,
+    salary: isMonthly ? 0 : item.totalSalary,
     allowances: [],
     note: `Ước tính từ lịch phân ca ${startDate} đến ${endDate}`,
-    salaryType: "hourly" as const,
-    fixedSalary: 0,
-    standardHours: 0,
+    salaryType,
+    fixedSalary: isMonthly ? item.employee.monthlySalary || 0 : 0,
+    standardHours: isMonthly ? item.employee.standardHours || 0 : 0,
     shifts: item.shifts,
   };
 }
@@ -409,8 +445,89 @@ function RoleScheduleTable({
   schedule: ScheduleState;
   week: WeekSegment;
 }) {
+  const captureRef = useRef<HTMLElement>(null);
+  const captureKey = `${role}__${week.key}`;
+  const [captureStatus, setCaptureStatus] = useState<"idle" | "capturing" | "done" | "error">("idle");
+
+  async function handleCaptureSchedule() {
+    const section = captureRef.current;
+    if (!section || captureStatus === "capturing") return;
+
+    setCaptureStatus("capturing");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const scheduleScroller = section.querySelector<HTMLElement>(
+        '[data-schedule-scroll="true"]',
+      );
+      const captureWidth = Math.max(
+        section.scrollWidth,
+        scheduleScroller?.scrollWidth || 0,
+      );
+      const captureHeight = section.scrollHeight;
+      const canvas = await html2canvas(section, {
+        backgroundColor: "#ffffff",
+        scale: Math.min(window.devicePixelRatio || 1, 2),
+        useCORS: true,
+        width: captureWidth + 4,
+        height: captureHeight + 4,
+        windowWidth: captureWidth + 4,
+        windowHeight: captureHeight + 4,
+        onclone: (clonedDocument) => {
+          const clonedSection = Array.from(
+            clonedDocument.querySelectorAll<HTMLElement>('[data-schedule-capture]'),
+          ).find((element) => element.dataset.scheduleCapture === captureKey);
+          if (!clonedSection) return;
+          clonedSection.style.width = `${captureWidth}px`;
+          clonedSection.style.maxWidth = "none";
+          clonedSection.style.overflow = "visible";
+          clonedSection.querySelectorAll<HTMLElement>('[data-schedule-scroll="true"]').forEach(
+            (element) => {
+              element.style.overflow = "visible";
+              element.style.width = `${captureWidth}px`;
+            },
+          );
+          clonedSection.querySelectorAll<HTMLElement>('[data-employee-name="true"]').forEach(
+            (element) => {
+              element.style.overflow = "visible";
+              element.style.textOverflow = "clip";
+              element.style.whiteSpace = "nowrap";
+              element.style.lineHeight = "20px";
+              element.style.height = "20px";
+            },
+          );
+          clonedSection.querySelectorAll<HTMLElement>('[data-today-badge="true"]').forEach(
+            (element) => {
+              element.style.display = "inline-flex";
+              element.style.alignItems = "center";
+              element.style.justifyContent = "center";
+              element.style.height = "20px";
+              element.style.lineHeight = "20px";
+              element.style.paddingTop = "0";
+              element.style.paddingBottom = "0";
+              element.style.overflow = "visible";
+            },
+          );
+        },
+      });
+      const link = document.createElement("a");
+      link.download = `lich-phan-ca-${sanitizeFileName(role)}-${week.days[0].date}-${week.days[week.days.length - 1].date}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      setCaptureStatus("done");
+      window.setTimeout(() => setCaptureStatus("idle"), 1800);
+    } catch (error) {
+      console.error("Không thể chụp lịch phân ca", error);
+      setCaptureStatus("error");
+      window.setTimeout(() => setCaptureStatus("idle"), 2400);
+    }
+  }
+
   return (
-    <section className="overflow-hidden rounded border border-slate-200 bg-white shadow-[5px_7px_12px_rgba(15,23,42,0.16)]">
+    <section
+      ref={captureRef}
+      data-schedule-capture={captureKey}
+      className="overflow-hidden rounded border border-slate-200 bg-white shadow-[5px_7px_12px_rgba(15,23,42,0.16)]"
+    >
       <div
         className={cn(
           "flex items-center justify-between border-b bg-gradient-to-r px-4 py-3",
@@ -421,24 +538,48 @@ function RoleScheduleTable({
           <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70">Lịch phân ca</p>
           <h3 className="text-lg font-bold">{role}</h3>
         </div>
-        <div className="rounded border border-emerald-900/15 bg-white/75 px-3 py-2 text-right shadow-sm backdrop-blur-sm">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-800/70">
-            Khoảng ngày
-          </p>
-          <div className="mt-0.5 flex items-center gap-1.5 text-sm font-bold tabular-nums text-emerald-950">
-            <CalendarDays className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
-            <span>
-              {fullDateFormatter.format(parseDateKey(week.days[0].date))}
-              {" – "}
-              {fullDateFormatter.format(
-                parseDateKey(week.days[week.days.length - 1].date),
-              )}
-            </span>
+        <div className="flex items-center gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-html2canvas-ignore="true"
+            className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-[#087A62] px-4 text-sm font-bold text-white shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#066B56] hover:text-white hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
+            onClick={() => void handleCaptureSchedule()}
+            disabled={captureStatus === "capturing"}
+          >
+            {captureStatus === "capturing" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <ImageDown className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {captureStatus === "capturing"
+              ? "Đang chụp..."
+              : captureStatus === "done"
+                ? "Đã tải ảnh"
+                : captureStatus === "error"
+                  ? "Thử lại"
+                  : "Chụp lịch"}
+          </Button>
+          <div className="rounded border border-emerald-900/15 bg-white/75 px-3 py-2 text-right shadow-sm backdrop-blur-sm">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-800/70">
+              Khoảng ngày
+            </p>
+            <div className="mt-0.5 flex items-center gap-1.5 text-sm font-bold tabular-nums text-emerald-950">
+              <CalendarDays className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
+              <span>
+                {fullDateFormatter.format(parseDateKey(week.days[0].date))}
+                {" – "}
+                {fullDateFormatter.format(
+                  parseDateKey(week.days[week.days.length - 1].date),
+                )}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div data-schedule-scroll="true" className="overflow-x-auto">
         <table className="w-full min-w-[920px] table-fixed border-separate border-spacing-0 2xl:min-w-[1080px]">
           <thead className="bg-slate-50/80">
             <tr className="text-left text-xs uppercase tracking-[0.16em] text-slate-500">
@@ -453,15 +594,18 @@ function RoleScheduleTable({
                     day.inRange ? "bg-white" : "bg-slate-50 text-slate-400",
                   )}
                 >
-                  <div className="flex items-center gap-2">
-                    <span>{day.weekdayLabel}</span>
+                  <div className="flex items-center gap-1.5 whitespace-nowrap text-[11px] tracking-[0.12em]">
+                    <span className="shrink-0">{day.weekdayLabel}</span>
                     {day.isToday ? (
-                      <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] text-white">
+                      <span
+                        data-today-badge="true"
+                        className="inline-flex h-5 shrink-0 items-center justify-center rounded-full bg-slate-900 px-2 text-[9px] font-bold leading-none tracking-[0.06em] text-white"
+                      >
                         Hôm nay
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-1 text-sm font-semibold normal-case text-slate-800">
+                  <div className="mt-1 whitespace-nowrap text-[13px] font-semibold normal-case tracking-normal text-slate-800">
                     {day.shortDateLabel}
                   </div>
                 </th>
@@ -470,7 +614,17 @@ function RoleScheduleTable({
           </thead>
 
           <tbody>
-            {SHIFT_DEFINITIONS.map((shift) => (
+            {SHIFT_DEFINITIONS.map((shift) => {
+              const maxEmployeesInRow = Math.max(
+                0,
+                ...week.days.map(
+                  (day) =>
+                    (schedule[makeCellKey(day.date, role, shift.id)] || []).length,
+                ),
+              );
+              const synchronizedCellHeight = getScheduleCellHeight(maxEmployeesInRow);
+
+              return (
               <tr key={shift.id}>
                 <td
                   className={cn(
@@ -517,15 +671,18 @@ function RoleScheduleTable({
                     activeCell?.shiftId === shift.id;
                   const cellEstimate = selectedEmployees.reduce(
                     (sum, employee) =>
-                      sum + (employee.hourlyRate || 0) * shift.hours,
+                      sum + getEstimatedHourlyRate(employee) * shift.hours,
                     0,
+                  );
+                  const hasHourlyEmployee = selectedEmployees.some(
+                    (employee) => !isFixedSalaryEmployee(employee),
                   );
 
                   return (
                     <td
                       key={day.date}
                       className={cn(
-                        "border-b border-slate-200 px-2 py-3 align-top",
+                        "h-full border-b border-slate-200 px-2 py-3 align-top",
                         !day.inRange && "bg-slate-50",
                       )}
                     >
@@ -540,17 +697,18 @@ function RoleScheduleTable({
                           }
                         }}
                         className={cn(
-                          "min-h-[128px] rounded-lg border bg-white p-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 2xl:min-h-[142px] 2xl:p-2.5",
+                          "rounded-lg border bg-white p-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 2xl:p-2.5",
                           isActive
                             ? "border-slate-900 bg-slate-50"
                             : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50",
                         )}
+                        style={{ height: synchronizedCellHeight }}
                       >
                         <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
                           <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                             {selectedEmployees.length > 0 ? `${selectedEmployees.length} người` : "Chưa xếp"}
                           </span>
-                          {selectedEmployees.length > 0 ? (
+                          {hasHourlyEmployee ? (
                             <span className="text-[10px] font-bold text-emerald-700">
                               {formatCurrency(cellEstimate)}
                             </span>
@@ -563,7 +721,7 @@ function RoleScheduleTable({
                               Chọn người
                             </span>
                           ) : (
-                            selectedEmployees.slice(0, MAX_VISIBLE_EMPLOYEES).map((employee) => {
+                            selectedEmployees.map((employee) => {
                               const employeeKey = getEmployeeKey(employee);
                               return (
                                 <div
@@ -571,7 +729,10 @@ function RoleScheduleTable({
                                   className="flex w-full items-center gap-1 py-1 text-slate-800"
                                   title={employee.name}
                                 >
-                                  <span className="min-w-0 flex-1 truncate text-xs font-semibold leading-5">
+                                  <span
+                                    data-employee-name="true"
+                                    className="min-w-0 flex-1 truncate text-xs font-semibold leading-5"
+                                  >
                                     {employee.name}
                                   </span>
                                   <button
@@ -589,11 +750,6 @@ function RoleScheduleTable({
                               );
                             })
                           )}
-                          {selectedEmployees.length > MAX_VISIBLE_EMPLOYEES ? (
-                            <div className="mt-1 rounded-md bg-slate-100 px-2 py-1 text-center text-[11px] font-semibold text-slate-600">
-                              +{selectedEmployees.length - MAX_VISIBLE_EMPLOYEES} nhân viên khác
-                            </div>
-                          ) : null}
                         </div>
 
                       </div>
@@ -601,7 +757,8 @@ function RoleScheduleTable({
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -631,10 +788,15 @@ export default function SalaryEstimatePage() {
   );
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("schedule");
   const [loadingSavedEstimate, setLoadingSavedEstimate] = useState(false);
+  const [managedEstimateRoles, setManagedEstimateRoles] = useState<string[]>([]);
 
   const estimateRoles = useMemo(
-    () => getEstimateRolesForStore(storeId),
-    [storeId],
+    () =>
+      (managedEstimateRoles.length > 0
+        ? managedEstimateRoles
+        : getEstimateRolesForStore(storeId)
+      ).filter(isVisibleEstimateRole),
+    [managedEstimateRoles, storeId],
   );
   const roleOptions = useMemo<readonly SelectBoxOption<EstimateRole>[]>(
     () =>
@@ -682,6 +844,19 @@ export default function SalaryEstimatePage() {
         }
       });
 
+    return () => {
+      ignore = true;
+    };
+  }, [storeId]);
+
+  useEffect(() => {
+    let ignore = false;
+    setManagedEstimateRoles([]);
+    getEmployeeRoles(storeId)
+      .then((items) => {
+        if (!ignore) setManagedEstimateRoles(items.map((item) => item.name));
+      })
+      .catch((error) => console.error(error));
     return () => {
       ignore = true;
     };
@@ -756,8 +931,7 @@ export default function SalaryEstimatePage() {
       employees
         .filter(
           (employee) =>
-            estimateRoles.includes(employee.role) &&
-            resolveEmployeeSalaryType(employee) === "hourly",
+            getEmployeeRoleNames(employee).some((role) => estimateRoles.includes(role)),
         )
         .sort((left, right) => left.name.localeCompare(right.name, "vi")),
     [employees, estimateRoles],
@@ -830,9 +1004,9 @@ export default function SalaryEstimatePage() {
     ) as Record<EstimateRole, Employee[]>;
 
     supportedEmployees.forEach((employee) => {
-      if (estimateRoles.includes(employee.role)) {
-        next[employee.role].push(employee);
-      }
+      getEmployeeRoleNames(employee).forEach((role) => {
+        if (estimateRoles.includes(role)) next[role].push(employee);
+      });
     });
 
     return next;
@@ -855,6 +1029,8 @@ export default function SalaryEstimatePage() {
             const nextSummary = summaryMap.get(employeeKey) || {
               employeeKey,
               employee,
+              assignedRoles: [],
+              roleTotals: {},
               totalHours: 0,
               totalSalary: 0,
               shiftCount: 0,
@@ -862,8 +1038,20 @@ export default function SalaryEstimatePage() {
             };
 
             nextSummary.totalHours += shift.hours;
-            nextSummary.totalSalary += shift.hours * (employee.hourlyRate || 0);
+            nextSummary.totalSalary += shift.hours * getEstimatedHourlyRate(employee);
             nextSummary.shiftCount += 1;
+            if (!nextSummary.assignedRoles.includes(roleName)) {
+              nextSummary.assignedRoles.push(roleName);
+            }
+            const currentRoleTotal = nextSummary.roleTotals[roleName] || {
+              hours: 0,
+              salary: 0,
+              shiftCount: 0,
+            };
+            currentRoleTotal.hours += shift.hours;
+            currentRoleTotal.salary += shift.hours * getEstimatedHourlyRate(employee);
+            currentRoleTotal.shiftCount += 1;
+            nextSummary.roleTotals[roleName] = currentRoleTotal;
             nextSummary.shifts.push({
               id: `${employeeKey}-${date}-${shift.id}`,
               date,
@@ -882,8 +1070,8 @@ export default function SalaryEstimatePage() {
 
     return Array.from(summaryMap.values()).sort((left, right) => {
       const roleDiff =
-        getRoleOrder(left.employee.role, estimateRoles) -
-        getRoleOrder(right.employee.role, estimateRoles);
+        getRoleOrder(left.assignedRoles[0] || left.employee.role, estimateRoles) -
+        getRoleOrder(right.assignedRoles[0] || right.employee.role, estimateRoles);
       if (roleDiff !== 0) return roleDiff;
       return left.employee.name.localeCompare(right.employee.name, "vi");
     });
@@ -900,13 +1088,13 @@ export default function SalaryEstimatePage() {
   const totalsByRole = useMemo(() => {
     return estimateRoles.map((roleName) => {
       const entries = estimateSummaries.filter(
-        (item) => item.employee.role === roleName,
+        (item) => item.assignedRoles.includes(roleName),
       );
       return {
         role: roleName,
         employees: entries.length,
-        totalHours: entries.reduce((sum, item) => sum + item.totalHours, 0),
-        totalSalary: entries.reduce((sum, item) => sum + item.totalSalary, 0),
+        totalHours: entries.reduce((sum, item) => sum + (item.roleTotals[roleName]?.hours || 0), 0),
+        totalSalary: entries.reduce((sum, item) => sum + (item.roleTotals[roleName]?.salary || 0), 0),
       };
     });
   }, [estimateRoles, estimateSummaries]);
@@ -921,7 +1109,7 @@ export default function SalaryEstimatePage() {
   };
 
   const selectedRoleSummaries = estimateSummaries.filter(
-    (item) => item.employee.role === selectedRole,
+    (item) => item.assignedRoles.includes(selectedRole),
   );
 
   const activeCellEmployees = activeCell
@@ -1187,7 +1375,7 @@ export default function SalaryEstimatePage() {
               />
               <Button
                 variant="outline"
-                className="h-10 gap-2 rounded-lg text-xs self-end"
+                className={WEEK_SHORTCUT_BUTTON_CLASS}
                 onClick={handleApplyCurrentWeek}
               >
                 <CalendarDays className="h-4 w-4" />
@@ -1195,7 +1383,7 @@ export default function SalaryEstimatePage() {
               </Button>
               <Button
                 variant="outline"
-                className="h-10 gap-2 rounded-lg text-xs self-end"
+                className={WEEK_SHORTCUT_BUTTON_CLASS}
                 onClick={handleApplyNextWeek}
               >
                 <CalendarRange className="h-4 w-4" />
@@ -1250,7 +1438,8 @@ export default function SalaryEstimatePage() {
                       onValueChange={setSelectedRole}
                       ariaLabel="Chọn vai trò cần xem"
                       className="w-full"
-                      triggerClassName="h-14 rounded-xl border-slate-200 bg-white px-4 text-base font-bold text-slate-950 shadow-sm hover:border-emerald-300 hover:bg-white focus-visible:ring-emerald-600 [&_svg]:h-5 [&_svg]:w-5 [&_svg:first-child]:text-slate-500"
+                      triggerClassName="h-14 rounded-xl border-slate-200 bg-white px-4 text-base font-bold text-slate-950 shadow-sm hover:border-[#064E3B] hover:bg-white hover:ring-1 hover:ring-[#064E3B]/20 focus-visible:border-[#D6A621] focus-visible:ring-[#E1B23D]/35 [&_svg]:h-5 [&_svg]:w-5 [&_svg:first-child]:text-slate-500"
+                      openTriggerClassName="!border-[#D6A621] !ring-2 !ring-[#E1B23D]/25"
                     />
                   </div>
 
@@ -1278,7 +1467,7 @@ export default function SalaryEstimatePage() {
             </section>
 
             <nav
-              className="sticky top-0 z-30 flex overflow-x-auto border-b border-slate-200 bg-slate-50/95 backdrop-blur"
+              className="flex overflow-x-auto border-b border-slate-200 bg-slate-50"
               aria-label="Nội dung ước lượng lương"
             >
               <button
@@ -1449,8 +1638,8 @@ export default function SalaryEstimatePage() {
                       filteredActiveEmployees.map((employee) => {
                         const employeeKey = getEmployeeKey(employee);
                         const selected = activeSelection.includes(employeeKey);
-                        const shiftCost =
-                          (employee.hourlyRate || 0) * activeShift.hours;
+                        const fixedSalary = isFixedSalaryEmployee(employee);
+                        const shiftCost = getEstimatedHourlyRate(employee) * activeShift.hours;
 
                         return (
                           <button
@@ -1480,21 +1669,28 @@ export default function SalaryEstimatePage() {
                                   </span>
                                 ) : null}
                               </div>
-                              <div className="mt-1 text-sm text-slate-500">
-                                {employee.employeeCode || "Không có mã"} •{" "}
-                                {formatCurrency(employee.hourlyRate || 0)}/giờ
-                              </div>
+                              {!fixedSalary ? (
+                                <div className="mt-1 text-sm text-slate-500">
+                                  {formatCurrency(employee.hourlyRate || 0)}/giờ
+                                </div>
+                              ) : null}
                             </div>
 
                             <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <div className="text-sm font-semibold text-slate-900">
-                                  {formatCurrency(shiftCost)}
+                              {fixedSalary ? (
+                                <div className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                                  Không tính theo ca
                                 </div>
-                                <div className="text-xs text-slate-400">
-                                  Chi phí cho ca này
+                              ) : (
+                                <div className="text-right">
+                                  <div className="text-sm font-semibold text-slate-900">
+                                    {formatCurrency(shiftCost)}
+                                  </div>
+                                  <div className="text-xs text-slate-400">
+                                    Chi phí cho ca này
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                               <div
                                 className={cn(
                                   "flex h-9 w-9 items-center justify-center rounded-full border",
@@ -1554,11 +1750,13 @@ export default function SalaryEstimatePage() {
                     </p>
                   </div>
                 ) : (
-                  selectedRoleSummaries.map((item) => (
-                    <div
-                      key={item.employeeKey}
-                      className="rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
-                    >
+                  selectedRoleSummaries.map((item) => {
+                    const fixedSalary = isFixedSalaryEmployee(item.employee);
+                    return (
+                      <div
+                        key={item.employeeKey}
+                        className="rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
+                      >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div
@@ -1568,14 +1766,18 @@ export default function SalaryEstimatePage() {
                             {item.employee.name}
                           </div>
                           <div className="mt-1 text-sm text-slate-500">
-                            {item.employee.role} •{" "}
-                            {formatCurrency(item.employee.hourlyRate || 0)}/giờ
+                            {item.assignedRoles.join(", ")}
+                            {!fixedSalary ? (
+                              <> • {formatCurrency(item.employee.hourlyRate || 0)}/giờ</>
+                            ) : null}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-semibold text-emerald-700">
-                            {formatCurrency(item.totalSalary)}
-                          </div>
+                          {!fixedSalary ? (
+                            <div className="font-semibold text-emerald-700">
+                              {formatCurrency(item.totalSalary)}
+                            </div>
+                          ) : null}
                           <div className="text-xs text-slate-400">
                             {item.shiftCount} ca
                           </div>
@@ -1584,8 +1786,9 @@ export default function SalaryEstimatePage() {
                       <div className="mt-2 text-sm text-slate-500">
                         {formatHours(item.totalHours)}
                       </div>
-                    </div>
-                  ))
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -1689,8 +1892,8 @@ export default function SalaryEstimatePage() {
                     filteredActiveEmployees.map((employee) => {
                       const employeeKey = getEmployeeKey(employee);
                       const selected = activeSelection.includes(employeeKey);
-                      const shiftCost =
-                        (employee.hourlyRate || 0) * activeShift.hours;
+                      const fixedSalary = isFixedSalaryEmployee(employee);
+                      const shiftCost = getEstimatedHourlyRate(employee) * activeShift.hours;
 
                       return (
                         <button
@@ -1716,18 +1919,25 @@ export default function SalaryEstimatePage() {
                             <span className="block truncate text-sm font-semibold text-slate-900" title={employee.name}>
                               {employee.name}
                             </span>
-                            <div className="mt-0.5 truncate text-xs text-slate-500">
-                              {employee.employeeCode || "Không có mã"} •{" "}
-                              {formatCurrency(employee.hourlyRate || 0)}/giờ
-                            </div>
+                            {!fixedSalary ? (
+                              <div className="mt-0.5 truncate text-xs text-slate-500">
+                                {formatCurrency(employee.hourlyRate || 0)}/giờ
+                              </div>
+                            ) : null}
                           </div>
                           <div className="flex shrink-0 items-center gap-3">
-                            <div className="text-right">
-                              <div className="text-sm font-bold text-slate-900">
-                                {formatCurrency(shiftCost)}
+                            {fixedSalary ? (
+                              <div className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">
+                                Không tính theo ca
                               </div>
-                              <div className="text-[11px] text-slate-400">Chi phí ca</div>
-                            </div>
+                            ) : (
+                              <div className="text-right">
+                                <div className="text-sm font-bold text-slate-900">
+                                  {formatCurrency(shiftCost)}
+                                </div>
+                                <div className="text-[11px] text-slate-400">Chi phí ca</div>
+                              </div>
+                            )}
                             <div
                               className={cn(
                                 "flex h-8 w-8 items-center justify-center rounded-lg border transition",

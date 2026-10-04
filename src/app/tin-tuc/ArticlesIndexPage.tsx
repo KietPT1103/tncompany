@@ -6,6 +6,7 @@ import { navPages } from "../../data/siteData";
 import { getSeoArticles, SeoArticle } from "../../services/seoArticleService";
 import defaultImage from "../../optimized-media/cafe/cafe-hero.jpg";
 import { resolveSeoArticleImageUrl } from "../../components/seo/seoArticleAssets";
+import { Pagination } from "@/components/ui/Pagination";
 
 function getStoreLabel(targetStore: string) {
   if (targetStore === "cafe") return "Cà phê";
@@ -79,22 +80,6 @@ export default function ArticlesIndexPage() {
     (currentPage - 1) * GRID_ITEMS_PER_PAGE,
     currentPage * GRID_ITEMS_PER_PAGE,
   );
-
-  function getPaginationItems(current: number, total: number) {
-    const items: (number | string)[] = [];
-    if (total <= 5) {
-      for (let i = 1; i <= total; i++) items.push(i);
-    } else {
-      if (current <= 3) {
-        items.push(1, 2, 3, 4, "...", total);
-      } else if (current >= total - 2) {
-        items.push(1, "...", total - 3, total - 2, total - 1, total);
-      } else {
-        items.push(1, "...", current - 1, current, current + 1, "...", total);
-      }
-    }
-    return items;
-  }
 
   return (
     <div className="">
@@ -253,32 +238,18 @@ export default function ArticlesIndexPage() {
                 </div>
               )}
 
-              {totalPages > 0 && (
-                <div className="news-pagination" style={{ marginTop: "1rem" }}>
-                  {getPaginationItems(currentPage, totalPages).map(
-                    (item, index) =>
-                      item === "..." ? (
-                        <span
-                          key={`ellipsis-${index}`}
-                          className="news-page-ellipsis"
-                        >
-                          ...
-                        </span>
-                      ) : (
-                        <button
-                          key={`page-${item}`}
-                          className={`news-page-button ${currentPage === item ? "is-active" : ""}`}
-                          onClick={() => {
-                            setCurrentPage(item as number);
-                            window.scrollTo(0, 0);
-                          }}
-                        >
-                          {item}
-                        </button>
-                      ),
-                  )}
-                </div>
-              )}
+              {totalPages > 0 ? (
+                <Pagination
+                  currentPage={currentPage}
+                  totalItems={allGridArticles.length}
+                  pageSize={GRID_ITEMS_PER_PAGE}
+                  onPageChange={(nextPage) => {
+                    setCurrentPage(nextPage);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="mt-4 rounded-xl border border-slate-200"
+                />
+              ) : null}
             </>
           ) : (
             <div

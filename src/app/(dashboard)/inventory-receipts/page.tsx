@@ -3,8 +3,6 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   BadgeCheck,
   Camera,
-  ChevronLeft,
-  ChevronRight,
   FilterX,
   ImageIcon,
   ListChecks,
@@ -23,6 +21,7 @@ import {
 } from "@/services/inventoryReceiptService";
 import PrivateApiImage from "@/components/PrivateApiImage";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
+import { Pagination } from "@/components/ui/Pagination";
 import {
   inventoryReceiptFiltersFromSearchParams,
   inventoryReceiptFiltersToSearchParams,
@@ -359,27 +358,13 @@ export default function FieldInventoryReceiptsPage() {
             ))
           )}
         </div>
-        <div className="mt-4 flex items-center justify-end gap-3">
-          <button
-            aria-label="Trang trước"
-            disabled={pagination.page <= 1}
-            onClick={() => change({ page: pagination.page - 1 })}
-            className="grid min-h-11 min-w-11 place-items-center rounded-xl border bg-white p-2 transition-colors hover:bg-slate-50 disabled:opacity-40"
-          >
-            <ChevronLeft />
-          </button>
-          <span className="text-sm">
-            Trang {pagination.page}/{Math.max(1, pagination.pages)}
-          </span>
-          <button
-            aria-label="Trang sau"
-            disabled={pagination.page >= pagination.pages}
-            onClick={() => change({ page: pagination.page + 1 })}
-            className="grid min-h-11 min-w-11 place-items-center rounded-xl border bg-white p-2 transition-colors hover:bg-slate-50 disabled:opacity-40"
-          >
-            <ChevronRight />
-          </button>
-        </div>
+        <Pagination
+          currentPage={pagination.page}
+          totalItems={pagination.total}
+          pageSize={20}
+          onPageChange={(nextPage) => change({ page: nextPage })}
+          className="mt-4 rounded-xl border border-slate-200"
+        />
       </div>
     </div>
   );

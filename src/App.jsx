@@ -14,6 +14,7 @@ import DashboardPage from "./app/(dashboard)/page";
 import OverviewPage from "./app/(dashboard)/overview/page";
 import InternalInvoicesPage from "./app/(dashboard)/internal-invoices/page";
 import PayrollPage from "./app/(dashboard)/payroll/page";
+import EmployeesPage from "./app/(dashboard)/employees/page";
 import SalaryEstimatePage from "./app/(dashboard)/payroll-estimate-page";
 import ProductsPage from "./app/(dashboard)/product/page";
 import IngredientsPage from "./pages/IngredientsPage";
@@ -219,6 +220,9 @@ export function App() {
               <Route element={<ProtectedLayout allowedRoles={["admin"]} permission="dashboard.access" />}>
                 <Route path="cost" element={<DashboardPage />} />
                 <Route path="overview" element={<OverviewPage />} />
+              </Route>
+              <Route element={<ProtectedLayout allowedRoles={["admin"]} inferPermission={false} />}>
+                <Route path="employees" element={<EmployeesPage />} />
               </Route>
               <Route path="bills" element={<BillsPage />} />
               <Route path="payroll-estimate" element={<SalaryEstimatePage />} />

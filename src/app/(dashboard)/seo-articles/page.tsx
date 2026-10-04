@@ -5,8 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   // ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   EyeOff,
   FileSearch2,
   FileText,
@@ -22,6 +20,7 @@ import RoleGuard from "@/components/RoleGuard";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
+import { Pagination } from "@/components/ui/Pagination";
 import {
   deleteSeoArticle,
   getSeoArticles,
@@ -138,23 +137,6 @@ function getArticleSummary(article: SeoArticle) {
   );
 }
 
-function getVisiblePages(currentPage: number, totalPages: number) {
-  if (totalPages <= 5) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
-  }
-
-  const pages: Array<number | string> = [1];
-  const start = Math.max(2, currentPage - 1);
-  const end = Math.min(totalPages - 1, currentPage + 1);
-
-  if (start > 2) pages.push("start-ellipsis");
-  for (let page = start; page <= end; page += 1) pages.push(page);
-  if (end < totalPages - 1) pages.push("end-ellipsis");
-
-  pages.push(totalPages);
-  return pages;
-}
-
 export default function SeoArticlesPage() {
   const [articles, setArticles] = useState<SeoArticle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,16 +217,6 @@ export default function SeoArticlesPage() {
     (safeCurrentPage - 1) * ARTICLES_PER_PAGE,
     safeCurrentPage * ARTICLES_PER_PAGE,
   );
-  const rangeStart =
-    filteredArticles.length === 0
-      ? 0
-      : (safeCurrentPage - 1) * ARTICLES_PER_PAGE + 1;
-  const rangeEnd = Math.min(
-    safeCurrentPage * ARTICLES_PER_PAGE,
-    filteredArticles.length,
-  );
-  const visiblePages = getVisiblePages(safeCurrentPage, totalPages);
-
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
@@ -649,69 +621,13 @@ export default function SeoArticlesPage() {
               })}
             </section>
 
-            <nav
-              aria-label="Phân trang bài viết SEO"
-              className="flex min-h-16 flex-col items-center justify-between gap-3 rounded-lg bg-white px-4 py-3 shadow-[0_2px_6px_rgba(15,23,42,0.06)] ring-1 ring-slate-200 sm:flex-row"
-            >
-              <p
-                aria-live="polite"
-                className="text-sm text-slate-600 tabular-nums"
-              >
-                Hiển thị {rangeStart}–{rangeEnd} / {filteredArticles.length} kết
-                quả
-              </p>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={safeCurrentPage === 1}
-                  onClick={() => setCurrentPage(safeCurrentPage - 1)}
-                  aria-label="Trang trước"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-
-                {visiblePages.map((page) =>
-                  typeof page === "number" ? (
-                    <button
-                      key={page}
-                      type="button"
-                      onClick={() => setCurrentPage(page)}
-                      aria-current={
-                        page === safeCurrentPage ? "page" : undefined
-                      }
-                      aria-label={`Trang ${page}`}
-                      className={
-                        page === safeCurrentPage
-                          ? "inline-flex h-11 min-w-11 items-center justify-center rounded-md bg-emerald-700 px-2 text-sm font-semibold text-white shadow-[0_2px_6px_rgba(4,120,87,0.2)] tabular-nums"
-                          : "inline-flex h-11 min-w-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-700 transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 active:scale-[0.96] motion-reduce:transition-none"
-                      }
-                    >
-                      {page}
-                    </button>
-                  ) : (
-                    <span
-                      key={page}
-                      aria-hidden="true"
-                      className="inline-flex h-11 min-w-7 items-center justify-center text-sm text-slate-500"
-                    >
-                      …
-                    </span>
-                  ),
-                )}
-
-                <button
-                  type="button"
-                  disabled={safeCurrentPage === totalPages}
-                  onClick={() => setCurrentPage(safeCurrentPage + 1)}
-                  aria-label="Trang sau"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </nav>
+            <Pagination
+              currentPage={safeCurrentPage}
+              totalItems={filteredArticles.length}
+              pageSize={ARTICLES_PER_PAGE}
+              onPageChange={setCurrentPage}
+              className="rounded-lg border border-slate-200 shadow-[0_2px_6px_rgba(15,23,42,0.06)]"
+            />
           </>
         )}
       </main>

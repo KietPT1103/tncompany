@@ -28,14 +28,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { Pagination } from "@/components/ui/Pagination";
 import PrivateApiImage from "@/components/PrivateApiImage";
 import {
   ArrowDownLeft,
   ArrowDown,
   ArrowUp,
   ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   Download,
   Edit3,
@@ -1323,36 +1322,14 @@ export default function BillsPage() {
                         </select>
                       </label>
                     </div>
-                    <nav
-                      aria-label="Phân trang danh sách hóa đơn"
-                      className="flex items-center justify-between gap-2 sm:justify-end"
-                    >
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-11 w-11 sm:h-9 sm:w-9"
-                        onClick={() => setBillPage(billPagination.page - 1)}
-                        disabled={billPagination.page <= 1}
-                        title="Trang trước"
-                        aria-label="Trang hóa đơn trước"
-                      >
-                        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                      <span className="min-w-24 text-center text-sm font-medium tabular-nums text-slate-700">
-                        Trang {billPagination.page}/{billPagination.totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-11 w-11 sm:h-9 sm:w-9"
-                        onClick={() => setBillPage(billPagination.page + 1)}
-                        disabled={billPagination.page >= billPagination.totalPages}
-                        title="Trang sau"
-                        aria-label="Trang hóa đơn sau"
-                      >
-                        <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </nav>
+                    <Pagination
+                      currentPage={billPagination.page}
+                      totalItems={filteredBills.length}
+                      pageSize={billPageSize}
+                      onPageChange={setBillPage}
+                      showSummary={false}
+                      className="min-h-0 border-0 bg-transparent p-0"
+                    />
                   </div>
                 </CardContent>
               </Card>
