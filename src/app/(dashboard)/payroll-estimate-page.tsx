@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocation } from "react-router-dom";
@@ -16,25 +17,29 @@ import {
   updatePayrollEntry,
 } from "@/services/payrolls";
 import { resolveEmployeeSalaryType } from "./payroll/_components/EmployeeSalaryFields";
+import { getRoleGroupsForStore } from "./payroll/_components/payrollShared";
 import { Button } from "@/components/ui/Button";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { Input } from "@/components/ui/Input";
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
+import { Toast } from "@/components/ui/Toast";
+import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   CalendarDays,
   CalendarRange,
   Check,
-  ChevronRight,
   Clock3,
-  Eraser,
+  Search,
   Save,
-  Sparkles,
   Users,
   Wallet,
   X,
 } from "lucide-react";
 
-const ESTIMATE_ROLES = ["Thu ngân", "Phục vụ", "Pha chế"] as const;
+const CAFE_ESTIMATE_ROLES = ["Thu ngân", "Phục vụ", "Pha chế"];
+const MAX_VISIBLE_EMPLOYEES = 3;
 const SHIFT_DEFINITIONS = [
   { id: "shift_1", label: "Ca 1", hours: 5 },
   { id: "shift_2", label: "Ca 2", hours: 5 },
@@ -47,13 +52,8 @@ const SHIFT_TIME_RANGES: Record<ShiftId, { start: string; end: string }> = {
   shift_3: { start: "17:00", end: "23:00" },
 };
 
-const ROLE_THEME: Record<EstimateRole, string> = {
-  "Thu ngân":
-    "from-amber-500/15 to-orange-500/10 text-amber-900 border-amber-200",
-  "Phục vụ":
-    "from-emerald-500/15 to-teal-500/10 text-emerald-900 border-emerald-200",
-  "Pha chế": "from-sky-500/15 to-cyan-500/10 text-sky-900 border-sky-200",
-};
+const ROLE_THEME =
+  "from-[#FFC107] via-[#FFE6A0] via-30% to-white to-60% text-[#064E3B] border-[#E5AE21]";
 
 const SHIFT_THEME: Record<ShiftId, { badge: string; surface: string }> = {
   shift_1: {
@@ -79,6 +79,12 @@ const shortDateFormatter = new Intl.DateTimeFormat("vi-VN", {
   month: "2-digit",
 });
 
+const fullDateFormatter = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
 const longDateFormatter = new Intl.DateTimeFormat("vi-VN", {
   weekday: "long",
   day: "2-digit",
@@ -92,7 +98,8 @@ const hoursFormatter = new Intl.NumberFormat("vi-VN", {
   maximumFractionDigits: 2,
 });
 
-type EstimateRole = (typeof ESTIMATE_ROLES)[number];
+type EstimateRole = string;
+type WorkspaceView = "schedule" | "summary";
 type ShiftId = (typeof SHIFT_DEFINITIONS)[number]["id"];
 type ScheduleState = Record<string, string[]>;
 
@@ -173,6 +180,22 @@ function formatHours(value: number) {
   return `${hoursFormatter.format(value)} giờ`;
 }
 
+function formatShiftTime(value: string) {
+  const [hour, minute] = value.split(":");
+  return minute === "00" ? `${Number(hour)}h` : `${Number(hour)}h${minute}`;
+}
+
+function getEstimateRolesForStore(storeId: string) {
+  if (storeId === "cafe" || storeId === "bakery") {
+    return CAFE_ESTIMATE_ROLES;
+  }
+
+  const roleGroups = getRoleGroupsForStore(storeId);
+  return Object.entries(roleGroups)
+    .filter(([groupName]) => groupName !== "Chung")
+    .flatMap(([, roles]) => roles);
+}
+
 function getEmployeeKey(employee: Employee) {
   return employee.id || employee.employeeCode || employee.name;
 }
@@ -233,9 +256,9 @@ function buildShiftDateTime(date: string, time: string) {
   return `${date}T${time}:00`;
 }
 
-function getRoleOrder(role: string) {
-  const index = ESTIMATE_ROLES.indexOf(role as EstimateRole);
-  return index === -1 ? ESTIMATE_ROLES.length : index;
+function getRoleOrder(role: string, estimateRoles: string[]) {
+  const index = estimateRoles.indexOf(role);
+  return index === -1 ? estimateRoles.length : index;
 }
 
 function getShiftIdFromStoredShift(shift: EstimateSummary["shifts"][number]) {
@@ -310,6 +333,7 @@ function buildScheduleFromEntries(
     shifts?: EstimateSummary["shifts"];
   }>,
   employees: Employee[],
+  estimateRoles: string[],
 ) {
   const schedule: ScheduleState = {};
   let minDate = "";
@@ -317,7 +341,7 @@ function buildScheduleFromEntries(
   let suggestedRole: EstimateRole | null = null;
 
   entries.forEach((entry) => {
-    if (!ESTIMATE_ROLES.includes(entry.role as EstimateRole)) return;
+    if (!estimateRoles.includes(entry.role)) return;
 
     const matchedEmployee = employees.find((employee) => {
       if (entry.employeeId && employee.id && entry.employeeId === employee.id) {
@@ -349,14 +373,14 @@ function buildScheduleFromEntries(
       );
       if (!date) return;
 
-      const cellKey = makeCellKey(date, entry.role as EstimateRole, shiftId);
+      const cellKey = makeCellKey(date, entry.role, shiftId);
       schedule[cellKey] = Array.from(
         new Set([...(schedule[cellKey] || []), employeeKey]),
       );
 
       if (!minDate || date < minDate) minDate = date;
       if (!maxDate || date > maxDate) maxDate = date;
-      if (!suggestedRole) suggestedRole = entry.role as EstimateRole;
+      if (!suggestedRole) suggestedRole = entry.role;
     });
   });
 
@@ -386,28 +410,46 @@ function RoleScheduleTable({
   week: WeekSegment;
 }) {
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+    <section className="overflow-hidden rounded border border-slate-200 bg-white shadow-[5px_7px_12px_rgba(15,23,42,0.16)]">
       <div
         className={cn(
-          "flex items-center justify-between rounded-t-[28px] border-b bg-gradient-to-r px-5 py-4",
-          ROLE_THEME[role],
+          "flex items-center justify-between border-b bg-gradient-to-r px-4 py-3",
+          ROLE_THEME,
         )}
       >
-        <h3 className="text-lg font-semibold">{role}</h3>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70">Lịch phân ca</p>
+          <h3 className="text-lg font-bold">{role}</h3>
+        </div>
+        <div className="rounded border border-emerald-900/15 bg-white/75 px-3 py-2 text-right shadow-sm backdrop-blur-sm">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-800/70">
+            Khoảng ngày
+          </p>
+          <div className="mt-0.5 flex items-center gap-1.5 text-sm font-bold tabular-nums text-emerald-950">
+            <CalendarDays className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
+            <span>
+              {fullDateFormatter.format(parseDateKey(week.days[0].date))}
+              {" – "}
+              {fullDateFormatter.format(
+                parseDateKey(week.days[week.days.length - 1].date),
+              )}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1080px] w-full table-fixed border-separate border-spacing-0">
-          <thead>
+        <table className="w-full min-w-[920px] table-fixed border-separate border-spacing-0 2xl:min-w-[1080px]">
+          <thead className="bg-slate-50/80">
             <tr className="text-left text-xs uppercase tracking-[0.16em] text-slate-500">
-              <th className="sticky left-0 z-20 min-w-[130px] border-b border-r border-slate-200 bg-white px-4 py-4">
+              <th className="sticky left-0 z-20 min-w-[110px] border-b border-r border-slate-200 bg-white px-3 py-3 2xl:min-w-[130px] 2xl:px-4 2xl:py-4">
                 Ca
               </th>
               {week.days.map((day) => (
                 <th
                   key={day.date}
                   className={cn(
-                    "min-w-[135px] border-b border-slate-200 px-4 py-4",
+                    "min-w-[115px] border-b border-slate-200 px-2.5 py-3 2xl:min-w-[135px] 2xl:px-3",
                     day.inRange ? "bg-white" : "bg-slate-50 text-slate-400",
                   )}
                 >
@@ -432,7 +474,7 @@ function RoleScheduleTable({
               <tr key={shift.id}>
                 <td
                   className={cn(
-                    "sticky left-0 z-10 border-r border-slate-200 px-4 py-4 align-top",
+                    "sticky left-0 z-10 border-r border-slate-200 px-3 py-3 align-top 2xl:px-4 2xl:py-4",
                     SHIFT_THEME[shift.id].surface,
                   )}
                 >
@@ -445,8 +487,15 @@ function RoleScheduleTable({
                     >
                       {shift.label}
                     </span>
-                    <div className="text-sm font-medium text-slate-800">
-                      {shift.hours} giờ
+                    <div>
+                      <div className="whitespace-nowrap text-xs font-bold text-slate-800">
+                        {formatShiftTime(SHIFT_TIME_RANGES[shift.id].start)}
+                        {" – "}
+                        {formatShiftTime(SHIFT_TIME_RANGES[shift.id].end)}
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-slate-500">
+                        {shift.hours} tiếng
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -491,22 +540,22 @@ function RoleScheduleTable({
                           }
                         }}
                         className={cn(
-                          "min-h-[170px] border bg-white px-2.5 py-2 text-left transition",
+                          "min-h-[128px] rounded-lg border bg-white p-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 2xl:min-h-[142px] 2xl:p-2.5",
                           isActive
                             ? "border-slate-900 bg-slate-50"
                             : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50",
                         )}
                       >
-                        {/* <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                            <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                              {selectedEmployees.length} người
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                            {selectedEmployees.length > 0 ? `${selectedEmployees.length} người` : "Chưa xếp"}
+                          </span>
+                          {selectedEmployees.length > 0 ? (
+                            <span className="text-[10px] font-bold text-emerald-700">
+                              {formatCurrency(cellEstimate)}
                             </span>
-                            {selectedEmployees.length > 0 ? (
-                              <span className="text-[10px] font-semibold text-emerald-700">
-                                {formatCurrency(cellEstimate)}
-                              </span>
-                            ) : null}
-                          </div> */}
+                          ) : null}
+                        </div>
 
                         <div className="mt-2 space-y-0.5">
                           {selectedEmployees.length === 0 ? (
@@ -514,15 +563,15 @@ function RoleScheduleTable({
                               Chọn người
                             </span>
                           ) : (
-                            selectedEmployees.map((employee) => {
+                            selectedEmployees.slice(0, MAX_VISIBLE_EMPLOYEES).map((employee) => {
                               const employeeKey = getEmployeeKey(employee);
                               return (
                                 <div
                                   key={employeeKey}
-                                  className="flex w-full items-start gap-1 border-b border-slate-100 py-1 text-slate-900 last:border-b-0"
+                                  className="flex w-full items-center gap-1 py-1 text-slate-800"
                                   title={employee.name}
                                 >
-                                  <span className="min-w-0 flex-1 break-words text-[15px] font-semibold leading-5">
+                                  <span className="min-w-0 flex-1 truncate text-xs font-semibold leading-5">
                                     {employee.name}
                                   </span>
                                   <button
@@ -540,6 +589,11 @@ function RoleScheduleTable({
                               );
                             })
                           )}
+                          {selectedEmployees.length > MAX_VISIBLE_EMPLOYEES ? (
+                            <div className="mt-1 rounded-md bg-slate-100 px-2 py-1 text-center text-[11px] font-semibold text-slate-600">
+                              +{selectedEmployees.length - MAX_VISIBLE_EMPLOYEES} nhân viên khác
+                            </div>
+                          ) : null}
                         </div>
 
                       </div>
@@ -556,7 +610,7 @@ function RoleScheduleTable({
 }
 
 export default function SalaryEstimatePage() {
-  const { user, role, loading } = useAuth();
+  const { user, loading } = useAuth();
   const { storeId, storeName } = useStore();
   const router = useRouter();
   const location = useLocation();
@@ -573,9 +627,24 @@ export default function SalaryEstimatePage() {
   const [editingPayrollId, setEditingPayrollId] = useState("");
   const [range, setRange] = useState(getCurrentWeekRange);
   const [selectedRole, setSelectedRole] = useState<EstimateRole>(
-    ESTIMATE_ROLES[0],
+    CAFE_ESTIMATE_ROLES[0],
   );
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("schedule");
   const [loadingSavedEstimate, setLoadingSavedEstimate] = useState(false);
+
+  const estimateRoles = useMemo(
+    () => getEstimateRolesForStore(storeId),
+    [storeId],
+  );
+  const roleOptions = useMemo<readonly SelectBoxOption<EstimateRole>[]>(
+    () =>
+      estimateRoles.map((value) => ({
+        value,
+        label: value,
+        icon: CalendarDays,
+      })),
+    [estimateRoles],
+  );
 
   useEffect(() => {
     if (!loading) {
@@ -619,8 +688,30 @@ export default function SalaryEstimatePage() {
   }, [storeId]);
 
   useEffect(() => {
+    setSelectedRole((currentRole) =>
+      estimateRoles.includes(currentRole)
+        ? currentRole
+        : estimateRoles[0] || "",
+    );
+    setActiveCell(null);
+    setSchedule({});
+    setEditingPayrollId("");
+  }, [estimateRoles, storeId]);
+
+  useEffect(() => {
     setCellSearch("");
   }, [activeCell?.date, activeCell?.role, activeCell?.shiftId]);
+
+  useEffect(() => {
+    if (!activeCell) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [activeCell]);
 
   useEffect(() => {
     if (activeCell && activeCell.role !== selectedRole) {
@@ -665,11 +756,11 @@ export default function SalaryEstimatePage() {
       employees
         .filter(
           (employee) =>
-            ESTIMATE_ROLES.includes(employee.role as EstimateRole) &&
+            estimateRoles.includes(employee.role) &&
             resolveEmployeeSalaryType(employee) === "hourly",
         )
         .sort((left, right) => left.name.localeCompare(right.name, "vi")),
-    [employees],
+    [employees, estimateRoles],
   );
 
   const queryPayrollId = useMemo(() => {
@@ -695,7 +786,11 @@ export default function SalaryEstimatePage() {
     getPayrollEntries(queryPayrollId)
       .then((entries) => {
         if (ignore) return;
-        const restored = buildScheduleFromEntries(entries, supportedEmployees);
+        const restored = buildScheduleFromEntries(
+          entries,
+          supportedEmployees,
+          estimateRoles,
+        );
         setSchedule(restored.schedule);
         if (restored.startDate && restored.endDate) {
           setRange({
@@ -727,29 +822,27 @@ export default function SalaryEstimatePage() {
     return () => {
       ignore = true;
     };
-  }, [queryPayrollId, supportedEmployees]);
+  }, [estimateRoles, queryPayrollId, supportedEmployees]);
 
   const employeesByRole = useMemo(() => {
-    const next = {
-      "Thu ngân": [] as Employee[],
-      "Phục vụ": [] as Employee[],
-      "Pha chế": [] as Employee[],
-    };
+    const next = Object.fromEntries(
+      estimateRoles.map((roleName) => [roleName, [] as Employee[]]),
+    ) as Record<EstimateRole, Employee[]>;
 
     supportedEmployees.forEach((employee) => {
-      if (ESTIMATE_ROLES.includes(employee.role as EstimateRole)) {
-        next[employee.role as EstimateRole].push(employee);
+      if (estimateRoles.includes(employee.role)) {
+        next[employee.role].push(employee);
       }
     });
 
     return next;
-  }, [supportedEmployees]);
+  }, [estimateRoles, supportedEmployees]);
 
   const estimateSummaries = useMemo(() => {
     const summaryMap = new Map<string, EstimateSummary>();
 
     visibleDateSet.forEach((date) => {
-      ESTIMATE_ROLES.forEach((roleName) => {
+      estimateRoles.forEach((roleName) => {
         SHIFT_DEFINITIONS.forEach((shift) => {
           const selectedEmployeeKeys =
             schedule[makeCellKey(date, roleName, shift.id)] || [];
@@ -789,11 +882,12 @@ export default function SalaryEstimatePage() {
 
     return Array.from(summaryMap.values()).sort((left, right) => {
       const roleDiff =
-        getRoleOrder(left.employee.role) - getRoleOrder(right.employee.role);
+        getRoleOrder(left.employee.role, estimateRoles) -
+        getRoleOrder(right.employee.role, estimateRoles);
       if (roleDiff !== 0) return roleDiff;
       return left.employee.name.localeCompare(right.employee.name, "vi");
     });
-  }, [employeeByKey, schedule, visibleDateSet]);
+  }, [employeeByKey, estimateRoles, schedule, visibleDateSet]);
 
   const totalEstimate = estimateSummaries.reduce(
     (sum, item) => sum + item.totalSalary,
@@ -804,7 +898,7 @@ export default function SalaryEstimatePage() {
     0,
   );
   const totalsByRole = useMemo(() => {
-    return ESTIMATE_ROLES.map((roleName) => {
+    return estimateRoles.map((roleName) => {
       const entries = estimateSummaries.filter(
         (item) => item.employee.role === roleName,
       );
@@ -815,7 +909,7 @@ export default function SalaryEstimatePage() {
         totalSalary: entries.reduce((sum, item) => sum + item.totalSalary, 0),
       };
     });
-  }, [estimateSummaries]);
+  }, [estimateRoles, estimateSummaries]);
 
   const selectedRoleTotal = totalsByRole.find(
     (item) => item.role === selectedRole,
@@ -831,7 +925,7 @@ export default function SalaryEstimatePage() {
   );
 
   const activeCellEmployees = activeCell
-    ? employeesByRole[activeCell.role]
+    ? employeesByRole[activeCell.role] || []
     : [];
   const activeSelection = activeCell
     ? schedule[
@@ -851,6 +945,7 @@ export default function SalaryEstimatePage() {
       (employee.employeeCode || "").toLowerCase().includes(keyword)
     );
   });
+  const canAccessPayroll = hasPermission(user, "payroll.access");
 
   function updateCellEmployees(
     cell: ActiveCell,
@@ -1048,74 +1143,51 @@ export default function SalaryEstimatePage() {
   if (loading || !user || !storeId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-emerald-600" />
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-200 border-t-emerald-700" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-full bg-slate-50">
-      <div className="mx-auto max-w-[1680px] space-y-6 p-4 lg:p-6">
-        <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div className="space-y-3">
-              <Link href="/payroll">
-                <Button
-                  variant="ghost"
-                  className="h-10 gap-2 px-0 text-slate-500"
-                >
+    <div className="min-h-full bg-slate-50/80">
+      <div className="mx-auto max-w-screen-2xl space-y-5 p-3 sm:p-5 lg:p-6">
+        <header className="border-b border-slate-200 pb-5">
+          <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-end 2xl:justify-between">
+            <div>
+              {canAccessPayroll ? (
+                <Link href="/payroll" className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                   <ArrowLeft className="h-4 w-4" />
                   Về tính lương
-                </Button>
-              </Link>
-
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Trang riêng để ước lượng lương
-                </div>
-                <h1 className="mt-3 text-3xl font-semibold text-slate-900">
-                  Lịch phân ca và ước tính lương
-                </h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                  Chọn khoảng ngày, xếp người vào từng ca theo tuần, hệ thống sẽ
-                  cộng giờ làm và tính ra lương ước tính dựa trên lương giờ của
-                  từng nhân viên.
-                </p>
-                <p className="mt-2 text-sm font-medium text-slate-700">
-                  {storeName} • Ca 1: 5 giờ • Ca 2: 5 giờ • Ca 3: 6 giờ
-                </p>
+                </Link>
+              ) : null}
+              <h1 className="font-smooch text-4xl font-bold leading-none text-emerald-800 sm:text-5xl">
+                Lịch phân ca và ước tính lương
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm font-semibold text-[#b89220]">
+                Xếp lịch theo ca, theo dõi giờ làm và dự tính chi phí lương tại {storeName}.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+                {SHIFT_DEFINITIONS.map((shift) => (
+                  <span key={shift.id} className="rounded-md border border-slate-200 bg-white px-2.5 py-1">
+                    {shift.label} · {shift.hours} giờ
+                  </span>
+                ))}
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_220px_auto_auto_auto]">
-              <Input
-                type="date"
-                label="Từ ngày"
-                value={range.startDate}
-                onChange={(event) =>
-                  setRange((current) => ({
-                    ...current,
-                    startDate: event.target.value,
-                  }))
-                }
-                className="h-11 rounded-2xl border-slate-200"
-              />
-              <Input
-                type="date"
-                label="Đến ngày"
-                value={range.endDate}
-                onChange={(event) =>
-                  setRange((current) => ({
-                    ...current,
-                    endDate: event.target.value,
-                  }))
-                }
-                className="h-11 rounded-2xl border-slate-200"
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <DateRangePicker
+                label="Khoảng ngày"
+                startDate={range.startDate}
+                endDate={range.endDate}
+                onChange={(startDate, endDate) => setRange({ startDate, endDate })}
+                className="w-full sm:w-80"
+                triggerClassName="h-10 rounded-lg border-slate-200 bg-white text-emerald-900 shadow-sm hover:border-slate-300 focus-visible:ring-emerald-800/25 [&_svg]:text-emerald-800"
+                openTriggerClassName="!border-emerald-800 !ring-0"
               />
               <Button
                 variant="outline"
-                className="h-11 gap-2 rounded-2xl self-end"
+                className="h-10 gap-2 rounded-lg text-xs self-end"
                 onClick={handleApplyCurrentWeek}
               >
                 <CalendarDays className="h-4 w-4" />
@@ -1123,7 +1195,7 @@ export default function SalaryEstimatePage() {
               </Button>
               <Button
                 variant="outline"
-                className="h-11 gap-2 rounded-2xl self-end"
+                className="h-10 gap-2 rounded-lg text-xs self-end"
                 onClick={handleApplyNextWeek}
               >
                 <CalendarRange className="h-4 w-4" />
@@ -1131,32 +1203,14 @@ export default function SalaryEstimatePage() {
               </Button>
             </div>
           </div>
-        </section>
+        </header>
 
-        {loadError ? (
-          <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {loadError}
-          </div>
-        ) : null}
-
-        {submitError ? (
-          <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {submitError}
-          </div>
-        ) : null}
-
-        {saveMessage ? (
-          <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {saveMessage}
-          </div>
-        ) : null}
-
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-6">
-            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="space-y-5">
+          <div className="space-y-5">
+            <section className="border border-slate-200 bg-white p-4 shadow-[5px_7px_12px_rgba(15,23,42,0.16)] rounded">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="rounded-lg bg-emerald-50/70 px-4 py-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
                       <Wallet className="h-4 w-4 text-emerald-600" />
                       Tổng toàn khoảng
@@ -1170,7 +1224,7 @@ export default function SalaryEstimatePage() {
                     </div>
                   </div>
 
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="rounded-lg bg-sky-50/70 px-4 py-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
                       <Clock3 className="h-4 w-4 text-sky-600" />
                       Đang xem: {selectedRole}
@@ -1186,24 +1240,19 @@ export default function SalaryEstimatePage() {
                 </div>
 
                 <div className="flex flex-col gap-3 md:flex-row md:items-end">
-                  <label className="block">
+                  <div className="w-full border-slate-200 md:w-[280px] md:border-l md:pl-6">
                     <span className="mb-2 block text-sm font-medium text-slate-600">
-                      Chọn bảng cần xem
+                      Chọn vai trò cần xem
                     </span>
-                    <select
+                    <SelectBox
                       value={selectedRole}
-                      onChange={(event) =>
-                        setSelectedRole(event.target.value as EstimateRole)
-                      }
-                      className="h-11 min-w-[180px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                    >
-                      {ESTIMATE_ROLES.map((roleName) => (
-                        <option key={roleName} value={roleName}>
-                          {roleName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      options={roleOptions}
+                      onValueChange={setSelectedRole}
+                      ariaLabel="Chọn vai trò cần xem"
+                      className="w-full"
+                      triggerClassName="h-14 rounded-xl border-slate-200 bg-white px-4 text-base font-bold text-slate-950 shadow-sm hover:border-emerald-300 hover:bg-white focus-visible:ring-emerald-600 [&_svg]:h-5 [&_svg]:w-5 [&_svg:first-child]:text-slate-500"
+                    />
+                  </div>
 
                   {/* <Button
                     variant="outline"
@@ -1228,6 +1277,51 @@ export default function SalaryEstimatePage() {
               </div>
             </section>
 
+            <nav
+              className="sticky top-0 z-30 flex overflow-x-auto border-b border-slate-200 bg-slate-50/95 backdrop-blur"
+              aria-label="Nội dung ước lượng lương"
+            >
+              <button
+                type="button"
+                onClick={() => setWorkspaceView("schedule")}
+                aria-current={workspaceView === "schedule" ? "page" : undefined}
+                className={cn(
+                  "inline-flex h-12 rounded shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset",
+                  workspaceView === "schedule"
+                    ? "border-[#E1B23D] bg-[#064E3B] text-[#F6C85F]"
+                    : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800",
+                )}
+              >
+                <CalendarRange className="h-4 w-4" aria-hidden="true" />
+                Lịch phân ca
+              </button>
+              <button
+                type="button"
+                onClick={() => setWorkspaceView("summary")}
+                aria-current={workspaceView === "summary" ? "page" : undefined}
+                className={cn(
+                  "inline-flex h-12 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset",
+                  workspaceView === "summary"
+                    ? "border-[#E1B23D] bg-[#064E3B] text-[#F6C85F]"
+                    : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800",
+                )}
+              >
+                <Users className="h-4 w-4" aria-hidden="true" />
+                Tổng hợp nhân viên
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px]",
+                    workspaceView === "summary"
+                      ? "bg-[#F6C85F] text-[#064E3B]"
+                      : "bg-slate-200 text-slate-700",
+                  )}
+                >
+                  {selectedRoleSummaries.length}
+                </span>
+              </button>
+            </nav>
+
+            <div className={workspaceView === "schedule" ? "block" : "hidden"}>
             {employeesLoading ? (
               <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-14 text-center text-slate-500 shadow-sm">
                 Đang tải nhân viên...
@@ -1238,8 +1332,9 @@ export default function SalaryEstimatePage() {
                   Chưa có nhân viên phù hợp để xếp lịch
                 </h3>
                 <p className="mt-2 text-sm text-slate-500">
-                  Trang này đang chia lịch cho 3 vai trò: Thu ngân, Phục vụ, Pha
-                  chế. Hãy kiểm tra lại vai trò trong mục Nhân sự nếu cần.
+                  Trang này đang chia lịch cho {estimateRoles.length} vai trò: {" "}
+                  {estimateRoles.join(", ")}. Hãy kiểm tra lại vai trò trong mục
+                  Nhân sự nếu cần.
                 </p>
               </div>
             ) : (
@@ -1285,10 +1380,11 @@ export default function SalaryEstimatePage() {
                 </section>
               ))
             )}
+            </div>
           </div>
 
-          <aside className="space-y-4 self-start xl:sticky xl:top-6">
-            <section className="hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <aside className={workspaceView === "summary" ? "block" : "hidden"}>
+            <section hidden className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -1441,20 +1537,27 @@ export default function SalaryEstimatePage() {
               )}
             </section>
 
-            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-semibold text-slate-900">
-                Tổng hợp theo nhân viên
-              </h2>
-              <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+            <section className="rounded-xl border border-slate-200 bg-white shadow-[5px_7px_12px_rgba(15,23,42,0.16)]">
+              <div className="border-b border-slate-200 px-4 py-3">
+                <h2 className="text-base font-bold text-slate-900">Tổng hợp nhân viên</h2>
+                <p className="mt-0.5 text-xs text-slate-500">{selectedRole} · {selectedRoleSummaries.length} người</p>
+              </div>
+              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
                 {selectedRoleSummaries.length === 0 ? (
-                  <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                    Chưa có ai được xếp lịch cho bảng này.
+                  <div className="flex min-h-44 flex-col items-center justify-center px-5 py-8 text-center sm:col-span-2 xl:col-span-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                      <Users className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <h3 className="mt-3 text-sm font-bold text-slate-800">Chưa xếp nhân viên</h3>
+                    <p className="mt-1 max-w-52 text-xs leading-5 text-slate-500">
+                      Chọn một ô trong lịch để thêm nhân viên vào ca làm.
+                    </p>
                   </div>
                 ) : (
                   selectedRoleSummaries.map((item) => (
                     <div
                       key={item.employeeKey}
-                      className="rounded-[22px] border border-slate-200 px-4 py-3"
+                      className="rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -1489,58 +1592,98 @@ export default function SalaryEstimatePage() {
           </aside>
         </div>
 
-        {activeCell && activeShift ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-3xl rounded-[30px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.28)]">
-              <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Chọn nhân viên
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
-                      {activeCell.role}
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded-full px-3 py-1 text-xs font-semibold",
-                        SHIFT_THEME[activeShift.id].badge,
-                      )}
-                    >
-                      {activeShift.label} • {activeShift.hours} giờ
-                    </span>
+        <Toast
+          open={Boolean(loadError || submitError || saveMessage)}
+          title={loadError || submitError ? "Không thể hoàn tất" : "Đã lưu bản ước tính"}
+          description={loadError || submitError || saveMessage}
+          variant={loadError || submitError ? "error" : "success"}
+          onDismiss={() => {
+            setLoadError("");
+            setSubmitError("");
+            setSaveMessage("");
+          }}
+        />
+
+        {activeCell && activeShift && typeof document !== "undefined"
+          ? createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-[2px] sm:p-5"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="employee-picker-title"
+          >
+            <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] sm:max-h-[min(780px,calc(100dvh-40px))]">
+              <div className="shrink-0 border-b border-slate-200 px-4 py-4 sm:px-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+                      Xếp lịch làm việc
+                    </p>
+                    <h2 id="employee-picker-title" className="mt-1 text-lg font-bold text-slate-950">
+                      Chọn nhân viên
+                    </h2>
                   </div>
-                  <div className="mt-3 text-sm font-medium text-slate-900">
-                    {longDateFormatter.format(parseDateKey(activeCell.date))}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    {activeSelection.length} người •{" "}
-                    {formatHours(activeSelection.length * activeShift.hours)}
-                  </div>
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    onClick={() => setActiveCell(null)}
+                    aria-label="Đóng popup"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200"
-                  onClick={() => setActiveCell(null)}
-                  aria-label="Đóng popup"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+                  <span className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                    {activeCell.role}
+                  </span>
+                  <span className={cn("rounded-md px-2.5 py-1 text-xs font-semibold", SHIFT_THEME[activeShift.id].badge)}>
+                    {activeShift.label} · {activeShift.hours} giờ
+                  </span>
+                  <span className="font-medium text-slate-700">
+                    {longDateFormatter.format(parseDateKey(activeCell.date))}
+                  </span>
+                  <span className="ml-auto font-semibold text-emerald-700">
+                    {activeSelection.length} đã chọn
+                  </span>
+                </div>
               </div>
 
-              <div className="space-y-4 px-6 py-5">
-                <Input
-                  value={cellSearch}
-                  onChange={(event) => setCellSearch(event.target.value)}
-                  placeholder="Tìm tên hoặc mã"
-                  className="h-11 rounded-2xl border-slate-200 bg-slate-50"
-                />
+              <div className="shrink-0 border-b border-slate-100 bg-white px-4 py-3 sm:px-5">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                  <Input
+                    value={cellSearch}
+                    onChange={(event) => setCellSearch(event.target.value)}
+                    placeholder="Tìm theo tên hoặc mã nhân viên"
+                    className="h-10 rounded-xl border-slate-200 bg-slate-50 pl-10 pr-10 text-sm focus:bg-white"
+                    autoFocus
+                  />
+                  {cellSearch ? (
+                    <button
+                      type="button"
+                      onClick={() => setCellSearch("")}
+                      className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                      aria-label="Xóa nội dung tìm kiếm"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  {filteredActiveEmployees.length} nhân viên phù hợp
+                </p>
+              </div>
 
-                <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5">
+                <div className="space-y-2">
                   {filteredActiveEmployees.length === 0 ? (
-                    <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                      Không có nhân viên phù hợp với ô đang chọn.
+                    <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-slate-400 shadow-sm">
+                        <Users className="h-5 w-5" aria-hidden="true" />
+                      </div>
+                      <p className="mt-3 text-sm font-semibold text-slate-800">Không tìm thấy nhân viên</p>
+                      <p className="mt-1 text-xs text-slate-500">Thử tìm bằng tên hoặc mã khác.</p>
                     </div>
                   ) : (
                     filteredActiveEmployees.map((employee) => {
@@ -1557,47 +1700,40 @@ export default function SalaryEstimatePage() {
                             toggleEmployeeInActiveCell(employeeKey)
                           }
                           className={cn(
-                            "flex w-full items-center justify-between rounded-[22px] border px-4 py-3 text-left transition",
+                            "group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                             selected
-                              ? "border-emerald-300 bg-emerald-50"
-                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                              ? "border-emerald-300 bg-emerald-50/80"
+                              : "border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50",
                           )}
                         >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="truncate font-semibold text-slate-900"
-                                title={employee.name}
-                              >
-                                {employee.name}
-                              </span>
-                              {selected ? (
-                                <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
-                                  Đã chọn
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-1 text-sm text-slate-500">
+                          <div className={cn(
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
+                            selected ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600",
+                          )}>
+                            {employee.name.trim().slice(0, 2).toLocaleUpperCase("vi-VN")}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-slate-900" title={employee.name}>
+                              {employee.name}
+                            </span>
+                            <div className="mt-0.5 truncate text-xs text-slate-500">
                               {employee.employeeCode || "Không có mã"} •{" "}
                               {formatCurrency(employee.hourlyRate || 0)}/giờ
                             </div>
                           </div>
-
-                          <div className="flex items-center gap-3">
+                          <div className="flex shrink-0 items-center gap-3">
                             <div className="text-right">
-                              <div className="text-sm font-semibold text-slate-900">
+                              <div className="text-sm font-bold text-slate-900">
                                 {formatCurrency(shiftCost)}
                               </div>
-                              <div className="text-xs text-slate-400">
-                                Chi phí ca này
-                              </div>
+                              <div className="text-[11px] text-slate-400">Chi phí ca</div>
                             </div>
                             <div
                               className={cn(
-                                "flex h-9 w-9 items-center justify-center rounded-full border",
+                                "flex h-8 w-8 items-center justify-center rounded-lg border transition",
                                 selected
                                   ? "border-emerald-600 bg-emerald-600 text-white"
-                                  : "border-slate-200 bg-white text-slate-400",
+                                  : "border-slate-200 bg-white text-slate-300 group-hover:border-emerald-300 group-hover:text-emerald-600",
                               )}
                             >
                               <Check className="h-4 w-4" />
@@ -1610,43 +1746,45 @@ export default function SalaryEstimatePage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-slate-500">
-                  {estimateSummaries.length > 0
-                    ? `${formatCurrency(totalEstimate)} • ${formatHours(totalHours)}`
-                    : "Chọn nhân viên rồi lưu bản nháp tại đây"}
-                </div>
-                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                  <Button
-                    variant="outline"
-                    className="rounded-2xl"
-                    onClick={() => clearCell(activeCell)}
-                    disabled={activeSelection.length === 0}
-                  >
-                    Xóa ô này
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="rounded-2xl"
-                    onClick={() => setActiveCell(null)}
-                  >
-                    Đóng
-                  </Button>
-                  <Button
-                    className="gap-2 rounded-2xl"
-                    isLoading={saving}
-                    onClick={() => void handleSaveFromPicker()}
-                    disabled={
-                      estimateSummaries.length === 0 || loadingSavedEstimate
-                    }
-                  >
-                    <Save className="h-4 w-4" />
-                    {editingPayrollId ? "Lưu thay đổi" : "Lưu bản nháp"}
-                  </Button>
+              <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-4 py-3 sm:px-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs text-slate-500">Ca đang chọn</p>
+                    <p className="mt-0.5 text-sm font-semibold text-slate-900">
+                      {activeSelection.length} người · {formatHours(activeSelection.length * activeShift.hours)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      className="h-9 rounded-lg px-3 text-xs"
+                      onClick={() => clearCell(activeCell)}
+                      disabled={activeSelection.length === 0}
+                    >
+                      Xóa lựa chọn
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-9 rounded-lg px-4 text-xs"
+                      onClick={() => setActiveCell(null)}
+                    >
+                      Đóng
+                    </Button>
+                    <Button
+                      className="h-9 gap-2 rounded-lg px-4 text-xs"
+                      isLoading={saving}
+                      onClick={() => void handleSaveFromPicker()}
+                      disabled={estimateSummaries.length === 0 || loadingSavedEstimate}
+                    >
+                      <Save className="h-4 w-4" />
+                      {editingPayrollId ? "Lưu thay đổi" : "Lưu bản nháp"}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body,
         ) : null}
       </div>
     </div>
