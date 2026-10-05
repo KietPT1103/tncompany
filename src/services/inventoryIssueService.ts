@@ -32,12 +32,17 @@ export type InventoryIssue = {
   shiftId?: string | null;
   shiftType?: "shift_1" | "shift_2" | "shift_3" | "single" | null;
   updatedAt: string;
+  revision: number;
+  cancelReason?: string;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
   items: InventoryIssueItem[];
   printJob?: InventoryIssuePrintJob | null;
 };
 
 export type InventoryIssuePayload = {
   id?: string;
+  revision?: number;
   storeId: string;
   issueDate: string;
   destination: string;
@@ -64,9 +69,10 @@ export async function saveInventoryIssue(payload: InventoryIssuePayload) {
   return result.item;
 }
 
-export async function deleteInventoryIssue(id: string, storeId: string) {
-  return apiRequest<{ deleted: boolean }>("/inventory-issues.php", {
-    method: "DELETE",
-    body: JSON.stringify({ id, storeId }),
+export async function cancelInventoryIssue(issue: InventoryIssue, reason: string) {
+  const result = await apiRequest<{ item: InventoryIssue }>("/inventory-issues.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "cancel", id: issue.id, storeId: issue.storeId, revision: issue.revision, reason }),
   });
+  return result.item;
 }

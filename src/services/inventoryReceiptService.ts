@@ -10,6 +10,7 @@ export type InventoryReceiptImage = {
   capturedAt: string; locationAddress?: string | null;
 };
 export type InventoryReceipt = {
+  evidenceReceiptId?: string | null; linkedReceipts?: Array<{id: string; receipt_code: string}>;
   id: string; receiptCode: string; areaId: string; storeId: string;
   entrySource?: "mobile_photo" | "web_manual";
   area: { id: string; name: string }; status: ReceiptStatus; receiptDate: string;
@@ -25,7 +26,7 @@ export type InventoryReceipt = {
 };
 export type ReceiptCounts = Record<ReceiptStatus | "all", number>;
 export type ReceiptFilters = {
-  status?: ReceiptStatus; areaId?: string; employeeId?: string; dateFrom?: string; dateTo?: string;
+  evidenceStatus?: "linked" | "unlinked" | "review"; view?: "ledger" | "evidence"; status?: ReceiptStatus; areaId?: string; employeeId?: string; dateFrom?: string; dateTo?: string;
   keyword?: string; productKeyword?: string; page?: number; limit?: number; sort?: "newest" | "oldest" | "amount_desc";
 };
 export type Area = { id: string; code: string; name: string };
@@ -38,7 +39,7 @@ export const getAreas = async () => (await apiRequest<{ items: Area[] }>("/areas
 export async function getInventoryReceipts(filters: ReceiptFilters = {}) {
   const query = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => value !== undefined && value !== "" && query.set(key, String(value)));
-  return apiRequest<{ items: InventoryReceipt[]; counts: ReceiptCounts; pagination: { page: number; limit: number; total: number; pages: number } }>(
+  return apiRequest<{ items: InventoryReceipt[]; counts: ReceiptCounts; summary?: Record<string, number>; pagination: { page: number; limit: number; total: number; pages: number } }>(
     `/inventory-receipts.php?${query}`
   );
 }
@@ -94,6 +95,7 @@ export async function createManualInventoryReceipt(payload: {
   storeId: string;
   receiptDate: string;
   enteredBy: string;
+  evidenceReceiptId?: string;
   supplierId?: string | null;
   note?: string;
   shiftId?: string | null;
@@ -105,4 +107,17 @@ export async function createManualInventoryReceipt(payload: {
     body: JSON.stringify(payload),
   });
   return result.item;
+}
+
+export async function getAvailableInventoryEvidence(areaId: string) {
+  const items: InventoryReceipt[] = [];
+  let page = 1;
+  let pages = 1;
+  do {
+    const data = await getInventoryReceipts({areaId, view: "evidence", evidenceStatus: "unlinked", limit: 100, page});
+    items.push(...data.items.filter(item => !["completed", "deleted", "cancelled"].includes(item.status)));
+    pages = data.pagination.pages;
+    page += 1;
+  } while (page <= pages);
+  return items;
 }

@@ -125,7 +125,7 @@ function inventory_issue_print_jobs_claim(string $storeId, string $terminalName)
     try {
         $pdo->prepare('UPDATE inventory_issue_print_jobs SET status="pending",claimed_by=NULL,claim_token=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=NOW() WHERE store_id=:store_id AND status="processing" AND lease_expires_at<NOW()')
             ->execute(['store_id' => $storeId]);
-        $statement = $pdo->prepare('SELECT * FROM inventory_issue_print_jobs WHERE store_id=:store_id AND status IN ("pending","failed") AND (next_attempt_at IS NULL OR next_attempt_at<=NOW()) ORDER BY created_at,id LIMIT 1 FOR UPDATE');
+        $statement = $pdo->prepare('SELECT * FROM inventory_issue_print_jobs WHERE store_id=:store_id AND status IN ("pending","failed") AND EXISTS (SELECT 1 FROM inventory_issues i WHERE i.id=inventory_issue_print_jobs.issue_id AND i.status="completed") AND (next_attempt_at IS NULL OR next_attempt_at<=NOW()) ORDER BY created_at,id LIMIT 1 FOR UPDATE');
         $statement->execute(['store_id' => $storeId]);
         $row = $statement->fetch();
         if (!$row) {
@@ -172,6 +172,12 @@ function inventory_issue_print_jobs_retry(string $storeId, string $id): array
     $pdo = db();
     $pdo->beginTransaction();
     try {
+        // Lock the issue before its jobs, matching correction/cancellation lock order.
+        $job = inventory_issue_print_jobs_find($pdo, $id, $storeId);
+        if (!$job) throw new RuntimeException('Không tìm thấy lệnh in.');
+        $issueStatement = $pdo->prepare('SELECT status FROM inventory_issues WHERE id=:id AND store_id=:store FOR UPDATE');
+        $issueStatement->execute(['id'=>$job['issue_id'], 'store'=>$storeId]);
+        if ($issueStatement->fetchColumn() !== 'completed') throw new RuntimeException('Chỉ được in lại phiếu xuất đã hoàn thành và chưa hủy.');
         $row = inventory_issue_print_jobs_find($pdo, $id, $storeId, true);
         if (!$row) throw new RuntimeException('Không tìm thấy lệnh in.');
         if ($row['status'] === 'processing' || $row['status'] === 'pending') throw new RuntimeException('Lệnh in đang chờ hoặc đang được xử lý.');

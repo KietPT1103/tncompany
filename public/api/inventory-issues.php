@@ -8,10 +8,14 @@ require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
 require_once __DIR__ . '/_lib/inventory_issue_print_jobs.php';
 require_once __DIR__ . '/_lib/inventory_issue_quantities.php';
+require_once __DIR__ . '/_lib/inventory_issue_corrections.php';
+require_once __DIR__ . '/_lib/preparation_receipt_cancellations.php';
 
 function inventory_issues_ensure_schema(): void
 {
     ingredients_ensure_schema();
+    $hasPreparationTable = db()->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='preparation_receipts'")->fetchColumn();
+    if ((int)$hasPreparationTable) preparation_receipts_ensure_cancel_column('status', 'VARCHAR(20) NOT NULL DEFAULT "completed"');
     db()->exec('CREATE TABLE IF NOT EXISTS inventory_issues (
         id VARCHAR(64) PRIMARY KEY, store_id VARCHAR(32) NOT NULL, issue_code VARCHAR(100) NOT NULL,
         issue_date DATE NOT NULL, destination VARCHAR(255) NOT NULL DEFAULT "Nơi sử dụng", issued_by VARCHAR(255) NULL,
@@ -35,6 +39,10 @@ function inventory_issues_ensure_schema(): void
     auth_ensure_column('inventory_issues', 'shift_id', 'VARCHAR(64) NULL AFTER created_by');
     auth_ensure_column('inventory_issues', 'shift_type', 'VARCHAR(20) NULL AFTER shift_id');
     auth_ensure_column('inventory_issues', 'requires_preparation_receipt', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER shift_type');
+    auth_ensure_column('inventory_issues', 'revision', 'INT UNSIGNED NOT NULL DEFAULT 0');
+    auth_ensure_column('inventory_issues', 'cancel_reason', 'TEXT NULL');
+    auth_ensure_column('inventory_issues', 'cancelled_by', 'VARCHAR(255) NULL');
+    auth_ensure_column('inventory_issues', 'cancelled_at', 'DATETIME NULL');
     inventory_issue_ensure_quantity_precision(db());
 }
 
@@ -80,12 +88,14 @@ function inventory_issues_payload(array $row): array
         'shiftId' => $row['shift_id'] ?: null, 'shiftType' => $row['shift_type'] ?: null,
         'createdAt' => (string) $row['created_at'], 'updatedAt' => (string) $row['updated_at'], 'items' => $items,
         'printJob' => inventory_issue_print_jobs_latest((string) $row['id']),
+        'revision' => (int) $row['revision'], 'cancelReason' => (string) ($row['cancel_reason'] ?? ''),
+        'cancelledBy' => $row['cancelled_by'] ?: null, 'cancelledAt' => $row['cancelled_at'] ?: null,
     ];
 }
 
-function inventory_issues_find(string $id, string $storeId): ?array
+function inventory_issues_find(string $id, string $storeId, bool $lock = false): ?array
 {
-    $statement = db()->prepare('SELECT * FROM inventory_issues WHERE id=:id AND store_id=:store_id LIMIT 1');
+    $statement = db()->prepare('SELECT * FROM inventory_issues WHERE id=:id AND store_id=:store_id LIMIT 1' . ($lock ? ' FOR UPDATE' : ''));
     $statement->execute(['id' => $id, 'store_id' => $storeId]);
     $row = $statement->fetch();
     return $row ?: null;
@@ -107,15 +117,52 @@ if ($method === 'GET') {
 $body = read_json_body();
 $storeId = field_inventory_require_store($user, trim((string) ($body['storeId'] ?? '')));
 
-if ($method === 'DELETE') {
-    $id = trim((string) ($body['id'] ?? ''));
-    $statement = db()->prepare('DELETE FROM inventory_issues WHERE id=:id AND store_id=:store_id AND status="draft"');
-    $statement->execute(['id' => $id, 'store_id' => $storeId]);
-    if ($statement->rowCount() === 0) respond_error('Chỉ có thể xóa phiếu xuất nháp.', 409);
-    respond_ok(['deleted' => true]);
+// Physical deletion is intentionally unavailable, including for drafts.
+if ($method === 'DELETE') respond_error('Không được xóa phiếu xuất. Vui lòng hủy phiếu và nhập lý do.', 405);
+if ($method !== 'POST') respond_error('Method not allowed', 405);
+
+function inventory_issues_has_preparation_receipt(PDO $pdo, string $id): bool
+{
+    $exists = $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='preparation_receipts'")->fetchColumn();
+    if (!(int) $exists) return false;
+    $statement = $pdo->prepare('SELECT id FROM preparation_receipts WHERE issue_id=:id AND status="completed" LIMIT 1');
+    $statement->execute(['id'=>$id]);
+    return (bool) $statement->fetchColumn();
 }
 
-if ($method !== 'POST') respond_error('Method not allowed', 405);
+function inventory_issues_lock_print_jobs(PDO $pdo, string $id): void
+{
+    $statement = $pdo->prepare('SELECT status FROM inventory_issue_print_jobs WHERE issue_id=:id FOR UPDATE');
+    $statement->execute(['id'=>$id]);
+    foreach ($statement->fetchAll() as $job) {
+        if ($job['status'] === 'processing') throw new RuntimeException('Phiếu đang được máy in xử lý. Vui lòng đợi in xong rồi thử lại.');
+    }
+}
+
+if (($body['action'] ?? '') === 'cancel') {
+    if ($user['role'] !== 'admin') respond_error('Chỉ admin được hủy phiếu xuất.', 403);
+    $id = trim((string) ($body['id'] ?? ''));
+    $reason = trim((string) ($body['reason'] ?? ''));
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $existing = inventory_issues_find($id, $storeId, true);
+        if (!$existing) throw new RuntimeException('Không tìm thấy phiếu xuất.');
+        inventory_issue_validate_correction($user['role'], $existing, isset($body['revision']) ? (int) $body['revision'] : null, 'cancel', $reason);
+        if (inventory_issues_has_preparation_receipt($pdo, $id)) throw new RuntimeException('Phiếu đã được quầy pha chế nhận. Cần xử lý phiếu nhận liên quan trước khi hủy để không sai tồn kho.');
+        inventory_issues_lock_print_jobs($pdo, $id);
+        if ($existing['status'] === 'completed') inventory_issue_apply_corrected_stock($pdo, $storeId, inventory_issues_items($id), []);
+        $pdo->prepare('UPDATE inventory_issues SET status="cancelled",cancel_reason=:reason,cancelled_by=:actor,cancelled_at=NOW(),requires_preparation_receipt=0,revision=revision+1,updated_at=NOW() WHERE id=:id')
+            ->execute(['id'=>$id,'reason'=>$reason,'actor'=>inventory_issues_actor($user)]);
+        $pdo->prepare('UPDATE inventory_issue_print_jobs SET status="cancelled",next_attempt_at=NULL,updated_at=NOW() WHERE issue_id=:id AND status IN ("pending","failed")')->execute(['id'=>$id]);
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        respond_error($exception->getMessage(), 409);
+    }
+    respond_ok(['item'=>inventory_issues_payload(inventory_issues_find($id, $storeId))]);
+}
+if (isset($body['action'])) respond_error('Thao tác không hợp lệ.', 422);
 
 $id = trim((string) ($body['id'] ?? ''));
 $status = strtolower(trim((string) ($body['status'] ?? 'draft')));
@@ -129,7 +176,7 @@ if ($destination === '' || $issuedBy === '') respond_error('Vui lòng nhập nơ
 $rawItems = is_array($body['items'] ?? null) ? $body['items'] : [];
 if ($rawItems === []) respond_error('Phiếu xuất phải có ít nhất một nguyên liệu.', 422);
 
-$findIngredient = db()->prepare('SELECT * FROM ingredients WHERE store_id=:store_id AND ingredient_code=:code AND is_active=1 LIMIT 1');
+$findIngredient = db()->prepare('SELECT * FROM ingredients WHERE store_id=:store_id AND ingredient_code=:code LIMIT 1');
 $normalized = [];
 foreach ($rawItems as $raw) {
     $code = trim((string) ($raw['ingredientCode'] ?? ''));
@@ -151,7 +198,7 @@ foreach ($rawItems as $raw) {
 
 $shiftId = trim((string) ($body['shiftId'] ?? '')) ?: null;
 $shiftType = trim((string) ($body['shiftType'] ?? '')) ?: null;
-if ($shiftId !== null) {
+if ($shiftId !== null && $id === '') {
     $shift = db()->prepare('SELECT shift_type FROM cashier_shifts WHERE id=:id AND store_id=:store_id AND status="open" LIMIT 1');
     $shift->execute(['id' => $shiftId, 'store_id' => $storeId]);
     $activeShiftType = $shift->fetchColumn();
@@ -162,15 +209,37 @@ if ($shiftId !== null) {
 $pdo = db();
 $pdo->beginTransaction();
 try {
-    $existing = $id !== '' ? inventory_issues_find($id, $storeId) : null;
+    $existing = $id !== '' ? inventory_issues_find($id, $storeId, true) : null;
     if ($id !== '' && !$existing) throw new RuntimeException('Không tìm thấy phiếu xuất.');
-    if ($existing && $existing['status'] !== 'draft') throw new RuntimeException('Phiếu đã hoàn thành không thể chỉnh sửa.');
+    $oldItems = [];
+    $received = false;
+    if ($existing) {
+        inventory_issue_validate_correction($user['role'], $existing, isset($body['revision']) ? (int) $body['revision'] : null, 'edit', '');
+        if ($existing['status'] === 'completed' && $status !== 'completed') throw new RuntimeException('Phiếu đã hoàn thành không thể chuyển về nháp.');
+        $oldItems = inventory_issues_items($id);
+        $received = inventory_issues_has_preparation_receipt($pdo, $id);
+        if ($received) {
+            $unchanged = count($oldItems) === count($normalized);
+            foreach ($oldItems as $oldItem) {
+                $newLine = $normalized[$oldItem['ingredientCode']] ?? null;
+                if (!$newLine || abs($newLine['quantity'] - $oldItem['quantity']) > 0.0000001 || abs($newLine['baseQuantity'] - $oldItem['baseQuantity']) > 0.0000001) $unchanged = false;
+            }
+            if (!$unchanged) throw new RuntimeException('Phiếu đã được quầy pha chế nhận. Cần xử lý phiếu nhận liên quan trước khi đổi nguyên liệu hoặc số lượng.');
+        }
+        inventory_issues_lock_print_jobs($pdo, $id);
+    }
+    $originalIngredientIds = array_column($oldItems, 'ingredientId');
+    foreach ($normalized as $line) {
+        if (!(int) $line['ingredient']['is_active'] && !in_array($line['ingredient']['id'], $originalIngredientIds, true)) {
+            throw new RuntimeException('Không thể thêm nguyên liệu đã ngừng sử dụng vào phiếu xuất.');
+        }
+    }
     if ($id === '') {
         $id = uuidv4();
         $insert = $pdo->prepare('INSERT INTO inventory_issues (id,store_id,issue_code,issue_date,destination,issued_by,status,note,total_quantity,created_by,shift_id,shift_type) VALUES (:id,:store_id,:code,:date,:destination,:issued_by,"draft",:note,:total,:actor,:shift_id,:shift_type)');
         $insert->execute(['id' => $id, 'store_id' => $storeId, 'code' => inventory_issues_code($storeId), 'date' => $issueDate, 'destination' => $destination, 'issued_by' => $issuedBy, 'note' => trim((string) ($body['note'] ?? '')), 'total' => array_sum(array_column($normalized, 'quantity')), 'actor' => inventory_issues_actor($user), 'shift_id' => $shiftId, 'shift_type' => $shiftType]);
     } else {
-        $pdo->prepare('UPDATE inventory_issues SET issue_date=:date,destination=:destination,issued_by=:issued_by,note=:note,total_quantity=:total,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'date' => $issueDate, 'destination' => $destination, 'issued_by' => $issuedBy, 'note' => trim((string) ($body['note'] ?? '')), 'total' => array_sum(array_column($normalized, 'quantity'))]);
+        $pdo->prepare('UPDATE inventory_issues SET issue_date=:date,destination=:destination,issued_by=:issued_by,note=:note,total_quantity=:total,revision=revision+1,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'date' => $issueDate, 'destination' => $destination, 'issued_by' => $issuedBy, 'note' => trim((string) ($body['note'] ?? '')), 'total' => array_sum(array_column($normalized, 'quantity'))]);
         $pdo->prepare('DELETE FROM inventory_issue_items WHERE issue_id=:id')->execute(['id' => $id]);
     }
     $insertItem = $pdo->prepare('INSERT INTO inventory_issue_items (issue_id,ingredient_id,ingredient_code,ingredient_name,unit,quantity,base_quantity,note) VALUES (:issue,:ingredient,:code,:name,:unit,:quantity,:base_quantity,:note)');
@@ -179,29 +248,17 @@ try {
         $insertItem->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'code' => $ingredient['ingredient_code'], 'name' => $ingredient['ingredient_name'], 'unit' => $ingredient['purchase_unit'] ?: $ingredient['unit'], 'quantity' => $line['quantity'], 'base_quantity' => $line['baseQuantity'], 'note' => $line['note']]);
     }
     if ($status === 'completed') {
-        $lock = $pdo->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');
-        $deduct = $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,updated_at=NOW() WHERE id=:id');
-        $snapshot = $pdo->prepare('UPDATE inventory_issue_items SET stock_before=:before,stock_after=:after WHERE issue_id=:issue AND ingredient_id=:ingredient');
-        foreach ($normalized as $line) {
-            $ingredient = $line['ingredient'];
-            if (($ingredient['item_kind'] ?? 'ingredient') === 'fresh') {
-                $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => null, 'after' => null]);
-                continue;
-            }
-            $lock->execute(['id' => $ingredient['id']]);
-            $before = (float) $lock->fetchColumn();
-            $lock->closeCursor();
-            $after = round($before - $line['baseQuantity'], 3);
-            if ($after < 0) {
-                $factor = max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1));
-                throw new RuntimeException('Tồn kho ' . $ingredient['ingredient_code'] . ' chỉ còn ' . inventory_issue_format_quantity($before / $factor) . ' ' . ($ingredient['purchase_unit'] ?: $ingredient['unit']) . '.');
-            }
-            $deduct->execute(['id' => $ingredient['id'], 'stock' => $after]);
-            $snapshot->execute(['issue' => $id, 'ingredient' => $ingredient['id'], 'before' => $before, 'after' => $after]);
+        $snapshots = $received ? [] : inventory_issue_apply_corrected_stock($pdo, $storeId, $existing && $existing['status'] === 'completed' ? $oldItems : [], array_values($normalized));
+        if ($received) {
+            foreach ($oldItems as $item) $snapshots[$item['ingredientId']] = ['before'=>$item['stockBefore'], 'after'=>$item['stockAfter'], 'baseQuantity'=>$item['baseQuantity']];
+        }
+        $snapshot = $pdo->prepare('UPDATE inventory_issue_items SET stock_before=:before,stock_after=:after,base_quantity=:base WHERE issue_id=:issue AND ingredient_id=:ingredient');
+        foreach ($snapshots as $ingredientId => $values) {
+            $snapshot->execute(['issue'=>$id,'ingredient'=>$ingredientId,'before'=>$values['before'],'after'=>$values['after'],'base'=>$values['baseQuantity']]);
         }
         $hasStockedItems = count(array_filter($normalized, static fn(array $line): bool => ($line['ingredient']['item_kind'] ?? 'ingredient') !== 'fresh')) > 0;
-        $pdo->prepare('UPDATE inventory_issues SET status="completed",requires_preparation_receipt=:requires_receipt,completed_at=NOW(),completed_by=:actor,updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'requires_receipt' => $storeId === 'warehouse' || !$hasStockedItems ? 0 : 1, 'actor' => inventory_issues_actor($user)]);
-        inventory_issue_print_jobs_create_initial($pdo, $id, $storeId);
+        $pdo->prepare('UPDATE inventory_issues SET status="completed",requires_preparation_receipt=:requires_receipt,completed_at=COALESCE(completed_at,NOW()),completed_by=COALESCE(completed_by,:actor),updated_at=NOW() WHERE id=:id')->execute(['id' => $id, 'requires_receipt' => $received || $storeId === 'warehouse' || !$hasStockedItems ? 0 : 1, 'actor' => inventory_issues_actor($user)]);
+        if (!$existing || $existing['status'] === 'draft') inventory_issue_print_jobs_create_initial($pdo, $id, $storeId);
     }
     $pdo->commit();
 } catch (Throwable $exception) {

@@ -146,6 +146,21 @@ try {
         'shift_type' => $shiftType,
     ]);
 
+    $evidenceId = trim((string) ($body['evidenceReceiptId'] ?? ''));
+    if ($evidenceId !== '') {
+        $evidence = $pdo->prepare('SELECT id,status FROM inventory_receipts WHERE id=:id AND store_id=:store FOR UPDATE');
+        $evidence->execute(['id' => $evidenceId, 'store' => $storeId]);
+        $source = $evidence->fetch();
+        if (!$source || in_array($source['status'], ['completed','deleted','cancelled'], true) || field_inventory_load_images($evidenceId) === []) {
+            throw new InvalidArgumentException('Minh chứng không hợp lệ hoặc không thuộc cửa hàng này.');
+        }
+        $existingLink = $pdo->prepare('SELECT id FROM inventory_receipts WHERE evidence_receipt_id=:id AND status<>"deleted" LIMIT 1');
+        $existingLink->execute(['id' => $evidenceId]);
+        if ($existingLink->fetchColumn()) throw new InvalidArgumentException('Minh chứng đã được liên kết với phiếu nhập khác.');
+        $link = $pdo->prepare('UPDATE inventory_receipts SET evidence_receipt_id=:evidence WHERE id=:id');
+        $link->execute(['evidence' => $evidenceId, 'id' => $receiptId]);
+    }
+
     $lockIngredient = $pdo->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');
     $updateIngredient = $pdo->prepare(
         'UPDATE ingredients SET stock_quantity=:stock,cost=:cost,updated_at=NOW() WHERE id=:id'
@@ -211,6 +226,7 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    if ($exception instanceof InvalidArgumentException) respond_error($exception->getMessage(), 422);
     throw $exception;
 }
 

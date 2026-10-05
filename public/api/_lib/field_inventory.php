@@ -5,6 +5,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/ingredients.php';
 
+auth_ensure_column('inventory_receipts', 'evidence_receipt_id', 'VARCHAR(64) NULL');
+
 const FIELD_RECEIPT_STATUSES = ['pending_explanation', 'draft', 'completed', 'cancelled', 'deleted'];
 
 function field_inventory_has_permission(array $user, string $permission): bool
@@ -229,6 +231,7 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
         'createdAt' => (string) $row['created_at'],
         'updatedAt' => (string) $row['updated_at'],
         'itemCount' => count($items),
+        'evidenceReceiptId' => ($row['evidence_receipt_id'] ?? null) ?: null,
         'imageCount' => count($images),
         'items' => $items,
         'images' => $images,

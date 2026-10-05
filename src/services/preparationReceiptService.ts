@@ -30,6 +30,10 @@ export type PreparationReceiptHistory = {
   receivedBy: string;
   note: string;
   createdAt: string;
+  status: "completed" | "cancelled";
+  cancelReason?: string;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
   items: PreparationReceiptLine[];
 };
 
@@ -49,5 +53,12 @@ export function confirmPreparationReceipt(payload: {
   return apiRequest<{ id: string }>("/preparation-receipts.php", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function cancelPreparationReceipt(storeId: string, id: string, reason: string) {
+  return apiRequest<{ cancelled: boolean; issueId: string }>("/preparation-receipts.php", {
+    method: "POST",
+    body: JSON.stringify({ storeId, id, action: "cancel", reason }),
   });
 }

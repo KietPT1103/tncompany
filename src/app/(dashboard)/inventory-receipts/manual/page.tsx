@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, PackagePlus, Plus, Trash2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import { getIngredients, type Ingredient } from "@/services/ingredients";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
-import { createManualInventoryReceipt } from "@/services/inventoryReceiptService";
+import { getAvailableInventoryEvidence, type InventoryReceipt, createManualInventoryReceipt } from "@/services/inventoryReceiptService";
 import { getOpenShiftByCashier, type CashierShift } from "@/services/shiftService";
 
 type DraftLine = {
@@ -32,6 +32,10 @@ const getPurchaseUnitCost = (ingredient?: Ingredient) => ingredient?.cost == nul
 export default function ManualInventoryReceiptPage() {
   const navigate = useNavigate();
   const { storeId } = useStore();
+  const [params] = useSearchParams();
+  const [evidenceId, setEvidenceId] = useState(params.get("evidence") || "");
+  const [evidence, setEvidence] = useState<InventoryReceipt[]>([]);
+  useEffect(() => { getAvailableInventoryEvidence(storeId).then(setEvidence).catch(reason => setError(reason.message)); }, [storeId]);
   const { user } = useAuth();
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -109,6 +113,7 @@ export default function ManualInventoryReceiptPage() {
         storeId,
         receiptDate,
         enteredBy: enteredBy.trim(),
+        evidenceReceiptId: evidenceId || undefined,
         supplierId: supplierId || null,
         note: note.trim(),
         shiftId: activeShift?.id || null,
@@ -123,7 +128,7 @@ export default function ManualInventoryReceiptPage() {
     }
   }
 
-  return <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-950 sm:p-6 2xl:p-8">
+  return <div className="warehouse-ui min-h-screen bg-slate-50 p-4 font-sans text-slate-950 sm:p-6 2xl:p-8">
     <div className="mx-auto max-w-[1680px]">
       <button onClick={() => navigate("/admin/inventory?tab=receipts")} className="inline-flex min-h-10 items-center gap-2 font-bold text-emerald-800 hover:text-emerald-950"><ArrowLeft className="h-4 w-4" /> Sổ kho</button>
       <header className="mt-4"><div className="text-sm font-bold uppercase tracking-[.2em] text-amber-600">Thu ngân ghi sổ</div>
@@ -138,6 +143,7 @@ export default function ManualInventoryReceiptPage() {
           <label className="text-sm font-semibold">Nhà phân phối<select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="mt-2 h-11 w-full rounded-md border bg-white px-3 text-slate-950"><option value="">Không chọn</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.supplierName}</option>)}</select></label>
           <label className="text-sm font-semibold">Ghi chú<input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Số hóa đơn, người giao..." className="mt-2 h-11 w-full rounded-md border bg-white px-3 text-slate-950" /></label>
         </div>
+        <label className="flex flex-wrap items-center gap-4 border-b p-4 text-sm font-bold text-emerald-950">Chọn minh chứng<select value={evidenceId} onChange={event => setEvidenceId(event.target.value)} className="h-10 min-w-72 rounded-lg border bg-white px-3"><option value="">Chưa chọn minh chứng</option>{evidence.map(item => <option key={item.id} value={item.id}>{item.receiptCode} · {item.imageCount} ảnh · {item.note || item.createdByName}</option>)}</select><button type="button" onClick={() => navigate("/admin/inventory?tab=evidence")} className="text-emerald-700">Mở kho minh chứng</button></label>
         <div className="overflow-x-auto"><table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="bg-blue-600 text-white"><tr><th className="w-16 p-3 text-center">STT</th><th className="w-28 p-3">Mã NL</th><th className="p-3">Tên nguyên vật liệu</th><th className="w-36 p-3 text-right">Số lượng nhập</th><th className="w-24 p-3">Đơn vị</th><th className="w-32 p-3 text-right">Tồn trước</th><th className="w-32 p-3 text-right">Tồn sau</th><th className="w-40 p-3 text-right">Đơn giá</th><th className="w-40 p-3 text-right">Thành tiền</th><th className="p-3">Ghi chú</th><th className="w-14"></th></tr></thead>
           <tbody className="divide-y">{items.map((item, index) => {

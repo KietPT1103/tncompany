@@ -345,3 +345,44 @@ button:disabled {
   cursor: grabbing !important;
   user-select: none;
 }
+
+/* Inventory workspace: shared reference palette and compact spreadsheet layout. */
+.warehouse-ui { color:#172544; background:#f7f9fc; font-family:'Nunito Sans Variable','Geist',sans-serif; font-size:16px;line-height:1.5; }
+.warehouse-ui .text-xs {font-size:14px;line-height:1.5}
+.warehouse-ui .text-sm {font-size:16px;line-height:1.5}
+.warehouse-ui small {font-size:14px;line-height:1.5}
+.warehouse-ui h1,.warehouse-ui h2,.warehouse-ui h3 { color:#003f33; font-family:inherit; font-weight:850; letter-spacing:-.025em; }
+.warehouse-ui h1 {font-size:32px;line-height:1.25}
+.warehouse-ui [role=tablist] {gap:0}
+.warehouse-ui [role=tab] {min-width:max-content;flex:1 0 auto;white-space:nowrap;font-size:16px;border-bottom-width:3px;padding:15px 16px;color:#5b7093}
+.warehouse-ui [role=tab][aria-selected=true] {color:#005943;background:linear-gradient(180deg,#effdf7,#e3faf1);border-color:#007c5a}
+.warehouse-ui .rounded-3xl,.warehouse-ui .rounded-sm {border-radius:12px}
+.warehouse-ui section,.warehouse-panel {border:1px solid #e2eaf3;border-radius:14px;background:white;box-shadow:0 2px 3px #17365404;overflow:hidden}
+.warehouse-ui input:not([type=checkbox]),.warehouse-ui select {border:1px solid #dce5f0;border-radius:8px;background:#fff;min-height:42px;padding:8px 12px;color:#243450;font-size:15px;outline:none}
+.warehouse-ui input.pl-9 {padding-left:36px}
+.warehouse-ui input:focus,.warehouse-ui select:focus {border-color:#008968;box-shadow:0 0 0 2px #00896815}
+.warehouse-ui thead {background:#eaf6f3!important;color:#064c3e!important}
+.warehouse-ui th {padding:14px 12px;font-size:14px;white-space:nowrap;font-weight:750;border-bottom:1px solid #e1eaf1}
+.warehouse-ui td {padding:11px 12px;border-right:1px solid #edf1f6;border-bottom:1px solid #e8eef4;font-size:15px;line-height:1.5}
+.warehouse-ui tbody tr:hover {background:#f5fcf9}
+.warehouse-ui tfoot {background:#e3f7ef;color:#073f33}
+.warehouse-ui table input,.warehouse-ui table select {min-height:36px;height:36px;padding:5px 8px;border-radius:6px;font-size:15px}
+.warehouse-ui .bg-blue-600 {background:#eaf6f3;color:#064c3e}
+.warehouse-ui div.grid.bg-emerald-950.text-white {background:#f9fbfd;color:#344d70}
+.warehouse-stat {display:flex;gap:18px;align-items:center;border:1px solid #e8edf4;border-radius:13px;background:#fff;padding:20px 16px;min-height:104px;box-shadow:0 2px 4px #16334a03}
+.warehouse-stat strong {font-size:30px;line-height:1.25}
+.warehouse-stat-icon {display:grid;place-items:center;flex-shrink:0;width:44px;height:44px;border-radius:13px;background:#e5faf2;color:#008466}
+.warehouse-stat-icon.tone-0 {background:#fff0e1;color:#ff7b00}
+.warehouse-stat-icon.tone-1 {background:#e7f2ff;color:#1677ff}
+.warehouse-stat-icon.tone-2 {background:#e5faf2;color:#008466}
+.warehouse-stat-icon.tone-3 {background:#e5faf2;color:#008466}
+.warehouse-primary,.warehouse-button {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:9px 16px;border-radius:8px;font-size:14px;font-weight:750;white-space:nowrap}
+.warehouse-primary {background:linear-gradient(135deg,#006a50,#004c3b);color:white;border:1px solid #006149;box-shadow:inset 0 1px 2px #ffffff20}
+.warehouse-button {background:white;border:1px solid #dde6f0;color:#075843}
+.warehouse-button:hover {background:#effaf5;border-color:#6bb19d}
+.warehouse-primary:disabled,.warehouse-button:disabled {opacity:.5;cursor:wait}
+.warehouse-badge {display:inline-block;border-radius:20px;padding:4px 12px;white-space:nowrap;background:#dff9ef;color:#007b56;font-weight:750;font-size:13px;line-height:1.5}
+.warehouse-badge.status-pending_explanation {background:#fff1c8;color:#a35b00}
+.warehouse-badge.status-draft {background:#e1efff;color:#0869e6}
+.warehouse-badge.status-cancelled,.warehouse-badge.status-deleted {background:#fee7e7;color:#d72f3d}
+@media(max-width:767px){.warehouse-ui [role=tab]{flex:none;padding:12px}.warehouse-stat{padding:14px}.inventory-ledger{padding:12px}}

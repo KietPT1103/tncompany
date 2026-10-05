@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, PackageMinus, Plus, Printer, RotateCcw, Save, Search, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { availableIssueStock, canEditIssue } from "./corrections";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { getIngredients, type Ingredient } from "@/services/ingredients";
 import {
-  deleteInventoryIssue,
+  cancelInventoryIssue,
   getInventoryIssues,
   saveInventoryIssue,
   type InventoryIssue,
+  type InventoryIssueItem,
 } from "@/services/inventoryIssueService";
 import { getOpenShiftByCashier, type CashierShift } from "@/services/shiftService";
 import { requestInventoryIssueReprint } from "@/services/inventoryIssuePrintJobService";
@@ -19,6 +22,9 @@ type DraftLine = { key: string; ingredientCode: string; quantity: string; note: 
 type FormState = {
   id?: string;
   issueCode?: string;
+  status?: InventoryIssue["status"];
+  revision?: number;
+  originalItems?: InventoryIssueItem[];
   issueDate: string;
   destination: string;
   issuedBy: string;
@@ -38,7 +44,8 @@ const destinations = ["Quầy pha chế", "Farm", "Lẩu", "Phục vụ", "Khác
 
 export default function InventoryIssuesPage() {
   const { storeId } = useStore();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const isAdmin = role === "admin";
   const isConstructionWarehouse = storeId === "warehouse";
   const stockItemLabel = isConstructionWarehouse ? "vật tư" : "nguyên liệu";
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -46,6 +53,9 @@ export default function InventoryIssuesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [confirmation, setConfirmation] = useState<"complete" | "edit" | InventoryIssue | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [dialogError, setDialogError] = useState("");
   const [historySearch, setHistorySearch] = useState("");
   const [reprintingJobId, setReprintingJobId] = useState("");
   const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
@@ -67,13 +77,17 @@ export default function InventoryIssuesPage() {
     const [ingredientResult, issueResult] = await Promise.all([
       getIngredients(storeId), getInventoryIssues(storeId),
     ]);
-    setIngredients(ingredientResult.items.filter((item) => item.isActive));
+    setIngredients(ingredientResult.items);
     setIssues(issueResult);
   }
 
   useEffect(() => {
     setLoading(true);
     setError("");
+    setForm(emptyForm());
+    setConfirmation(null);
+    setCancelReason("");
+    setDialogError("");
     reload().catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải dữ liệu xuất kho."))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,16 +113,17 @@ export default function InventoryIssuesPage() {
   }
 
   function edit(issue: InventoryIssue) {
-    if (issue.status !== "draft") return;
+    if (saving || !canEditIssue(role, issue.status)) return;
     setForm({
-      id: issue.id, issueCode: issue.issueCode, issueDate: issue.issueDate,
+      id: issue.id, issueCode: issue.issueCode, status: issue.status, revision: issue.revision, originalItems: issue.items, issueDate: issue.issueDate,
       destination: issue.destination, issuedBy: issue.issuedBy, note: issue.note,
       items: issue.items.map((item) => ({ key: key(), ingredientCode: item.ingredientCode, quantity: String(item.quantity), note: item.note })),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function save(status: "draft" | "completed") {
+  async function save(status: "draft" | "completed", confirmed = false) {
+    if (saving) return;
     const items = form.items
       .filter((item) => item.ingredientCode || item.quantity.trim())
       .map((item) => ({ ingredientCode: item.ingredientCode, quantity: number(item.quantity), note: item.note.trim() }));
@@ -120,32 +135,58 @@ export default function InventoryIssuesPage() {
       setError(`Mỗi dòng phải chọn ${stockItemLabel} và có số lượng xuất lớn hơn 0.`);
       return;
     }
-    if (status === "completed" && !window.confirm("Hoàn thành phiếu sẽ trừ tồn kho ngay và không thể sửa. Tiếp tục?")) return;
+    if (status === "completed" && !confirmed) {
+      setDialogError("");
+      setConfirmation(form.status === "completed" ? "edit" : "complete");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      const savedIssue = await saveInventoryIssue({
-        id: form.id, storeId, issueDate: form.issueDate, destination: form.destination.trim(),
+      await saveInventoryIssue({
+        id: form.id, revision: form.revision, storeId, issueDate: form.issueDate, destination: form.destination.trim(),
         issuedBy: form.issuedBy.trim(), note: form.note.trim(), status, items,
         shiftId: activeShift?.id || null, shiftType: activeShift?.shiftType || null,
       });
-      await reload();
+      setConfirmation(null);
       setForm(emptyForm());
+      await reload();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể lưu phiếu xuất kho.");
+      const message = reason instanceof Error ? reason.message : "Không thể lưu phiếu xuất kho.";
+      setError(message);
+      if (confirmed) setDialogError(message);
     } finally {
       setSaving(false);
     }
   }
 
-  async function remove(issue: InventoryIssue) {
-    if (!window.confirm(`Xóa phiếu nháp ${issue.issueCode}?`)) return;
+  function requestCancellation(issue: InventoryIssue) {
+    if (!isAdmin || saving || issue.status === "cancelled") return;
+    setCancelReason("");
+    setDialogError("");
+    setConfirmation(issue);
+  }
+
+  async function cancelIssue(issue: InventoryIssue) {
+    if (saving) return;
+    if (!cancelReason.trim()) {
+      setDialogError("Vui lòng nhập lý do hủy phiếu.");
+      return;
+    }
+    setSaving(true);
+    setDialogError("");
+    setError("");
     try {
-      await deleteInventoryIssue(issue.id, storeId);
+      await cancelInventoryIssue(issue, cancelReason.trim());
+      setConfirmation(null);
       if (form.id === issue.id) setForm(emptyForm());
       await reload();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể xóa phiếu.");
+      const message = reason instanceof Error ? reason.message : "Không thể hủy phiếu.";
+      setError(message);
+      setDialogError(message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -162,13 +203,13 @@ export default function InventoryIssuesPage() {
     }
   }
 
-  return <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-950 sm:p-6 2xl:p-8">
+  return <div className="warehouse-ui min-h-screen bg-slate-50 p-4 font-sans text-slate-950 sm:p-6 2xl:p-8">
     <div className="mx-auto max-w-[1680px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div><div className="text-sm font-bold uppercase tracking-[.2em] text-amber-600">{isConstructionWarehouse ? "Kho vật tư xây dựng → đội thợ / công trình" : "Kho nguyên liệu → pha chế"}</div>
           <h1 className="mt-2 text-3xl font-black text-emerald-900 sm:text-4xl">Phiếu xuất kho</h1>
           <p className="mt-2 max-w-3xl text-slate-600">{isConstructionWarehouse ? "Ghi nhận vật tư cấp cho đội thợ hoặc từng công trình. Phiếu hoàn thành sẽ trừ trực tiếp tồn vật tư của Kho thợ." : "Ghi nhận nguyên liệu cấp cho quầy. Đây là luồng xuất vật lý, tách biệt với tiêu hao lý thuyết tính từ công thức món bán."}</p></div>
-        <button onClick={() => setForm(emptyForm())} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-800 bg-white px-4 font-bold text-emerald-900 hover:bg-emerald-50"><Plus className="h-4 w-4" /> Phiếu mới</button>
+        <button disabled={saving} onClick={() => setForm(emptyForm())} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-800 bg-white px-4 font-bold text-emerald-900 hover:bg-emerald-50"><Plus className="h-4 w-4" /> Phiếu mới</button>
       </header>
 
       {error && <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-3 font-medium text-rose-700">{error}</div>}
@@ -180,33 +221,35 @@ export default function InventoryIssuesPage() {
           <label className="text-sm font-semibold">Người xuất *<input required value={form.issuedBy} onChange={(e) => setForm({ ...form, issuedBy: e.target.value })} placeholder="Bắt buộc nhập tên người xuất" className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
           <label className="text-sm font-semibold">Ghi chú chung<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Ca, bộ phận nhận..." className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
         </div>
-        {form.issueCode && <div className="border-b bg-amber-50 px-5 py-3 text-sm font-bold text-amber-900">Đang sửa phiếu nháp {form.issueCode}</div>}
+        {form.issueCode && <div className="border-b bg-amber-50 px-5 py-3 text-sm font-bold text-amber-900">Đang sửa {form.status === "completed" ? "phiếu đã hoàn thành" : "phiếu nháp"} {form.issueCode}{form.status === "completed" && <span className="ml-2 font-normal">Lưu thay đổi sẽ điều chỉnh lại tồn kho.</span>}</div>}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[950px] text-left text-sm">
-            <thead className="bg-blue-600 text-white"><tr><th className="w-16 px-4 py-3 text-center">STT</th><th className="w-32 px-4 py-3">Mã NL</th><th className="px-4 py-3">Tên nguyên vật liệu</th><th className="w-40 px-4 py-3 text-right">Số lượng xuất</th><th className="w-28 px-4 py-3">Đơn vị</th><th className="w-36 px-4 py-3 text-right">Tồn kho</th><th className="px-4 py-3">Ghi chú</th><th className="w-16"></th></tr></thead>
+            <thead className="bg-blue-600 text-white"><tr><th className="w-16 px-4 py-3 text-center">STT</th><th className="w-32 px-4 py-3">Mã NL</th><th className="px-4 py-3">Tên nguyên vật liệu</th><th className="w-40 px-4 py-3 text-right">Số lượng xuất</th><th className="w-28 px-4 py-3">Đơn vị</th><th className="w-36 px-4 py-3 text-right">Tồn kho</th><th className="px-4 py-3 text-right">Giá trị quy đổi</th><th className="px-4 py-3">Ghi chú</th><th className="px-4 py-3">Trạng thái</th><th className="w-16"></th></tr></thead>
             <tbody className="divide-y divide-slate-200">{form.items.map((item, index) => {
               const ingredient = ingredientByCode.get(item.ingredientCode);
               const requested = number(item.quantity);
+              const original = form.originalItems?.find((old) => old.ingredientCode === item.ingredientCode);
+              const availableStock = availableIssueStock(ingredient?.stockQuantity ?? 0, form.status, original);
               const factor = ingredient?.purchaseToBaseFactor || 1;
-              const insufficient = Boolean(ingredient && ingredient.itemKind !== "fresh" && isInventoryIssueQuantityInsufficient(requested, factor, ingredient.stockQuantity));
+              const insufficient = Boolean(ingredient && ingredient.itemKind !== "fresh" && isInventoryIssueQuantityInsufficient(requested, factor, availableStock));
               return <tr key={item.key} className={insufficient ? "bg-rose-50" : "hover:bg-blue-50/40"}>
                 <td className="px-4 py-2 text-center font-semibold">{index + 1}</td>
                 <td className="px-4 py-2 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>
-                <td className="px-4 py-2"><select value={item.ingredientCode} onChange={(e) => updateLine(index, { ingredientCode: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="">Chọn {stockItemLabel}...</option>{ingredients.map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
+                <td className="px-4 py-2"><select value={item.ingredientCode} onChange={(e) => updateLine(index, { ingredientCode: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="">Chọn {stockItemLabel}...</option>{ingredients.filter((option) => option.isActive || form.originalItems?.some((old) => old.ingredientCode === option.ingredientCode)).map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
                 <td className="px-4 py-2"><input inputMode="decimal" value={item.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} className={`h-10 w-full rounded-md border px-3 text-right font-bold ${insufficient ? "border-rose-500 text-rose-700" : "border-slate-300"}`} /></td>
                 <td className="px-4 py-2">{ingredient?.purchaseUnit || ingredient?.unit || "—"}</td>
-                <td className="px-4 py-2 text-right font-semibold">{ingredient ? ingredient.itemKind === "fresh" ? <span className="text-sky-700">Không tồn kho</span> : <>{quantity(ingredient.stockQuantity / factor)} {ingredient.purchaseUnit || ingredient.unit}<small className="block font-normal text-slate-500">{quantity(ingredient.stockQuantity)} {ingredient.baseUnit || ingredient.unit}</small></> : "—"}</td>
-                <td className="px-4 py-2"><input value={item.note} onChange={(e) => updateLine(index, { note: e.target.value })} placeholder="Người/bộ phận nhận" className="h-10 w-full rounded-md border border-slate-300 px-3" /></td>
-                <td className="px-2 py-2"><button aria-label="Xóa dòng" disabled={form.items.length === 1} onClick={() => setForm((current) => ({ ...current, items: current.items.filter((_, i) => i !== index) }))} className="rounded-md p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button></td>
+                <td className="px-4 py-2 text-right font-semibold">{ingredient ? ingredient.itemKind === "fresh" ? <span className="text-sky-700">Không tồn kho</span> : <>{quantity(availableStock / factor)} {ingredient.purchaseUnit || ingredient.unit}<small className="block font-normal text-slate-500">{quantity(availableStock)} {ingredient.baseUnit || ingredient.unit}</small></> : "—"}</td>
+                <td className="px-4 py-2 text-right font-bold">{ingredient?.cost==null?"—":`${Math.round(requested*factor*ingredient.cost).toLocaleString("vi-VN")} đ`}</td><td className="px-4 py-2"><input value={item.note} onChange={(e) => updateLine(index, { note: e.target.value })} placeholder="Người/bộ phận nhận" className="h-10 w-full rounded-md border border-slate-300 px-3" /></td>
+                <td className="px-4 py-2"><span className={`warehouse-badge ${insufficient?"status-deleted":requested<=0||!ingredient?"status-pending_explanation":""}`}>{insufficient?"Không đủ tồn":requested<=0||!ingredient?"Chưa xuất":"Hợp lệ"}</span></td><td className="px-2 py-2"><button aria-label="Xóa dòng" disabled={form.items.length === 1} onClick={() => setForm((current) => ({ ...current, items: current.items.filter((_, i) => i !== index) }))} className="rounded-md p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button></td>
               </tr>;
             })}</tbody>
-            <tfoot className="bg-slate-50 font-bold"><tr><td colSpan={3} className="px-4 py-3 text-right">Tổng số lượng</td><td className="px-4 py-3 text-right">{quantity(total)}</td><td colSpan={4}></td></tr></tfoot>
+            <tfoot className="bg-slate-50 font-bold"><tr><td colSpan={3} className="px-4 py-3 text-right">Tổng số lượng</td><td className="px-4 py-3 text-right">{quantity(total)}</td><td colSpan={2}></td><td className="px-4 py-3 text-right">{form.items.some(item=>ingredientByCode.get(item.ingredientCode)?.cost==null)?"—":`${Math.round(form.items.reduce((sum,item)=>{const ingredient=ingredientByCode.get(item.ingredientCode);return sum+number(item.quantity)*(ingredient?.purchaseToBaseFactor||1)*(ingredient?.cost||0)},0)).toLocaleString("vi-VN")} đ`}</td><td colSpan={3}></td></tr></tfoot>
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
           <button onClick={() => setForm((current) => ({ ...current, items: [...current.items, line()] }))} className="inline-flex min-h-10 items-center gap-2 rounded-md border px-4 font-semibold hover:bg-slate-50"><Plus className="h-4 w-4" /> Thêm dòng</button>
-          <div className="flex gap-3"><button disabled={saving} onClick={() => void save("draft")} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-emerald-800 px-5 font-bold text-emerald-900 disabled:opacity-50"><Save className="h-4 w-4" /> Lưu nháp</button>
-            <button disabled={saving} onClick={() => void save("completed")} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-emerald-800 px-5 font-bold text-white hover:bg-emerald-900 disabled:opacity-50"><PackageMinus className="h-4 w-4" /> Hoàn thành &amp; trừ kho</button></div>
+          <div className="flex gap-3">{form.status !== "completed" && <button disabled={saving} onClick={() => void save("draft")} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-emerald-800 px-5 font-bold text-emerald-900 disabled:opacity-50"><Save className="h-4 w-4" /> Lưu nháp</button>}
+            <button disabled={saving} onClick={() => void save("completed")} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-emerald-800 px-5 font-bold text-white hover:bg-emerald-900 disabled:opacity-50"><PackageMinus className="h-4 w-4" /> {form.status === "completed" ? "Lưu & điều chỉnh tồn" : "Hoàn thành & trừ kho"}</button></div>
         </div>
       </section>
 
@@ -215,9 +258,28 @@ export default function InventoryIssuesPage() {
           <label className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Tìm mã, nơi nhận..." className="h-10 rounded-md border pl-9 pr-3" /></label></div>
         {loading ? <div className="p-12 text-center text-slate-500">Đang tải...</div> : filteredIssues.length === 0 ? <div className="p-12 text-center text-slate-500"><ClipboardList className="mx-auto mb-2 text-slate-300" />Chưa có phiếu xuất kho.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-4">Thời gian tạo</th><th className="p-4">Mã phiếu</th><th className="p-4">Nơi nhận</th><th className="p-4">Người xuất</th><th className="p-4 text-right">Số dòng</th><th className="p-4 text-right">Tổng lượng</th><th className="p-4">Kho</th><th className="p-4">In tự động</th><th className="p-4"></th></tr></thead><tbody className="divide-y">{filteredIssues.map((issue) => {
           const printStatus = issue.printJob ? getPrintStatusPresentation(issue.printJob.status) : null;
-          return <tr key={issue.id} className="hover:bg-slate-50"><td className="p-4">{new Date(issue.createdAt).toLocaleString("vi-VN")}<small className="block font-semibold text-emerald-700">{issue.shiftType ? (issue.shiftType === "single" ? "Ca làm việc" : `Ca ${issue.shiftType.slice(-1)}`) : "Không theo ca"}</small></td><td className="p-4 font-bold text-emerald-800">{issue.issueCode}</td><td className="p-4">{issue.destination}</td><td className="p-4">{issue.issuedBy}</td><td className="p-4 text-right">{issue.itemCount}</td><td className="p-4 text-right font-bold">{quantity(issue.totalQuantity)}</td><td className="p-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${issue.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{issue.status === "completed" ? "Đã trừ kho" : "Phiếu nháp"}</span></td><td className="p-4">{printStatus ? <><span className={`rounded-full px-3 py-1 text-xs font-bold ${printStatus.className}`}>{printStatus.label}</span>{issue.printJob?.lastError && <small className="mt-1 block max-w-48 text-rose-700" title={issue.printJob.lastError}>{issue.printJob.lastError}</small>}</> : <span className="text-slate-400">—</span>}</td><td className="p-4 text-right"><div className="flex flex-wrap justify-end gap-3">{printStatus?.canReprint && <button disabled={reprintingJobId === issue.id} onClick={() => void reprint(issue)} className="inline-flex items-center gap-1 font-bold text-blue-700 disabled:opacity-50"><RotateCcw className="h-4 w-4" /> In lại</button>}{canManualPrintInventoryIssue(issue.status) && <button onClick={() => printInventoryIssue(issue)} className="inline-flex items-center gap-1 font-bold text-emerald-700"><Printer className="h-4 w-4" /> In thủ công</button>}{issue.status === "draft" && <div className="flex justify-end gap-2"><button onClick={() => edit(issue)} className="font-bold text-emerald-700">Sửa</button><button onClick={() => void remove(issue)} className="font-bold text-rose-600">Xóa</button></div>}</div></td></tr>;
+          return <tr key={issue.id} className="hover:bg-slate-50"><td className="p-4">{new Date(issue.createdAt).toLocaleString("vi-VN")}<small className="block font-semibold text-emerald-700">{issue.shiftType ? (issue.shiftType === "single" ? "Ca làm việc" : `Ca ${issue.shiftType.slice(-1)}`) : "Không theo ca"}</small></td><td className="p-4 font-bold text-emerald-800">{issue.issueCode}</td><td className="p-4">{issue.destination}</td><td className="p-4">{issue.issuedBy}</td><td className="p-4 text-right">{issue.itemCount}</td><td className="p-4 text-right font-bold">{quantity(issue.totalQuantity)}</td><td className="p-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${issue.status === "cancelled" ? "bg-rose-100 text-rose-800" : issue.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{issue.status === "cancelled" ? "Đã hủy" : issue.status === "completed" ? "Đã trừ kho" : "Phiếu nháp"}</span>{issue.status === "cancelled" && <div className="mt-2 max-w-64 text-xs text-rose-700"><p className="whitespace-pre-wrap break-words">Lý do: {issue.cancelReason}</p><p>{issue.cancelledBy} · {issue.cancelledAt ? new Date(issue.cancelledAt).toLocaleString("vi-VN") : ""}</p></div>}</td><td className="p-4">{printStatus ? <><span className={`rounded-full px-3 py-1 text-xs font-bold ${printStatus.className}`}>{printStatus.label}</span>{issue.printJob?.lastError && <small className="mt-1 block max-w-48 text-rose-700" title={issue.printJob.lastError}>{issue.printJob.lastError}</small>}</> : <span className="text-slate-400">—</span>}</td><td className="p-4 text-right"><div className="flex flex-wrap justify-end gap-3">{issue.status === "completed" && printStatus?.canReprint && <button disabled={reprintingJobId === issue.id} onClick={() => void reprint(issue)} className="inline-flex items-center gap-1 font-bold text-blue-700 disabled:opacity-50"><RotateCcw className="h-4 w-4" /> In lại</button>}{canManualPrintInventoryIssue(issue.status) && <button onClick={() => printInventoryIssue(issue)} className="inline-flex items-center gap-1 font-bold text-emerald-700"><Printer className="h-4 w-4" /> In thủ công</button>}{canEditIssue(role, issue.status) && <button disabled={saving} onClick={() => edit(issue)} className="font-bold text-emerald-700 disabled:opacity-50">Sửa</button>}{isAdmin && issue.status !== "cancelled" && <button disabled={saving} onClick={() => requestCancellation(issue)} className="font-bold text-rose-600 disabled:opacity-50">Hủy phiếu</button>}</div></td></tr>;
         })}</tbody></table></div>}
       </section>
     </div>
+    <ConfirmDialog
+      open={confirmation !== null}
+      title={typeof confirmation === "object" && confirmation ? `Hủy phiếu ${confirmation.issueCode}` : confirmation === "edit" ? `Lưu thay đổi ${form.issueCode}` : "Hoàn thành phiếu xuất kho"}
+      description={<div>
+        {typeof confirmation === "object" && confirmation ? <>
+          <p>{confirmation.status === "completed" ? "Hủy phiếu sẽ hoàn lại lượng tồn đã trừ. Phiếu được giữ trong lịch sử." : "Phiếu nháp được giữ trong lịch sử với trạng thái đã hủy."}</p>
+          <label className="mt-3 block font-semibold text-slate-900">Lý do hủy <span className="text-rose-600">*</span>
+            <textarea value={cancelReason} disabled={saving} maxLength={1000} required rows={3} onChange={(event) => { setCancelReason(event.target.value); setDialogError(""); }} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-normal" placeholder="Nhập lý do hủy phiếu..." />
+          </label>
+        </> : <p>{confirmation === "edit" ? "Lưu thông tin mới và điều chỉnh tồn theo chênh lệch giữa phiếu cũ và phiếu mới." : "Hoàn thành phiếu sẽ trừ tồn kho. Admin có thể sửa hoặc hủy phiếu khi cần."}</p>}
+        {dialogError && <p role="alert" className="mt-3 text-rose-700">{dialogError}</p>}
+      </div>}
+      confirmLabel={typeof confirmation === "object" && confirmation ? "Hủy phiếu" : confirmation === "edit" ? "Lưu thay đổi" : "Hoàn thành"}
+      cancelLabel="Quay lại"
+      variant={typeof confirmation === "object" && confirmation ? "destructive" : "default"}
+      isLoading={saving}
+      onCancel={() => { setConfirmation(null); setDialogError(""); }}
+      onConfirm={() => { if (typeof confirmation === "object" && confirmation) void cancelIssue(confirmation); else void save("completed", true); }}
+    />
   </div>;
 }

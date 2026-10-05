@@ -44,7 +44,9 @@ function receipts_store(array $body = []): string
 function receipts_full(array $user, string $id): array
 {
     $row = field_inventory_require_receipt($user, $id);
-    return field_inventory_receipt_payload($row, field_inventory_load_items($id), field_inventory_load_images($id), $user);
+    $imageReceiptId = trim((string) ($row['evidence_receipt_id'] ?? '')) ?: $id;
+    if ($imageReceiptId !== $id) field_inventory_require_receipt($user, $imageReceiptId);
+    return field_inventory_receipt_payload($row, field_inventory_load_items($id), field_inventory_load_images($imageReceiptId), $user);
 }
 
 function receipts_recalculate(string $id): void
@@ -73,6 +75,10 @@ function receipts_list(): void
         respond_ok(['items' => [], 'pagination' => ['page' => 1, 'limit' => 20, 'total' => 0, 'pages' => 0], 'counts' => []]);
     }
     $where = [];
+    $view = trim((string) ($_GET['view'] ?? ''));
+    if ($view === 'evidence') $where[] = 'EXISTS (SELECT 1 FROM inventory_receipt_images ev WHERE ev.receipt_id=r.id)';
+    if ($view === 'ledger') $where[] = 'NOT EXISTS (SELECT 1 FROM inventory_receipts linked_target WHERE linked_target.evidence_receipt_id=r.id AND linked_target.status<>"deleted")';
+    if ($view === 'ledger') $where[] = '(r.entry_source="web_manual" OR EXISTS (SELECT 1 FROM inventory_receipt_items li WHERE li.receipt_id=r.id))';
     $params = [];
     $allowedSql = [];
     foreach ($allowed as $index => $value) {
@@ -115,10 +121,12 @@ function receipts_list(): void
     $keyword = trim((string) ($_GET['keyword'] ?? $_GET['search'] ?? ''));
     if ($keyword !== '') {
         $needle = '%' . $keyword . '%';
-        $where[] = '(r.receipt_code LIKE :keyword_code OR r.note LIKE :keyword_note OR r.location_address LIKE :keyword_address)';
+        $where[] = '(r.receipt_code LIKE :keyword_code OR r.note LIKE :keyword_note OR r.location_address LIKE :keyword_address OR EXISTS (SELECT 1 FROM inventory_receipt_items keyword_item WHERE keyword_item.receipt_id=r.id AND keyword_item.product_name LIKE :keyword_product) OR EXISTS (SELECT 1 FROM suppliers keyword_supplier WHERE keyword_supplier.id=r.supplier_id AND keyword_supplier.supplier_name LIKE :keyword_supplier))';
         $params['keyword_code'] = $needle;
         $params['keyword_note'] = $needle;
         $params['keyword_address'] = $needle;
+        $params['keyword_product'] = $needle;
+        $params['keyword_supplier'] = $needle;
     }
     $productKeyword = trim((string) ($_GET['productKeyword'] ?? ''));
     if ($productKeyword !== '') {
@@ -127,6 +135,11 @@ function receipts_list(): void
         $params['product_code'] = $needle;
         $params['product_name'] = $needle;
     }
+    $evidenceStatus = trim((string) ($_GET['evidenceStatus'] ?? ''));
+    $linkedSql = '(EXISTS (SELECT 1 FROM inventory_receipts evidence_target WHERE evidence_target.evidence_receipt_id=r.id AND evidence_target.status<>"deleted") OR (r.status="completed" AND EXISTS (SELECT 1 FROM inventory_receipt_items evidence_item WHERE evidence_item.receipt_id=r.id)))';
+    if ($view === 'evidence' && $evidenceStatus === 'linked') $where[] = $linkedSql;
+    if ($view === 'evidence' && in_array($evidenceStatus, ['unlinked','review'], true)) $where[] = 'NOT ' . $linkedSql;
+    if ($view === 'evidence' && $evidenceStatus === 'review') $where[] = 'COALESCE(r.note, "")=""';
     $whereSql = implode(' AND ', $where);
     $page = max(1, (int) ($_GET['page'] ?? 1));
     $limit = max(1, min(100, (int) ($_GET['limit'] ?? 20)));
@@ -159,14 +172,28 @@ function receipts_list(): void
     $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
     $statement->bindValue(':offset', ($page - 1) * $limit, PDO::PARAM_INT);
     $statement->execute();
-    $items = array_map(static function (array $row) use ($user): array {
-        $item = field_inventory_receipt_payload($row, [], [], $user);
+    $items = array_map(static function (array $row) use ($user, $view): array {
+        $item = field_inventory_receipt_payload($row, field_inventory_load_items((string) $row['id']), $view === 'evidence' ? field_inventory_load_images((string) $row['id']) : [], $user);
+        $linked = db()->prepare('SELECT id,receipt_code FROM inventory_receipts WHERE evidence_receipt_id=:id AND status<>"deleted"');
+        $linked->execute(['id' => $row['id']]);
+        $item['linkedReceipts'] = $linked->fetchAll();
         $item['itemCount'] = (int) $row['item_count'];
         $item['imageCount'] = (int) $row['image_count'];
         $item['thumbnailUrl'] = $row['thumbnail_id'] ? '/api/inventory-receipt-images.php?id=' . rawurlencode($row['thumbnail_id']) . '&size=thumbnail' : null;
         $item['capturedByName'] = $row['captured_by_name'] ?: null;
         return $item;
     }, $statement->fetchAll());
+
+    $summaryStatement = db()->prepare('SELECT
+        SUM(r.status="pending_explanation") pending,
+        SUM(r.status="draft") processing,
+        SUM(r.status="completed") completed,
+        SUM(r.evidence_receipt_id IS NOT NULL OR (r.status="completed" AND EXISTS (SELECT 1 FROM inventory_receipt_images own_img WHERE own_img.receipt_id=r.id))) linked,
+        SUM(EXISTS (SELECT 1 FROM inventory_receipts target WHERE target.evidence_receipt_id=r.id AND target.status<>"deleted") OR (r.status="completed" AND EXISTS (SELECT 1 FROM inventory_receipt_items own_item WHERE own_item.receipt_id=r.id))) evidence_linked,
+        SUM(COALESCE(r.note, "")="") needs_review
+        FROM inventory_receipts r WHERE ' . $whereSql);
+    $summaryStatement->execute($params);
+    $summary = array_map('intval', $summaryStatement->fetch());
 
     $counts = array_fill_keys(FIELD_RECEIPT_STATUSES, 0);
     $allowedParams = array_filter($params, static fn(string $key): bool => strpos($key, 'area_') === 0, ARRAY_FILTER_USE_KEY);
@@ -184,7 +211,7 @@ function receipts_list(): void
         $counts[$row['status']] = (int) $row['total'];
     }
     $counts['all'] = array_sum($counts);
-    respond_ok(['items' => $items, 'counts' => $counts, 'pagination' => [
+    respond_ok(['items' => $items, 'summary' => $summary, 'counts' => $counts, 'pagination' => [
         'page' => $page, 'limit' => $limit, 'total' => $total, 'pages' => (int) ceil($total / $limit),
     ]]);
 }
@@ -303,6 +330,9 @@ function receipts_complete(array $body): void
     try {
         $receipt = field_inventory_load_receipt($id, true);
         if (!$receipt) throw new ReceiptValidationException('Không tìm thấy phiếu nhập.', 404);
+        $linkedTarget = db()->prepare('SELECT id FROM inventory_receipts WHERE evidence_receipt_id=:id AND status<>"deleted" LIMIT 1');
+        $linkedTarget->execute(['id' => $id]);
+        if ($linkedTarget->fetchColumn()) throw new ReceiptValidationException('Minh chứng đã gắn với phiếu nhập. Hãy mở phiếu nhập liên kết để tránh cộng tồn hai lần.', 409);
         if ($receipt['status'] === 'completed') {
             db()->commit();
             respond_ok(['item' => receipts_full($user, $id), 'idempotent' => true]);

@@ -83,7 +83,7 @@ export default function FieldInventoryReceiptDetailPage() {
   }, [query, receipt?.areaId, suggestionsOpen]);
   if (loading && !receipt) {
     return (
-      <div className="min-h-full bg-slate-50 p-4 sm:p-6 2xl:p-8" aria-busy="true" aria-label="Đang tải chi tiết phiếu nhập">
+      <div className="warehouse-ui min-h-full bg-slate-50 p-4 sm:p-6 2xl:p-8" aria-busy="true" aria-label="Đang tải chi tiết phiếu nhập">
         <div className="mx-auto max-w-[1720px] space-y-5">
           <div className="h-10 w-40 animate-pulse rounded-md bg-slate-200" />
           <div className="h-56 animate-pulse rounded-xl border border-slate-200 bg-white" />
@@ -196,7 +196,7 @@ export default function FieldInventoryReceiptDetailPage() {
   }
 
   return (
-    <div className="min-h-full bg-slate-50 p-3 sm:p-5 lg:p-6 2xl:p-8">
+    <div className="warehouse-ui min-h-full bg-slate-50 p-3 sm:p-5 lg:p-6 2xl:p-8">
       <div className="mx-auto max-w-[1720px]">
         <Button
           variant="ghost"
