@@ -4,10 +4,6 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Clock3,
   Download,
   Monitor,
@@ -17,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
+import { Pagination } from "@/components/ui/Pagination";
 import {
   ActivityLog,
   ActivityLogPagination,
@@ -159,31 +156,6 @@ function buildScreenshotFileName(item: ActivityLog) {
   return `${safeMachine}-${safeEvent}-${timestamp}.jpg`;
 }
 
-function buildVisiblePages(page: number, lastPage: number) {
-  if (lastPage <= 7) {
-    return Array.from({ length: lastPage }, (_, index) => index + 1);
-  }
-
-  const pages: Array<number | string> = [1];
-  const start = Math.max(2, page - 1);
-  const end = Math.min(lastPage - 1, page + 1);
-
-  if (start > 2) {
-    pages.push("left-gap");
-  }
-
-  for (let current = start; current <= end; current += 1) {
-    pages.push(current);
-  }
-
-  if (end < lastPage - 1) {
-    pages.push("right-gap");
-  }
-
-  pages.push(lastPage);
-  return pages;
-}
-
 function downloadStatusLabel(status: DownloadJobState["status"]) {
   switch (status) {
     case "queued":
@@ -295,71 +267,21 @@ function PaginationControls({
   onJump: () => void;
   onPageChange: (page: number) => void;
 }) {
-  const pages = buildVisiblePages(pagination.page, pagination.lastPage);
-
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div className="text-sm text-slate-500">
         Trang {pagination.page}/{pagination.lastPage} | {pagination.total} dòng log
       </div>
       <div className="flex flex-wrap items-center gap-2 md:justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={loading || pagination.page <= 1}
-          onClick={() => onPageChange(1)}
-        >
-          <ChevronsLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={loading || pagination.page <= 1}
-          onClick={() => onPageChange(pagination.page - 1)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-
-        {pages.map((pageItem) =>
-          typeof pageItem === "number" ? (
-            <Button
-              key={pageItem}
-              type="button"
-              variant={pageItem === pagination.page ? "default" : "outline"}
-              size="sm"
-              disabled={loading}
-              onClick={() => onPageChange(pageItem)}
-              className="min-w-10"
-            >
-              {pageItem}
-            </Button>
-          ) : (
-            <span key={pageItem} className="px-1 text-sm text-slate-400">
-              ...
-            </span>
-          )
-        )}
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={loading || pagination.page >= pagination.lastPage}
-          onClick={() => onPageChange(pagination.page + 1)}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={loading || pagination.page >= pagination.lastPage}
-          onClick={() => onPageChange(pagination.lastPage)}
-        >
-          <ChevronsRight className="h-4 w-4" />
-        </Button>
+        <Pagination
+          currentPage={pagination.page}
+          totalItems={pagination.total}
+          pageSize={pagination.perPage}
+          onPageChange={onPageChange}
+          disabled={loading}
+          showSummary={false}
+          className="min-h-0 border-0 bg-transparent p-0"
+        />
 
         <div className="ml-1 flex items-center gap-2">
           <input

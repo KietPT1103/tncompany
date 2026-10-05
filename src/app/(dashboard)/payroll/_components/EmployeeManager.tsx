@@ -1,23 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   addEmployee,
   deleteEmployee,
   Employee,
+  getEmployeeRoleNames,
   getEmployees,
   updateEmployee,
 } from "@/services/employees";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Pagination } from "@/components/ui/Pagination";
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
+import { paginateItems } from "@/lib/listPagination";
 import { cn } from "@/lib/utils";
+import { getEmployeeRoles, type EmployeeRole } from "@/services/employeeRoles";
 import {
   ChevronRight,
   Pencil,
   Plus,
   Search,
+  Tags,
   Trash2,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import {
@@ -33,6 +41,9 @@ import EmployeeSalaryFields, {
   resolveEmployeeSalaryType,
   validateEmployeeSalaryForm,
 } from "./EmployeeSalaryFields";
+import EmployeeRoleManager from "./EmployeeRoleManager";
+
+const EMPLOYEE_PAGE_SIZE = 15;
 
 function getRoleBadge(role: string) {
   if (ROLE_GROUPS.Chung.includes(role))
@@ -42,6 +53,26 @@ function getRoleBadge(role: string) {
   if (ROLE_GROUPS.Farm.includes(role))
     return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
   return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+}
+
+function EmployeeRoleBadges({ employee, compact = false }: { employee: Employee; compact?: boolean }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {getEmployeeRoleNames(employee).map((role, index) => (
+        <span
+          key={role}
+          className={cn(
+            "inline-flex rounded-full font-semibold",
+            compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs",
+            getRoleBadge(role),
+          )}
+          title={index === 0 ? "Vai trò chính" : undefined}
+        >
+          {role}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function getCompensationSummary(employee: Employee) {
@@ -71,8 +102,21 @@ export default function EmployeeManager({
   storeId: string;
   refreshKey?: number;
 }) {
-  const roleGroups = useMemo(() => getRoleGroupsForStore(storeId), [storeId]);
-  const defaultRole = useMemo(() => getDefaultRoleForStore(storeId), [storeId]);
+  const fallbackRoleGroups = useMemo(() => getRoleGroupsForStore(storeId), [storeId]);
+  const fallbackDefaultRole = useMemo(() => getDefaultRoleForStore(storeId), [storeId]);
+  const [roles, setRoles] = useState<EmployeeRole[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesError, setRolesError] = useState("");
+  const [workspaceTab, setWorkspaceTab] = useState<"employees" | "roles">("employees");
+  const [currentPage, setCurrentPage] = useState(1);
+  const roleGroups = useMemo(
+    () =>
+      roles.length > 0
+        ? { "Vai trò": roles.map((item) => item.name) }
+        : fallbackRoleGroups,
+    [fallbackRoleGroups, roles],
+  );
+  const defaultRole = roles[0]?.name || fallbackDefaultRole;
   const availableRoles = useMemo(
     () => Object.values(roleGroups).flat(),
     [roleGroups],
@@ -82,6 +126,7 @@ export default function EmployeeManager({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -93,12 +138,26 @@ export default function EmployeeManager({
 
   useEffect(() => {
     void loadEmployees();
+    void loadRoles();
   }, [storeId, refreshKey]);
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [roleFilter, searchTerm, storeId]);
+
+  useEffect(() => {
+    setRoleFilter("all");
+  }, [storeId]);
+
+  useEffect(() => {
     setFormValues((current) => {
-      if (!availableRoles.includes(current.role))
-        return { ...current, role: defaultRole };
+      const validRoles = current.roles.filter((role) => availableRoles.includes(role));
+      if (validRoles.length === 0) {
+        return { ...current, role: defaultRole, roles: [defaultRole] };
+      }
+      if (validRoles.length !== current.roles.length || current.role !== validRoles[0]) {
+        return { ...current, role: validRoles[0], roles: validRoles };
+      }
       return current;
     });
   }, [availableRoles, defaultRole]);
@@ -119,6 +178,23 @@ export default function EmployeeManager({
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadRoles() {
+    if (!storeId) return;
+    try {
+      setRolesError("");
+      setRolesLoading(true);
+      setRoles(await getEmployeeRoles(storeId));
+    } catch (error) {
+      console.error(error);
+      setRoles([]);
+      setRolesError(
+        error instanceof Error ? error.message : "Không tải được danh sách vai trò.",
+      );
+    } finally {
+      setRolesLoading(false);
     }
   }
 
@@ -205,17 +281,82 @@ export default function EmployeeManager({
     }
   }
 
+  const roleFilterOptions = useMemo<SelectBoxOption<string>[]>(() => {
+    const roleNames = Array.from(
+      new Set([
+        ...availableRoles,
+        ...employees.flatMap(getEmployeeRoleNames),
+      ]),
+    );
+
+    return [
+      { value: "all", label: "Tất cả vai trò" },
+      ...roleNames.map((role) => ({ value: role, label: role })),
+    ];
+  }, [availableRoles, employees]);
+
   const filteredEmployees = employees.filter((employee) => {
+    const employeeRoles = getEmployeeRoleNames(employee);
+    if (roleFilter !== "all" && !employeeRoles.includes(roleFilter)) return false;
     const keyword = searchTerm.trim().toLowerCase();
     if (!keyword) return true;
     return (
       employee.name.toLowerCase().includes(keyword) ||
-      employee.role.toLowerCase().includes(keyword) ||
+      employeeRoles.some((role) => role.toLowerCase().includes(keyword)) ||
       (employee.employeeCode || "").toLowerCase().includes(keyword)
     );
   });
+  const paginatedEmployees = paginateItems(
+    filteredEmployees,
+    currentPage,
+    EMPLOYEE_PAGE_SIZE,
+  );
   return (
     <>
+      <nav
+        className="flex overflow-x-auto border-b border-slate-200 bg-slate-50/95"
+        role="tablist"
+        aria-label="Quản lý nhân sự"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workspaceTab === "employees"}
+          onClick={() => setWorkspaceTab("employees")}
+          className={cn(
+            "inline-flex h-12 items-center gap-2 border-b-2 px-4 text-sm font-bold transition-colors",
+            workspaceTab === "employees"
+              ? "border-[#E1B23D] bg-[#064E3B] text-[#F6C85F]"
+              : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800",
+          )}
+        >
+          <Users className="h-4 w-4" />
+          Nhân sự
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px]", workspaceTab === "employees" ? "bg-[#F6C85F] text-[#064E3B]" : "bg-slate-200 text-slate-700")}>
+            {employees.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workspaceTab === "roles"}
+          onClick={() => setWorkspaceTab("roles")}
+          className={cn(
+            "inline-flex h-12 items-center gap-2 border-b-2 px-4 text-sm font-bold transition-colors",
+            workspaceTab === "roles"
+              ? "border-[#E1B23D] bg-[#064E3B] text-[#F6C85F]"
+              : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800",
+          )}
+        >
+          <Tags className="h-4 w-4" />
+          Vai trò
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px]", workspaceTab === "roles" ? "bg-[#F6C85F] text-[#064E3B]" : "bg-slate-200 text-slate-700")}>
+            {roles.length}
+          </span>
+        </button>
+      </nav>
+
+      <div className={workspaceTab === "employees" ? "block" : "hidden"}>
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
@@ -234,7 +375,7 @@ export default function EmployeeManager({
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto lg:items-center">
-            <div className="relative w-full lg:w-[320px]">
+            <div className="relative w-full lg:w-[280px]">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
                 value={searchTerm}
@@ -244,6 +385,17 @@ export default function EmployeeManager({
                 className="h-9 rounded border-slate-300 bg-slate-50 pl-10"
               />
             </div>
+            <SelectBox
+              value={roleFilter}
+              options={roleFilterOptions}
+              onValueChange={setRoleFilter}
+              ariaLabel="Lọc nhân viên theo vai trò"
+              searchable
+              searchThreshold={7}
+              searchPlaceholder="Tìm vai trò..."
+              className="w-full sm:w-48"
+              triggerClassName="h-9 rounded border-slate-300 bg-slate-50 shadow-none"
+            />
             <Button
               className="h-9 gap-1.5 rounded border border-emerald-800 bg-white px-3 text-sm font-semibold text-emerald-800 transition-[background-color,border-color,color,transform] duration-200 hover:bg-emerald-800 hover:text-white active:scale-[0.97]"
               onClick={openCreateDialog}
@@ -277,7 +429,7 @@ export default function EmployeeManager({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredEmployees.map((employee) => {
+              {paginatedEmployees.items.map((employee) => {
                 const compensation = getCompensationSummary(employee);
                 return (
                   <tr
@@ -295,14 +447,7 @@ export default function EmployeeManager({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
-                          getRoleBadge(employee.role),
-                        )}
-                      >
-                        {employee.role}
-                      </span>
+                      <EmployeeRoleBadges employee={employee} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -337,7 +482,7 @@ export default function EmployeeManager({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-9 w-9 rounded-md text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+                          className="h-9 w-9 rounded-md text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                           onClick={() => handleDelete(employee.id!)}
                           aria-label={"Xóa " + employee.name}
                           title="Xóa"
@@ -366,7 +511,7 @@ export default function EmployeeManager({
         </div>
 
         <div className="divide-y divide-slate-200 md:hidden">
-          {filteredEmployees.map((employee) => {
+          {paginatedEmployees.items.map((employee) => {
             const compensation = getCompensationSummary(employee);
             return (
               <button
@@ -380,14 +525,7 @@ export default function EmployeeManager({
                     <span className="truncate text-sm font-semibold text-slate-950">
                       {employee.name}
                     </span>
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                        getRoleBadge(employee.role),
-                      )}
-                    >
-                      {employee.role}
-                    </span>
+                    <EmployeeRoleBadges employee={employee} compact />
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                     <span className="font-mono">
@@ -414,6 +552,15 @@ export default function EmployeeManager({
             </div>
           ) : null}
         </div>
+
+        {filteredEmployees.length > 0 ? (
+          <Pagination
+            currentPage={paginatedEmployees.pagination.currentPage}
+            totalItems={filteredEmployees.length}
+            pageSize={EMPLOYEE_PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
+        ) : null}
       </section>
 
       {viewingEmployee ? (
@@ -454,9 +601,7 @@ export default function EmployeeManager({
                   <dl className="divide-y divide-slate-200 rounded-lg border border-slate-200">
                     <div className="flex items-center justify-between gap-4 px-3 py-3">
                       <dt className="text-sm text-slate-500">Vai trò</dt>
-                      <dd className="text-sm font-semibold text-slate-900">
-                        {viewingEmployee.role}
-                      </dd>
+                      <dd><EmployeeRoleBadges employee={viewingEmployee} compact /></dd>
                     </div>
                     <div className="flex items-center justify-between gap-4 px-3 py-3">
                       <dt className="text-sm text-slate-500">
@@ -494,10 +639,10 @@ export default function EmployeeManager({
         </div>
       ) : null}
 
-      {dialogOpen ? (
+      {dialogOpen && typeof document !== "undefined" ? createPortal(
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4">
-          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-lg border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-2rem)] sm:rounded-lg">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
+          <div className="flex max-h-[94dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.28)] sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-6 sm:py-5">
               <div>
                 <h3 className="text-lg font-semibold text-slate-950">
                   {editingId ? "Cập nhật nhân viên" : "Thêm nhân viên"}
@@ -517,11 +662,12 @@ export default function EmployeeManager({
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <div className="min-h-0 overflow-y-auto px-4 py-5 sm:px-5">
+            <div className="admin-list-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6 sm:py-6">
               <div className="space-y-4">
                 <EmployeeSalaryFields
                   roleGroups={roleGroups}
                   values={formValues}
+                  multipleRoles
                   onChange={(changes) =>
                     setFormValues((current) => ({ ...current, ...changes }))
                   }
@@ -536,7 +682,7 @@ export default function EmployeeManager({
                 ) : null}
               </div>
             </div>
-            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-5">
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50/80 px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
               <Button
                 variant="outline"
                 className="h-10 rounded-md"
@@ -546,7 +692,7 @@ export default function EmployeeManager({
                 Hủy
               </Button>
               <Button
-                className="h-10 rounded-md"
+                className="h-10 rounded-md border border-[#064E3B] bg-[#064E3B] font-semibold text-[#F6C85F] shadow-sm transition-colors hover:border-[#0B5F48] hover:bg-[#0B5F48] hover:text-[#FFD978] focus-visible:ring-[#E1B23D]"
                 isLoading={submitting}
                 onClick={() => void handleSaveEmployee()}
               >
@@ -554,7 +700,21 @@ export default function EmployeeManager({
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
+      ) : null}
+      </div>
+
+      {workspaceTab === "roles" ? (
+        <EmployeeRoleManager
+          storeId={storeId}
+          roles={roles}
+          loading={rolesLoading}
+          error={rolesError}
+          onRefresh={async () => {
+            await Promise.all([loadRoles(), loadEmployees()]);
+          }}
+        />
       ) : null}
     </>
   );

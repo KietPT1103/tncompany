@@ -40,6 +40,7 @@ function employees_ensure_table(): void
             employee_code VARCHAR(100) NOT NULL,
             name VARCHAR(255) NOT NULL,
             role VARCHAR(100) NOT NULL DEFAULT "",
+            roles_json LONGTEXT NULL,
             hourly_rate DECIMAL(12,2) NOT NULL DEFAULT 0,
             salary_type VARCHAR(20) NOT NULL DEFAULT "hourly",
             monthly_salary DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -57,6 +58,7 @@ function employees_ensure_table(): void
     );
 
     employees_ensure_column('employees', 'employee_code', "VARCHAR(100) NOT NULL DEFAULT '' AFTER store_id");
+    employees_ensure_column('employees', 'roles_json', 'LONGTEXT NULL AFTER role');
     employees_ensure_column('employees', 'salary_type', "VARCHAR(20) NOT NULL DEFAULT 'hourly' AFTER hourly_rate");
     employees_ensure_column('employees', 'monthly_salary', 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER salary_type');
     employees_ensure_column('employees', 'expected_work_days', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER monthly_salary');
@@ -79,6 +81,26 @@ function employees_ensure_table(): void
             ELSE 'hourly'
          END"
     );
+}
+
+function employees_normalize_roles(array $source): array
+{
+    $roles = [];
+    if (isset($source['roles']) && is_array($source['roles'])) {
+        foreach ($source['roles'] as $role) {
+            $normalized = trim((string) $role);
+            if ($normalized !== '' && !in_array($normalized, $roles, true)) {
+                $roles[] = $normalized;
+            }
+        }
+    }
+
+    $primaryRole = trim((string) ($source['role'] ?? ($source['role_name'] ?? '')));
+    if ($primaryRole !== '' && !in_array($primaryRole, $roles, true)) {
+        array_unshift($roles, $primaryRole);
+    }
+
+    return $roles;
 }
 
 function employees_has_monthly_signals(array $source): bool
@@ -106,12 +128,19 @@ function employees_normalize_salary_type(?string $value, array $source = []): st
 
 function employees_map_row(array $row): array
 {
+    $storedRoles = json_decode((string) ($row['roles_json'] ?? '[]'), true);
+    $roles = employees_normalize_roles([
+        'role' => (string) $row['role'],
+        'roles' => is_array($storedRoles) ? $storedRoles : [],
+    ]);
+
     return [
         'id' => (string) $row['id'],
         'storeId' => (string) $row['store_id'],
         'employeeCode' => (string) $row['employee_code'],
         'name' => (string) $row['name'],
         'role' => (string) $row['role'],
+        'roles' => $roles,
         'hourlyRate' => (float) $row['hourly_rate'],
         'salaryType' => employees_normalize_salary_type((string) ($row['salary_type'] ?? ''), $row),
         'monthlySalary' => (float) ($row['monthly_salary'] ?? 0),
@@ -134,7 +163,7 @@ if ($method === 'GET') {
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
-        'SELECT id, store_id, employee_code, name, role, hourly_rate, salary_type, monthly_salary,
+        'SELECT id, store_id, employee_code, name, role, roles_json, hourly_rate, salary_type, monthly_salary,
                 expected_work_days, paid_leave_days, attendance_bonus_enabled, attendance_bonus_days,
                 attendance_bonus_amount, standard_hours, allowances_json, created_at
          FROM employees
@@ -168,15 +197,19 @@ if ($method === 'POST') {
     }
 
     $salaryType = employees_normalize_salary_type((string) ($body['salaryType'] ?? ''), $body);
+    $roles = employees_normalize_roles($body);
+    if ($roles === []) {
+        respond_error('At least one employee role is required', 422);
+    }
     $expectedWorkDays = (float) ($body['expectedWorkDays'] ?? ($salaryType === 'monthly' ? 30 : 0));
     $id = uuidv4();
     $statement = db()->prepare(
         'INSERT INTO employees (
-            id, store_id, employee_code, name, role, hourly_rate, salary_type, monthly_salary,
+            id, store_id, employee_code, name, role, roles_json, hourly_rate, salary_type, monthly_salary,
             expected_work_days, paid_leave_days, attendance_bonus_enabled, attendance_bonus_days,
             attendance_bonus_amount, standard_hours, allowances_json, created_at
          ) VALUES (
-            :id, :store_id, :employee_code, :name, :role, :hourly_rate, :salary_type, :monthly_salary,
+            :id, :store_id, :employee_code, :name, :role, :roles_json, :hourly_rate, :salary_type, :monthly_salary,
             :expected_work_days, :paid_leave_days, :attendance_bonus_enabled, :attendance_bonus_days,
             :attendance_bonus_amount, :standard_hours, :allowances_json, NOW()
          )'
@@ -186,7 +219,8 @@ if ($method === 'POST') {
         'store_id' => $storeId,
         'employee_code' => $employeeCode,
         'name' => $name,
-        'role' => trim((string) ($body['role'] ?? '')),
+        'role' => $roles[0],
+        'roles_json' => json_encode($roles, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         'hourly_rate' => (float) ($body['hourlyRate'] ?? 0),
         'salary_type' => $salaryType,
         'monthly_salary' => (float) ($body['monthlySalary'] ?? 0),
@@ -256,9 +290,20 @@ if ($method === 'PATCH') {
         $params['name'] = $name;
     }
 
-    if (array_key_exists('role', $body)) {
+    if (array_key_exists('roles', $body)) {
+        $roles = employees_normalize_roles($body);
+        if ($roles === []) {
+            respond_error('At least one employee role is required', 422);
+        }
         $fields[] = 'role = :role';
+        $fields[] = 'roles_json = :roles_json';
+        $params['role'] = $roles[0];
+        $params['roles_json'] = json_encode($roles, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } elseif (array_key_exists('role', $body)) {
+        $fields[] = 'role = :role';
+        $fields[] = 'roles_json = :roles_json';
         $params['role'] = trim((string) $body['role']);
+        $params['roles_json'] = json_encode([$params['role']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     if (array_key_exists('hourlyRate', $body)) {
@@ -327,7 +372,7 @@ if ($method === 'PATCH') {
     $statement->execute($params);
 
     $verifyStatement = db()->prepare(
-        'SELECT id, store_id, employee_code, name, role, hourly_rate, salary_type, monthly_salary,
+        'SELECT id, store_id, employee_code, name, role, roles_json, hourly_rate, salary_type, monthly_salary,
                 expected_work_days, paid_leave_days, attendance_bonus_enabled, attendance_bonus_days,
                 attendance_bonus_amount, standard_hours, allowances_json, created_at
          FROM employees

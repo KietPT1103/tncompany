@@ -9,8 +9,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  ChevronLeft,
-  ChevronRight,
   Download,
   FileDown,
   FileSpreadsheet,
@@ -28,6 +26,7 @@ import { SelectBox } from "@/components/ui/SelectBox";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { useStore } from "@/context/StoreContext";
 import { cn } from "@/lib/utils";
+import { Pagination } from "@/components/ui/Pagination";
 import { getAllBills } from "@/services/billService";
 import { getAllProducts } from "@/services/products";
 import {
@@ -454,9 +453,7 @@ export default function ProductSalesReportPage() {
           <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-3 py-2 sm:px-4">
             <div className="flex items-center gap-2 text-sm"><span className="font-bold text-emerald-950">Bản xem trước</span><span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">{filteredRows.length} mặt hàng</span></div>
             <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-0.5">
-              <ToolbarButton label="Trang trước" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1}><ChevronLeft className="h-4 w-4" /></ToolbarButton>
-              <span className="min-w-[68px] text-center text-xs font-semibold tabular-nums text-slate-600">{page} / {pageCount}</span>
-              <ToolbarButton label="Trang sau" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={page === pageCount}><ChevronRight className="h-4 w-4" /></ToolbarButton>
+              <Pagination currentPage={page} totalItems={filteredRows.length} pageSize={ROWS_PER_PAGE} onPageChange={setPage} showSummary={false} className="min-h-0 shrink-0 border-0 bg-transparent p-0" />
               <span className="mx-1 h-6 w-px bg-slate-200" />
               <ToolbarButton label="Thu nhỏ" onClick={() => setZoom((value) => Math.max(MIN_REPORT_ZOOM, Number((value - REPORT_ZOOM_STEP).toFixed(2))))}><Minus className="h-4 w-4" /></ToolbarButton>
               <button type="button" onClick={() => setZoom(DEFAULT_REPORT_ZOOM)} className="h-9 min-w-[52px] rounded-md px-2 text-xs font-bold tabular-nums text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">{Math.round((zoom / DEFAULT_REPORT_ZOOM) * 100)}%</button>

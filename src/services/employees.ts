@@ -13,6 +13,7 @@ export type Employee = {
   employeeCode?: string;
   name: string;
   role: string;
+  roles?: string[];
   hourlyRate: number;
   salaryType?: "hourly" | "monthly";
   monthlySalary?: number;
@@ -25,6 +26,16 @@ export type Employee = {
   allowances?: EmployeeAllowance[];
   createdAt?: any;
 };
+
+export function getEmployeeRoleNames(
+  employee?: Partial<Pick<Employee, "role" | "roles">> | null,
+): string[] {
+  const values = [employee?.role, ...(employee?.roles || [])]
+    .map((role) => String(role || "").trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(values));
+}
 
 type EmployeesResponse = {
   items: Employee[];

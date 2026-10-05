@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { StoreType } from "@/context/StoreContext";
-import { Employee } from "@/services/employees";
+import { Employee, getEmployeeRoleNames } from "@/services/employees";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { Check, Search, UserPlus, Users, X } from "lucide-react";
@@ -78,8 +78,8 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
     return employees.filter((employee) => {
       const code = (employee.employeeCode || "").toLowerCase();
       const employeeName = (employee.name || "").toLowerCase();
-      const employeeRole = (employee.role || "").toLowerCase();
-      return code.includes(keyword) || employeeName.includes(keyword) || employeeRole.includes(keyword);
+      const employeeRoles = getEmployeeRoleNames(employee);
+      return code.includes(keyword) || employeeName.includes(keyword) || employeeRoles.some((role) => role.toLowerCase().includes(keyword));
     });
   }, [employees, searchTerm]);
 
@@ -179,7 +179,7 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
                           <span className="font-semibold text-slate-900">{employee.name}</span>
                           <span className={cn("inline-flex rounded-full px-3 py-1 text-xs font-semibold", summary.badgeClass)}>{summary.badgeLabel}</span>
                         </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500"><span>{employee.role || defaultRole}</span><span className="text-slate-300">•</span><span>{summary.detail}</span></div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500"><span>{getEmployeeRoleNames(employee).join(", ") || defaultRole}</span><span className="text-slate-300">•</span><span>{summary.detail}</span></div>
                       </div>
                       <span className={cn("mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border", selected ? "border-emerald-200 bg-emerald-600 text-white" : "border-slate-200 bg-white text-transparent")}><Check className="h-4 w-4" /></span>
                     </button>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Clock3, Save } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { getRoleGroupsForStore } from "./payrollShared";
+import { getEmployeeRoles } from "@/services/employeeRoles";
 import {
   getRoleStartTimes,
   RoleStartTimeSetting,
@@ -36,7 +37,15 @@ const WEEKEND_SHIFT_FIELDS = [
 ] as const;
 
 export default function RoleStartTimeManager({ storeId }: { storeId: string }) {
-  const roleGroups = useMemo(() => getRoleGroupsForStore(storeId), [storeId]);
+  const fallbackRoleGroups = useMemo(() => getRoleGroupsForStore(storeId), [storeId]);
+  const [managedRoles, setManagedRoles] = useState<string[]>([]);
+  const roleGroups = useMemo(
+    () =>
+      managedRoles.length > 0
+        ? { "Vai trò": managedRoles }
+        : fallbackRoleGroups,
+    [fallbackRoleGroups, managedRoles],
+  );
   const [values, setValues] = useState<RoleShiftStartValues>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,8 +60,12 @@ export default function RoleStartTimeManager({ storeId }: { storeId: string }) {
         setLoading(true);
         setError("");
         setMessage("");
-        const items = await getRoleStartTimes(storeId);
+        const [items, roleItems] = await Promise.all([
+          getRoleStartTimes(storeId),
+          getEmployeeRoles(storeId),
+        ]);
         if (!active) return;
+        setManagedRoles(roleItems.map((item) => item.name));
         setValues(
           items.reduce<RoleShiftStartValues>((result, item) => {
             result[item.role] = {

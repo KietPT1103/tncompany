@@ -15,6 +15,7 @@ const ADMIN_PATHS = [
   "/accounts",
   "/activity-logs",
   "/internal-invoices",
+  "/employees",
   "/payroll",
   "/payroll-estimate",
   "/social-listening",

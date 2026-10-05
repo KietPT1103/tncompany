@@ -3,7 +3,9 @@
 import InputMoney from "@/components/InputMoney";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Employee, EmployeeAllowance } from "@/services/employees";
+import { MultiSelectBox } from "@/components/ui/MultiSelectBox";
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
+import { Employee, EmployeeAllowance, getEmployeeRoleNames } from "@/services/employees";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +13,7 @@ export type EmployeeSalaryFormValues = {
   employeeCode: string;
   name: string;
   role: string;
+  roles: string[];
   salaryType: "hourly" | "monthly";
   hourlyRate: number;
   monthlySalary: number;
@@ -40,11 +43,13 @@ export function createEmployeeSalaryFormValues(
   employee?: Partial<Employee>
 ): EmployeeSalaryFormValues {
   const salaryType = resolveEmployeeSalaryType(employee);
+  const roles = getEmployeeRoleNames(employee);
 
   return {
     employeeCode: employee?.employeeCode || "",
     name: employee?.name || "",
-    role: employee?.role || defaultRole,
+    role: roles[0] || defaultRole,
+    roles: roles.length > 0 ? roles : [defaultRole],
     salaryType,
     hourlyRate: employee?.hourlyRate || 0,
     monthlySalary: salaryType === "monthly" ? employee?.monthlySalary || 0 : 0,
@@ -65,7 +70,8 @@ export function buildEmployeeMutationPayload(values: EmployeeSalaryFormValues) {
   return {
     employeeCode: values.employeeCode.trim(),
     name: values.name.trim(),
-    role: values.role,
+    role: values.roles[0] || values.role,
+    roles: values.roles.length > 0 ? values.roles : [values.role],
     hourlyRate: values.hourlyRate,
     salaryType: values.salaryType,
     monthlySalary: isMonthly ? values.monthlySalary : 0,
@@ -92,6 +98,10 @@ export function validateEmployeeSalaryForm(values: EmployeeSalaryFormValues) {
     return "Vui lòng nhập mã nhân viên và tên nhân viên.";
   }
 
+  if (values.roles.length === 0) {
+    return "Vui lòng chọn ít nhất một vai trò.";
+  }
+
   if (values.salaryType === "monthly") {
     if (!values.monthlySalary) {
       return "Vui lòng nhập lương tháng.";
@@ -111,17 +121,37 @@ export default function EmployeeSalaryFields({
   values,
   onChange,
   className,
+  multipleRoles = false,
 }: {
   roleGroups: Record<string, string[]>;
   values: EmployeeSalaryFormValues;
   onChange: (changes: Partial<EmployeeSalaryFormValues>) => void;
   className?: string;
+  multipleRoles?: boolean;
 }) {
   const isMonthly = values.salaryType === "monthly";
+  const roleOptions: SelectBoxOption<string>[] = Object.entries(roleGroups).flatMap(
+    ([group, roles]) =>
+      roles.map((role) => ({ value: role, label: role, group })),
+  );
+  const allowancePeriodOptions: SelectBoxOption<"all" | "1" | "2">[] = [
+    { value: "all", label: "Tất cả các kỳ" },
+    { value: "1", label: "Kỳ 1" },
+    { value: "2", label: "Kỳ 2" },
+  ];
 
   return (
-    <div className={cn("space-y-4", className)}>
-      <div className="grid gap-4 md:grid-cols-2">
+    <div className={cn("space-y-6", className)}>
+      <section className="space-y-4" aria-labelledby="employee-basic-info">
+        <div>
+          <h4 id="employee-basic-info" className="text-sm font-semibold text-slate-950">
+            Thông tin nhân viên
+          </h4>
+          <p className="mt-1 text-xs text-slate-500">
+            Mã nhân viên, tên hiển thị và các vai trò có thể đảm nhiệm.
+          </p>
+        </div>
+        <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Mã nhân viên (EnNo)
@@ -150,47 +180,80 @@ export default function EmployeeSalaryFields({
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Vai trò
           </label>
-          <select
-            value={values.role}
-            onChange={(event) => onChange({ role: event.target.value })}
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
-          >
-            {Object.entries(roleGroups).map(([group, roles]) => (
-              <optgroup key={group} label={group}>
-                {roles.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          {multipleRoles ? (
+            <MultiSelectBox
+              values={values.roles}
+              options={roleOptions}
+              onValuesChange={(roles) =>
+                onChange({ roles, role: roles[0] || "" })
+              }
+              ariaLabel="Chọn các vai trò nhân viên"
+              searchThreshold={7}
+              className="w-full"
+              triggerClassName="shadow-none hover:bg-emerald-50/40"
+            />
+          ) : (
+            <SelectBox
+              value={values.role}
+              options={roleOptions}
+              onValueChange={(role) => onChange({ role, roles: [role] })}
+              ariaLabel="Chọn vai trò nhân viên"
+              searchable
+              searchThreshold={7}
+              searchPlaceholder="Tìm vai trò..."
+              className="w-full"
+              triggerClassName="h-10 rounded-md border-slate-200 bg-white shadow-none hover:border-emerald-400 hover:bg-emerald-50/40 focus-visible:ring-emerald-500"
+            />
+          )}
+          {multipleRoles ? (
+            <p className="mt-1.5 text-xs text-slate-500">
+              Vai trò đầu tiên là vai trò chính dùng trong bảng lương.
+            </p>
+          ) : null}
         </div>
 
-        <label className="flex min-h-10 items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 md:self-end">
-          <input
-            type="checkbox"
-            checked={isMonthly}
-            onChange={(event) =>
-              onChange({
-                salaryType: event.target.checked ? "monthly" : "hourly",
-                expectedWorkDays:
-                  event.target.checked ? values.expectedWorkDays || 30 : values.expectedWorkDays,
-              })
-            }
-            className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-          />
           <div>
-            <div className="text-sm font-semibold text-slate-900">Lương tháng</div>
-            <p className="text-xs text-slate-500">
-              Bật để nhập cấu hình nhân sự full tháng.
-            </p>
+            <span className="mb-2 block text-sm font-medium text-slate-700">
+              Hình thức lương
+            </span>
+            <label className="flex h-10 cursor-pointer items-center gap-3 rounded-md border border-slate-200 bg-white px-3 transition-colors hover:border-emerald-300 hover:bg-emerald-50/30">
+              <input
+                type="checkbox"
+                checked={isMonthly}
+                onChange={(event) =>
+                  onChange({
+                    salaryType: event.target.checked ? "monthly" : "hourly",
+                    expectedWorkDays:
+                      event.target.checked ? values.expectedWorkDays || 30 : values.expectedWorkDays,
+                  })
+                }
+                className="peer sr-only"
+              />
+              <span
+                aria-hidden="true"
+                className="relative h-6 w-11 shrink-0 rounded-full bg-slate-300 shadow-inner transition-colors duration-200 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-[0_2px_5px_rgba(15,23,42,0.24)] after:transition-transform after:duration-200 peer-checked:bg-[linear-gradient(135deg,#123d2b_0%,#1d5a3a_100%)] peer-checked:after:translate-x-5 peer-checked:after:bg-[linear-gradient(135deg,#fff0ad_0%,#d99b2b_58%,#ffe48f_100%)] peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2"
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-900">Lương tháng</div>
+              </div>
+            </label>
           </div>
-        </label>
-      </div>
+        </div>
+      </section>
 
-      {isMonthly ? (
-        <div className="grid gap-4 md:grid-cols-2">
+      <section className="space-y-4 border-t border-slate-200 pt-5" aria-labelledby="employee-salary-info">
+        <div>
+          <h4 id="employee-salary-info" className="text-sm font-semibold text-slate-950">
+            Cấu hình lương
+          </h4>
+          <p className="mt-1 text-xs text-slate-500">
+            {isMonthly
+              ? "Thiết lập lương cố định, ngày công và mức lương làm thêm."
+              : "Thiết lập mức lương cho mỗi giờ làm việc thực tế."}
+          </p>
+        </div>
+        {isMonthly ? (
+        <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-2">
           <InputMoney
             label="Lương tháng"
             value={values.monthlySalary}
@@ -230,26 +293,30 @@ export default function EmployeeSalaryFields({
             set={(value) => onChange({ hourlyRate: value })}
             className="h-10 rounded-md bg-slate-50"
           />
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+          <div className="flex min-h-[64px] items-center rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-5 text-slate-600 md:self-end">
             Nếu tổng giờ làm vượt mốc giờ cần làm thì phần vượt được cộng theo lương OT / giờ.
           </div>
         </div>
       ) : (
-        <div className="max-w-md">
+        <div className="grid items-end gap-x-5 gap-y-3 md:grid-cols-2">
           <InputMoney
             label="Lương theo giờ"
             value={values.hourlyRate}
             set={(value) => onChange({ hourlyRate: value })}
             className="h-10 rounded-md"
           />
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-5 text-slate-600">
+            Tiền lương được tính theo tổng số giờ làm hợp lệ trong kỳ.
+          </div>
         </div>
       )}
+      </section>
 
-      <div className="border-t border-slate-200 pt-4">
-        <label className="flex items-center justify-between gap-4">
+      <section className="space-y-4 border-t border-slate-200 pt-5" aria-labelledby="employee-attendance-info">
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-md bg-slate-50 px-4 py-3 transition-colors hover:bg-slate-100">
           <div>
-            <div className="font-semibold text-slate-900">Chuyên cần hồ sơ</div>
-            <p className="mt-1 text-sm text-slate-500">
+            <div id="employee-attendance-info" className="text-sm font-semibold text-slate-900">Thưởng chuyên cần</div>
+            <p className="mt-1 text-xs text-slate-500">
               Lưu cấu hình thưởng chuyên cần để dùng lại khi tạo kỳ lương mới.
             </p>
           </div>
@@ -292,12 +359,12 @@ export default function EmployeeSalaryFields({
             />
           </div>
         ) : null}
-      </div>
+      </section>
 
-      <div className="border-t border-slate-200 pt-4">
+      <section className="border-t border-slate-200 pt-5" aria-labelledby="employee-allowance-info">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-sm font-semibold text-slate-900">Phụ cấp hồ sơ</div>
+            <div id="employee-allowance-info" className="text-sm font-semibold text-slate-900">Phụ cấp hồ sơ</div>
             <p className="text-xs text-slate-500">
               Thiết lập phụ cấp cho nhân viên theo kỳ 1, kỳ 2 hoặc tất cả.
             </p>
@@ -327,9 +394,10 @@ export default function EmployeeSalaryFields({
             {values.allowances.map((allowance, index) => (
               <div
                 key={index}
-                className="grid gap-3 border-b border-slate-200 py-3 md:grid-cols-[1.5fr,140px,130px,44px]"
+                className="grid items-end gap-3 rounded-md border border-slate-200 bg-slate-50/70 p-3 md:grid-cols-[minmax(0,1.5fr)_minmax(150px,0.8fr)_minmax(150px,0.7fr)_44px]"
               >
                 <Input
+                  label="Tên phụ cấp"
                   value={allowance.name}
                   onChange={(event) =>
                     onChange({
@@ -357,26 +425,23 @@ export default function EmployeeSalaryFields({
                   }
                   className="h-10 rounded-md"
                 />
-                <select
-                  value={allowance.period || "all"}
-                  onChange={(event) =>
-                    onChange({
-                      allowances: values.allowances.map((item, itemIndex) =>
-                        itemIndex === index
-                          ? {
-                              ...item,
-                              period: event.target.value as EmployeeAllowance['period'],
-                            }
-                          : item
-                      ),
-                    })
-                  }
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
-                >
-                  <option value="all">Tất cả</option>
-                  <option value="1">Kỳ 1</option>
-                  <option value="2">Kỳ 2</option>
-                </select>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Áp dụng</label>
+                  <SelectBox
+                    value={allowance.period || "all"}
+                    options={allowancePeriodOptions}
+                    onValueChange={(period) =>
+                      onChange({
+                        allowances: values.allowances.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, period } : item,
+                        ),
+                      })
+                    }
+                    ariaLabel="Chọn kỳ áp dụng phụ cấp"
+                    className="w-full"
+                    triggerClassName="h-10 rounded-md border-slate-200 bg-white shadow-none"
+                  />
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -395,7 +460,7 @@ export default function EmployeeSalaryFields({
             ))}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

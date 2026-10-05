@@ -6,6 +6,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -33,6 +34,9 @@ type SelectBoxProps<T extends string> = {
   className?: string;
   triggerClassName?: string;
   openTriggerClassName?: string;
+  searchable?: boolean;
+  searchThreshold?: number;
+  searchPlaceholder?: string;
 };
 
 type MenuPosition = {
@@ -58,14 +62,19 @@ export function SelectBox<T extends string>({
   className,
   triggerClassName,
   openTriggerClassName,
+  searchable = false,
+  searchThreshold = 7,
+  searchPlaceholder = "Tìm kiếm...",
 }: SelectBoxProps<T>) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const typeaheadRef = useRef("");
   const typeaheadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [searchQuery, setSearchQuery] = useState("");
   const [menuPosition, setMenuPosition] = useState<MenuPosition>({
     top: 0,
     left: 0,
@@ -75,6 +84,15 @@ export function SelectBox<T extends string>({
 
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+  const searchEnabled = searchable && options.length >= searchThreshold;
+  const visibleOptions = useMemo(() => {
+    const query = normalizeSearchText(searchQuery.trim());
+    return options
+      .map((option, originalIndex) => ({ option, originalIndex }))
+      .filter(({ option }) =>
+        !query || normalizeSearchText(option.label).includes(query),
+      );
+  }, [options, searchQuery]);
   const groupCount = new Set(
     options.map((option) => option.group).filter(Boolean)
   ).size;
@@ -86,8 +104,8 @@ export function SelectBox<T extends string>({
     const rect = trigger.getBoundingClientRect();
     const viewportPadding = 8;
     const estimatedHeight = Math.min(
-      options.length * 44 + groupCount * 28 + 8,
-      264
+      options.length * 44 + groupCount * 28 + (searchEnabled ? 58 : 8),
+      searchEnabled ? 322 : 264
     );
     const availableBelow = window.innerHeight - rect.bottom - viewportPadding;
     const availableAbove = rect.top - viewportPadding;
@@ -115,26 +133,23 @@ export function SelectBox<T extends string>({
           );
 
     setMenuPosition({ top, left, width, placement });
-  }, [groupCount, options.length]);
+  }, [groupCount, options.length, searchEnabled]);
 
   const findEnabledIndex = useCallback(
     (preference: "selected" | "first" | "last" = "selected") => {
-      if (
-        preference === "selected" &&
-        selectedIndex >= 0 &&
-        !options[selectedIndex]?.disabled
-      ) {
+      if (preference === "selected" && visibleOptions.some(({ originalIndex }) => originalIndex === selectedIndex) && !options[selectedIndex]?.disabled) {
         return selectedIndex;
       }
       if (preference === "last") {
-        for (let index = options.length - 1; index >= 0; index -= 1) {
-          if (!options[index].disabled) return index;
+        for (let index = visibleOptions.length - 1; index >= 0; index -= 1) {
+          const entry = visibleOptions[index];
+          if (!entry.option.disabled) return entry.originalIndex;
         }
         return -1;
       }
-      return options.findIndex((option) => !option.disabled);
+      return visibleOptions.find(({ option }) => !option.disabled)?.originalIndex ?? -1;
     },
-    [options, selectedIndex]
+    [options, selectedIndex, visibleOptions]
   );
 
   const openMenu = useCallback(
@@ -148,6 +163,7 @@ export function SelectBox<T extends string>({
 
   const closeMenu = useCallback((restoreFocus = false) => {
     setOpen(false);
+    setSearchQuery("");
     if (restoreFocus) {
       window.requestAnimationFrame(() => triggerRef.current?.focus());
     }
@@ -165,23 +181,52 @@ export function SelectBox<T extends string>({
 
   const moveActiveIndex = useCallback(
     (direction: 1 | -1) => {
-      if (options.length === 0) return;
-      let nextIndex = activeIndex;
-      for (let attempts = 0; attempts < options.length; attempts += 1) {
-        nextIndex =
-          nextIndex < 0
+      if (visibleOptions.length === 0) return;
+      const currentPosition = visibleOptions.findIndex(
+        ({ originalIndex }) => originalIndex === activeIndex,
+      );
+      let nextPosition = currentPosition;
+      for (let attempts = 0; attempts < visibleOptions.length; attempts += 1) {
+        nextPosition =
+          nextPosition < 0
             ? direction === 1
               ? 0
-              : options.length - 1
-            : (nextIndex + direction + options.length) % options.length;
-        if (!options[nextIndex].disabled) {
-          setActiveIndex(nextIndex);
+              : visibleOptions.length - 1
+            : (nextPosition + direction + visibleOptions.length) % visibleOptions.length;
+        const entry = visibleOptions[nextPosition];
+        if (!entry.option.disabled) {
+          setActiveIndex(entry.originalIndex);
           return;
         }
       }
     },
-    [activeIndex, options]
+    [activeIndex, visibleOptions]
   );
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    const normalizedQuery = normalizeSearchText(query.trim());
+    const firstMatch = options.findIndex(
+      (option) =>
+        !option.disabled &&
+        (!normalizedQuery ||
+          normalizeSearchText(option.label).includes(normalizedQuery)),
+    );
+    setActiveIndex(firstMatch);
+  };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      moveActiveIndex(event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Enter" && activeIndex >= 0) {
+      event.preventDefault();
+      selectIndex(activeIndex);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeMenu(true);
+    }
+  };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
@@ -281,6 +326,11 @@ export function SelectBox<T extends string>({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeIndex, open]);
 
+  useEffect(() => {
+    if (!open || !searchEnabled) return;
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [open, searchEnabled]);
+
   useEffect(
     () => () => {
       if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current);
@@ -295,7 +345,7 @@ export function SelectBox<T extends string>({
       id={listboxId}
       role="listbox"
       aria-label={ariaLabel}
-      className="fixed z-[70] max-h-64 overflow-y-auto rounded-md bg-popover p-1 text-popover-foreground shadow-[0_4px_8px_rgba(15,23,42,0.16)] ring-1 ring-black/5 animate-in fade-in-0 zoom-in-95 duration-150 ease-out motion-reduce:animate-none"
+      className="fixed z-[70] overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-[0_8px_24px_rgba(15,23,42,0.16)] ring-1 ring-black/5 animate-in fade-in-0 zoom-in-95 duration-150 ease-out motion-reduce:animate-none"
       style={{
         top: menuPosition.top,
         left: menuPosition.left,
@@ -304,12 +354,30 @@ export function SelectBox<T extends string>({
           menuPosition.placement === "top" ? "bottom center" : "top center",
       }}
     >
-      {options.map((option, index) => {
+      {searchEnabled ? (
+        <div className="border-b border-slate-100 bg-white p-2">
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              type="search"
+              value={searchQuery}
+              onChange={(event) => handleSearchChange(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+            />
+          </div>
+        </div>
+      ) : null}
+      <div className="admin-list-scrollbar max-h-64 overflow-y-auto p-1">
+      {visibleOptions.map(({ option, originalIndex }, visibleIndex) => {
+        const index = originalIndex;
         const OptionIcon = option.icon;
         const selected = option.value === value;
         const active = index === activeIndex;
         const showGroup = Boolean(
-          option.group && option.group !== options[index - 1]?.group
+          option.group && option.group !== visibleOptions[visibleIndex - 1]?.option.group
         );
         return (
           <Fragment key={option.value}>
@@ -358,6 +426,12 @@ export function SelectBox<T extends string>({
           </Fragment>
         );
       })}
+      {visibleOptions.length === 0 ? (
+        <div className="px-3 py-8 text-center text-sm text-slate-500">
+          Không tìm thấy lựa chọn phù hợp.
+        </div>
+      ) : null}
+      </div>
     </div>
   ) : null;
 

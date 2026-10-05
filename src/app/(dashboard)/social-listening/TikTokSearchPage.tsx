@@ -7,8 +7,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Download,
   ExternalLink,
   Loader2,
@@ -19,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import RoleGuard from "@/components/RoleGuard";
+import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -1161,98 +1160,16 @@ export default function TikTokSearchPage() {
                 </div>
               )}
 
-              {pagination.total > 0 && (
-                <div className="mt-6 flex flex-col items-center gap-3 py-3 md:flex-row md:justify-center">
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label="Về trang đầu"
-                      disabled={pagination.page <= 1}
-                      onClick={() => setPage(1)}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-[transform,background-color,color] duration-150 ease-out hover:bg-slate-100 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      <ChevronsLeft className="h-5 w-5" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Trang trước"
-                      disabled={pagination.page <= 1}
-                      onClick={() => setPage((current) => Math.max(1, current - 1))}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-[transform,background-color,color] duration-150 ease-out hover:bg-slate-100 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-
-                    {Array.from({ length: Math.min(5, pagination.last_page) }, (_, i) => {
-                      let start = Math.max(1, pagination.page - 2);
-                      let end = Math.min(pagination.last_page, start + 4);
-                      if (end - start < 4) {
-                        start = Math.max(1, end - 4);
-                      }
-                      const currentPage = start + i;
-                      if (currentPage > pagination.last_page) return null;
-
-                      const isCurrent = currentPage === pagination.page;
-
-                      return (
-                        <button
-                          type="button"
-                          key={currentPage}
-                          aria-label={`Đến trang ${currentPage}`}
-                          aria-current={isCurrent ? "page" : undefined}
-                          onClick={() => setPage(currentPage)}
-                          className={`flex h-10 w-10 items-center justify-center rounded-full text-sm tabular-nums transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.96] ${
-                            isCurrent
-                              ? "bg-[#1976D2] font-medium text-white shadow-sm"
-                              : "text-slate-600 hover:bg-slate-100"
-                          }`}
-                        >
-                          {currentPage}
-                        </button>
-                      );
-                    })}
-
-                    <button
-                      type="button"
-                      aria-label="Trang sau"
-                      disabled={pagination.page >= pagination.last_page}
-                      onClick={() =>
-                        setPage((current) => Math.min(pagination.last_page || 1, current + 1))
-                      }
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-[transform,background-color,color] duration-150 ease-out hover:bg-slate-100 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Đến trang cuối"
-                      disabled={pagination.page >= pagination.last_page}
-                      onClick={() => setPage(pagination.last_page)}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-[transform,background-color,color] duration-150 ease-out hover:bg-slate-100 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      <ChevronsRight className="h-5 w-5" />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm text-slate-500 md:ml-4">
-                    <input
-                      type="number"
-                      aria-label="Nhập số trang"
-                      min={1}
-                      max={pagination.last_page}
-                      value={page}
-                      onChange={(event) => {
-                        const value = parseInt(event.target.value, 10);
-                        if (!Number.isNaN(value) && value >= 1 && value <= pagination.last_page) {
-                          setPage(value);
-                        }
-                      }}
-                      className="h-10 w-16 rounded-lg border border-slate-300 text-center text-slate-700 tabular-nums outline-none transition-[border-color,box-shadow] duration-150 ease-out hover:border-slate-400 focus:border-[#1976D2] focus:shadow-[0_0_0_3px_rgba(25,118,210,0.12)]"
-                    />
-                    <span>/ <span className="tabular-nums">{pagination.last_page}</span> trang</span>
-                  </div>
-                </div>
-              )}
+              {pagination.total > 0 ? (
+                <Pagination
+                  currentPage={pagination.page}
+                  totalItems={pagination.total}
+                  pageSize={pagination.per_page}
+                  onPageChange={setPage}
+                  showSummary={false}
+                  className="mt-6 rounded-xl border border-slate-200"
+                />
+              ) : null}
             </CardContent>
           </Card>
         </div>
