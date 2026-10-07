@@ -93,9 +93,15 @@ export function buildEmployeeMutationPayload(values: EmployeeSalaryFormValues) {
   };
 }
 
-export function validateEmployeeSalaryForm(values: EmployeeSalaryFormValues) {
-  if (!values.employeeCode.trim() || !values.name.trim()) {
-    return "Vui lòng nhập mã nhân viên và tên nhân viên.";
+export function validateEmployeeSalaryForm(
+  values: EmployeeSalaryFormValues,
+  { autoEmployeeCode = false } = {},
+) {
+  if (!autoEmployeeCode && !values.employeeCode.trim()) {
+    return "Vui lòng nhập mã nhân viên.";
+  }
+  if (!values.name.trim()) {
+    return "Vui lòng nhập tên nhân viên.";
   }
 
   if (values.roles.length === 0) {
@@ -122,12 +128,14 @@ export default function EmployeeSalaryFields({
   onChange,
   className,
   multipleRoles = false,
+  autoEmployeeCode = false,
 }: {
   roleGroups: Record<string, string[]>;
   values: EmployeeSalaryFormValues;
   onChange: (changes: Partial<EmployeeSalaryFormValues>) => void;
   className?: string;
   multipleRoles?: boolean;
+  autoEmployeeCode?: boolean;
 }) {
   const isMonthly = values.salaryType === "monthly";
   const roleOptions: SelectBoxOption<string>[] = Object.entries(roleGroups).flatMap(
@@ -159,7 +167,9 @@ export default function EmployeeSalaryFields({
           <Input
             value={values.employeeCode}
             onChange={(event) => onChange({ employeeCode: event.target.value })}
-            placeholder="Ví dụ: 00125"
+            readOnly={autoEmployeeCode}
+            aria-label="Mã nhân viên (EnNo)"
+            placeholder={autoEmployeeCode ? "Tự động tạo khi lưu" : "Ví dụ: 00125"}
             className="h-10 rounded-md"
           />
         </div>
@@ -246,11 +256,6 @@ export default function EmployeeSalaryFields({
           <h4 id="employee-salary-info" className="text-sm font-semibold text-slate-950">
             Cấu hình lương
           </h4>
-          <p className="mt-1 text-xs text-slate-500">
-            {isMonthly
-              ? "Thiết lập lương cố định, ngày công và mức lương làm thêm."
-              : "Thiết lập mức lương cho mỗi giờ làm việc thực tế."}
-          </p>
         </div>
         {isMonthly ? (
         <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-2">
@@ -305,7 +310,7 @@ export default function EmployeeSalaryFields({
             set={(value) => onChange({ hourlyRate: value })}
             className="h-10 rounded-md"
           />
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-5 text-slate-600">
+          <div className="flex min-h-10 items-center rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-sm leading-4 text-slate-600 md:h-10 md:py-0">
             Tiền lương được tính theo tổng số giờ làm hợp lệ trong kỳ.
           </div>
         </div>
@@ -365,13 +370,11 @@ export default function EmployeeSalaryFields({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div id="employee-allowance-info" className="text-sm font-semibold text-slate-900">Phụ cấp hồ sơ</div>
-            <p className="text-xs text-slate-500">
-              Thiết lập phụ cấp cho nhân viên theo kỳ 1, kỳ 2 hoặc tất cả.
-            </p>
           </div>
           <Button
             variant="outline"
-            className="inline-flex items-center gap-2 rounded-md border-dashed"
+            size="sm"
+            className="inline-flex items-center gap-1.5 rounded-md border-dashed text-sm"
             onClick={() =>
               onChange({
                 allowances: [
@@ -381,7 +384,7 @@ export default function EmployeeSalaryFields({
               })
             }
           >
-            <Plus className="h-4 w-4" /> Thêm phụ cấp
+            <Plus className="h-3.5 w-3.5" /> Thêm phụ cấp
           </Button>
         </div>
 

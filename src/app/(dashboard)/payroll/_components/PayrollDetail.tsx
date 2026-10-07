@@ -24,7 +24,7 @@ import {
 } from "@/services/payrolls";
 
 import {
-  addEmployee,
+  createEmployee,
   Employee,
   getEmployees,
   updateEmployee,
@@ -1581,7 +1581,7 @@ export default function PayrollDetail({
 
     const normalizedCode = payload.employeeCode.trim().toLowerCase();
 
-    if (
+    if (normalizedCode &&
       savedEmployees.some(
         (employee) =>
           (employee.employeeCode || "").trim().toLowerCase() === normalizedCode,
@@ -1592,7 +1592,7 @@ export default function PayrollDetail({
 
     const isMonthly = payload.salaryType === "monthly";
 
-    const employeeId = await addEmployee({
+    const createdEmployee = await createEmployee({
       storeId,
       employeeCode: payload.employeeCode.trim(),
       name: payload.name.trim(),
@@ -1614,8 +1614,8 @@ export default function PayrollDetail({
     });
 
     await addPayrollEntry(payrollId, {
-      employeeId,
-      employeeCode: payload.employeeCode.trim(),
+      employeeId: createdEmployee.id,
+      employeeCode: createdEmployee.employeeCode,
       employeeName: payload.name.trim(),
       role: payload.role,
       hourlyRate: payload.hourlyRate,

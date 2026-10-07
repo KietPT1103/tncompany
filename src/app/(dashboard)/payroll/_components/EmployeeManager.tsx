@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Pagination } from "@/components/ui/Pagination";
+import { Toast } from "@/components/ui/Toast";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { paginateItems } from "@/lib/listPagination";
 import { cn } from "@/lib/utils";
@@ -133,6 +134,7 @@ export default function EmployeeManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [dialogError, setDialogError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [createSuccessOpen, setCreateSuccessOpen] = useState(false);
   const [formValues, setFormValues] = useState<EmployeeSalaryFormValues>(() =>
     createEmployeeSalaryFormValues(defaultRole),
   );
@@ -230,22 +232,24 @@ export default function EmployeeManager({
   }
 
   async function handleSaveEmployee() {
-    const validationError = validateEmployeeSalaryForm(formValues);
+    if (submitting) return;
+    const validationError = validateEmployeeSalaryForm(formValues, { autoEmployeeCode: !editingId });
     if (validationError) {
       setDialogError(validationError);
       return;
     }
 
-    if (hasDuplicateCode(formValues.employeeCode, editingId || undefined)) {
+    if (editingId && hasDuplicateCode(formValues.employeeCode, editingId)) {
       setDialogError("Mã nhân viên đã tồn tại.");
       return;
     }
 
     setSubmitting(true);
     setDialogError("");
+    setCreateSuccessOpen(false);
 
     try {
-      const payload = buildEmployeeMutationPayload(formValues);
+      const payload = buildEmployeeMutationPayload({ ...formValues, employeeCode: editingId ? formValues.employeeCode : "" });
       if (editingId) {
         const updatedEmployee = await updateEmployee(editingId, payload);
         if (updatedEmployee?.id) {
@@ -259,13 +263,14 @@ export default function EmployeeManager({
         }
       } else {
         await addEmployee({ storeId, ...payload });
+        setCreateSuccessOpen(true);
         await loadEmployees();
       }
       setDialogOpen(false);
       setEditingId(null);
     } catch (error) {
       console.error(error);
-      setDialogError("Không thể lưu nhân viên.");
+      setDialogError(error instanceof Error ? error.message : "Không thể lưu nhân viên.");
     } finally {
       setSubmitting(false);
     }
@@ -668,6 +673,7 @@ export default function EmployeeManager({
                 <EmployeeSalaryFields
                   roleGroups={roleGroups}
                   values={formValues}
+                  autoEmployeeCode={!editingId}
                   multipleRoles
                   onChange={(changes) =>
                     setFormValues((current) => ({ ...current, ...changes }))
@@ -717,6 +723,12 @@ export default function EmployeeManager({
           }}
         />
       ) : null}
+      <Toast
+        open={createSuccessOpen}
+        title="Thêm nhân viên thành công"
+        variant="success"
+        onDismiss={() => setCreateSuccessOpen(false)}
+      />
     </>
   );
 }

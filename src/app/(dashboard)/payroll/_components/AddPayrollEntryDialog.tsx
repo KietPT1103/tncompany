@@ -107,11 +107,11 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
         return;
       }
 
-      const validationError = validateEmployeeSalaryForm(formValues);
+      const validationError = validateEmployeeSalaryForm(formValues, { autoEmployeeCode: true });
       if (validationError) throw new Error(validationError);
 
       await onCreateNew({
-        employeeCode: formValues.employeeCode.trim(),
+        employeeCode: "",
         hourlyRate: formValues.hourlyRate,
         name: formValues.name.trim(),
         role: formValues.role,
@@ -190,7 +190,7 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
               </div>
             </div>
           ) : (
-            <EmployeeSalaryFields roleGroups={roleGroups} values={formValues} onChange={(changes) => setFormValues((current) => ({ ...current, ...changes }))} />
+            <EmployeeSalaryFields autoEmployeeCode roleGroups={roleGroups} values={formValues} onChange={(changes) => setFormValues((current) => ({ ...current, ...changes }))} />
           )}
 
           {error ? <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
