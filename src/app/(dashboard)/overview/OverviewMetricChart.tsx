@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BarChart3, UsersRound } from "lucide-react";
 import type { SalesPoint } from "./overviewData";
+import OverviewComboChart from "./OverviewComboChart";
 
 type ChartMetric = "revenue" | "customers";
 type ChartView = "hour" | "day";
@@ -54,6 +55,8 @@ export default function OverviewMetricChart({
   dailyPoints: SalesPoint[];
 }) {
   const [view, setView] = useState<ChartView>("hour");
+  const [chartType, setChartType] = useState<"bar" | "combo">("bar");
+  const showCombo = metric === "revenue" && chartType === "combo";
   const points = view === "hour" ? hourlyPoints : dailyPoints;
   const values = points.map((point) => (metric === "revenue" ? point.revenue : point.customers));
   const maxValue = Math.max(...values, 1);
@@ -90,8 +93,9 @@ export default function OverviewMetricChart({
         <MetricValue metric={metric} value={metricValue} />
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-slate-200 px-5 pt-2">
       <div
-        className="flex items-center gap-1 border-b border-slate-200 px-5 pt-2"
+        className="flex items-center gap-1"
         role="tablist"
         aria-label={`Chế độ xem ${title.toLocaleLowerCase("vi")}`}
       >
@@ -119,8 +123,14 @@ export default function OverviewMetricChart({
           );
         })}
       </div>
+      {metric === "revenue" && (
+        <div role="group" aria-label="Loại biểu đồ doanh thu" className="mb-2 flex rounded-md border border-slate-200 p-0.5">
+          {([["bar", "Cột"], ["combo", "Cột & đường"]] as const).map(([type, label]) => <button key={type} type="button" aria-pressed={chartType === type} onClick={() => setChartType(type)} className={`rounded px-2.5 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${chartType === type ? "bg-emerald-800 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{label}</button>)}
+        </div>
+      )}
+      </div>
 
-      {metricValue === 0 ? (
+      {metricValue === 0 && !(showCombo && points.some((point) => point.customers > 0)) ? (
         <div className="flex min-h-64 items-center justify-center px-6 py-12 text-center" role="status">
           <div>
             <p className="font-semibold text-slate-800">Chưa có dữ liệu trong kỳ</p>
@@ -131,6 +141,8 @@ export default function OverviewMetricChart({
             </p>
           </div>
         </div>
+      ) : showCombo ? (
+        <div id={`${id}-chart`}><OverviewComboChart id={id} points={points} /></div>
       ) : (
         <div id={`${id}-chart`} className="overflow-x-auto px-5 pb-5 pt-4">
           <div className="flex min-w-[560px] gap-3 sm:min-w-0">
