@@ -68,7 +68,7 @@ function profit_history_ensure_schema(PDO $pdo): void
 function profit_period_snapshot(array $sources, array $rawInputs): array
 {
     if (count($sources) !== count($rawInputs)) throw new InvalidArgumentException('Cần nhập đủ chi phí cho tất cả ngày trong kỳ.');
-    $totals = ['revenue'=>0,'materialCost'=>0,'salary'=>0,'electricity'=>0,'water'=>0,'other'=>0,'marketing'=>0,'voucherCost'=>0,'totalCosts'=>0,'profit'=>0];
+    $totals = ['revenue'=>0,'materialCost'=>0,'salary'=>0,'electricity'=>0,'water'=>0,'other'=>0,'marketing'=>0,'thienExpense'=>0,'ingredientInventory'=>0,'debt'=>0,'voucherCost'=>0,'totalCosts'=>0,'profit'=>0];
     $days = [];
     foreach ($sources as $date=>$source) {
         if (!is_array($rawInputs[$date] ?? null)) throw new InvalidArgumentException('Thiếu chi phí ngày '.$date.'.');
@@ -81,8 +81,8 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
         $cost = 0;
         foreach ($source['sales'] as $sale) $cost += $sale['quantity'] * ($inputs['costOverrides'][$sale['key']] ?? $sale['unitCost']);
         $cashier = array_sum(array_column($source['vouchers'], 'amount'));
-        $total = $cost + $cashier + $inputs['salary'] + $inputs['electricity'] + $inputs['water'] + $inputs['other'] + $inputs['marketing'];
-        $result = ['revenue'=>$source['revenue'],'materialCost'=>$cost,'salary'=>$inputs['salary'],'electricity'=>$inputs['electricity'],'water'=>$inputs['water'],'other'=>$inputs['other'],'marketing'=>$inputs['marketing'],'voucherCost'=>$cashier,'totalCosts'=>$total,'profit'=>$source['revenue']-$total];
+        $total = $cost + $cashier + $inputs['salary'] + $inputs['electricity'] + $inputs['water'] + $inputs['other'] + $inputs['marketing'] + $inputs['thienExpense'];
+        $result = ['revenue'=>$source['revenue'],'materialCost'=>$cost,'salary'=>$inputs['salary'],'electricity'=>$inputs['electricity'],'water'=>$inputs['water'],'other'=>$inputs['other'],'marketing'=>$inputs['marketing'],'thienExpense'=>$inputs['thienExpense'],'ingredientInventory'=>$inputs['ingredientInventory'],'debt'=>$inputs['debt'],'voucherCost'=>$cashier,'totalCosts'=>$total,'profit'=>$source['revenue']-$total+$inputs['ingredientInventory']-$inputs['debt']];
         foreach ($totals as $key=>$_) $totals[$key] += $result[$key];
         $days[] = ['date'=>$date,'inputs'=>$inputs,'result'=>$result];
     }

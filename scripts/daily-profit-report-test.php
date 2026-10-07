@@ -5,6 +5,11 @@ function check(bool $condition, string $message): void { if (!$condition) throw 
 function rejected(callable $action): void { try { $action(); } catch (InvalidArgumentException $e) { return; } throw new RuntimeException('Expected invalid input to be rejected'); }
 $inputs = ['salary'=>200000,'electricity'=>0,'water'=>0,'other'=>100000,'marketing'=>0,'costOverrides'=>[]];
 check(daily_profit_validate_inputs($inputs)['marketing'] === 0.0, 'Explicit zero is accepted');
+foreach (['thienExpense','ingredientInventory','debt'] as $field) {
+  check(daily_profit_validate_inputs($inputs)[$field] === 0.0, 'New amount defaults to zero for older clients');
+  check(daily_profit_validate_inputs([...$inputs,$field=>null])[$field] === 0.0, 'Blank optional amount is zero');
+  foreach ([-1,'100',INF,1e13] as $value) rejected(fn() => daily_profit_validate_inputs([...$inputs,$field=>$value]));
+}
 foreach (['salary','electricity','water','other'] as $field) {
   $bad = $inputs; unset($bad[$field]); rejected(fn() => daily_profit_validate_inputs($bad));
   $bad[$field] = -1; rejected(fn() => daily_profit_validate_inputs($bad));
@@ -20,10 +25,13 @@ check(daily_profit_validate_inputs($noMarketing)['marketing'] === 0.0, 'Marketin
 rejected(fn() => daily_profit_validate_inputs([...$inputs, 'costOverrides'=>['coffee'=>null]]));
 $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
 daily_profit_ensure_schema($pdo);
-daily_profit_save($pdo, 'cafe', '2026-10-07', $inputs, 'test');
+daily_profit_save($pdo, 'cafe', '2026-10-07', [...$inputs,'thienExpense'=>7,'ingredientInventory'=>12,'debt'=>3], 'test');
+$loadedAmounts = daily_profit_load($pdo, 'cafe', '2026-10-07')['inputs'];
+check($loadedAmounts['thienExpense'] === 7 && $loadedAmounts['ingredientInventory'] === 12 && $loadedAmounts['debt'] === 3, 'All three optional amounts survive save and reload');
 daily_profit_save($pdo, 'cafe', '2026-10-07', [...$inputs,'salary'=>300000], 'test');
 check($pdo->query('SELECT COUNT(*) FROM daily_profit_inputs')->fetchColumn() == 1, 'Save replaces same day instead of duplicating');
 check(daily_profit_load($pdo, 'cafe', '2026-10-07')['inputs']['salary'] == 300000, 'Persisted salary');
+check(daily_profit_load($pdo, 'cafe', '2026-10-07')['inputs']['thienExpense'] === 0, 'Legacy saved inputs load with zero for new fields');
 check(daily_profit_load($pdo, 'restaurant', '2026-10-07') === null, 'Store isolation');
 check(daily_profit_load($pdo, 'cafe', '2026-10-08') === null, 'Date isolation');
 $pdo->exec('CREATE TABLE bills (id TEXT, store_id TEXT, status TEXT, created_at TEXT, total REAL)');
@@ -80,6 +88,13 @@ rejected(fn() => profit_period_save($pdo,'cafe','2026-10-07','2026-10-08',$inval
 check(daily_profit_load($pdo,'cafe','2026-10-07') === $before && profit_history($pdo,'cafe',1)['total'] === 1, 'Failed save is atomic');
 check(profit_history($pdo,'restaurant',1)['total'] === 0, 'History store isolation');
 echo "PASS profit period: ranges, daily reuse, snapshot history and atomic saves\n";
+
+$sheetSource = ['revenue'=>1394083000,'salaryEstimate'=>['amount'=>254741000],'sales'=>[['key'=>'cost','name'=>'Cost','quantity'=>1,'unitCost'=>204308000]],'vouchers'=>[['amount'=>251444000]]];
+$sheetInputs = ['salary'=>0,'electricity'=>49999521,'water'=>0,'other'=>257834000,'marketing'=>100000000,'thienExpense'=>640192632,'ingredientInventory'=>220922212,'debt'=>112923000,'costOverrides'=>[]];
+$sheetSnapshot = profit_period_snapshot(['2026-10-07'=>$sheetSource], ['2026-10-07'=>$sheetInputs]);
+check($sheetSnapshot['totals']['totalCosts'] === 1758519153.0 && $sheetSnapshot['totals']['profit'] === -256436941.0, 'Backend matches supplied spreadsheet including inventory and debt');
+check($sheetSnapshot['days'][0]['result']['ingredientInventory'] === 220922212.0 && $sheetSnapshot['totals']['debt'] === 112923000.0, 'New amounts included in daily snapshots and period totals');
+echo "PASS optional amounts: defaults, validation, persistence and spreadsheet formula\n";
 
 $salary = profit_source_salary($pdo,'cafe',['2026-10-07','2026-10-08','2026-10-09']);
 check($salary['2026-10-08']['amount'] === 0.0 && $salary['2026-10-09'] === null, 'Saved unscheduled day is zero; absent estimate remains missing');

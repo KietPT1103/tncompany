@@ -22,6 +22,9 @@ function daily_profit_validate_inputs(array $body): array
         $result[$key] = daily_profit_money($body[$key] ?? null, $label);
     }
     $result['marketing'] = daily_profit_money(array_key_exists('marketing', $body) ? $body['marketing'] : 0, 'marketing');
+    foreach (['thienExpense'=>'Anh Thiện chi', 'ingredientInventory'=>'giá trị tồn kho nguyên liệu', 'debt'=>'công nợ'] as $key=>$label) {
+        $result[$key] = daily_profit_money($body[$key] ?? 0, $label);
+    }
     $overrides = $body['costOverrides'] ?? [];
     if (!is_array($overrides) || count($overrides) > 2000) throw new InvalidArgumentException('Danh sách cost không hợp lệ hoặc quá dài.');
     $result['costOverrides'] = [];
@@ -67,6 +70,7 @@ function daily_profit_saved_row(array $row): array
         $inputs['legacyUtilities'] = $legacy;
         unset($inputs['utilities']);
     }
+    foreach (['thienExpense','ingredientInventory','debt'] as $key) $inputs[$key] = $inputs[$key] ?? 0;
     return ['inputs'=>$inputs, 'updatedAt'=>$row['updated_at']];
 }
 function daily_profit_save(PDO $pdo, string $storeId, string $date, array $inputs, string $userId): void

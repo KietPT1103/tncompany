@@ -1,9 +1,37 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateDailyProfit, emptyProfitInputs, parseMoneyInput } from "./dailyProfit.ts";
+import { calculateDailyProfit, emptyProfitInputs, parseMoneyInput, formatProfitMoneyInput, normalizeProfitMoneyInput } from "./dailyProfit.ts";
 
 const data = { revenue: 1000000, billCount: 10, sales: [{ key: "coffee", code: "coffee", name: "Cà phê", quantity: 10, unitCost: 10000 }], vouchers: [{ id: "v1", code: "PC1", category: "Chi tại quầy", amount: 50000 }] };
 const complete = () => ({ ...emptyProfitInputs(), salary: 200000, electricity: 0, water: 0, other: 100000 });
+
+test("money inputs display Vietnamese grouping without changing the saved amount", () => {
+  for (const [raw, display] of [['', ''], ['0', '0'], ['1000', '1.000'], ['1000000', '1.000.000'], ['1000.25', '1.000,25'], ['1000000000000', '1.000.000.000.000']]) {
+    assert.equal(formatProfitMoneyInput(raw), display);
+    assert.equal(normalizeProfitMoneyInput(display), raw);
+    assert.equal(parseMoneyInput(normalizeProfitMoneyInput(display)), parseMoneyInput(raw));
+  }
+  assert.equal(normalizeProfitMoneyInput(' 1.234.567,89 '), '1234567.89');
+  assert.equal(formatProfitMoneyInput('1000.'), '1.000,');
+  assert.equal(parseMoneyInput(normalizeProfitMoneyInput('-1.000')), null);
+  assert.equal(parseMoneyInput(normalizeProfitMoneyInput('1.000,123')), null);
+});
+
+test("new amounts default to zero and legacy inputs preserve their result", () => {
+  for (const key of ['thienExpense', 'ingredientInventory', 'debt']) assert.equal(emptyProfitInputs()[key], 0);
+  const legacy = { salary: 200000, electricity: 0, water: 0, other: 100000, marketing: 0, costOverrides: {} };
+  assert.equal(calculateDailyProfit(data, legacy).profit, 550000);
+});
+
+test("Thien expense, inventory and debt match the supplied spreadsheet formula", () => {
+  const source = { revenue: 1394083000, billCount: 1, sales: [{ key: 'cost', code: 'cost', name: 'Cost', quantity: 1, unitCost: 204308000 }], vouchers: [{ id: 'v', code: 'v', category: 'Chi', amount: 251444000 }] };
+  const result = calculateDailyProfit(source, { ...emptyProfitInputs(), salary: 254741000, electricity: 49999521, other: 257834000, marketing: 100000000, thienExpense: 640192632, ingredientInventory: 220922212, debt: 112923000 });
+  assert.equal(result.totalCosts, 1758519153);
+  assert.equal(result.profit, -256436941);
+  for (const key of ['thienExpense', 'ingredientInventory', 'debt']) {
+    for (const value of [null, -1, NaN, Infinity, 1e13]) assert.equal(calculateDailyProfit(data, { ...complete(), [key]: value }).complete, false);
+  }
+});
 
 test("four manual costs default to zero; salary still requires a source", () => {
   assert.equal(emptyProfitInputs().marketing, 0);

@@ -14,6 +14,7 @@ import {
 import {
   emptyProfitInputs,
   PROFIT_FIELDS,
+  OPTIONAL_PROFIT_FIELDS,
   type ProfitInputs,
 } from "./dailyProfit";
 import {
@@ -414,14 +415,14 @@ export function ProfitCalculation({
                       {PROFIT_FIELDS.filter((field) => field.key !== "salary").map((field) => (
                         <div
                           key={field.key}
-                          className="min-w-0"
+                          className={field.key === "debt" ? "min-w-0 sm:col-span-2" : "min-w-0"}
                         >
                           <label
                             htmlFor={`profit-${selected.date}-${field.key}`}
                             className="mb-1.5 block text-sm font-semibold"
                           >
                             {field.label}
-                            {field.key !== "marketing" && (
+                            {field.key !== "marketing" && !OPTIONAL_PROFIT_FIELDS.some((key) => key === field.key) && (
                               <span className="text-red-600"> *</span>
                             )}
                           </label>
@@ -430,6 +431,7 @@ export function ProfitCalculation({
                             id={`profit-${selected.date}-${field.key}`}
                             label={`${field.label} ngày ${profitDate(selected.date)}`}
                             value={selected.inputs[field.key]}
+                            required={!OPTIONAL_PROFIT_FIELDS.some((key) => key === field.key)}
                             onChange={(value) =>
                               edit(selected.date, {
                                 ...selected.inputs,
@@ -514,7 +516,7 @@ export function ProfitCalculation({
                         </dd>
                       </div>
                       {(
-                        ["electricity", "water", "other", "marketing"] as const
+                        ["electricity", "water", "other", "marketing", "thienExpense"] as const
                       ).map((key) => (
                         <div
                           key={key}
@@ -542,6 +544,14 @@ export function ProfitCalculation({
                             : "Chưa đủ số liệu"}
                         </dd>
                       </div>
+                      {(["ingredientInventory", "debt"] as const).map((key) => (
+                        <div key={key} className="flex min-w-0 justify-between gap-3 py-2.5">
+                          <dt>{key === "ingredientInventory" ? "+" : "−"} {PROFIT_FIELDS.find((field) => field.key === key)!.label}</dt>
+                          <dd className="shrink-0 text-right font-semibold tabular-nums">
+                            {selected.inputs[key] === null ? "Chưa nhập" : profitMoney(selected.inputs[key]!)}
+                          </dd>
+                        </div>
+                      ))}
                       <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">
                         <dt>Lợi nhuận ngày</dt>
                         <dd
