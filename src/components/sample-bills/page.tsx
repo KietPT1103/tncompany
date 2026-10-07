@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -432,7 +433,7 @@ export default function SampleBillGeneratorPage({
   }, [bills.length, generatedTotal, targetRevenue]);
 
   const filteredProducts = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("vi");
+    const query = adminSearchText(search.trim());
     return eligibleCatalog.filter((product) => {
       const productSelected =
         billType === "farm"
@@ -441,8 +442,8 @@ export default function SampleBillGeneratorPage({
       const matchesFilter = filter === "all" || productSelected;
       const matchesSearch =
         !query ||
-        product.product_code.toLocaleLowerCase("vi").includes(query) ||
-        product.product_name.toLocaleLowerCase("vi").includes(query);
+        adminSearchText(product.product_code).includes(query) ||
+        adminSearchText(product.product_name).includes(query);
       return matchesFilter && matchesSearch;
     });
   }, [billType, eligibleCatalog, farmQuantities, filter, search, selectedSet]);

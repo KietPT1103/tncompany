@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useState } from "react";
 import {
@@ -90,7 +91,7 @@ export default function ReportsPage() {
   }, [startDate, endDate, storeId]);
 
   const filteredReports = reports.filter((r) =>
-    r.fileName.toLowerCase().includes(search.toLowerCase())
+    adminSearchText(r.fileName).includes(adminSearchText(search))
   );
 
   return (

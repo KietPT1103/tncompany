@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -1150,12 +1151,12 @@ export default function SalaryEstimatePage() {
     : null;
 
   const filteredActiveEmployees = activeCellEmployees.filter((employee) => {
-    const keyword = cellSearch.trim().toLowerCase();
+    const keyword = adminSearchText(cellSearch.trim());
     if (!keyword) return true;
 
     return (
-      employee.name.toLowerCase().includes(keyword) ||
-      (employee.employeeCode || "").toLowerCase().includes(keyword)
+      adminSearchText(employee.name).includes(keyword) ||
+      adminSearchText((employee.employeeCode || "")).includes(keyword)
     );
   });
   const canAccessPayroll = hasPermission(user, "payroll.access");

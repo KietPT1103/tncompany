@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
+import { MultiSelectBox } from "@/components/ui/MultiSelectBox";
 import { Pagination } from "@/components/ui/Pagination";
 import {
   ActivityLog,
@@ -30,7 +31,6 @@ import {
 const EVENT_OPTIONS = [
   { value: "app_active", label: "Cửa sổ đang dùng" },
   { value: "app_opened", label: "Mở ứng dụng" },
-  { value: "app_closed", label: "Đóng ứng dụng" },
   { value: "file_created", label: "Tạo tệp" },
   { value: "file_changed", label: "Sửa tệp" },
   { value: "file_deleted", label: "Xóa tệp" },
@@ -40,7 +40,6 @@ const EVENT_OPTIONS = [
   { value: "agent_started", label: "Agent chạy" },
   { value: "agent_crashed", label: "Agent bị lỗi" },
   { value: "keyboard", label: "Gõ phím" },
-  { value: "mouse", label: "Click chuột" },
 ];
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
@@ -176,7 +175,7 @@ function downloadStatusLabel(status: DownloadJobState["status"]) {
 function MachineCard({ machine }: { machine: ActivityMachine }) {
   return (
     <Card className="border-slate-200 shadow-sm">
-      <CardContent className="p-4">
+      <CardContent className="p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -185,7 +184,7 @@ function MachineCard({ machine }: { machine: ActivityMachine }) {
                 {machine.displayName || machine.machineId}
               </div>
             </div>
-            <div className="mt-2 text-xs text-slate-500">
+            <div className="mt-1 text-xs text-slate-500">
               {machine.lastSeenAt ? `Lần cuối: ${formatDateTime(machine.lastSeenAt)}` : "Chưa có log"}
             </div>
           </div>
@@ -647,13 +646,6 @@ export default function ActivityLogsPage() {
     }
   }
 
-  function handleToggleEventType(eventType: string) {
-    setSelectedEventTypes((current) =>
-      current.includes(eventType)
-        ? current.filter((value) => value !== eventType)
-        : [...current, eventType]
-    );
-  }
 
   function handleToggleDownloadMachine(machineIdValue: string) {
     setSelectedDownloadMachineIds((current) =>
@@ -765,19 +757,19 @@ export default function ActivityLogsPage() {
 
   return (
     <main className="min-h-screen bg-slate-50/70 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="rounded-[28px] border border-slate-200/80 bg-white px-5 py-5 shadow-sm md:px-7 md:py-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+      <div className="mx-auto max-w-[1600px] space-y-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl">
               <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
                 <Activity className="h-4 w-4" />
                 Nhật ký hoạt động
               </div>
-              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
                 Nhật ký máy thu ngân
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Theo dõi theo trang, lọc nhiều loại sự kiện, tìm nhanh và xuất ảnh đúng theo bộ lọc hiện tại.
+                Chỉ hiển thị sự kiện có ảnh. Lọc theo máy, thời gian và loại sự kiện.
               </p>
             </div>
 
@@ -962,7 +954,7 @@ export default function ActivityLogsPage() {
         </div>
 
         {machines.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             {machines.map((machine) => (
               <MachineCard key={machine.machineId} machine={machine} />
             ))}
@@ -970,7 +962,7 @@ export default function ActivityLogsPage() {
         ) : null}
 
         <Card className="border-slate-200 shadow-sm">
-          <CardContent className="space-y-5 p-4 md:p-5">
+          <CardContent className="space-y-3 p-3 md:p-4">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-sm font-semibold text-slate-900">Bộ lọc nhật ký</div>
@@ -978,7 +970,7 @@ export default function ActivityLogsPage() {
                   Thu hẹp dữ liệu theo máy, khoảng thời gian và loại sự kiện.
                 </div>
               </div>
-              <div className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-100 px-4 text-sm font-medium text-slate-700">
+              <div className="inline-flex h-8 items-center gap-2 rounded-lg bg-slate-100 px-4 text-sm font-medium text-slate-700">
                 <Search className="h-4 w-4 text-slate-500" />
                 {pagination.total} dòng log
               </div>
@@ -990,7 +982,7 @@ export default function ActivityLogsPage() {
                 <select
                   value={machineId}
                   onChange={(event) => setMachineId(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500"
                 >
                   <option value="">Tất cả máy</option>
                   {machines.map((machine) => (
@@ -1003,7 +995,7 @@ export default function ActivityLogsPage() {
 
               <label className="space-y-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tìm kiếm</span>
-                <div className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 transition focus-within:border-emerald-500">
+                <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 transition focus-within:border-emerald-500">
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
                     value={searchInput}
@@ -1020,7 +1012,7 @@ export default function ActivityLogsPage() {
                   type="date"
                   value={startDate}
                   onChange={(event) => setStartDate(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500"
                 />
               </label>
 
@@ -1030,80 +1022,15 @@ export default function ActivityLogsPage() {
                   type="date"
                   value={endDate}
                   onChange={(event) => setEndDate(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500"
                 />
               </label>
             </div>
 
-            <div className="grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-2 xl:grid-cols-[240px_minmax(0,1fr)]">
-              <label className="space-y-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Dòng trên trang
-                </span>
-                <select
-                  value={pageSize}
-                  onChange={(event) => setPageSize(Number(event.target.value))}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500"
-                >
-                  {PAGE_SIZE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option} dòng
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="flex items-end">
-                <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  {selectedEventTypes.length > 0
-                    ? `Đang lọc ${selectedEventTypes.length} loại sự kiện.`
-                    : "Chưa chọn loại sự kiện, đang hiển thị tất cả."}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 border-t border-slate-100 pt-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Loại sự kiện
-                  </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    Chọn nhiều nhóm để lọc chéo dữ liệu.
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={selectedEventTypes.length === 0}
-                  onClick={() => setSelectedEventTypes([])}
-                  className="h-8 px-2 text-slate-500"
-                >
-                  Bỏ chọn
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {EVENT_OPTIONS.map((option) => {
-                  const active = selectedEventTypes.includes(option.value);
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => handleToggleEventType(option.value)}
-                      className={`rounded-full border px-3 py-2 text-sm font-medium transition ${
-                        active
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="grid items-end gap-3 border-t pt-3 sm:grid-cols-[140px_minmax(0,1fr)_auto]">
+              <label className="space-y-1"><span className="text-xs font-semibold text-slate-500">Dòng trên trang</span><select value={pageSize} onChange={event => setPageSize(Number(event.target.value))} className="h-9 w-full rounded-lg border bg-white px-3 text-sm">{PAGE_SIZE_OPTIONS.map(option => <option key={option} value={option}>{option} dòng</option>)}</select></label>
+              <label className="min-w-0 space-y-1"><span className="text-xs font-semibold text-slate-500">Loại sự kiện</span><MultiSelectBox values={selectedEventTypes} options={EVENT_OPTIONS} onValuesChange={setSelectedEventTypes} ariaLabel="Loại sự kiện có ảnh" placeholder="Tất cả sự kiện có ảnh" searchPlaceholder="Tìm loại sự kiện..." triggerClassName="h-9" /></label>
+              <Button variant="ghost" size="sm" disabled={!selectedEventTypes.length} onClick={() => setSelectedEventTypes([])}>Bỏ chọn</Button>
             </div>
           </CardContent>
         </Card>

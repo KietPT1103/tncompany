@@ -1,3 +1,4 @@
+import { normalizeSearchText } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
@@ -391,12 +392,12 @@ export function PermissionEditorModal({
 
   const enabled = useMemo(() => new Set(permissions), [permissions]);
   const filteredGroups = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = normalizeSearchText(search);
     return MANAGED_PERMISSION_GROUPS.map((group) => ({
       ...group,
       items: group.items.filter((item) => {
         if (!keyword) return true;
-        return `${item.label} ${item.description} ${group.category}`.toLowerCase().includes(keyword);
+        return normalizeSearchText(`${item.label} ${item.description} ${group.category}`).includes(keyword);
       }),
     })).filter((group) => group.items.length > 0);
   }, [search]);

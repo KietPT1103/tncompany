@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText } from "@/lib/utils";
 
 import {
   Fragment,
@@ -47,11 +48,6 @@ type MenuPosition = {
   placement: "top" | "bottom";
 };
 
-const normalizeSearchText = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("vi").replace(/đ/g, "d");
 
 export function SelectBox<T extends string>({
   value,
@@ -277,7 +273,7 @@ export function SelectBox<T extends string>({
       !event.metaKey &&
       !event.altKey
     ) {
-      typeaheadRef.current += normalizeSearchText(event.key);
+      typeaheadRef.current += event.key === " " ? " " : normalizeSearchText(event.key);
       if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current);
       typeaheadTimerRef.current = setTimeout(() => {
         typeaheadRef.current = "";

@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
@@ -332,7 +333,7 @@ function ProductModal({
     : "uncategorized";
 
   const componentSuggestions = useMemo(() => {
-    const keyword = componentQuery.trim().toLocaleLowerCase("vi");
+    const keyword = adminSearchText(componentQuery.trim());
 
     if (!keyword) return [];
 
@@ -342,8 +343,8 @@ function ProductModal({
         if (selectedCodes.has(product.product_code)) return false;
 
         return (
-          product.product_code.toLocaleLowerCase("vi").includes(keyword) ||
-          product.product_name.toLocaleLowerCase("vi").includes(keyword)
+          adminSearchText(product.product_code).includes(keyword) ||
+          adminSearchText(product.product_name).includes(keyword)
         );
       })
       .slice(0, 8);
@@ -904,11 +905,11 @@ export default function ProductsPage() {
   );
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      const keyword = searchTerm.trim().toLowerCase();
+      const keyword = adminSearchText(searchTerm.trim());
       const matchesSearch =
         !keyword ||
-        product.product_code.toLowerCase().includes(keyword) ||
-        product.product_name.toLowerCase().includes(keyword);
+        adminSearchText(product.product_code).includes(keyword) ||
+        adminSearchText(product.product_name).includes(keyword);
 
       if (!matchesSearch) {
         return false;

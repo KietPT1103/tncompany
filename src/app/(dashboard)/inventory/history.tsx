@@ -1,3 +1,4 @@
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
 import { InventoryPagination } from "@/components/ui/InventoryPagination";
 import { paginateItems } from "@/lib/listPagination";
@@ -42,9 +43,9 @@ export default function InventoryHistoryTab() {
   useEffect(() => { void load(); return()=>{loadSequence.current++}; }, [storeId,type,dateFrom,dateTo]);
 
   const rows = useMemo(() => {
-    const keyword = query.trim().toLocaleLowerCase("vi");
+    const keyword = adminSearchText(query.trim());
     return entries.flatMap((entry) => entry.items.map((item) => ({ entry, item }))).filter(({ entry, item }) =>
-      !keyword || `${entry.code} ${entry.actorName} ${entry.counterpart} ${item.ingredientCode} ${item.ingredientName}`.toLocaleLowerCase("vi").includes(keyword)
+      !keyword || adminSearchText(`${entry.code} ${entry.actorName} ${entry.counterpart} ${item.ingredientCode} ${item.ingredientName}`).includes(keyword)
     );
   }, [entries, query]);
   useEffect(()=>{setPage(1)},[storeId,type,dateFrom,dateTo,query,pageSize]);

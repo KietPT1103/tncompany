@@ -1,3 +1,4 @@
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -461,11 +462,11 @@ export default function BillsPage() {
         ? canViewCancelledBills && bill.status === "cancelled"
         : bill.status !== "cancelled",
     );
-    const keyword = billSearch.trim().toLowerCase();
+    const keyword = adminSearchText(billSearch.trim());
     const matchedBills = keyword ? visibilityMatchedBills.filter((bill) => {
-      const tableMatch = bill.tableNumber?.toLowerCase().includes(keyword);
-      const idMatch = bill.id.toLowerCase().includes(keyword);
-      const noteMatch = bill.note?.toLowerCase().includes(keyword);
+      const tableMatch = adminSearchText(bill.tableNumber).includes(keyword);
+      const idMatch = adminSearchText(bill.id).includes(keyword);
+      const noteMatch = adminSearchText(bill.note).includes(keyword);
       return tableMatch || idMatch || noteMatch;
     }) : visibilityMatchedBills;
 
@@ -514,12 +515,12 @@ export default function BillsPage() {
         ? canViewCancelledVouchers && voucher.isCancelled === true
         : voucher.isCancelled !== true,
     );
-    const keyword = voucherSearch.trim().toLowerCase();
+    const keyword = adminSearchText(voucherSearch.trim());
     const matchedVouchers = keyword ? visibilityMatchedVouchers.filter((voucher) => {
-      const codeMatch = voucher.code?.toLowerCase().includes(keyword);
-      const categoryMatch = voucher.category?.toLowerCase().includes(keyword);
-      const personMatch = voucher.personName?.toLowerCase().includes(keyword);
-      const noteMatch = voucher.note?.toLowerCase().includes(keyword);
+      const codeMatch = adminSearchText(voucher.code).includes(keyword);
+      const categoryMatch = adminSearchText(voucher.category).includes(keyword);
+      const personMatch = adminSearchText(voucher.personName).includes(keyword);
+      const noteMatch = adminSearchText(voucher.note).includes(keyword);
       return codeMatch || categoryMatch || personMatch || noteMatch;
     }) : visibilityMatchedVouchers;
 

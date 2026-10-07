@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -303,15 +304,14 @@ export default function SampleBillProductsPage() {
   );
 
   const filteredProducts = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("vi");
+    const normalizedQuery = adminSearchText(query.trim());
     return sortByCreatedAtDesc(
       products.filter((product) => {
         const matchesQuery =
           !normalizedQuery ||
-          product.productCode
-            .toLocaleLowerCase("vi")
+          adminSearchText(product.productCode)
             .includes(normalizedQuery) ||
-          product.productName.toLocaleLowerCase("vi").includes(normalizedQuery);
+          adminSearchText(product.productName).includes(normalizedQuery);
         const matchesType =
           typeFilter === "all" || product.billType === typeFilter;
         const matchesStatus =

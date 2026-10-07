@@ -1,6 +1,8 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/../search.php';
+
 
 final class SocialListeningSearchRepository
 {
@@ -582,19 +584,19 @@ final class SocialListeningSearchRepository
             return '';
         }
 
-        $params['comment_query'] = '%' . strtr($normalized, [
+        $params['comment_query'] = '%' . strtr(str_replace(['đ', 'Đ'], ['d', 'D'], $normalized), [
             '\\' => '\\\\',
             '%' => '\\%',
             '_' => '\\_',
         ]) . '%';
 
         return ' AND (
-            comment_text LIKE :comment_query ESCAPE "\\\\"
-            OR username LIKE :comment_query ESCAPE "\\\\"
-            OR author_name LIKE :comment_query ESCAPE "\\\\"
-            OR video_username LIKE :comment_query ESCAPE "\\\\"
-            OR comment_id LIKE :comment_query ESCAPE "\\\\"
-            OR video_id LIKE :comment_query ESCAPE "\\\\"
+            ' . admin_search_expression('comment_text') . ' LIKE :comment_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('username') . ' LIKE :comment_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('author_name') . ' LIKE :comment_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('video_username') . ' LIKE :comment_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('comment_id') . ' LIKE :comment_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('video_id') . ' LIKE :comment_query ESCAPE "\\\\"
         )';
     }
 
@@ -608,18 +610,18 @@ final class SocialListeningSearchRepository
             return '';
         }
 
-        $params['video_query'] = '%' . strtr($normalized, [
+        $params['video_query'] = '%' . strtr(str_replace(['đ', 'Đ'], ['d', 'D'], $normalized), [
             '\\' => '\\\\',
             '%' => '\\%',
             '_' => '\\_',
         ]) . '%';
 
         return ' AND (
-            video_id LIKE :video_query ESCAPE "\\\\"
-            OR video_username LIKE :video_query ESCAPE "\\\\"
-            OR description LIKE :video_query ESCAPE "\\\\"
-            OR video_url LIKE :video_query ESCAPE "\\\\"
-            OR share_url LIKE :video_query ESCAPE "\\\\"
+            ' . admin_search_expression('video_id') . ' LIKE :video_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('video_username') . ' LIKE :video_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('description') . ' LIKE :video_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('video_url') . ' LIKE :video_query ESCAPE "\\\\"
+            OR ' . admin_search_expression('share_url') . ' LIKE :video_query ESCAPE "\\\\"
         )';
     }
 

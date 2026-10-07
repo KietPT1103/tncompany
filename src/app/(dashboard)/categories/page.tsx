@@ -1,3 +1,4 @@
+import { normalizeSearchText } from "@/lib/utils";
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -335,14 +336,14 @@ export default function CategoryManagementPage() {
   }, [storeId]);
 
   const filteredCategories = useMemo(() => {
-    const keyword = normalizeText(query);
+    const keyword = normalizeSearchText(query);
 
     if (!keyword) return categories;
 
     return categories.filter(
       (category) =>
-        normalizeText(category.name).includes(keyword) ||
-        normalizeText(category.description || "").includes(keyword),
+        normalizeSearchText(category.name).includes(keyword) ||
+        normalizeSearchText(category.description || "").includes(keyword),
     );
   }, [categories, query]);
 

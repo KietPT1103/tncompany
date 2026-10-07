@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -232,15 +233,15 @@ export default function InventoryChecksPage() {
 
   const selectedCodes = new Set(form.items.map((item) => item.productCode));
   const suggestions = useMemo(() => {
-    const keyword = searchTerm.trim().toLowerCase();
+    const keyword = adminSearchText(searchTerm.trim());
     if (!keyword) return [];
 
     return products
       .filter((product) => {
         if (selectedCodes.has(product.product_code)) return false;
         return (
-          product.product_code.toLowerCase().includes(keyword) ||
-          product.product_name.toLowerCase().includes(keyword)
+          adminSearchText(product.product_code).includes(keyword) ||
+          adminSearchText(product.product_name).includes(keyword)
         );
       })
       .slice(0, 8);
@@ -275,18 +276,18 @@ export default function InventoryChecksPage() {
   }, [checks]);
 
   const historyItems = useMemo(() => {
-    const keyword = historySearch.trim().toLowerCase();
+    const keyword = adminSearchText(historySearch.trim());
     if (!keyword) return checks;
 
     return checks.filter((check) => {
       const inHeader =
-        check.checkCode.toLowerCase().includes(keyword) || check.note.toLowerCase().includes(keyword);
+        adminSearchText(check.checkCode).includes(keyword) || adminSearchText(check.note).includes(keyword);
       if (inHeader) return true;
 
       return (check.items || []).some(
         (item) =>
-          item.productCode.toLowerCase().includes(keyword) ||
-          item.productName.toLowerCase().includes(keyword)
+          adminSearchText(item.productCode).includes(keyword) ||
+          adminSearchText(item.productName).includes(keyword)
       );
     });
   }, [checks, historySearch]);

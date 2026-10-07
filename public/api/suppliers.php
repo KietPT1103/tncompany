@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/_lib/search.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
@@ -47,9 +48,9 @@ if ($method === 'GET') {
             LEFT JOIN ingredients i ON i.supplier_id COLLATE utf8mb4_unicode_ci=s.id COLLATE utf8mb4_unicode_ci
             WHERE s.store_id=:store_id';
     if ($search !== '') {
-        $sql .= ' AND (s.supplier_code LIKE :needle_code OR s.supplier_name LIKE :needle_name
-                       OR s.normalized_name LIKE :normalized OR s.phone LIKE :needle_phone)';
-        $needle = '%' . $search . '%';
+        $sql .= ' AND (' . admin_search_expression('s.supplier_code') . ' LIKE :needle_code OR ' . admin_search_expression('s.supplier_name') . ' LIKE :needle_name
+                       OR ' . admin_search_expression('s.normalized_name') . ' LIKE :normalized OR ' . admin_search_expression('s.phone') . ' LIKE :needle_phone)';
+        $needle = admin_search_value($search);
         $params['needle_code'] = $needle;
         $params['needle_name'] = $needle;
         $params['needle_phone'] = $needle;

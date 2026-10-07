@@ -1,3 +1,4 @@
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { LoaderCircle, Pencil, Plus, Search, Trash2, Truck, X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
@@ -30,8 +31,8 @@ export default function SuppliersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId]);
   const filtered = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("vi");
-    return q ? items.filter((i) => `${i.supplierCode} ${i.supplierName} ${i.phone}`.toLocaleLowerCase("vi").includes(q)) : items;
+    const q = adminSearchText(search.trim());
+    return q ? items.filter((i) => adminSearchText(`${i.supplierCode} ${i.supplierName} ${i.phone}`).includes(q)) : items;
   }, [items, search]);
 
   async function startCreate() {

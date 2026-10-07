@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -166,18 +167,17 @@ export default function AccountManagementPage() {
   const permissionTarget = useMemo(() => items.find((item) => item.id === permissionTargetId) || null, [items, permissionTargetId]);
 
   const filteredItems = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = adminSearchText(search.trim());
     return items.filter((item) => {
       if (statusFilter === "active" && !item.isActive) return false;
       if (statusFilter === "locked" && item.isActive) return false;
       if (!keyword) return true;
-      const permissionText = normalizePermissionList(item.permissions)
+      const permissionText = adminSearchText(normalizePermissionList(item.permissions)
         .map((permission) => getPermissionDefinition(permission)?.label || permission)
-        .join(" ")
-        .toLowerCase();
+        .join(" "));
       return [item.email, item.username, item.displayName, item.role, item.storeId, storeSummary(item), permissionText]
         .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(keyword));
+        .some((value) => adminSearchText(String(value)).includes(keyword));
     });
   }, [items, search, statusFilter]);
 

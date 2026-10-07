@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import {
   useCallback,
@@ -1967,8 +1968,8 @@ export default function PayrollDetail({
 
   const filteredEntries = entries
     .filter((entry) => {
-      const keyword = searchTerm.trim().toLowerCase();
-      const code = (entry.employeeCode || "").toLowerCase();
+      const keyword = adminSearchText(searchTerm.trim());
+      const code = adminSearchText((entry.employeeCode || ""));
       const lateSummary = getEntryLateSummary(
         entry,
         roleStartTimes[entry.role || defaultRole],
@@ -1976,9 +1977,9 @@ export default function PayrollDetail({
 
       const matchesSearch =
         !keyword ||
-        entry.employeeName.toLowerCase().includes(keyword) ||
+        adminSearchText(entry.employeeName).includes(keyword) ||
         code.includes(keyword) ||
-        entry.role.toLowerCase().includes(keyword);
+        adminSearchText(entry.role).includes(keyword);
 
       const matchesRole = filterRole === "All" || entry.role === filterRole;
 

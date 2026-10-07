@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import React, { useMemo, useState } from "react";
 import ShiftDetailModal, { Shift } from "./ShiftDetailModal";
@@ -483,11 +484,11 @@ export default function TimesheetPage() {
   const filteredData = useMemo(() => {
     return [...summaryData]
       .filter((emp) => {
-        const keyword = searchTerm.trim().toLowerCase();
+        const keyword = adminSearchText(searchTerm.trim());
         const matchSearch =
           !keyword ||
-          emp.Name.toLowerCase().includes(keyword) ||
-          emp.EnNo.toLowerCase().includes(keyword);
+          adminSearchText(emp.Name).includes(keyword) ||
+          adminSearchText(emp.EnNo).includes(keyword);
         const matchRole = filterRole === "All" || emp.Role === filterRole;
         const matchError = !filterError || emp.Errors.length > 0;
         return matchSearch && matchRole && matchError;

@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -298,12 +299,12 @@ export default function EmployeeManager({
   const filteredEmployees = employees.filter((employee) => {
     const employeeRoles = getEmployeeRoleNames(employee);
     if (roleFilter !== "all" && !employeeRoles.includes(roleFilter)) return false;
-    const keyword = searchTerm.trim().toLowerCase();
+    const keyword = adminSearchText(searchTerm.trim());
     if (!keyword) return true;
     return (
-      employee.name.toLowerCase().includes(keyword) ||
-      employeeRoles.some((role) => role.toLowerCase().includes(keyword)) ||
-      (employee.employeeCode || "").toLowerCase().includes(keyword)
+      adminSearchText(employee.name).includes(keyword) ||
+      employeeRoles.some((role) => adminSearchText(role).includes(keyword)) ||
+      adminSearchText((employee.employeeCode || "")).includes(keyword)
     );
   });
   const paginatedEmployees = paginateItems(

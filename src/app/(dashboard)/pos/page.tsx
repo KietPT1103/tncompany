@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { Fragment, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CashVoucherReportTab } from "./CashVoucherReportTab";
 import { flushSync } from "react-dom";
 import Link from "next/link";
 import {
@@ -54,6 +55,7 @@ import {
   createCashVoucher,
   getCashVoucherCategories,
   getCashVouchers,
+  getAllCashVouchers,
   getVoucherEvidenceOptions,
 } from "@/services/cashVoucherService";
 import { getAllProducts, Product } from "@/services/products";
@@ -214,7 +216,7 @@ type ReceiptData = {
 };
 type SoldBillsSortKey = "time" | "total" | "code" | "table";
 type SortDirection = "asc" | "desc";
-type DailyReportTab = "overview" | "bills" | "products";
+type DailyReportTab = "overview" | "bills" | "products" | "vouchers";
 type DailyReportShift = Exclude<ShiftType, "single"> | "all";
 type DailyReportPaymentFilter = "all" | PaymentMethod;
 type SoldProductKind = "drink" | "bakery";
@@ -2592,7 +2594,7 @@ export default function CafePosPage() {
       if (shiftType === "all") {
         const [loadedBills, loadedVouchers, ...shiftsByType] = await Promise.all([
           getBills({ storeId, startDate: start, endDate: end, includeCancelled: true, limitCount: 2000 }),
-          getCashVouchers({ storeId, startDate: start, endDate: end, limitCount: 2000 }),
+          getAllCashVouchers({ storeId, startDate: start, endDate: end, limitCount: 2000 }),
           getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_1" }),
           getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_2" }),
           getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_3" }),
@@ -2607,7 +2609,7 @@ export default function CafePosPage() {
         if (shiftIds.length > 0) {
           [bills, vouchers] = await Promise.all([
             getBills({ storeId, shiftIds, includeCancelled: true, limitCount: 2000 }),
-            getCashVouchers({ storeId, shiftIds, limitCount: 2000 }),
+            getAllCashVouchers({ storeId, shiftIds, limitCount: 2000 }),
           ]);
         }
       }
@@ -5047,9 +5049,10 @@ export default function CafePosPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-1 border-b bg-slate-100 p-1.5 sm:gap-2 sm:px-5 sm:py-3">
+            <div className="grid grid-cols-2 gap-1 border-b bg-slate-100 p-1.5 sm:grid-cols-4 sm:gap-2 sm:px-5 sm:py-3">
               {([
                 ["overview", "Tổng quan"],
+                ["vouchers", "Thu/chi (" + dailyReportVouchers.filter(voucher => !voucher.isCancelled).length + ")"],
                 ["bills", `Bill theo giờ (${dailyReport?.completedBills || 0})`],
                 ["products", `Hàng đã bán ${getDailyReportShiftLabel(dailyReportShift)} (${dailyProductRows.length})`],
               ] as [DailyReportTab, string][]).map(([tab, label]) => (
@@ -5145,6 +5148,8 @@ export default function CafePosPage() {
                     </div>
                   </div>
                 </div>
+              ) : dailyReportTab === "vouchers" ? (
+                <CashVoucherReportTab vouchers={dailyReportVouchers} shifts={dailyReportShifts} />
               ) : dailyReportTab === "bills" ? (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-white p-3 shadow-sm">

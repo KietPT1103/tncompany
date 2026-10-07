@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/_lib/search.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
@@ -146,12 +147,12 @@ if ($method === 'GET') {
                       AND LOWER(COALESCE(c.name,""))<>LOWER("Nguyên liệu")';
             $params['filter_area_id'] = $fieldAreaId;
         } else {
-            $needle = '%' . $fieldSearch . '%';
+            $needle = admin_search_value($fieldSearch);
             $sql .= ' WHERE p.item_type=:item_type
                       AND LOWER(COALESCE(c.name,""))<>LOWER("Nguyên liệu")
-                      AND (p.product_name LIKE :name_needle
-                           OR p.product_code LIKE :code_needle
-                           OR p.normalized_name LIKE :normalized_needle)';
+                      AND (' . admin_search_expression('p.product_name') . ' LIKE :name_needle
+                           OR ' . admin_search_expression('p.product_code') . ' LIKE :code_needle
+                           OR ' . admin_search_expression('p.normalized_name') . ' LIKE :normalized_needle)';
             $params['name_needle'] = $needle;
             $params['code_needle'] = $needle;
             $params['normalized_needle'] = '%' . products_normalized_name($fieldSearch) . '%';

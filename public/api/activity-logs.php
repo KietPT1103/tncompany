@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/_lib/search.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
@@ -450,8 +451,8 @@ function activity_build_log_conditions(array $filters, bool $onlyWithScreenshot 
     }
 
     if (!empty($filters['search'])) {
-        $clauses[] = '(machine_id LIKE :search OR event_type LIKE :search OR action LIKE :search OR app_name LIKE :search OR target LIKE :search)';
-        $params['search'] = '%' . $filters['search'] . '%';
+        $clauses[] = '(' . admin_search_expression('machine_id') . ' LIKE :search OR ' . admin_search_expression('event_type') . ' LIKE :search OR ' . admin_search_expression('action') . ' LIKE :search OR ' . admin_search_expression('app_name') . ' LIKE :search OR ' . admin_search_expression('target') . ' LIKE :search)';
+        $params['search'] = admin_search_value($filters['search']);
     }
 
     if (!empty($filters['startDate'])) {
@@ -1254,7 +1255,7 @@ if ($method === 'GET') {
     $perPage = max(1, min(300, (int) ($_GET['perPage'] ?? $_GET['limit'] ?? 25)));
     $offset = ($page - 1) * $perPage;
 
-    [$whereClause, $params] = activity_build_log_conditions($filters, false);
+    [$whereClause, $params] = activity_build_log_conditions($filters, true);
 
     $countStatement = db()->prepare(
         'SELECT COUNT(*) FROM activity_logs WHERE ' . $whereClause

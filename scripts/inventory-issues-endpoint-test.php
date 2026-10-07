@@ -4,6 +4,7 @@ declare(strict_types=1);
 // and MySQL locking syntax are adapted; no application database is contacted.
 class FixturePDO extends PDO {
     public function prepare(string $query, array $options = []): PDOStatement|false {
+        $query = preg_replace('/CONVERT\(COALESCE\(([^,]+), ""\) USING utf8mb4\)/', 'admin_fold($1)', $query);
         return parent::prepare(str_replace([' FOR UPDATE','INSERT IGNORE'], ['', 'INSERT OR IGNORE'], $query), $options);
     }
     public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
@@ -14,6 +15,16 @@ class FixturePDO extends PDO {
 if (($argv[1] ?? '') === 'worker') {
     $request = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
     $fixture = new FixturePDO('sqlite:' . $argv[2], null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
+    require_once __DIR__ . '/../public/api/_lib/search.php';
+    $fixture->sqliteCreateCollation('utf8mb4_unicode_ci', fn($left,$right) => strcmp($left,$right));
+    function fixture_search_fold($value): string {
+        $text=mb_strtolower((string) $value, 'UTF-8');
+        foreach (['a'=>'àáạảãâầấậẩẫăằắặẳẵ','e'=>'èéẹẻẽêềếệểễ','i'=>'ìíịỉĩ','o'=>'òóọỏõôồốộổỗơờớợởỡ','u'=>'ùúụủũưừứựửữ','y'=>'ỳýỵỷỹ','d'=>'đ'] as $ascii=>$letters) $text=preg_replace('/['.$letters.']/u',$ascii,$text);
+        return $text;
+    }
+    $fixture->sqliteCreateFunction('admin_fold', 'fixture_search_fold');
+    // SQLite LIKE ignores custom collations; emulate MySQL accent-insensitive LIKE.
+    $fixture->sqliteCreateFunction('like', fn($pattern,$value) => preg_match('/^'.str_replace(['%','_'],['.*','.'],preg_quote(fixture_search_fold($pattern),'/')).'$/us',fixture_search_fold($value)));
     $fixture->sqliteCreateFunction('NOW', fn() => '2026-10-05 12:00:00');
     function db(): PDO { return $GLOBALS['fixture']; }
     function uuidv4(): string { return bin2hex(random_bytes(16)); }
@@ -108,6 +119,11 @@ if (($argv[1] ?? '') === '--list-only') {
         expect(count($large['data']['items'])===27 && $large['data']['pagination']['pages']===1,'selected page size is applied');
         $search=call_endpoint('GET',array_replace($query,['keyword'=>'XK-027']));
         expect($search['data']['pagination']['total']===1 && $search['data']['items'][0]['issueCode']==='XK-027','search filters before pagination');
+        $pdo->exec("UPDATE inventory_issues SET destination='Quầy Đường',issued_by='Nguyễn Đặng' WHERE id='list-27'");
+        foreach (['quay duong','QUẦY ĐƯỜNG','nguyen dang'] as $keyword) {
+            $accentSearch=call_endpoint('GET',array_replace($query,['keyword'=>$keyword]));
+            expect($accentSearch['data']['pagination']['total']===1 && $accentSearch['data']['items'][0]['id']==='list-27', 'accent-insensitive search before pagination: '.$keyword);
+        }
         $empty=call_endpoint('GET',array_replace($query,['dateFrom'=>'2026-10-09','dateTo'=>'2026-10-09']));
         expect($empty['data']['items']===[] && $empty['data']['pagination']['total']===0,'empty date has no bills');
         expect(call_endpoint('GET',array_replace($query,['dateFrom'=>'2026-02-30']))['status']===422,'invalid dates rejected');

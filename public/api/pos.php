@@ -924,7 +924,7 @@ if ($method === 'GET' && $resource === 'vouchers') {
            ON receipt.id COLLATE utf8mb4_unicode_ci=voucher.inventory_receipt_id COLLATE utf8mb4_unicode_ci
          LEFT JOIN suppliers supplier
            ON supplier.id COLLATE utf8mb4_unicode_ci=receipt.supplier_id COLLATE utf8mb4_unicode_ci
-         WHERE ' . implode(' AND ', $where) . " ORDER BY voucher.happened_at DESC LIMIT $limit"
+         WHERE ' . implode(' AND ', $where) . " ORDER BY voucher.happened_at DESC,voucher.id DESC LIMIT $limit OFFSET " . pos_offset($_GET["offset"] ?? 0)
     );
     $statement->execute($params);
     $voucherRows = $statement->fetchAll();

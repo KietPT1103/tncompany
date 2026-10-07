@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/_lib/search.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
@@ -46,7 +47,9 @@ function receipts_full(array $user, string $id): array
     $row = field_inventory_require_receipt($user, $id);
     $imageReceiptId = trim((string) ($row['evidence_receipt_id'] ?? '')) ?: $id;
     if ($imageReceiptId !== $id) field_inventory_require_receipt($user, $imageReceiptId);
-    return field_inventory_receipt_payload($row, field_inventory_load_items($id), field_inventory_load_images($imageReceiptId), $user);
+    $images = field_inventory_load_images($id);
+    if ($imageReceiptId !== $id) $images = array_merge($images, field_inventory_load_images($imageReceiptId));
+    return field_inventory_receipt_payload($row, field_inventory_load_items($id), $images, $user);
 }
 
 function receipts_recalculate(string $id): void
@@ -120,8 +123,8 @@ function receipts_list(): void
     }
     $keyword = trim((string) ($_GET['keyword'] ?? $_GET['search'] ?? ''));
     if ($keyword !== '') {
-        $needle = '%' . $keyword . '%';
-        $where[] = '(r.receipt_code LIKE :keyword_code OR r.note LIKE :keyword_note OR r.location_address LIKE :keyword_address OR EXISTS (SELECT 1 FROM inventory_receipt_items keyword_item WHERE keyword_item.receipt_id=r.id AND keyword_item.product_name LIKE :keyword_product) OR EXISTS (SELECT 1 FROM suppliers keyword_supplier WHERE keyword_supplier.id=r.supplier_id AND keyword_supplier.supplier_name LIKE :keyword_supplier))';
+        $needle = admin_search_value($keyword);
+        $where[] = '(' . admin_search_expression('r.receipt_code') . ' LIKE :keyword_code OR ' . admin_search_expression('r.note') . ' LIKE :keyword_note OR ' . admin_search_expression('r.location_address') . ' LIKE :keyword_address OR EXISTS (SELECT 1 FROM inventory_receipt_items keyword_item WHERE keyword_item.receipt_id=r.id AND ' . admin_search_expression('keyword_item.product_name') . ' LIKE :keyword_product) OR EXISTS (SELECT 1 FROM suppliers keyword_supplier WHERE keyword_supplier.id=r.supplier_id AND ' . admin_search_expression('keyword_supplier.supplier_name') . ' LIKE :keyword_supplier))';
         $params['keyword_code'] = $needle;
         $params['keyword_note'] = $needle;
         $params['keyword_address'] = $needle;
@@ -130,8 +133,8 @@ function receipts_list(): void
     }
     $productKeyword = trim((string) ($_GET['productKeyword'] ?? ''));
     if ($productKeyword !== '') {
-        $needle = '%' . $productKeyword . '%';
-        $where[] = 'EXISTS (SELECT 1 FROM inventory_receipt_items si WHERE si.receipt_id=r.id AND (si.product_code LIKE :product_code OR si.product_name LIKE :product_name))';
+        $needle = admin_search_value($productKeyword);
+        $where[] = 'EXISTS (SELECT 1 FROM inventory_receipt_items si WHERE si.receipt_id=r.id AND (' . admin_search_expression('si.product_code') . ' LIKE :product_code OR ' . admin_search_expression('si.product_name') . ' LIKE :product_name))';
         $params['product_code'] = $needle;
         $params['product_name'] = $needle;
     }

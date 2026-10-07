@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText } from "@/lib/utils";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -18,8 +19,6 @@ type MultiSelectBoxProps<T extends string> = {
   triggerClassName?: string;
 };
 
-const normalizeSearchText = (value: string) =>
-  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("vi");
 
 export function MultiSelectBox<T extends string>({
   values,

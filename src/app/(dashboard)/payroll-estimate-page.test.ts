@@ -80,7 +80,7 @@ test("keeps fixed-salary employees schedulable without showing salary amounts", 
 
 test("does not show employee codes in the shift picker", () => {
   assert.doesNotMatch(source, /employee\.employeeCode \|\| "Không có mã"/);
-  assert.match(source, /\(employee\.employeeCode \|\| ""\)\.toLowerCase\(\)\.includes\(keyword\)/);
+  assert.match(source, /adminSearchText\(\(employee\.employeeCode \|\| ""\)\)\.includes\(keyword\)/);
 });
 
 test("allows one employee to be scheduled for each assigned role", () => {

@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/_lib/search.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
@@ -244,13 +245,13 @@ if ($method === 'GET') {
     }
 
     if ($search !== '') {
-        $where[] = '(c.check_code LIKE :search OR c.note LIKE :search OR EXISTS (
+        $where[] = '(' . admin_search_expression('c.check_code') . ' LIKE :search OR ' . admin_search_expression('c.note') . ' LIKE :search OR EXISTS (
             SELECT 1
             FROM inventory_check_items ici
             WHERE ici.check_id = c.id
-              AND (ici.product_code LIKE :search OR ici.product_name LIKE :search)
+              AND (' . admin_search_expression('ici.product_code') . ' LIKE :search OR ' . admin_search_expression('ici.product_name') . ' LIKE :search)
         ))';
-        $params['search'] = '%' . $search . '%';
+        $params['search'] = admin_search_value($search);
     }
 
     $statement = db()->prepare(

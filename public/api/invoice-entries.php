@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
+require_once __DIR__ . '/_lib/invoice_search.php';
 require_once __DIR__ . '/_lib/auth.php';
 
 const INVOICE_UPLOAD_RELATIVE_ROOT = 'uploads/invoices';
@@ -854,21 +855,21 @@ if ($method === 'GET') {
 
     if ($search !== '') {
         $baseWhereSql .= ' AND (
-            entries.id LIKE :search_id
-            OR entries.invoice_number LIKE :search_invoice_number
-            OR entries.partner_name LIKE :search_partner_name
-            OR entries.note LIKE :search_note
+            ' . invoice_search_expression('entries.id') . ' LIKE :search_id
+            OR ' . invoice_search_expression('entries.invoice_number') . ' LIKE :search_invoice_number
+            OR ' . invoice_search_expression('entries.partner_name') . ' LIKE :search_partner_name
+            OR ' . invoice_search_expression('entries.note') . ' LIKE :search_note
             OR EXISTS (
                 SELECT 1
                 FROM invoice_entry_items invoice_items
                 WHERE invoice_items.invoice_id = entries.id
                   AND (
-                    invoice_items.item_name LIKE :search_item_name
-                    OR COALESCE(invoice_items.unit, "") LIKE :search_item_unit
+                    ' . invoice_search_expression('invoice_items.item_name') . ' LIKE :search_item_name
+                    OR ' . invoice_search_expression('COALESCE(invoice_items.unit, "")') . ' LIKE :search_item_unit
                   )
             )
         )';
-        $searchValue = '%' . $search . '%';
+        $searchValue = invoice_search_value($search);
         $baseParams['search_id'] = $searchValue;
         $baseParams['search_invoice_number'] = $searchValue;
         $baseParams['search_partner_name'] = $searchValue;

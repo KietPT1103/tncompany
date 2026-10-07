@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/_lib/search.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
@@ -121,8 +122,8 @@ if ($method === 'GET') {
     if (isset($params['dateFrom'], $params['dateTo']) && $params['dateFrom'] > $params['dateTo']) respond_error('Khoảng ngày không hợp lệ.', 422);
     $keyword = trim((string) ($_GET['keyword'] ?? ''));
     if ($keyword !== '') {
-        $where[] = '(issue_code LIKE :code OR destination LIKE :destination OR issued_by LIKE :issued_by)';
-        foreach (['code', 'destination', 'issued_by'] as $key) $params[$key] = '%' . $keyword . '%';
+        $where[] = '(' . admin_search_expression('issue_code') . ' LIKE :code OR ' . admin_search_expression('destination') . ' LIKE :destination OR ' . admin_search_expression('issued_by') . ' LIKE :issued_by)';
+        foreach (['code', 'destination', 'issued_by'] as $key) $params[$key] = admin_search_value($keyword);
     }
     $filter = implode(' AND ', $where);
     $count = db()->prepare("SELECT COUNT(*) FROM inventory_issues WHERE $filter");

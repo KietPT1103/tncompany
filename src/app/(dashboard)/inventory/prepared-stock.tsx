@@ -1,3 +1,4 @@
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
 import { InventoryPagination } from "@/components/ui/InventoryPagination";
 import { paginateItems } from "@/lib/listPagination";
@@ -31,7 +32,7 @@ export default function PreparedStockTab() {
     finally { if(sequence===loadSequence.current)setLoading(false); }
   }
   useEffect(() => { void load(); return()=>{loadSequence.current++}; }, [storeId,from,to]);
-  const items = useMemo(() => { const term=search.trim().toLocaleLowerCase("vi"); return !term?(data?.items??[]):(data?.items??[]).filter((item)=>`${item.ingredientCode} ${item.ingredientName} ${item.components.map((component)=>component.ingredientName).join(" ")}`.toLocaleLowerCase("vi").includes(term)); }, [data,search]);
+  const items = useMemo(() => { const term=adminSearchText(search.trim()); return !term?(data?.items??[]):(data?.items??[]).filter((item)=>adminSearchText(`${item.ingredientCode} ${item.ingredientName} ${item.components.map((component)=>component.ingredientName).join(" ")}`).includes(term)); }, [data,search]);
   useEffect(()=>{setPage(1)},[storeId,from,to,search,pageSize]);
   const paged=paginateItems(items,page,pageSize);
   async function save() {

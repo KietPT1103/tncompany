@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/_lib/search.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
@@ -106,8 +107,8 @@ if ($method === 'GET') {
     $params = [];
 
     if ($query !== '') {
-        $sql .= ' AND (title LIKE :query OR slug LIKE :query OR excerpt LIKE :query)';
-        $params['query'] = '%' . $query . '%';
+        $sql .= ' AND (' . admin_search_expression('title') . ' LIKE :query OR ' . admin_search_expression('slug') . ' LIKE :query OR ' . admin_search_expression('excerpt') . ' LIKE :query)';
+        $params['query'] = admin_search_value($query);
     }
 
     if ($status === 'published') {

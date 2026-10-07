@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
 import { useEffect, useMemo, useState } from "react";
 import type { StoreType } from "@/context/StoreContext";
@@ -73,13 +74,13 @@ export default function AddPayrollEntryDialog({ open, employees, storeId, onAddE
   }, [defaultRole, employees, open]);
 
   const filteredEmployees = useMemo(() => {
-    const keyword = searchTerm.trim().toLowerCase();
+    const keyword = adminSearchText(searchTerm.trim());
     if (!keyword) return employees;
     return employees.filter((employee) => {
-      const code = (employee.employeeCode || "").toLowerCase();
-      const employeeName = (employee.name || "").toLowerCase();
+      const code = adminSearchText((employee.employeeCode || ""));
+      const employeeName = adminSearchText((employee.name || ""));
       const employeeRoles = getEmployeeRoleNames(employee);
-      return code.includes(keyword) || employeeName.includes(keyword) || employeeRoles.some((role) => role.toLowerCase().includes(keyword));
+      return code.includes(keyword) || employeeName.includes(keyword) || employeeRoles.some((role) => adminSearchText(role).includes(keyword));
     });
   }, [employees, searchTerm]);
 

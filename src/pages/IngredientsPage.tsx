@@ -1,3 +1,4 @@
+import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
 import { inventoryToday } from "@/lib/inventoryPeriods";
 import { Pagination } from "@/components/ui/Pagination";
@@ -104,11 +105,11 @@ export default function IngredientsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, dateFrom, dateTo]);
   const filtered = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("vi");
+    const q = adminSearchText(search.trim());
     return items.filter((item) =>
       (visibility === "all" || item.isActive === (visibility === "active")) &&
       (kind === "all" || item.itemKind === kind) &&
-      (!q || `${item.ingredientCode} ${item.ingredientName} ${item.supplierName || ""}`.toLocaleLowerCase("vi").includes(q))
+      (!q || adminSearchText(`${item.ingredientCode} ${item.ingredientName} ${item.supplierName || ""}`).includes(q))
     );
   }, [items, search, visibility, kind]);
 

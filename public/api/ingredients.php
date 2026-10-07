@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/_lib/search.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
@@ -166,9 +167,9 @@ if ($method === 'GET') {
         $sql .= ' AND COALESCE(i.item_kind,"ingredient")<>"fresh"';
     }
     if ($search !== '') {
-        $sql .= ' AND (i.ingredient_code LIKE :needle_code OR i.ingredient_name LIKE :needle_name
-                       OR i.normalized_name LIKE :normalized OR s.supplier_name LIKE :needle_supplier)';
-        $needle = '%' . $search . '%';
+        $sql .= ' AND (' . admin_search_expression('i.ingredient_code') . ' LIKE :needle_code OR ' . admin_search_expression('i.ingredient_name') . ' LIKE :needle_name
+                       OR ' . admin_search_expression('i.normalized_name') . ' LIKE :normalized OR ' . admin_search_expression('s.supplier_name') . ' LIKE :needle_supplier)';
+        $needle = admin_search_value($search);
         $params['needle_code'] = $needle;
         $params['needle_name'] = $needle;
         $params['needle_supplier'] = $needle;
