@@ -20,6 +20,7 @@ export type Ingredient = {
   conversionComponents: Array<{ ingredientId: string; ingredientCode: string; ingredientName: string; unit: string; inputQuantity: number; cost: number | null }>;
   stockQuantity: number;
   preparationStockQuantity: number;
+  periodReceivedAmount?: number | null;
   periodReceivedQuantity: number;
   periodIssuedQuantity: number;
   supplierId: string | null;

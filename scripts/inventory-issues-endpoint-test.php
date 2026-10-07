@@ -30,10 +30,16 @@ if (($argv[1] ?? '') === 'worker') {
     }
     $_SERVER['REQUEST_METHOD'] = $request['method'];
     $_GET = $request['body'];
-    $endpoint = ($request['operation'] ?? '') === 'preparation' ? 'preparation-receipts.php' : 'inventory-issues.php';
+    $endpoint = ($request['operation'] ?? '') === 'history' ? 'inventory-history.php' : (($request['operation'] ?? '') === 'preparation' ? 'preparation-receipts.php' : 'inventory-issues.php');
     $code = file_get_contents(__DIR__ . '/../public/api/' . $endpoint);
     $code = preg_replace('/^require_once .*;\R/m', '', $code);
     $code = preg_replace('/^(inventory_issues_ensure_schema|inventory_issue_print_jobs_ensure_schema|preparation_receipts_ensure_schema)\(\);\R/m', '', $code);
+    if ($endpoint === 'inventory-history.php') {
+        $fixture->sqliteCreateCollation('utf8mb4_unicode_ci', fn($left,$right) => strcmp($left,$right));
+        $code = preg_replace('/^(products_inventory_ensure_schema|ingredients_ensure_schema)\(\);\R/m', '', $code);
+        $code = preg_replace('/^auth_ensure_column.*;\R/m', '', $code);
+        $code = preg_replace('/db\(\)->exec\(\'CREATE TABLE IF NOT EXISTS.*?\'\);/s', '', $code);
+    }
     eval(substr($code, 5));
     exit;
 }
@@ -60,6 +66,55 @@ function call_endpoint(string $method, array $body, string $role='admin', array 
     return json_decode($out, true, 512, JSON_THROW_ON_ERROR);
 }
 function stock(string $id): float { global $pdo; return (float)$pdo->query("SELECT stock_quantity FROM ingredients WHERE id='$id'")->fetchColumn(); }
+if (($argv[1] ?? '') === '--history-list-only') {
+    try {
+        $pdo->exec('CREATE TABLE inventory_receipts (id TEXT PRIMARY KEY,store_id TEXT,receipt_code TEXT,receipt_date TEXT,status TEXT,created_at TEXT,order_creator_name TEXT,created_by TEXT,supplier_id TEXT,note TEXT,total_amount REAL)');
+        $pdo->exec('CREATE TABLE inventory_receipt_items (id INTEGER PRIMARY KEY,receipt_id TEXT,product_code TEXT,product_name TEXT,unit TEXT,quantity REAL,unit_cost REAL,line_total REAL,note TEXT)');
+        $pdo->exec('CREATE TABLE suppliers (id TEXT,supplier_name TEXT)');
+        $insert=$pdo->prepare('INSERT INTO inventory_issues (id,store_id,issue_code,issue_date,destination,issued_by,status,total_quantity) VALUES (?,?,?,?,?,?,?,?)');
+        for($i=1;$i<=325;$i++) $insert->execute(['history-'.$i,'cafe',sprintf('XK-%04d',$i),'2026-10-08','Bar','Admin','draft',0]);
+        $insert->execute(['older','cafe','XK-OLDER','2026-10-07','Bar','Admin','draft',0]);
+        $insert->execute(['other','farm','XK-OTHER','2026-10-08','Bar','Admin','draft',0]);
+        $query=['storeId'=>'cafe','type'=>'issue','dateFrom'=>'2026-10-08','dateTo'=>'2026-10-08','page'=>1,'limit'=>300];
+        $first=call_endpoint('GET',$query,'admin',['operation'=>'history']);
+        expect($first['data']['pagination']['total']===325 && count($first['data']['items'])===300,'history counts all matching records beyond old cap');
+        $next=call_endpoint('GET',array_replace($query,['page'=>2]),'admin',['operation'=>'history']);
+        expect(count($next['data']['items'])===25 && !array_intersect(array_column($first['data']['items'],'id'),array_column($next['data']['items'],'id')),'history next page retains remaining records without duplicates');
+        $empty=call_endpoint('GET',array_replace($query,['dateFrom'=>'2026-10-09','dateTo'=>'2026-10-09']),'admin',['operation'=>'history']);
+        expect($empty['data']['pagination']['total']===0,'history filters by date and store');
+        $receipt=$pdo->prepare('INSERT INTO preparation_receipts (id,issue_id,store_id,receipt_code,receipt_date,received_by,note) VALUES (?,?,?,?,?,?,?)');
+        for($i=1;$i<=55;$i++) $receipt->execute(['receive-'.$i,'history-'.$i,'cafe','PC-'.$i,'2026-10-08','Admin','']);
+        $receipt->execute(['receive-old','older','cafe','PC-OLD','2026-10-07','Admin','']);
+        $list=call_endpoint('GET',['storeId'=>'cafe','dateFrom'=>'2026-10-08','dateTo'=>'2026-10-08'],'admin',['operation'=>'preparation']);
+        expect(count($list['data']['history'])===55,'preparation period includes all records beyond old 50 record cap');
+        expect(call_endpoint('GET',['storeId'=>'cafe','dateFrom'=>'2026-02-30'],'admin',['operation'=>'preparation'])['status']===422,'preparation rejects invalid dates');
+    } finally { $pdo=null; @unlink($path); }
+    exit;
+}
+if (($argv[1] ?? '') === '--list-only') {
+    try {
+        $insert = $pdo->prepare('INSERT INTO inventory_issues (id,store_id,issue_code,issue_date,destination,issued_by,status,note,total_quantity,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)');
+        for ($i=1; $i<=27; $i++) $insert->execute(['list-'.$i,'cafe',sprintf('XK-%03d',$i),'2026-10-08','Bar','Admin','draft','',0,'fixture']);
+        $insert->execute(['older','cafe','XK-OLD','2026-10-07','Bar','Admin','draft','',0,'fixture']);
+        $insert->execute(['other','farm','XK-OTHER','2026-10-08','Bar','Admin','draft','',0,'fixture']);
+        $query=['storeId'=>'cafe','dateFrom'=>'2026-10-08','dateTo'=>'2026-10-08','limit'=>10,'page'=>1];
+        $first=call_endpoint('GET',$query);
+        expect($first['data']['pagination']['total']===27 && count($first['data']['items'])===10,'date and store filters count only matching bills');
+        $second=call_endpoint('GET',array_replace($query,['page'=>2]));
+        expect(count($second['data']['items'])===10 && !array_intersect(array_column($first['data']['items'],'id'),array_column($second['data']['items'],'id')),'pages do not repeat bills');
+        $last=call_endpoint('GET',array_replace($query,['page'=>99]));
+        expect($last['data']['pagination']['page']===3 && count($last['data']['items'])===7,'last page is clamped and preserves remaining bills');
+        $large=call_endpoint('GET',array_replace($query,['limit'=>50]));
+        expect(count($large['data']['items'])===27 && $large['data']['pagination']['pages']===1,'selected page size is applied');
+        $search=call_endpoint('GET',array_replace($query,['keyword'=>'XK-027']));
+        expect($search['data']['pagination']['total']===1 && $search['data']['items'][0]['issueCode']==='XK-027','search filters before pagination');
+        $empty=call_endpoint('GET',array_replace($query,['dateFrom'=>'2026-10-09','dateTo'=>'2026-10-09']));
+        expect($empty['data']['items']===[] && $empty['data']['pagination']['total']===0,'empty date has no bills');
+        expect(call_endpoint('GET',array_replace($query,['dateFrom'=>'2026-02-30']))['status']===422,'invalid dates rejected');
+        expect(call_endpoint('GET',array_replace($query,['dateFrom'=>'2026-10-09']))['status']===422,'reversed dates rejected');
+    } finally { @unlink($path); }
+    exit;
+}
 try {
     $body=['storeId'=>'cafe','issueDate'=>'2026-10-05','destination'=>'Bar','issuedBy'=>'Admin','status'=>'completed','items'=>[['ingredientCode'=>'A','quantity'=>0.03],['ingredientCode'=>'F','quantity'=>2]]];
     $create=call_endpoint('POST',$body);
@@ -110,7 +165,7 @@ try {
     expect($cancelResult['status']===200,'preparation receipt cancelled');
     expect((float)$pdo->query("SELECT preparation_stock_quantity FROM ingredients WHERE id='a'")->fetchColumn()===40.0 && (float)$pdo->query("SELECT preparation_stock_quantity FROM ingredients WHERE id='b'")->fetchColumn()===10.0,'cancel subtracts actual received stock');
     expect(stock('a')===80.0 && stock('b')===17.0,'preparation cancellation leaves cashier stock unchanged');
-    $updated=call_endpoint('GET',['storeId'=>'cafe'])['data']['items'][0];
+    $updated=array_values(array_filter(call_endpoint('GET',['storeId'=>'cafe'])['data']['items'], fn($item) => $item['id'] === $issue2['id']))[0];
     $pending=call_endpoint('GET',['storeId'=>'cafe'],'admin',['operation'=>'preparation']);
     expect(count($pending['data']['pending'])===1 && $pending['data']['pending'][0]['issueId']===$issue2['id'],'same issue returns to pending');
     expect($pending['data']['history'][0]['status']==='cancelled' && $pending['data']['history'][0]['cancelReason']==='Sai số thực nhận','cancelled preparation history retained');

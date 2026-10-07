@@ -95,5 +95,7 @@ foreach ($rows as $row) {
     ];
 }
 $items = array_values($grouped);
-usort($items, static fn(array $left,array $right):int => strcmp($right['date'].' '.$right['createdAt'],$left['date'].' '.$left['createdAt']));
-respond_ok(['items'=>array_slice($items,0,$limit)]);
+usort($items, static fn(array $left,array $right):int => strcmp($right['date'].' '.$right['createdAt'].' '.$right['type'].':'.$right['id'],$left['date'].' '.$left['createdAt'].' '.$left['type'].':'.$left['id']));
+$page = max(1, (int) ($_GET['page'] ?? 1));
+$total = count($items); $pages = max(1, (int) ceil($total / $limit)); $page = min($page, $pages);
+respond_ok(['items'=>array_slice($items,($page-1)*$limit,$limit),'pagination'=>['page'=>$page,'pages'=>$pages,'total'=>$total,'limit'=>$limit]]);

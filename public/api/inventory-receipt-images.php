@@ -177,7 +177,7 @@ if ($method === 'POST') {
     $clientFileId = trim((string) ($_POST['clientFileId'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $receiptId);
     field_inventory_assert_receipt_editable($user, $receipt);
-    if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) respond_error('Phiếu đã khóa.', 409);
+    if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true) && !($receipt['status'] === 'completed' && field_inventory_is_admin($user))) respond_error('Phiếu đã khóa.', 409);
     if ($clientFileId === '') respond_error('Thiếu clientFileId.', 422);
 
     $duplicate = db()->prepare('SELECT id FROM inventory_receipt_images WHERE receipt_id=:receipt AND client_file_id=:client LIMIT 1');

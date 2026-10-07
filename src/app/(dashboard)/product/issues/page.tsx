@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
+import { inventoryToday } from "@/lib/inventoryPeriods";
+import { Pagination } from "@/components/ui/Pagination";
+import { InventoryIssueFormDialog } from "./InventoryIssueFormDialog";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardList, PackageMinus, Plus, Printer, RotateCcw, Save, Search, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { availableIssueStock, canEditIssue } from "./corrections";
@@ -7,7 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getIngredients, type Ingredient } from "@/services/ingredients";
 import {
   cancelInventoryIssue,
-  getInventoryIssues,
+  getInventoryIssuePage,
   saveInventoryIssue,
   type InventoryIssue,
   type InventoryIssueItem,
@@ -57,6 +61,13 @@ export default function InventoryIssuesPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [dialogError, setDialogError] = useState("");
   const [historySearch, setHistorySearch] = useState("");
+  const [dateFrom, setDateFrom] = useState(inventoryToday);
+  const [dateTo, setDateTo] = useState(today);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [issueTotal, setIssueTotal] = useState(0);
+  const [formOpen, setFormOpen] = useState(false);
+  const loadSequence = useRef(0);
   const [reprintingJobId, setReprintingJobId] = useState("");
   const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
   const emptyForm = (): FormState => ({
@@ -74,35 +85,27 @@ export default function InventoryIssuesPage() {
   }, [storeId, user?.uid]);
 
   async function reload() {
-    const [ingredientResult, issueResult] = await Promise.all([
-      getIngredients(storeId), getInventoryIssues(storeId),
-    ]);
-    setIngredients(ingredientResult.items);
-    setIssues(issueResult);
+    const sequence = ++loadSequence.current;
+    const result = await getInventoryIssuePage(storeId, { dateFrom, dateTo, keyword: historySearch, page, limit: pageSize });
+    if (sequence !== loadSequence.current) return;
+    setIssues(result.items); setIssueTotal(result.pagination.total); setPage(result.pagination.page);
   }
 
   useEffect(() => {
-    setLoading(true);
-    setError("");
-    setForm(emptyForm());
-    setConfirmation(null);
-    setCancelReason("");
-    setDialogError("");
-    reload().catch((reason) => setError(reason instanceof Error ? reason.message : "Không thể tải dữ liệu xuất kho."))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setForm(emptyForm()); setFormOpen(false); setConfirmation(null); setPage(1);
+    getIngredients(storeId).then(result=>setIngredients(result.items)).catch(reason=>setError(reason.message));
   }, [storeId]);
+  useEffect(() => {
+    setLoading(true); setError("");
+    let active = true;
+    const timer = setTimeout(() => { reload().catch(reason=>{if(active)setError(reason instanceof Error ? reason.message : "Không thể tải danh sách xuất kho.")}).finally(()=>{if(active)setLoading(false)}); }, 200);
+    return () => { active = false; clearTimeout(timer); loadSequence.current++; };
+  }, [storeId, dateFrom, dateTo, historySearch, page, pageSize]);
 
   const ingredientByCode = useMemo(
     () => new Map(ingredients.map((item) => [item.ingredientCode, item])),
     [ingredients],
   );
-  const filteredIssues = useMemo(() => {
-    const term = historySearch.trim().toLocaleLowerCase("vi");
-    return term ? issues.filter((item) =>
-      `${item.issueCode} ${item.destination} ${item.issuedBy}`.toLocaleLowerCase("vi").includes(term)
-    ) : issues;
-  }, [historySearch, issues]);
   const total = form.items.reduce((sum, item) => sum + number(item.quantity), 0);
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
@@ -119,7 +122,7 @@ export default function InventoryIssuesPage() {
       destination: issue.destination, issuedBy: issue.issuedBy, note: issue.note,
       items: issue.items.map((item) => ({ key: key(), ingredientCode: item.ingredientCode, quantity: String(item.quantity), note: item.note })),
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setError(""); setFormOpen(true);
   }
 
   async function save(status: "draft" | "completed", confirmed = false) {
@@ -149,8 +152,8 @@ export default function InventoryIssuesPage() {
         shiftId: activeShift?.id || null, shiftType: activeShift?.shiftType || null,
       });
       setConfirmation(null);
-      setForm(emptyForm());
-      await reload();
+      setForm(emptyForm()); setFormOpen(false);
+      await Promise.all([reload(), getIngredients(storeId).then(result=>setIngredients(result.items))]);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Không thể lưu phiếu xuất kho.";
       setError(message);
@@ -203,18 +206,18 @@ export default function InventoryIssuesPage() {
     }
   }
 
-  return <div className="warehouse-ui min-h-screen bg-slate-50 p-4 font-sans text-slate-950 sm:p-6 2xl:p-8">
+  return <div className="warehouse-ui min-h-screen min-w-0 bg-slate-50 p-4 font-sans text-slate-950 sm:p-6 2xl:p-8">
     <div className="mx-auto max-w-[1680px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div><div className="text-sm font-bold uppercase tracking-[.2em] text-amber-600">{isConstructionWarehouse ? "Kho vật tư xây dựng → đội thợ / công trình" : "Kho nguyên liệu → pha chế"}</div>
           <h1 className="mt-2 text-3xl font-black text-emerald-900 sm:text-4xl">Phiếu xuất kho</h1>
           <p className="mt-2 max-w-3xl text-slate-600">{isConstructionWarehouse ? "Ghi nhận vật tư cấp cho đội thợ hoặc từng công trình. Phiếu hoàn thành sẽ trừ trực tiếp tồn vật tư của Kho thợ." : "Ghi nhận nguyên liệu cấp cho quầy. Đây là luồng xuất vật lý, tách biệt với tiêu hao lý thuyết tính từ công thức món bán."}</p></div>
-        <button disabled={saving} onClick={() => setForm(emptyForm())} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-800 bg-white px-4 font-bold text-emerald-900 hover:bg-emerald-50"><Plus className="h-4 w-4" /> Phiếu mới</button>
+        <button disabled={saving} onClick={() => { setForm(emptyForm()); setError(""); setFormOpen(true); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-800 bg-white px-4 font-bold text-emerald-900 hover:bg-emerald-50"><Plus className="h-4 w-4" /> Phiếu mới</button>
       </header>
 
       {error && <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-3 font-medium text-rose-700">{error}</div>}
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      {formOpen && <InventoryIssueFormDialog title={form.id ? "Sửa phiếu xuất kho" : "Tạo phiếu xuất kho"} busy={saving || confirmation !== null} onClose={()=>setFormOpen(false)}>{error && <p role="alert" className="m-4 rounded-lg bg-rose-50 p-3 text-rose-700">{error}</p>}      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="grid gap-4 border-b bg-emerald-950 p-5 text-white md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm font-semibold">Ngày xuất<input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950" /></label>
           <label className="text-sm font-semibold">Nơi nhận<select value={destinations.includes(form.destination) ? form.destination : "Khác"} onChange={(e) => setForm({ ...form, destination: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/20 bg-white px-3 text-slate-950">{destinations.map((destination) => <option key={destination} value={destination}>{destination}</option>)}</select></label>
@@ -253,13 +256,16 @@ export default function InventoryIssuesPage() {
         </div>
       </section>
 
+</InventoryIssueFormDialog>}
+
       <section className="mt-7 rounded-xl border bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div><h2 className="text-xl font-black text-emerald-950">Lịch sử xuất kho</h2><p className="text-sm text-slate-500">Mới nhất hiển thị trước</p></div>
-          <label className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Tìm mã, nơi nhận..." className="h-10 rounded-md border pl-9 pr-3" /></label></div>
-        {loading ? <div className="p-12 text-center text-slate-500">Đang tải...</div> : filteredIssues.length === 0 ? <div className="p-12 text-center text-slate-500"><ClipboardList className="mx-auto mb-2 text-slate-300" />Chưa có phiếu xuất kho.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-4">Thời gian tạo</th><th className="p-4">Mã phiếu</th><th className="p-4">Nơi nhận</th><th className="p-4">Người xuất</th><th className="p-4 text-right">Số dòng</th><th className="p-4 text-right">Tổng lượng</th><th className="p-4">Kho</th><th className="p-4">In tự động</th><th className="p-4"></th></tr></thead><tbody className="divide-y">{filteredIssues.map((issue) => {
+          <div className="flex w-full min-w-0 flex-wrap items-end gap-3 lg:w-auto"><InventoryDateFilter from={dateFrom} to={dateTo} onChange={(from,to)=>{setDateFrom(from);setDateTo(to);setPage(1)}}/><label className="relative w-full min-w-0 sm:w-64"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={historySearch} onChange={(e) => {setHistorySearch(e.target.value);setPage(1);}} placeholder="Tìm mã, nơi nhận..." className="h-10 w-full rounded-md border pl-9 pr-3" /></label></div></div>
+        {loading ? <div className="p-12 text-center text-slate-500">Đang tải...</div> : issues.length === 0 ? <div className="p-12 text-center text-slate-500"><ClipboardList className="mx-auto mb-2 text-slate-300" />Chưa có phiếu xuất kho.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-4">Thời gian tạo</th><th className="p-4">Mã phiếu</th><th className="p-4">Nơi nhận</th><th className="p-4">Người xuất</th><th className="p-4 text-right">Số dòng</th><th className="p-4 text-right">Tổng lượng</th><th className="p-4">Kho</th><th className="p-4">In tự động</th><th className="p-4"></th></tr></thead><tbody className="divide-y">{issues.map((issue) => {
           const printStatus = issue.printJob ? getPrintStatusPresentation(issue.printJob.status) : null;
           return <tr key={issue.id} className="hover:bg-slate-50"><td className="p-4">{new Date(issue.createdAt).toLocaleString("vi-VN")}<small className="block font-semibold text-emerald-700">{issue.shiftType ? (issue.shiftType === "single" ? "Ca làm việc" : `Ca ${issue.shiftType.slice(-1)}`) : "Không theo ca"}</small></td><td className="p-4 font-bold text-emerald-800">{issue.issueCode}</td><td className="p-4">{issue.destination}</td><td className="p-4">{issue.issuedBy}</td><td className="p-4 text-right">{issue.itemCount}</td><td className="p-4 text-right font-bold">{quantity(issue.totalQuantity)}</td><td className="p-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${issue.status === "cancelled" ? "bg-rose-100 text-rose-800" : issue.status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{issue.status === "cancelled" ? "Đã hủy" : issue.status === "completed" ? "Đã trừ kho" : "Phiếu nháp"}</span>{issue.status === "cancelled" && <div className="mt-2 max-w-64 text-xs text-rose-700"><p className="whitespace-pre-wrap break-words">Lý do: {issue.cancelReason}</p><p>{issue.cancelledBy} · {issue.cancelledAt ? new Date(issue.cancelledAt).toLocaleString("vi-VN") : ""}</p></div>}</td><td className="p-4">{printStatus ? <><span className={`rounded-full px-3 py-1 text-xs font-bold ${printStatus.className}`}>{printStatus.label}</span>{issue.printJob?.lastError && <small className="mt-1 block max-w-48 text-rose-700" title={issue.printJob.lastError}>{issue.printJob.lastError}</small>}</> : <span className="text-slate-400">—</span>}</td><td className="p-4 text-right"><div className="flex flex-wrap justify-end gap-3">{issue.status === "completed" && printStatus?.canReprint && <button disabled={reprintingJobId === issue.id} onClick={() => void reprint(issue)} className="inline-flex items-center gap-1 font-bold text-blue-700 disabled:opacity-50"><RotateCcw className="h-4 w-4" /> In lại</button>}{canManualPrintInventoryIssue(issue.status) && <button onClick={() => printInventoryIssue(issue)} className="inline-flex items-center gap-1 font-bold text-emerald-700"><Printer className="h-4 w-4" /> In thủ công</button>}{canEditIssue(role, issue.status) && <button disabled={saving} onClick={() => edit(issue)} className="font-bold text-emerald-700 disabled:opacity-50">Sửa</button>}{isAdmin && issue.status !== "cancelled" && <button disabled={saving} onClick={() => requestCancellation(issue)} className="font-bold text-rose-600 disabled:opacity-50">Hủy phiếu</button>}</div></td></tr>;
         })}</tbody></table></div>}
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t p-3"><label className="flex items-center gap-2 text-sm text-slate-600">Số dòng / trang<select aria-label="Số phiếu xuất mỗi trang" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1)}} className="h-10 rounded-md border bg-white px-3">{[10,20,50,100].map(size=><option key={size} value={size}>{size}</option>)}</select></label><Pagination currentPage={page} totalItems={issueTotal} pageSize={pageSize} onPageChange={setPage} disabled={loading} className="min-h-0 max-w-full flex-wrap border-0 p-0 [&_button]:h-9 [&_button]:min-w-9 [&_button]:w-9 [&>div]:gap-1"/></footer>
       </section>
     </div>
     <ConfirmDialog

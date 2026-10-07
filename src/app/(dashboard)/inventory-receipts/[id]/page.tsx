@@ -111,6 +111,7 @@ export default function FieldInventoryReceiptDetailPage() {
   }
   const editableStatus = receipt.status === "pending_explanation" || receipt.status === "draft";
   const editable = editableStatus && receipt.canEdit;
+  const canCorrect = editable || (role === "admin" && receipt.status === "completed");
   const listReturnTo = (location.state as { returnTo?: string } | null)?.returnTo || "/admin/inventory-receipts";
 
   async function choose(product: ProductResult) {
@@ -334,10 +335,10 @@ export default function FieldInventoryReceiptDetailPage() {
                       </div>
                       <div className="flex items-center justify-between gap-2 sm:justify-end">
                         <b className="mr-1 whitespace-nowrap tabular-nums text-slate-950">{item.lineTotal.toLocaleString("vi-VN")} ₫</b>
-                        {editable && (
+                        {canCorrect && (
                           <>
                             <Button variant="ghost" size="icon" onClick={() => beginEdit(item)} className="h-10 w-10 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800" aria-label={`Sửa ${item.productName}`}><Pencil className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" onClick={async () => { if (confirm("Xóa dòng hàng?")) { await deleteInventoryReceiptItem(item.id); reload(); } }} className="h-10 w-10 text-rose-600 hover:bg-rose-50 hover:text-rose-700" aria-label={`Xóa ${item.productName}`}><Trash2 className="h-4 w-4" /></Button>
+                            {editable && <Button variant="ghost" size="icon" onClick={async () => { if (confirm("Xóa dòng hàng?")) { await deleteInventoryReceiptItem(item.id); reload(); } }} className="h-10 w-10 text-rose-600 hover:bg-rose-50 hover:text-rose-700" aria-label={`Xóa ${item.productName}`}><Trash2 className="h-4 w-4" /></Button>}
                           </>
                         )}
                       </div>

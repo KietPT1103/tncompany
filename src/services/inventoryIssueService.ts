@@ -76,3 +76,9 @@ export async function cancelInventoryIssue(issue: InventoryIssue, reason: string
   });
   return result.item;
 }
+
+export async function getInventoryIssuePage(storeId: string, filters: { dateFrom: string; dateTo: string; keyword: string; page: number; limit: number }) {
+  const query = new URLSearchParams({ storeId });
+  Object.entries(filters).forEach(([key, value]) => query.set(key, String(value)));
+  return apiRequest<{ items: InventoryIssue[]; pagination: { page: number; limit: number; total: number; pages: number } }>("/inventory-issues.php?" + query);
+}

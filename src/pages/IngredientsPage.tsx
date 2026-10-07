@@ -1,3 +1,7 @@
+import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
+import { inventoryToday } from "@/lib/inventoryPeriods";
+import { Pagination } from "@/components/ui/Pagination";
+import { paginateItems } from "@/lib/listPagination";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { Boxes, Download, Eye, EyeOff, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
@@ -51,8 +55,10 @@ export default function IngredientsPage() {
   const [items, setItems] = useState<Ingredient[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [visibility, setVisibility] = useState<"active" | "hidden" | "all">("active");
-  const initialPeriod = useMemo(defaultPeriod, []);
+  const initialPeriod = useMemo(() => ({ dateFrom: inventoryToday(), dateTo: inventoryToday() }), []);
   const [dateFrom, setDateFrom] = useState(initialPeriod.dateFrom);
   const [dateTo, setDateTo] = useState(initialPeriod.dateTo);
   const [kind, setKind] = useState<"all" | "ingredient" | "consumable" | "fresh">("all");
@@ -69,6 +75,7 @@ export default function IngredientsPage() {
     title: "",
     variant: "info",
   });
+  const loadSequence = useRef(0);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   function showToast(title: string, variant: ToastVariant, description?: string) {
@@ -76,22 +83,26 @@ export default function IngredientsPage() {
   }
 
   async function reload() {
+    const sequence = ++loadSequence.current;
     const [ingredientResult, supplierResult] = await Promise.all([
       getIngredients(storeId, "", undefined, { dateFrom, dateTo }), getSuppliers(storeId),
     ]);
+    if (sequence !== loadSequence.current) return;
     setItems(ingredientResult.items);
     setSuppliers(supplierResult.items);
   }
   useEffect(() => {
+    let active = true;
     setLoading(true);
-    reload().catch((e) => showToast(
+    reload().catch((e) => { if (active) showToast(
       `Không thể tải danh sách ${itemLabel}`,
       "error",
       e instanceof Error ? e.message : "Không thể tải dữ liệu.",
-    ))
-      .finally(() => setLoading(false));
+    ); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; loadSequence.current++; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId]);
+  }, [storeId, dateFrom, dateTo]);
   const filtered = useMemo(() => {
     const q = search.trim().toLocaleLowerCase("vi");
     return items.filter((item) =>
@@ -100,6 +111,9 @@ export default function IngredientsPage() {
       (!q || `${item.ingredientCode} ${item.ingredientName} ${item.supplierName || ""}`.toLocaleLowerCase("vi").includes(q))
     );
   }, [items, search, visibility, kind]);
+
+  useEffect(() => { setPage(1); }, [search, visibility, kind, storeId, dateFrom, dateTo, pageSize]);
+  const paged = paginateItems(filtered, page, pageSize);
 
   function startCreate() {
     setEditing(null);
@@ -255,7 +269,7 @@ export default function IngredientsPage() {
     }
   }
 
-  return <div className="warehouse-ui min-h-screen bg-slate-50 p-4 font-sans md:p-8"><div className="mx-auto max-w-[1680px]">
+  return <div className="warehouse-ui min-h-screen min-w-0 bg-slate-50 p-4 font-sans md:p-8"><div className="mx-auto max-w-[1680px]">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="text-3xl font-bold">{itemTitle}</h1><p className="mt-1 text-slate-500">{isConstructionWarehouse ? "Danh mục độc lập của kho thợ, phục vụ nhập, xuất và kiểm kê vật tư xây dựng." : "Dữ liệu riêng cho định mức, nhập hàng và kiểm kho."}</p></div>
       <div className="flex flex-wrap gap-2">
@@ -273,17 +287,12 @@ export default function IngredientsPage() {
       {label:"Sắp hết hàng",value:items.filter(i=>i.isActive&&i.stockQuantity>0&&i.stockQuantity/(i.purchaseToBaseFactor||1)<=1).length,tone:"tone-2"},
       {label:"Hết hàng",value:items.filter(i=>i.isActive&&i.stockQuantity<=0).length,tone:"tone-3"}
     ].map(stat=><div className="warehouse-stat" key={stat.label}><span className={`warehouse-stat-icon ${stat.tone}`}><Boxes className="h-7 w-7"/></span><div><p className="text-sm text-slate-500">{stat.label}</p><strong className="mt-2 block text-3xl">{stat.value}</strong></div></div>)}</div>
-    <div className="mt-6 rounded-3xl border bg-white shadow-sm">
-      <div className="flex flex-wrap items-center gap-3 border-b p-5"><label className="relative block min-w-[260px] flex-1"><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Tìm mã, tên ${itemLabel} hoặc nhà phân phối`} className="h-12 w-full rounded-xl border bg-slate-50 pl-12 pr-4" /></label>
-        <label className="text-sm font-semibold text-slate-700">Từ ngày<input aria-label="Từ ngày" type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 block h-12 rounded-xl border px-3" /></label>
-        <label className="text-sm font-semibold text-slate-700">Đến ngày<input aria-label="Đến ngày" type="date" value={dateTo} min={dateFrom} onChange={(e) => setDateTo(e.target.value)} className="mt-1 block h-12 rounded-xl border px-3" /></label>
-        <button disabled={loading || !dateFrom || !dateTo || dateFrom > dateTo} onClick={() => { setLoading(true); reload().catch((e) => showToast("Không thể tải số liệu theo kỳ", "error", e instanceof Error ? e.message : undefined)).finally(() => setLoading(false)); }} className="mt-5 h-12 rounded-xl bg-emerald-700 px-4 font-bold text-white disabled:opacity-50">Xem</button>
-        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">Loại
-          <select aria-label="Lọc loại nguyên vật liệu" value={kind} onChange={(event) => setKind(event.target.value as typeof kind)} className="h-12 rounded-xl border bg-white px-3"><option value="all">Tất cả</option><option value="ingredient">Nguyên liệu</option><option value="consumable">Vật liệu tiêu hao</option><option value="fresh">Nguyên liệu tươi</option></select>
+    <div className="mt-6 min-w-0 overflow-hidden rounded-3xl border bg-white shadow-sm">
+      <div className="grid min-w-0 items-end gap-3 border-b p-4 sm:grid-cols-2 2xl:grid-cols-[minmax(200px,1fr)_minmax(440px,1.5fr)_150px_160px]"><label className="min-w-0 space-y-1 sm:col-span-2 2xl:col-span-1"><span className="text-sm font-medium text-slate-700">Tìm kiếm</span><span className="relative block"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={"Tìm mã, tên " + itemLabel + " hoặc nhà phân phối"} className="h-10 w-full min-w-0 rounded-md border bg-white pl-9 pr-3" /></span></label><InventoryDateFilter from={dateFrom} to={dateTo} disabled={loading} onChange={(from,to)=>{setDateFrom(from);setDateTo(to)}}/><label className="min-w-0 space-y-1 text-sm font-medium text-slate-700">Loại
+          <select aria-label="Lọc loại nguyên vật liệu" value={kind} onChange={(event) => setKind(event.target.value as typeof kind)} className="block h-10 w-full min-w-0 rounded-md border bg-white px-3"><option value="all">Tất cả</option><option value="ingredient">Nguyên liệu</option><option value="consumable">Vật liệu tiêu hao</option><option value="fresh">Nguyên liệu tươi</option></select>
         </label>
-        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">Trạng thái
-          <select aria-label="Lọc trạng thái nguyên liệu" value={visibility} onChange={(event) => setVisibility(event.target.value as "active" | "hidden" | "all")} className="h-12 rounded-xl border bg-white px-3">
+        <label className="min-w-0 space-y-1 text-sm font-medium text-slate-700">Trạng thái
+          <select aria-label="Lọc trạng thái nguyên liệu" value={visibility} onChange={(event) => setVisibility(event.target.value as "active" | "hidden" | "all")} className="block h-10 w-full min-w-0 rounded-md border bg-white px-3">
             <option value="active">Đang sử dụng</option><option value="hidden">Đã ẩn</option><option value="all">Tất cả</option>
           </select>
         </label></div>
@@ -291,12 +300,13 @@ export default function IngredientsPage() {
         <thead className="bg-slate-50 text-sm text-slate-600"><tr><th className="p-4">Mã</th><th className="p-4">Tên {itemLabel}</th><th className="p-4">Nhà phân phối</th><th className="p-4 text-right">Tồn hiện tại</th><th className="p-4">Đơn vị</th><th className="p-4 text-right">Giá vốn</th><th className="p-4">Trạng thái</th><th className="p-4 text-right">Thao tác</th></tr></thead>
         <tbody className="divide-y">{loading ? <tr><td colSpan={8} className="p-14 text-center"><LoaderCircle className="mx-auto animate-spin" /></td></tr>
           : filtered.length === 0 ? <tr><td colSpan={8} className="p-14 text-center text-slate-500"><Boxes className="mx-auto mb-2 text-slate-300" />{visibility === "hidden" ? `Không có ${itemLabel} đã ẩn.` : `Không có ${itemLabel} phù hợp.`}</td></tr>
-          : filtered.map((item) => <tr key={item.id} className={item.isActive ? "hover:bg-slate-50" : "bg-slate-50/70 text-slate-500"}>
+          : paged.items.map((item) => <tr key={item.id} className={item.isActive ? "hover:bg-slate-50" : "bg-slate-50/70 text-slate-500"}>
             <td className="p-4 font-bold text-emerald-700">{item.ingredientCode}</td><td className="p-4"><b>{item.ingredientName}</b>{!item.isActive && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Đã ẩn</span>}<small className="block text-slate-500">{item.supplierItemCode}</small></td>
             <td className="p-4">{item.supplierName || "Chưa gán"}</td><td className="p-4 text-right font-semibold">{item.itemKind === "fresh" ? "—" : (item.stockQuantity / (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 3 })}</td><td className="p-4"><b>{item.purchaseUnit || item.unit || "—"}</b></td><td className="p-4 text-right">{(Number(item.cost || 0) * (item.purchaseToBaseFactor || 1)).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ₫/{item.purchaseUnit || item.unit}</td>
             <td className="p-4"><span className={`warehouse-badge ${item.stockQuantity<=0?"status-deleted":item.stockQuantity/(item.purchaseToBaseFactor||1)<=1?"status-pending_explanation":""}`}>● {item.stockQuantity<=0?"Hết hàng":item.stockQuantity/(item.purchaseToBaseFactor||1)<=1?"Sắp hết":"Còn hàng"}</span></td><td className="p-4"><div className="flex justify-end gap-2"><button onClick={() => startEdit(item)} className="p-2 text-emerald-700"><Pencil className="h-4 w-4" /></button>{item.isActive ? <button title="Tạm ẩn" aria-label={`Tạm ẩn ${item.ingredientName}`} disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hide")} className="p-2 text-amber-600 disabled:opacity-50"><EyeOff className="h-4 w-4" /></button> : <button title="Hiện lại" aria-label={`Hiện lại ${item.ingredientName}`} disabled={Boolean(restoring)} onClick={() => void restore(item)} className="p-2 text-emerald-700 disabled:opacity-50">{restoring === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}</button>}<button title="Xóa vĩnh viễn" disabled={Boolean(deleting)} onClick={() => requestRemove(item, "hard")} className="p-2 text-rose-600 disabled:opacity-50">{deleting === item.ingredientCode ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button></div></td>
           </tr>)}</tbody>
       </table></div>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t p-3"><label className="flex items-center gap-2 text-sm text-slate-600">Số dòng / trang<select aria-label="Số dòng nguyên liệu mỗi trang" value={pageSize} onChange={e=>setPageSize(Number(e.target.value))} className="h-10 rounded-md border bg-white px-3">{[10,20,50,100].map(size=><option key={size} value={size}>{size}</option>)}</select></label><Pagination currentPage={paged.pagination.currentPage} totalItems={filtered.length} pageSize={pageSize} onPageChange={setPage} disabled={loading} className="min-h-0 max-w-full flex-wrap border-0 p-0 [&_button]:h-9 [&_button]:min-w-9 [&_button]:w-9 [&>div]:gap-1"/></footer>
     </div>
   </div>
   {open && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/55 p-4"><div className="w-full max-w-2xl rounded-3xl bg-white p-6">

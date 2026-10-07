@@ -102,8 +102,8 @@ function receipts_list(): void
         $where[] = 'r.status = :status';
         $params['status'] = $status;
     }
-    foreach (['dateFrom' => ['r.created_at >= :date_from', 'date_from', ' 00:00:00'],
-              'dateTo' => ['r.created_at <= :date_to', 'date_to', ' 23:59:59']] as $queryKey => $definition) {
+    foreach (['dateFrom' => [$view === 'ledger' ? 'r.receipt_date >= :date_from' : 'r.created_at >= :date_from', 'date_from', $view === 'ledger' ? '' : ' 00:00:00'],
+              'dateTo' => [$view === 'ledger' ? 'r.receipt_date <= :date_to' : 'r.created_at <= :date_to', 'date_to', $view === 'ledger' ? '' : ' 23:59:59']] as $queryKey => $definition) {
         $value = trim((string) ($_GET[$queryKey] ?? ''));
         if ($value !== '') {
             $where[] = $definition[0];

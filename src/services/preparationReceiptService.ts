@@ -37,9 +37,9 @@ export type PreparationReceiptHistory = {
   items: PreparationReceiptLine[];
 };
 
-export function getPreparationReceipts(storeId: string) {
+export function getPreparationReceipts(storeId: string, period?: { from: string; to: string }) {
   return apiRequest<{ pending: PendingPreparationReceipt[]; history: PreparationReceiptHistory[] }>(
-    `/preparation-receipts.php?storeId=${encodeURIComponent(storeId)}`,
+    `/preparation-receipts.php?storeId=${encodeURIComponent(storeId)}&dateFrom=${period?.from || ""}&dateTo=${period?.to || ""}`,
   );
 }
 

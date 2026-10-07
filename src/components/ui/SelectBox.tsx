@@ -51,7 +51,7 @@ const normalizeSearchText = (value: string) =>
   value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("vi");
+    .toLocaleLowerCase("vi").replace(/đ/g, "d");
 
 export function SelectBox<T extends string>({
   value,
