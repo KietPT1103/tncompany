@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, RefreshCw, Store } from "lucide-react";
+import { CalendarDays, Download, RefreshCw, Store } from "lucide-react";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { getAllBills } from "@/services/billService";
@@ -134,6 +134,42 @@ export default function OverviewPage() {
   const [weeklyQuantity, setWeeklyQuantity] = useState<OverviewWeeklyQuantityRow[]>([]);
   const [weeklyQuantityLoading, setWeeklyQuantityLoading] = useState(true);
   const [weeklyQuantityError, setWeeklyQuantityError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+
+  const exportRange = async () => {
+    if (!storeId || exporting) return;
+    const { startDate, endDate } = ranges;
+    setExporting(true);
+    setExportError("");
+    try {
+      const options = { storeId, startDate, endDate };
+      const [bills, vouchers, products, categories] = await Promise.all([
+        getAllBills({ ...options, includeCancelled: true }),
+        getCashVouchers({ ...options, limitCount: 5000 }),
+        getAllProducts(storeId),
+        getCategories(storeId),
+      ]);
+      const cups = getCupProductCodes(products, categories);
+      const shifts = await loadOverviewShiftRevenue({ ...options, cupProductCodes: cups });
+      const [{ buildOverviewRangeWorkbook }, { downloadExcelWorkbook }] = await Promise.all([
+        import("./overviewExcelExport"),
+        import("../bills/billExcelExport"),
+      ]);
+      const workbook = buildOverviewRangeWorkbook({
+        storeName, startDate: formatDateInputValue(startDate), endDate: formatDateInputValue(endDate),
+        snapshot: buildOverviewSnapshot(bills, startDate, endDate, getBakeryProductCodes(products, categories), cups),
+        vouchers: calculateOverviewVoucherTotals(vouchers, startDate, endDate),
+        shifts,
+      });
+      await downloadExcelWorkbook(workbook, `tong-quan-${storeId.replace(/[^a-zA-Z0-9_-]/g, "_")}-${formatDateInputValue(startDate)}_${formatDateInputValue(endDate)}.xlsx`);
+    } catch (reason) {
+      console.error(reason);
+      setExportError("Không thể xuất Excel. Vui lòng kiểm tra kết nối và thử lại.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     setCupProductCodes(null);
@@ -336,6 +372,14 @@ export default function OverviewPage() {
             </button>
           </div>
         </header>
+
+        <div className="flex flex-wrap items-end justify-end gap-3">
+          <button type="button" onClick={() => void exportRange()} disabled={!storeId || exporting} aria-busy={exporting} className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+            <Download className="h-4 w-4" aria-hidden="true" />
+            {exporting ? "Đang xuất Excel…" : "Xuất Excel"}
+          </button>
+          {exportError ? <p role="alert" className="w-full text-right text-sm text-rose-700">{exportError}</p> : null}
+        </div>
 
         <div className="flex flex-col gap-2 border-y border-slate-200 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span className="inline-flex items-center gap-1.5">
