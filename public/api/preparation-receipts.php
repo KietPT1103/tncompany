@@ -77,10 +77,21 @@ $user = auth_require_permission('preparation_receipts.access');
 if ($method === 'GET') {
     $storeId = field_inventory_require_store($user, trim((string) ($_GET['storeId'] ?? '')));
     if ($storeId === 'warehouse') respond_error('Kho thợ không sử dụng kho pha chế.', 422);
+    $dateParams = ['store' => $storeId]; $pendingDates = ''; $historyDates = '';
+    foreach (['dateFrom' => '>=', 'dateTo' => '<='] as $key => $operator) {
+        $value = trim((string) ($_GET[$key] ?? ''));
+        if ($value === '') continue;
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        if (!$date || $date->format('Y-m-d') !== $value) respond_error('Ngày lọc không hợp lệ.', 422);
+        $dateParams[$key] = $value;
+        $pendingDates .= " AND issue_date $operator :$key";
+        $historyDates .= " AND r.receipt_date $operator :$key";
+    }
+    if (isset($dateParams['dateFrom'], $dateParams['dateTo']) && $dateParams['dateFrom'] > $dateParams['dateTo']) respond_error('Khoảng ngày không hợp lệ.', 422);
     $pendingStatement = db()->prepare('SELECT id,issue_code,issue_date,destination,issued_by,completed_at
         FROM inventory_issues WHERE store_id=:store AND status="completed" AND requires_preparation_receipt=1
-        ORDER BY completed_at ASC LIMIT 100');
-    $pendingStatement->execute(['store' => $storeId]);
+        ' . $pendingDates . ' ORDER BY completed_at ASC');
+    $pendingStatement->execute($dateParams);
     $pending = array_map(static function (array $row): array {
         return [
             'issueId' => (string) $row['id'], 'issueCode' => (string) $row['issue_code'],
@@ -92,8 +103,8 @@ if ($method === 'GET') {
 
     $historyStatement = db()->prepare('SELECT r.id,r.issue_id,r.receipt_code,r.receipt_date,r.received_by,r.note,r.created_at,r.status,r.cancel_reason,r.cancelled_by,r.cancelled_at,
         i.issue_code FROM preparation_receipts r LEFT JOIN inventory_issues i ON i.id=r.issue_id
-        WHERE r.store_id=:store ORDER BY r.created_at DESC LIMIT 50');
-    $historyStatement->execute(['store' => $storeId]);
+        WHERE r.store_id=:store' . $historyDates . ' ORDER BY r.created_at DESC,r.id DESC');
+    $historyStatement->execute($dateParams);
     $itemStatement = db()->prepare('SELECT ingredient_code,ingredient_name,unit,expected_quantity,actual_quantity FROM preparation_receipt_items WHERE receipt_id=:receipt ORDER BY id');
     $history = array_map(static function (array $row) use ($itemStatement): array {
         $itemStatement->execute(['receipt' => $row['id']]);

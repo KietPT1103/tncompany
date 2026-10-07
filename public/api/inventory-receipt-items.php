@@ -99,6 +99,41 @@ if ($method === 'POST') {
 
 $id = (int) ($_GET['id'] ?? $body['id'] ?? 0);
 $existing = receipt_item_find($user, $id);
+if ($existing['status'] === 'completed' && in_array($method, ['PUT', 'PATCH'], true)) {
+    if (!field_inventory_is_admin($user)) respond_error('Chỉ admin được sửa phiếu đã nhập.', 403);
+    $pdo = db(); $pdo->beginTransaction();
+    try {
+        $lock = $pdo->prepare('SELECT status FROM inventory_receipts WHERE id=:id FOR UPDATE');
+        $lock->execute(['id' => $existing['receipt_id']]);
+        if ($lock->fetchColumn() !== 'completed') throw new RuntimeException('Trạng thái phiếu đã thay đổi.');
+        $lock = $pdo->prepare('SELECT * FROM inventory_receipt_items WHERE id=:id FOR UPDATE');
+        $lock->execute(['id' => $id]); $existing = $lock->fetch();
+        if (!$existing) throw new RuntimeException('Dòng hàng không còn tồn tại.');
+        [$quantity, $unitPrice, $lineTotal] = receipt_item_values($body + ['quantity' => $existing['quantity'], 'unitPrice' => $existing['unit_cost']]);
+        if ($existing['ingredient_id']) {
+            $lock = $pdo->prepare('SELECT * FROM ingredients WHERE id=:id FOR UPDATE');
+            $lock->execute(['id' => $existing['ingredient_id']]); $ingredient = $lock->fetch();
+            if (!$ingredient) throw new RuntimeException('Không tìm thấy nguyên liệu.');
+            $lock = $pdo->prepare('SELECT * FROM inventory_stock_movements WHERE receipt_item_id=:id FOR UPDATE');
+            $lock->execute(['id' => $id]); $movement = $lock->fetch();
+            if ($movement) {
+                $base = round($quantity * max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1)), 3);
+                $stock = round((float) $ingredient['stock_quantity'] + $base - (float) $movement['quantity'], 3);
+                if ($stock < 0) throw new InvalidArgumentException('Điều chỉnh làm tồn kho âm.');
+                $pdo->prepare('UPDATE ingredients SET stock_quantity=:stock,updated_at=NOW() WHERE id=:id')->execute(['stock' => $stock, 'id' => $ingredient['id']]);
+                $pdo->prepare('UPDATE inventory_stock_movements SET quantity=:quantity,stock_after=stock_before+:amount WHERE id=:id')->execute(['quantity' => $base, 'amount' => $base, 'id' => $movement['id']]);
+            }
+        }
+        $pdo->prepare('UPDATE inventory_receipt_items SET quantity=:quantity,unit_cost=:cost,line_total=:total,note=:note,updated_at=NOW() WHERE id=:id')->execute(['quantity' => $quantity, 'cost' => $unitPrice, 'total' => $lineTotal, 'note' => trim((string) ($body['note'] ?? $existing['note'])) ?: null, 'id' => $id]);
+        receipt_item_recalculate((string) $existing['receipt_id']); $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($error instanceof InvalidArgumentException) respond_error($error->getMessage(), 422);
+        throw $error;
+    }
+    respond_ok(['items' => field_inventory_load_items((string) $existing['receipt_id'])]);
+}
+
 field_inventory_assert_receipt_editable(
     $user,
     field_inventory_require_receipt($user, (string) $existing['receipt_id'])

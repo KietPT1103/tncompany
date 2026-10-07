@@ -109,9 +109,30 @@ $user = auth_require_permission('inventory_issues.access');
 if ($method === 'GET') {
     $storeId = field_inventory_require_store($user, trim((string) ($_GET['storeId'] ?? '')));
     $limit = max(1, min(100, (int) ($_GET['limit'] ?? 50)));
-    $statement = db()->prepare("SELECT * FROM inventory_issues WHERE store_id=:store_id ORDER BY issue_date DESC,created_at DESC LIMIT $limit");
-    $statement->execute(['store_id' => $storeId]);
-    respond_ok(['items' => array_map('inventory_issues_payload', $statement->fetchAll())]);
+    $page = max(1, (int) ($_GET['page'] ?? 1));
+    $where = ['store_id=:store_id']; $params = ['store_id' => $storeId];
+    foreach (['dateFrom' => '>=', 'dateTo' => '<='] as $key => $operator) {
+        $value = trim((string) ($_GET[$key] ?? ''));
+        if ($value === '') continue;
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        if (!$date || $date->format('Y-m-d') !== $value) respond_error('Ngày lọc không hợp lệ.', 422);
+        $where[] = "issue_date $operator :$key"; $params[$key] = $value;
+    }
+    if (isset($params['dateFrom'], $params['dateTo']) && $params['dateFrom'] > $params['dateTo']) respond_error('Khoảng ngày không hợp lệ.', 422);
+    $keyword = trim((string) ($_GET['keyword'] ?? ''));
+    if ($keyword !== '') {
+        $where[] = '(issue_code LIKE :code OR destination LIKE :destination OR issued_by LIKE :issued_by)';
+        foreach (['code', 'destination', 'issued_by'] as $key) $params[$key] = '%' . $keyword . '%';
+    }
+    $filter = implode(' AND ', $where);
+    $count = db()->prepare("SELECT COUNT(*) FROM inventory_issues WHERE $filter");
+    $count->execute($params); $total = (int) $count->fetchColumn();
+    $pages = max(1, (int) ceil($total / $limit)); $page = min($page, $pages);
+    $offset = ($page - 1) * $limit;
+    $statement = db()->prepare("SELECT * FROM inventory_issues WHERE $filter ORDER BY issue_date DESC,created_at DESC,id DESC LIMIT $limit OFFSET $offset");
+    $statement->execute($params);
+    respond_ok(['items' => array_map('inventory_issues_payload', $statement->fetchAll()), 'pagination' => ['page' => $page, 'limit' => $limit, 'total' => $total, 'pages' => $pages]]);
+
 }
 
 $body = read_json_body();

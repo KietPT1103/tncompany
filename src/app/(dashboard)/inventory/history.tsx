@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
+import { InventoryPagination } from "@/components/ui/InventoryPagination";
+import { paginateItems } from "@/lib/listPagination";
+import { inventoryToday } from "@/lib/inventoryPeriods";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, LoaderCircle, RefreshCw, Search } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { getInventoryHistory, type InventoryHistoryEntry } from "@/services/inventoryHistoryService";
+import { getAllInventoryHistory, type InventoryHistoryEntry } from "@/services/inventoryHistoryService";
 
 const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const number = (value: number) => value.toLocaleString("vi-VN", { maximumFractionDigits: 3 });
@@ -13,26 +17,29 @@ const statusText: Record<InventoryHistoryEntry["status"], string> = {
 export default function InventoryHistoryTab() {
   const { storeId } = useStore();
   const today = new Date();
-  const [dateFrom, setDateFrom] = useState(iso(new Date(today.getFullYear(), today.getMonth(), 1)));
-  const [dateTo, setDateTo] = useState(iso(today));
+  const [dateFrom, setDateFrom] = useState(inventoryToday);
+  const [dateTo, setDateTo] = useState(inventoryToday);
   const [type, setType] = useState<"all" | "receipt" | "issue">("all");
+  const [page,setPage] = useState(1); const [pageSize,setPageSize] = useState(20);
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<InventoryHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const loadSequence = useRef(0);
   async function load() {
+    const sequence = ++loadSequence.current;
     setLoading(true); setError("");
     try {
-      const result = await getInventoryHistory({ storeId, type, dateFrom, dateTo, limit: 200 });
-      setEntries(result.items);
+      const result = await getAllInventoryHistory({ storeId, type, dateFrom, dateTo });
+      if(sequence===loadSequence.current)setEntries(result.items);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể tải lịch sử kho.");
+      if(sequence===loadSequence.current)setError(reason instanceof Error ? reason.message : "Không thể tải lịch sử kho.");
     } finally {
-      setLoading(false);
+      if(sequence===loadSequence.current)setLoading(false);
     }
   }
-  useEffect(() => { void load(); }, [storeId]);
+  useEffect(() => { void load(); return()=>{loadSequence.current++}; }, [storeId,type,dateFrom,dateTo]);
 
   const rows = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase("vi");
@@ -40,6 +47,8 @@ export default function InventoryHistoryTab() {
       !keyword || `${entry.code} ${entry.actorName} ${entry.counterpart} ${item.ingredientCode} ${item.ingredientName}`.toLocaleLowerCase("vi").includes(keyword)
     );
   }, [entries, query]);
+  useEffect(()=>{setPage(1)},[storeId,type,dateFrom,dateTo,query,pageSize]);
+  const paged=paginateItems(rows,page,pageSize);
   const receiptTotal = rows.filter(({ entry }) => entry.type === "receipt").reduce((sum, row) => sum + row.item.quantity, 0);
   const issueTotal = rows.filter(({ entry }) => entry.type === "issue").reduce((sum, row) => sum + row.item.quantity, 0);
 
@@ -49,9 +58,7 @@ export default function InventoryHistoryTab() {
         <div><h2 className="text-2xl font-black text-emerald-950">Lịch sử nhập · xuất kho</h2><p className="text-sm text-slate-500">Đối chiếu chi tiết từng nguyên liệu, số lượng, giá nhập và người thực hiện.</p></div>
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs font-bold text-slate-600">Loại<select value={type} onChange={(event) => setType(event.target.value as typeof type)} className="mt-1 block h-10 rounded-lg border px-3 text-sm"><option value="all">Tất cả</option><option value="receipt">Nhập kho</option><option value="issue">Xuất kho</option></select></label>
-          <label className="text-xs font-bold text-slate-600">Từ ngày<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block h-10 rounded-lg border px-3 text-sm" /></label>
-          <label className="text-xs font-bold text-slate-600">Đến ngày<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1 block h-10 rounded-lg border px-3 text-sm" /></label>
-          <button onClick={() => void load()} disabled={loading} className="flex h-10 items-center gap-2 rounded-lg border border-emerald-700 px-4 font-bold text-emerald-800 disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Xem</button>
+          <InventoryDateFilter disabled={loading} from={dateFrom} to={dateTo} onChange={(from,to)=>{setDateFrom(from);setDateTo(to)}}/><button onClick={() => void load()} disabled={loading} className="flex h-10 items-center gap-2 rounded-lg border border-emerald-700 px-4 font-bold text-emerald-800 disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Xem</button>
         </div>
       </div>
     </section>
@@ -67,7 +74,7 @@ export default function InventoryHistoryTab() {
         <table className="w-full min-w-[1350px] text-sm">
           <thead className="bg-emerald-950 text-left text-white"><tr>{["Ngày","Loại","Mã phiếu","Mã NL","Tên nguyên liệu","Số lượng","Đơn vị","Đơn giá","Thành tiền","Người nhập/xuất","NCC/Nơi nhận","Trạng thái","Ghi chú"].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}</tr></thead>
           <tbody className="divide-y">
-            {rows.map(({ entry, item }) => <tr key={entry.type + entry.id + item.id} className="hover:bg-emerald-50/50">
+            {!loading && paged.items.map(({ entry, item }) => <tr key={entry.type + entry.id + item.id} className="hover:bg-emerald-50/50">
               <td className="whitespace-nowrap px-3 py-3">{new Date(entry.date + "T00:00:00").toLocaleDateString("vi-VN")}</td>
               <td className="px-3 py-3"><span className={entry.type === "receipt" ? "inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 font-bold text-emerald-800" : "inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-800"}>{entry.type === "receipt" ? <ArrowDownToLine className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}{entry.type === "receipt" ? "Nhập" : "Xuất"}</span></td>
               <td className="px-3 py-3 font-bold text-emerald-800">{entry.code}</td>
@@ -84,6 +91,7 @@ export default function InventoryHistoryTab() {
         </table>
       </div>
       {loading ? <div className="p-14 text-center text-slate-500"><LoaderCircle className="mx-auto mb-2 animate-spin" />Đang tải lịch sử...</div> : rows.length === 0 ? <div className="p-14 text-center text-slate-500">Không có dữ liệu phù hợp.</div> : null}
+      <InventoryPagination page={paged.pagination.currentPage} pageSize={pageSize} total={rows.length} onPageChange={setPage} onPageSizeChange={setPageSize} disabled={loading}/>
     </section>
   </div>;
 }

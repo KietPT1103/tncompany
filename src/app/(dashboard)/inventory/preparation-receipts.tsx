@@ -1,3 +1,7 @@
+import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
+import { InventoryPagination } from "@/components/ui/InventoryPagination";
+import { paginateItems } from "@/lib/listPagination";
+import { inventoryToday } from "@/lib/inventoryPeriods";
 import { createElement as h, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Inbox, LoaderCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -16,6 +20,8 @@ const quantity = (value: number) => value.toLocaleString("vi-VN", { maximumFract
 export default function PreparationReceiptsTab() {
   const { storeId } = useStore();
   const { role } = useAuth();
+  const [from,setFrom] = useState(inventoryToday);const [to,setTo] = useState(inventoryToday);
+  const [page,setPage] = useState(1);const [pageSize,setPageSize] = useState(20);
   const [pending, setPending] = useState<PendingPreparationReceipt[]>([]);
   const [history, setHistory] = useState<PreparationReceiptHistory[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -33,7 +39,7 @@ export default function PreparationReceiptsTab() {
   async function load() {
     setLoading(true); setError("");
     try {
-      const result = await getPreparationReceipts(storeId);
+      const result = await getPreparationReceipts(storeId,{from,to});
       setPending(result.pending); setHistory(result.history);
       setSelectedId((current) => result.pending.some((item) => item.issueId === current) ? current : result.pending[0]?.issueId || "");
     } catch (reason) {
@@ -44,7 +50,9 @@ export default function PreparationReceiptsTab() {
     setCancelTarget(null); setCancelReason(""); setCancelError(""); setMessage("");
     setPending([]); setHistory([]); setSelectedId(""); setReceivedBy(""); setNote("");
     void load();
-  }, [storeId]);
+  }, [storeId,from,to]);
+  useEffect(()=>{setPage(1)},[storeId,from,to,pageSize]);
+  const paged=paginateItems(history,page,pageSize);
   const selected = useMemo(() => pending.find((item) => item.issueId === selectedId) || null, [pending, selectedId]);
   useEffect(() => {
     if (!selected) { setValues({}); return; }
@@ -93,7 +101,7 @@ export default function PreparationReceiptsTab() {
     h("section", { className: "rounded-2xl border bg-white p-5 shadow-sm" },
       h("div", { className: "flex flex-wrap items-center justify-between gap-4" },
         h("div", {}, h("h2", { className: "text-2xl font-black text-emerald-950" }, "Nhập kho pha chế"), h("p", { className: "text-sm text-slate-500" }, "Quầy pha chế kiểm tra và xác nhận số lượng thực nhận từ phiếu xuất kho thu ngân.")),
-        h("button", { disabled: saving || loading, onClick: () => void load(), className: "flex h-10 items-center gap-2 rounded-lg border px-4 font-bold text-emerald-800" }, h(RefreshCw, { className: "h-4 w-4" }), "Tải lại"))),
+        h(InventoryDateFilter,{from,to,disabled:saving,onChange:(start:string,end:string)=>{setFrom(start);setTo(end)}}),h("button", { disabled: saving || loading, onClick: () => void load(), className: "flex h-10 items-center gap-2 rounded-lg border px-4 font-bold text-emerald-800" }, h(RefreshCw, { className: "h-4 w-4" }), "Tải lại"))),
     error ? h("div", { className: "rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700" }, error) : null,
     message ? h("div", { className: "rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-800" }, message) : null,
     h("section", { className: "overflow-hidden rounded-2xl border bg-white shadow-sm" },
@@ -122,14 +130,14 @@ export default function PreparationReceiptsTab() {
       h("div", { className: "border-b p-4" }, h("h3", { className: "text-lg font-black text-emerald-950" }, "Lịch sử nhận kho pha chế")),
       h("div", { className: "overflow-x-auto" }, h("table", { className: "w-full min-w-[900px] text-sm" },
         h("thead", { className: "bg-emerald-950 text-left text-white" }, h("tr", {}, ...["Phiếu nhận", "Phiếu xuất", "Ngày", "Người nhận", "Chi tiết", "Ghi chú", "Trạng thái", "Thao tác"].map((label) => h("th", { key: label, className: "px-4 py-3" }, label)))),
-        h("tbody", { className: "divide-y" }, ...history.map((record) => h("tr", { key: record.id }, h("td", { className: "px-4 py-3 font-bold text-emerald-800" }, record.receiptCode), h("td", { className: "px-4 py-3" }, record.issueCode), h("td", { className: "px-4 py-3" }, record.receiptDate), h("td", { className: "px-4 py-3" }, record.receivedBy), h("td", { className: "px-4 py-3" }, record.items.map((item) => `${item.ingredientName}: ${quantity(item.actualQuantity || 0)} ${item.unit}`).join(" · ")), h("td", { className: "px-4 py-3" }, record.note || "—"),
+        h("tbody", { className: "divide-y" }, ...paged.items.map((record) => h("tr", { key: record.id }, h("td", { className: "px-4 py-3 font-bold text-emerald-800" }, record.receiptCode), h("td", { className: "px-4 py-3" }, record.issueCode), h("td", { className: "px-4 py-3" }, record.receiptDate), h("td", { className: "px-4 py-3" }, record.receivedBy), h("td", { className: "px-4 py-3" }, record.items.map((item) => `${item.ingredientName}: ${quantity(item.actualQuantity || 0)} ${item.unit}`).join(" · ")), h("td", { className: "px-4 py-3" }, record.note || "—"),
           h("td", { className: "px-4 py-3" },
             h("span", { className: `warehouse-badge ${record.status === "cancelled" ? "status-cancelled" : ""}` }, record.status === "cancelled" ? "Đã hủy" : "Đã nhận"),
             record.status === "cancelled" ? h("div", { className: "mt-2 max-w-64 text-sm text-rose-700" },
               h("p", { className: "whitespace-pre-wrap break-words" }, `Lý do: ${record.cancelReason || "—"}`),
               h("p", {}, `${record.cancelledBy || ""}${record.cancelledAt ? ` · ${new Date(record.cancelledAt).toLocaleString("vi-VN")}` : ""}`)) : null),
           h("td", { className: "px-4 py-3" }, role === "admin" && record.status !== "cancelled" ? h("button", { disabled: saving, onClick: () => requestCancellation(record), className: "warehouse-button text-rose-700 disabled:opacity-50" }, "Hủy phiếu") : null))))),
-      history.length === 0 ? h("div", { className: "p-10 text-center text-slate-500" }, "Chưa có lần nhận kho pha chế.") : null)),
+      history.length === 0 ? h("div", { className: "p-10 text-center text-slate-500" }, "Chưa có lần nhận kho pha chế.") : null,h(InventoryPagination,{page:paged.pagination.currentPage,pageSize,total:history.length,onPageChange:setPage,onPageSizeChange:setPageSize,disabled:loading||saving}))),
     h(ConfirmDialog, {
       open: cancelTarget !== null,
       title: `Hủy phiếu nhận ${cancelTarget?.receiptCode || ""}`,

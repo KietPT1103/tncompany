@@ -59,6 +59,7 @@ function ingredient_payload(array $row): array
             : (float) ($row['preparation_stock_quantity'] ?? 0),
         'itemKind' => in_array(($row['item_kind'] ?? 'ingredient'), ['ingredient', 'consumable', 'fresh'], true)
             ? (string) $row['item_kind'] : 'ingredient',
+        'periodReceivedAmount' => (float) ($row['period_received_amount'] ?? 0),
         'periodReceivedQuantity' => (float) ($row['period_received_quantity'] ?? 0),
         'periodIssuedQuantity' => (float) ($row['period_issued_quantity'] ?? 0),
         'supplierId' => $row['supplier_id'] ?: null,
@@ -132,6 +133,7 @@ if ($method === 'GET') {
     $params = ['store_id' => $storeId, 'date_from_receipt' => $dateFrom, 'date_to_receipt' => $dateTo, 'date_from_issue' => $dateFrom, 'date_to_issue' => $dateTo];
     $sql = 'SELECT i.*,s.supplier_code,s.supplier_name,
                    COALESCE(received.total,0) AS period_received_quantity,
+                   COALESCE(received.amount,0) AS period_received_amount,
                    COALESCE(issued.total,0) AS period_issued_quantity,
                    source.ingredient_code AS conversion_source_code,
                    source.ingredient_name AS conversion_source_name,
@@ -148,7 +150,7 @@ if ($method === 'GET') {
             LEFT JOIN ingredients source
               ON source.id COLLATE utf8mb4_unicode_ci=i.conversion_source_ingredient_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN (
-              SELECT rii.ingredient_id,SUM(rii.quantity) total
+              SELECT rii.ingredient_id,SUM(rii.quantity) total,SUM(rii.line_total) amount
               FROM inventory_receipt_items rii JOIN inventory_receipts ir ON ir.id=rii.receipt_id
               WHERE ir.status="completed" AND ir.receipt_date BETWEEN :date_from_receipt AND :date_to_receipt
               GROUP BY rii.ingredient_id
@@ -180,6 +182,7 @@ if ($method === 'GET') {
         foreach ($items as &$item) {
             $item['cost'] = null;
             $item['directCost'] = null;
+            $item['periodReceivedAmount'] = null;
             foreach ($item['conversionComponents'] as &$component) $component['cost'] = null;
             unset($component);
         }
