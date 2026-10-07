@@ -134,18 +134,12 @@ export default function OverviewPage() {
   const [weeklyQuantity, setWeeklyQuantity] = useState<OverviewWeeklyQuantityRow[]>([]);
   const [weeklyQuantityLoading, setWeeklyQuantityLoading] = useState(true);
   const [weeklyQuantityError, setWeeklyQuantityError] = useState("");
-  const [exportDate, setExportDate] = useState(() => formatDateInputValue(new Date()));
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
 
-  const exportDay = async () => {
-    if (!storeId || !exportDate || exporting) return;
-    const startDate = new Date(`${exportDate}T00:00:00`);
-    const endDate = new Date(`${exportDate}T23:59:59.999`);
-    if (!Number.isFinite(startDate.getTime()) || formatDateInputValue(startDate) !== exportDate) {
-      setExportError("Vui lòng chọn ngày hợp lệ để xuất báo cáo.");
-      return;
-    }
+  const exportRange = async () => {
+    if (!storeId || exporting) return;
+    const { startDate, endDate } = ranges;
     setExporting(true);
     setExportError("");
     try {
@@ -158,17 +152,17 @@ export default function OverviewPage() {
       ]);
       const cups = getCupProductCodes(products, categories);
       const shifts = await loadOverviewShiftRevenue({ ...options, cupProductCodes: cups });
-      const [{ buildOverviewDayWorkbook }, { downloadExcelWorkbook }] = await Promise.all([
+      const [{ buildOverviewRangeWorkbook }, { downloadExcelWorkbook }] = await Promise.all([
         import("./overviewExcelExport"),
         import("../bills/billExcelExport"),
       ]);
-      const workbook = buildOverviewDayWorkbook({
-        storeName, date: exportDate,
+      const workbook = buildOverviewRangeWorkbook({
+        storeName, startDate: formatDateInputValue(startDate), endDate: formatDateInputValue(endDate),
         snapshot: buildOverviewSnapshot(bills, startDate, endDate, getBakeryProductCodes(products, categories), cups),
         vouchers: calculateOverviewVoucherTotals(vouchers, startDate, endDate),
         shifts,
       });
-      await downloadExcelWorkbook(workbook, `tong-quan-${storeId.replace(/[^a-zA-Z0-9_-]/g, "_")}-${exportDate}.xlsx`);
+      await downloadExcelWorkbook(workbook, `tong-quan-${storeId.replace(/[^a-zA-Z0-9_-]/g, "_")}-${formatDateInputValue(startDate)}_${formatDateInputValue(endDate)}.xlsx`);
     } catch (reason) {
       console.error(reason);
       setExportError("Không thể xuất Excel. Vui lòng kiểm tra kết nối và thử lại.");
@@ -380,13 +374,9 @@ export default function OverviewPage() {
         </header>
 
         <div className="flex flex-wrap items-end justify-end gap-3">
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            Ngày xuất báo cáo
-            <input type="date" value={exportDate} disabled={exporting} onChange={(event) => { setExportDate(event.target.value); setExportError(""); }} className="h-10 rounded-sm border border-slate-200 bg-white px-3 text-sm text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 disabled:opacity-60" />
-          </label>
-          <button type="button" onClick={() => void exportDay()} disabled={!storeId || !exportDate || exporting} aria-busy={exporting} className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+          <button type="button" onClick={() => void exportRange()} disabled={!storeId || exporting} aria-busy={exporting} className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
             <Download className="h-4 w-4" aria-hidden="true" />
-            {exporting ? "Đang xuất Excel…" : "Xuất Excel theo ngày"}
+            {exporting ? "Đang xuất Excel…" : "Xuất Excel"}
           </button>
           {exportError ? <p role="alert" className="w-full text-right text-sm text-rose-700">{exportError}</p> : null}
         </div>

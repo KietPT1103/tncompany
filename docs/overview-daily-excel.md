@@ -1,14 +1,15 @@
-# Xuất Excel tổng quan theo ngày
+# Xuất Excel tổng quan theo khoảng ngày
 
-Trên màn **Tổng quan kinh doanh**, chọn **Ngày xuất báo cáo** rồi bấm
-**Xuất Excel theo ngày**. Ngày xuất độc lập với khoảng ngày đang lọc dashboard.
-Báo cáo lấy dữ liệu mới của cửa hàng đang chọn, từ đầu đến cuối ngày được chọn.
+Trên màn **Tổng quan kinh doanh**, chọn khoảng **Từ ngày – Đến ngày** ở bộ lọc
+phía trên rồi bấm **Xuất Excel**. Không cần chọn ngày xuất riêng.
+Báo cáo lấy dữ liệu mới của cửa hàng đang chọn, từ đầu ngày bắt đầu đến hết
+ngày kết thúc. Chọn cùng một ngày bắt đầu và kết thúc để xuất một ngày.
 
-File `tong-quan-{cua-hang}-{YYYY-MM-DD}.xlsx` gồm:
+File `tong-quan-{cua-hang}-{ngay-bat-dau}_{ngay-ket-thuc}.xlsx` gồm:
 
 - **Tổng quan**: doanh thu thuần, đơn hoàn tất/hủy, số ly/bánh, giá trị đơn trung
   bình, tiền mặt, chuyển khoản, phiếu thu và phiếu chi.
-- **Theo ca**: trạng thái, thu ngân, doanh thu, đơn hàng, số ly, thanh toán,
+- **Theo ca**: ngày mở ca, trạng thái, thu ngân, doanh thu, đơn hàng, số ly, thanh toán,
   thu/chi, tiền cuối ca dự kiến, tiền chốt ca và chênh lệch.
 
 Đơn hủy không tính vào doanh thu. Phiếu hủy hoặc không tính dòng tiền không
