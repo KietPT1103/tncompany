@@ -29,6 +29,8 @@ type SingleDatePickerProps = {
   hideLabel?: boolean;
   compact?: boolean;
   iconTooltip?: string;
+  /** Display a reporting period while keeping the selected date as the calendar anchor. */
+  summary?: string;
 };
 
 type PickerPosition = {
@@ -112,6 +114,7 @@ export function SingleDatePicker({
   hideLabel = false,
   compact = false,
   iconTooltip,
+  summary,
 }: SingleDatePickerProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -354,7 +357,7 @@ export function SingleDatePicker({
 
       <div className="flex min-h-14 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-2">
         <span className="text-sm font-medium text-slate-600 tabular-nums">
-          {formatDisplayDate(selectedDate)}
+          {summary ?? formatDisplayDate(selectedDate)}
         </span>
         <button
           type="button"
@@ -411,7 +414,7 @@ export function SingleDatePicker({
           <CalendarDays className="h-4 w-4 shrink-0 text-emerald-700" />
         ) : null}
         <span id={valueId} className="min-w-0 flex-1 truncate tabular-nums">
-          {formatDisplayDate(selectedDate)}
+          {summary ?? formatDisplayDate(selectedDate)}
         </span>
         {compact ? (
           <span className="group/calendar relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-emerald-700 transition-[background-color,color] duration-150 group-hover/date-picker:bg-emerald-50 group-hover/date-picker:text-emerald-800">
