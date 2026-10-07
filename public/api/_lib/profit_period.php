@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/profit_sources.php';
 
 function profit_period_dates(string $start, string $end): array
 {
@@ -14,6 +15,8 @@ function profit_period_sources(PDO $pdo, string $storeId, string $start, string 
 {
     $days = [];
     foreach (profit_period_dates($start, $end) as $date) $days[$date] = ['revenue'=>0.0,'billCount'=>0,'sales'=>[],'vouchers'=>[]];
+    foreach (profit_source_salary($pdo, $storeId, array_keys($days)) as $date=>$estimate) $days[$date]['salaryEstimate'] = $estimate;
+    $costs = profit_source_costs($pdo, $storeId);
     $params = ['store'=>$storeId,'start'=>$start.' 00:00:00','end'=>(new DateTimeImmutable($end))->modify('+1 day')->format('Y-m-d').' 00:00:00'];
     $filter = "b.store_id=:store AND b.status='completed' AND b.created_at>=:start AND b.created_at<:end";
     $stmt = $pdo->prepare("SELECT DATE(b.created_at) AS day, SUM(b.total) AS revenue, COUNT(*) AS bill_count FROM bills b WHERE $filter GROUP BY DATE(b.created_at)");
@@ -22,16 +25,15 @@ function profit_period_sources(PDO $pdo, string $storeId, string $start, string 
         $days[$row['day']]['revenue'] = daily_profit_money((float)$row['revenue'], 'doanh thu');
         $days[$row['day']]['billCount'] = (int)$row['bill_count'];
     }
-    $stmt = $pdo->prepare("SELECT DATE(b.created_at) AS day, i.menu_id, i.name, SUM(i.quantity) AS quantity, p.cost, p.has_cost
+    $stmt = $pdo->prepare("SELECT DATE(b.created_at) AS day, i.menu_id, i.name, SUM(i.quantity) AS quantity
         FROM bill_items i JOIN bills b ON b.id=i.bill_id
-        LEFT JOIN products p ON p.store_id=b.store_id AND p.product_code=i.menu_id
-        WHERE $filter GROUP BY DATE(b.created_at), i.menu_id, i.name, p.cost, p.has_cost ORDER BY i.name");
+        WHERE $filter GROUP BY DATE(b.created_at), i.menu_id, i.name ORDER BY i.name");
     $stmt->execute($params);
     foreach ($stmt->fetchAll() as $row) {
         $code = (string)$row['menu_id']; $key = $code !== '' ? $code : 'name:'.$row['name'];
-        $cost = $row['cost'] !== null && !empty($row['has_cost']) ? daily_profit_money((float)$row['cost'], 'cost món') : null;
+        $cost = $costs[$code]['unitCost'] ?? null;
         $quantity = (float)$row['quantity']; daily_profit_money($quantity, 'số lượng bán');
-        if (!isset($days[$row['day']]['sales'][$key])) $days[$row['day']]['sales'][$key] = ['key'=>$key,'code'=>$code,'name'=>(string)$row['name'],'quantity'=>0,'unitCost'=>$cost];
+        if (!isset($days[$row['day']]['sales'][$key])) $days[$row['day']]['sales'][$key] = ['key'=>$key,'code'=>$code,'name'=>(string)$row['name'],'quantity'=>0,'unitCost'=>$cost,'costSource'=>$costs[$code]['costSource'] ?? null];
         $days[$row['day']]['sales'][$key]['quantity'] += $quantity;
     }
     $stmt = $pdo->prepare("SELECT DATE(happened_at) AS day, id, code, category, amount, note FROM cash_vouchers
@@ -71,6 +73,8 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
     foreach ($sources as $date=>$source) {
         if (!is_array($rawInputs[$date] ?? null)) throw new InvalidArgumentException('Thiếu chi phí ngày '.$date.'.');
         try {
+            if (!isset($source['salaryEstimate']['amount'])) throw new InvalidArgumentException('Chưa có ước lượng lương đã lưu cho ngày này.');
+            $rawInputs[$date]['salary'] = $source['salaryEstimate']['amount'];
             $inputs = daily_profit_validate_inputs($rawInputs[$date]);
             daily_profit_require_complete($source, $inputs);
         } catch (InvalidArgumentException $e) { throw new InvalidArgumentException($date.': '.$e->getMessage()); }

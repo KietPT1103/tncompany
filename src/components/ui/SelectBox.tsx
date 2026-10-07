@@ -37,6 +37,7 @@ type SelectBoxProps<T extends string> = {
   searchable?: boolean;
   searchThreshold?: number;
   searchPlaceholder?: string;
+  searchInputClassName?: string;
 };
 
 type MenuPosition = {
@@ -65,6 +66,7 @@ export function SelectBox<T extends string>({
   searchable = false,
   searchThreshold = 7,
   searchPlaceholder = "Tìm kiếm...",
+  searchInputClassName,
 }: SelectBoxProps<T>) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -365,7 +367,7 @@ export function SelectBox<T extends string>({
               onKeyDown={handleSearchKeyDown}
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
-              className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+              className={cn("h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100", searchInputClassName)}
             />
           </div>
         </div>

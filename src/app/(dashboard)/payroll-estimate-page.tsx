@@ -13,6 +13,8 @@ import {
   addPayrollEntry,
   deletePayrollEntry,
   getPayrollEntries,
+  getSavedEstimateSchedule,
+  type PayrollEntry,
   saveImportedPayroll,
   updatePayroll,
   updatePayrollEntry,
@@ -26,10 +28,12 @@ import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Toast } from "@/components/ui/Toast";
 import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { SavedEstimateSchedules } from "./payroll/_components/SavedEstimateSchedules";
 import {
   ArrowLeft,
   CalendarDays,
   CalendarRange,
+  History,
   Check,
   Clock3,
   ImageDown,
@@ -104,7 +108,7 @@ const hoursFormatter = new Intl.NumberFormat("vi-VN", {
 });
 
 type EstimateRole = string;
-type WorkspaceView = "schedule" | "summary";
+type WorkspaceView = "schedule" | "summary" | "saved";
 type ShiftId = (typeof SHIFT_DEFINITIONS)[number]["id"];
 type ScheduleState = Record<string, string[]>;
 
@@ -320,7 +324,7 @@ function buildEstimateEntryPayload(
   item: EstimateSummary,
   startDate: string,
   endDate: string,
-) {
+): Partial<PayrollEntry> {
   const salaryType = resolveEmployeeSalaryType(item.employee);
   const isMonthly = salaryType === "monthly";
 
@@ -432,7 +436,10 @@ function RoleScheduleTable({
   activeCell,
   employeeByKey,
   onRemoveEmployee,
+  onSave,
   onSelectCell,
+  saveDisabled,
+  saving,
   role,
   schedule,
   week,
@@ -440,7 +447,10 @@ function RoleScheduleTable({
   activeCell: ActiveCell | null;
   employeeByKey: Map<string, Employee>;
   onRemoveEmployee: (cell: ActiveCell, employeeKey: string) => void;
+  onSave: () => void;
   onSelectCell: (cell: ActiveCell) => void;
+  saveDisabled: boolean;
+  saving: boolean;
   role: EstimateRole;
   schedule: ScheduleState;
   week: WeekSegment;
@@ -530,7 +540,7 @@ function RoleScheduleTable({
     >
       <div
         className={cn(
-          "flex items-center justify-between border-b bg-gradient-to-r px-4 py-3",
+          "flex flex-col gap-4 border-b bg-gradient-to-r px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between",
           ROLE_THEME,
         )}
       >
@@ -538,29 +548,42 @@ function RoleScheduleTable({
           <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70">Lịch phân ca</p>
           <h3 className="text-lg font-bold">{role}</h3>
         </div>
-        <div className="flex items-center gap-4">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            data-html2canvas-ignore="true"
-            className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-[#087A62] px-4 text-sm font-bold text-white shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#066B56] hover:text-white hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
-            onClick={() => void handleCaptureSchedule()}
-            disabled={captureStatus === "capturing"}
-          >
-            {captureStatus === "capturing" ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <ImageDown className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            {captureStatus === "capturing"
-              ? "Đang chụp..."
-              : captureStatus === "done"
-                ? "Đã tải ảnh"
-                : captureStatus === "error"
-                  ? "Thử lại"
-                  : "Chụp lịch"}
-          </Button>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3" data-html2canvas-ignore="true">
+            <Button
+              type="button"
+              className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-[#F6C85F] px-4 text-sm font-bold text-[#064E3B] shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#E1B23D] hover:text-[#064E3B] hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#064E3B] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
+              title="Lưu toàn bộ lịch phân ca trong khoảng ngày đã chọn"
+              isLoading={saving}
+              disabled={saveDisabled || saving}
+              onClick={onSave}
+            >
+              <Save className="h-4 w-4" aria-hidden="true" />
+              Lưu ước tính
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-html2canvas-ignore="true"
+              className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-[#087A62] px-4 text-sm font-bold text-white shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#066B56] hover:text-white hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
+              onClick={() => void handleCaptureSchedule()}
+              disabled={captureStatus === "capturing"}
+            >
+              {captureStatus === "capturing" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <ImageDown className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {captureStatus === "capturing"
+                ? "Đang chụp..."
+                : captureStatus === "done"
+                  ? "Đã tải ảnh"
+                  : captureStatus === "error"
+                    ? "Thử lại"
+                    : "Chụp lịch"}
+            </Button>
+          </div>
           <div className="rounded border border-emerald-900/15 bg-white/75 px-3 py-2 text-right shadow-sm backdrop-blur-sm">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-800/70">
               Khoảng ngày
@@ -788,6 +811,8 @@ export default function SalaryEstimatePage() {
   );
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("schedule");
   const [loadingSavedEstimate, setLoadingSavedEstimate] = useState(false);
+  const [savedSchedulesRevision, setSavedSchedulesRevision] = useState(0);
+  const [openSavedRevision, setOpenSavedRevision] = useState(0);
   const [managedEstimateRoles, setManagedEstimateRoles] = useState<string[]>([]);
 
   const estimateRoles = useMemo(
@@ -957,8 +982,8 @@ export default function SalaryEstimatePage() {
     setLoadingSavedEstimate(true);
     setSubmitError("");
 
-    getPayrollEntries(queryPayrollId)
-      .then((entries) => {
+    getSavedEstimateSchedule(storeId, queryPayrollId)
+      .then(({ entries, schedule: savedSchedule }) => {
         if (ignore) return;
         const restored = buildScheduleFromEntries(
           entries,
@@ -966,10 +991,10 @@ export default function SalaryEstimatePage() {
           estimateRoles,
         );
         setSchedule(restored.schedule);
-        if (restored.startDate && restored.endDate) {
+        if (savedSchedule.startDate && savedSchedule.endDate) {
           setRange({
-            startDate: restored.startDate,
-            endDate: restored.endDate,
+            startDate: savedSchedule.startDate,
+            endDate: savedSchedule.endDate,
           });
         }
         if (restored.selectedRole) {
@@ -996,7 +1021,7 @@ export default function SalaryEstimatePage() {
     return () => {
       ignore = true;
     };
-  }, [estimateRoles, queryPayrollId, supportedEmployees]);
+  }, [estimateRoles, queryPayrollId, supportedEmployees, storeId, openSavedRevision]);
 
   const employeesByRole = useMemo(() => {
     const next = Object.fromEntries(
@@ -1236,7 +1261,7 @@ export default function SalaryEstimatePage() {
   }
 
   async function handleSaveEstimate() {
-    if (!storeId) return;
+    if (!storeId || saving || loadingSavedEstimate || employeesLoading || loadError) return false;
 
     if (estimateSummaries.length === 0) {
       setSubmitError("Chưa có lịch phân ca để ước lượng.");
@@ -1295,6 +1320,7 @@ export default function SalaryEstimatePage() {
         setSaveMessage("Đã cập nhật bản ước tính hiện tại.");
       } else {
         const payrollId = await saveImportedPayroll({
+          source: "payroll_estimate",
           storeId,
           name: payrollName,
           startDate: normalizedRange.startDate,
@@ -1309,6 +1335,7 @@ export default function SalaryEstimatePage() {
         setSaveMessage("Đã lưu bản ước tính và có thể mở lại để sửa tiếp.");
       }
 
+      setSavedSchedulesRevision(value => value + 1);
       return true;
     } catch (error) {
       console.error(error);
@@ -1321,13 +1348,6 @@ export default function SalaryEstimatePage() {
     }
   }
 
-  async function handleSaveFromPicker() {
-    const saved = await handleSaveEstimate();
-    if (saved) {
-      setActiveCell(null);
-    }
-  }
-
   if (loading || !user || !storeId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100">
@@ -1337,10 +1357,10 @@ export default function SalaryEstimatePage() {
   }
 
   return (
-    <div className="min-h-full bg-slate-50/80">
-      <div className="mx-auto max-w-screen-2xl space-y-5 p-3 sm:p-5 lg:p-6">
+    <div className="min-h-full min-w-0 bg-slate-50/80">
+      <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-5 p-3 sm:p-5 lg:p-6 2xl:px-8">
         <header className="border-b border-slate-200 pb-5">
-          <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-end 2xl:justify-between">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div>
               {canAccessPayroll ? (
                 <Link href="/payroll" className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
@@ -1363,20 +1383,22 @@ export default function SalaryEstimatePage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className={cn("min-w-0 flex-wrap gap-2 sm:flex-row sm:items-end sm:self-end xl:shrink-0", workspaceView === "saved" ? "hidden" : "flex flex-col")}>
               <DateRangePicker
                 label="Khoảng ngày"
                 startDate={range.startDate}
                 endDate={range.endDate}
                 onChange={(startDate, endDate) => setRange({ startDate, endDate })}
+                disabled={saving || loadingSavedEstimate}
                 className="w-full sm:w-80"
-                triggerClassName="h-10 rounded-lg border-slate-200 bg-white text-emerald-900 shadow-sm hover:border-slate-300 focus-visible:ring-emerald-800/25 [&_svg]:text-emerald-800"
+                triggerClassName="h-10 rounded-lg border-slate-200 bg-white text-emerald-900 shadow-sm hover:border-[#064E3B] focus-visible:border-[#064E3B] focus-visible:ring-0 [&_svg]:text-emerald-800"
                 openTriggerClassName="!border-emerald-800 !ring-0"
               />
               <Button
                 variant="outline"
                 className={WEEK_SHORTCUT_BUTTON_CLASS}
                 onClick={handleApplyCurrentWeek}
+                disabled={saving || loadingSavedEstimate}
               >
                 <CalendarDays className="h-4 w-4" />
                 Tuần này
@@ -1385,6 +1407,7 @@ export default function SalaryEstimatePage() {
                 variant="outline"
                 className={WEEK_SHORTCUT_BUTTON_CLASS}
                 onClick={handleApplyNextWeek}
+                disabled={saving || loadingSavedEstimate}
               >
                 <CalendarRange className="h-4 w-4" />
                 Tuần sau
@@ -1395,7 +1418,7 @@ export default function SalaryEstimatePage() {
 
         <div className="space-y-5">
           <div className="space-y-5">
-            <section className="border border-slate-200 bg-white p-4 shadow-[5px_7px_12px_rgba(15,23,42,0.16)] rounded">
+            <section className={cn("border border-slate-200 bg-white p-4 shadow-[5px_7px_12px_rgba(15,23,42,0.16)] rounded", workspaceView === "saved" && "hidden")}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg bg-emerald-50/70 px-4 py-3">
@@ -1508,7 +1531,42 @@ export default function SalaryEstimatePage() {
                   {selectedRoleSummaries.length}
                 </span>
               </button>
+              <button
+                type="button"
+                onClick={() => setWorkspaceView("saved")}
+                aria-current={workspaceView === "saved" ? "page" : undefined}
+                className={cn(
+                  "inline-flex h-12 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset",
+                  workspaceView === "saved"
+                    ? "border-[#E1B23D] bg-[#064E3B] text-[#F6C85F]"
+                    : "border-transparent text-slate-500 hover:border-[#064E3B] hover:bg-white hover:text-[#064E3B]",
+                )}
+              >
+                <History className="h-4 w-4" aria-hidden="true" />
+                Lịch phân ca đã lưu
+              </button>
             </nav>
+
+            {workspaceView === "saved" && <SavedEstimateSchedules
+              key={storeId}
+              storeId={storeId}
+              revision={savedSchedulesRevision}
+              opening={loadingSavedEstimate || saving}
+              onDeleted={(id) => {
+                if (id !== editingPayrollId && id !== queryPayrollId) return;
+                setEditingPayrollId("");
+                setSchedule({});
+                setActiveCell(null);
+                setSaveMessage("");
+                router.replace("/payroll-estimate");
+              }}
+              onOpen={(id) => {
+                setActiveCell(null);
+                setWorkspaceView("schedule");
+                if (id === queryPayrollId) setOpenSavedRevision(value => value + 1);
+                else router.replace(`/payroll-estimate?payrollId=${encodeURIComponent(id)}`);
+              }}
+            />}
 
             <div className={workspaceView === "schedule" ? "block" : "hidden"}>
             {employeesLoading ? (
@@ -1561,7 +1619,10 @@ export default function SalaryEstimatePage() {
                     activeCell={activeCell}
                     employeeByKey={employeeByKey}
                     onRemoveEmployee={removeEmployeeFromCell}
+                    onSave={() => void handleSaveEstimate()}
                     onSelectCell={handleSelectScheduleCell}
+                    saveDisabled={estimateSummaries.length === 0 || loadingSavedEstimate || employeesLoading || Boolean(loadError)}
+                    saving={saving}
                     role={selectedRole}
                     schedule={schedule}
                     week={week}
@@ -1979,15 +2040,6 @@ export default function SalaryEstimatePage() {
                       onClick={() => setActiveCell(null)}
                     >
                       Đóng
-                    </Button>
-                    <Button
-                      className="h-9 gap-2 rounded-lg px-4 text-xs"
-                      isLoading={saving}
-                      onClick={() => void handleSaveFromPicker()}
-                      disabled={estimateSummaries.length === 0 || loadingSavedEstimate}
-                    >
-                      <Save className="h-4 w-4" />
-                      {editingPayrollId ? "Lưu thay đổi" : "Lưu bản nháp"}
                     </Button>
                   </div>
                 </div>

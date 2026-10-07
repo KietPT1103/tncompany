@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Calculator, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { SelectBox } from "@/components/ui/SelectBox";
+import { SingleDatePicker } from "@/components/ui/SingleDatePicker";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import {
   getProfitPeriod,
@@ -32,7 +33,8 @@ const today = () =>
     day: "2-digit",
   }).format(new Date());
 const control =
-  "h-10 min-w-0 rounded-sm border border-slate-200 bg-white px-3 text-sm text-emerald-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-800/25";
+  "h-10 min-w-0 rounded-sm border border-slate-200 bg-white px-3 text-sm text-emerald-900 shadow-sm hover:border-[#064E3B] hover:bg-white focus-visible:outline-none focus-visible:border-[#064E3B] focus-visible:ring-0 focus-visible:ring-offset-0";
+const openControl = "border-[#064E3B] ring-0 ring-offset-0";
 
 export function ProfitCalculation({
   storeId,
@@ -185,25 +187,21 @@ export function ProfitCalculation({
           className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-end"
         >
           <div>
-            <label
-              htmlFor="profit-period"
+            <p
               className="mb-1 block text-xs font-medium text-slate-500"
             >
               Kỳ báo cáo
-            </label>
-            <select
-              id="profit-period"
+            </p>
+            <SelectBox<ProfitPreset>
+              ariaLabel="Kỳ báo cáo"
               value={preset}
-              onChange={(event) =>
-                setPreset(event.target.value as ProfitPreset)
-              }
-              className={`${control} w-full sm:w-40`}
-            >
-              <option value="day">Một ngày</option>
-              <option value="week">Một tuần</option>
-              <option value="month">Một tháng</option>
-              <option value="custom">Khoảng ngày</option>
-            </select>
+              onValueChange={setPreset}
+              disabled={saving}
+              options={[{value:"day",label:"Một ngày"},{value:"week",label:"Một tuần"},{value:"month",label:"Một tháng"},{value:"custom",label:"Khoảng ngày"}]}
+              className="w-full sm:w-40"
+              triggerClassName={control}
+              openTriggerClassName={openControl}
+            />
           </div>
           {preset === "custom" ? (
             <DateRangePicker
@@ -216,27 +214,21 @@ export function ProfitCalculation({
               disabled={saving}
               className="w-full sm:w-80"
               triggerClassName={control}
+              openTriggerClassName={openControl}
             />
           ) : (
-            <div className="min-w-0 sm:w-44">
-              <label
-                htmlFor="profit-anchor"
-                className="mb-1 block text-xs font-medium text-slate-500"
-              >
-                {preset === "day"
+            <SingleDatePicker
+              label={preset === "day"
                   ? "Ngày báo cáo"
                   : preset === "week"
                     ? "Ngày trong tuần cần xem"
                     : "Ngày trong tháng cần xem"}
-              </label>
-              <Input
-                id="profit-anchor"
-                type="date"
-                value={anchor}
-                onChange={(event) => setAnchor(event.target.value)}
-                className={control}
-              />
-            </div>
+              value={anchor}
+              onChange={setAnchor}
+              disabled={saving}
+              className="min-w-0 sm:w-56"
+              triggerClassName={`${control} aria-expanded:border-[#064E3B] aria-expanded:ring-0`}
+            />
           )}
         </fieldset>
         <div className="grid gap-3 sm:flex">
@@ -244,7 +236,7 @@ export function ProfitCalculation({
             variant="outline"
             disabled={loading || saving || dirty}
             onClick={() => setReload((value) => value + 1)}
-            className="gap-2 rounded-sm border-slate-200 bg-white text-emerald-900"
+            className={`gap-2 ${control}`}
           >
             <RefreshCw className="h-4 w-4" />
             Làm mới
@@ -359,41 +351,48 @@ export function ProfitCalculation({
                   <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <h2 className="text-base font-bold">Chi phí cần nhập</h2>
-                      <div className="min-w-0 w-full sm:w-52">
-                        <label
-                          htmlFor="profit-edit-day"
+                      <div className="min-w-0 w-full sm:w-40">
+                        <p
                           className="mb-1 block text-xs font-medium text-slate-500"
                         >
                           Ngày nhập chi phí
-                        </label>
-                        <select
-                          id="profit-edit-day"
+                        </p>
+                        <SelectBox
+                          ariaLabel="Ngày nhập chi phí"
                           value={selectedDate}
-                          onChange={(event) =>
-                            setSelectedDate(event.target.value)
-                          }
-                          className={`${control} w-full`}
-                        >
-                          {calculation.rows.map((row) => (
-                            <option key={row.date} value={row.date}>
-                              {profitDate(row.date)} ·{" "}
-                              {row.result.complete
-                                ? "Đã nhập đủ"
-                                : "Thiếu chi phí"}
-                            </option>
-                          ))}
-                        </select>
+                          onValueChange={setSelectedDate}
+                          options={calculation.rows.map((row) => ({value:row.date,label:profitDate(row.date)}))}
+                          disabled={saving}
+                          searchable
+                          searchPlaceholder="Tìm ngày..."
+                          triggerClassName={control}
+                          openTriggerClassName={openControl}
+                          searchInputClassName="hover:border-[#064E3B] focus:border-[#064E3B] focus:ring-0"
+                        />
+                        <p className={`mt-1 text-xs ${selected.result.complete ? "text-emerald-700" : "text-amber-700"}`}>
+                          {selected.result.complete ? "Đã nhập đủ" : "Thiếu chi phí"}
+                        </p>
                       </div>
                     </div>
                     <p className="mt-3 text-sm text-slate-500">
                       Nhập cho riêng ngày {profitDate(selected.date)}. Không
-                      phát sinh thì nhập 0; marketing mặc định là 0.
+                      phát sinh thì giữ 0; các khoản chi mặc định là 0.
                     </p>
                     <div className="mt-5 grid min-w-0 gap-4 sm:grid-cols-2">
-                      {PROFIT_FIELDS.map((field) => (
+                      <div className="min-w-0 sm:col-span-2">
+                        <p className="mb-1.5 text-sm font-semibold">Lương nhân viên (1 ngày)</p>
+                        <p className={`rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 font-semibold ${selected.inputs.salary === null ? "text-amber-700" : "text-emerald-800"}`}>
+                          {selected.inputs.salary === null ? "Chưa có ước lượng lương đã lưu" : profitMoney(selected.inputs.salary)}
+                        </p>
+                        <p className="mt-1.5 text-xs text-slate-500">
+                          {selected.source.salaryEstimate ? `Lấy từ ${selected.source.salaryEstimate.name}. ` : "Lưu lịch phân ca trong Ước lượng lương để lấy lương ngày này. "}
+                          <a className="font-semibold text-emerald-800 underline" href={`/admin/payroll-estimate${selected.source.salaryEstimate ? `?payrollId=${encodeURIComponent(selected.source.salaryEstimate.payrollId)}` : ""}`}>Xem ước lượng lương</a>
+                        </p>
+                      </div>
+                      {PROFIT_FIELDS.filter((field) => field.key !== "salary").map((field) => (
                         <div
                           key={field.key}
-                          className={`min-w-0 ${field.key === "salary" ? "sm:col-span-2" : ""}`}
+                          className="min-w-0"
                         >
                           <label
                             htmlFor={`profit-${selected.date}-${field.key}`}
@@ -630,8 +629,8 @@ export function ProfitCalculation({
                     Chi tiết ngày {profitDate(selected.date)}
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Cost dùng giá hiện tại trong danh mục. Món thiếu cost cần bổ
-                    sung riêng cho ngày này.
+                    Cost lấy từ giá vốn trong danh mục hoặc công thức nguyên liệu của món.
+                    Món chưa có dữ liệu cost cần bổ sung trước khi tính lợi nhuận.
                   </p>
                   <div className="mt-4 grid min-w-0 gap-5 2xl:grid-cols-2">
                     <div className="overflow-x-auto">
@@ -673,7 +672,10 @@ export function ProfitCalculation({
                                     }
                                   />
                                 ) : (
-                                  profitMoney(row.unitCost)
+                                  <>
+                                    {profitMoney(row.unitCost)}
+                                    <span className="mt-1 block text-xs text-slate-500">{row.costSource === "recipe" ? "Từ công thức" : "Từ danh mục"}</span>
+                                  </>
                                 )}
                               </td>
                               <td className="p-3 text-right">

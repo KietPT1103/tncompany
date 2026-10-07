@@ -5,11 +5,14 @@ import { calculateDailyProfit, emptyProfitInputs, parseMoneyInput } from "./dail
 const data = { revenue: 1000000, billCount: 10, sales: [{ key: "coffee", code: "coffee", name: "Cà phê", quantity: 10, unitCost: 10000 }], vouchers: [{ id: "v1", code: "PC1", category: "Chi tại quầy", amount: 50000 }] };
 const complete = () => ({ ...emptyProfitInputs(), salary: 200000, electricity: 0, water: 0, other: 100000 });
 
-test("salary, utilities and other costs required; marketing defaults to zero", () => {
+test("four manual costs default to zero; salary still requires a source", () => {
   assert.equal(emptyProfitInputs().marketing, 0);
+  assert.equal(emptyProfitInputs().electricity, 0);
+  assert.equal(emptyProfitInputs().water, 0);
+  assert.equal(emptyProfitInputs().other, 0);
   const result = calculateDailyProfit(data, emptyProfitInputs());
   assert.equal(result.profit, null);
-  assert.equal(result.missingFields.length, 4);
+  assert.equal(result.missingFields.length, 1);
   assert.equal(parseMoneyInput(""), null);
   assert.equal(parseMoneyInput("0"), 0);
   assert.equal(parseMoneyInput("-1"), null);
@@ -55,4 +58,11 @@ test("cleared or invalid manual amounts block calculation", () => {
 test("electricity and water are subtracted separately and explicit zero is accepted", () => {
   assert.equal(calculateDailyProfit(data, { ...complete(), electricity: 50000, water: 25000 }).profit, 475000);
   assert.equal(calculateDailyProfit(data, { ...complete(), electricity: 0, water: 0 }).complete, true);
+});
+
+test("saved daily salary estimate replaces manual salary; missing estimate blocks a result", () => {
+  const estimated = { ...data, salaryEstimate: { amount: 50000, payrollId: 'estimate', name: 'Ước tính lương' } };
+  assert.equal(calculateDailyProfit(estimated, complete()).profit, 700000);
+  assert.equal(calculateDailyProfit({ ...estimated, salaryEstimate: { ...estimated.salaryEstimate, amount: 0 } }, complete()).profit, 750000);
+  assert.equal(calculateDailyProfit({ ...data, salaryEstimate: null }, complete()).profit, null);
 });
