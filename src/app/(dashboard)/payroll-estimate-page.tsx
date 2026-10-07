@@ -14,6 +14,7 @@ import {
   deletePayrollEntry,
   getPayrollEntries,
   getSavedEstimateSchedule,
+  getSavedEstimateSchedules,
   type PayrollEntry,
   saveImportedPayroll,
   updatePayroll,
@@ -22,12 +23,14 @@ import {
 import { resolveEmployeeSalaryType } from "./payroll/_components/EmployeeSalaryFields";
 import { getRoleGroupsForStore } from "./payroll/_components/payrollShared";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import { Input } from "@/components/ui/Input";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Toast } from "@/components/ui/Toast";
 import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { removeEstimateRole } from "@/lib/estimateSchedule";
 import { SavedEstimateSchedules } from "./payroll/_components/SavedEstimateSchedules";
 import {
   ArrowLeft,
@@ -38,8 +41,10 @@ import {
   Clock3,
   ImageDown,
   Loader2,
+  Plus,
   Search,
   Save,
+  Trash2,
   Users,
   Wallet,
   X,
@@ -142,6 +147,7 @@ type EstimateSummary = {
   shiftCount: number;
   shifts: Array<{
     id: string;
+    role?: string;
     date: string;
     inTime: string;
     outTime: string;
@@ -381,8 +387,6 @@ function buildScheduleFromEntries(
   let suggestedRole: EstimateRole | null = null;
 
   entries.forEach((entry) => {
-    if (!estimateRoles.includes(entry.role)) return;
-
     const matchedEmployee = employees.find((employee) => {
       if (entry.employeeId && employee.id && entry.employeeId === employee.id) {
         return true;
@@ -405,6 +409,8 @@ function buildScheduleFromEntries(
     const employeeKey = getEmployeeKey(matchedEmployee);
     (entry.shifts || []).forEach((shift) => {
       if (!shift.isValid) return;
+      const role = shift.role || entry.role;
+      if (!estimateRoles.includes(role)) return;
       const shiftId = getShiftIdFromStoredShift(shift);
       if (!shiftId) return;
 
@@ -413,14 +419,14 @@ function buildScheduleFromEntries(
       );
       if (!date) return;
 
-      const cellKey = makeCellKey(date, entry.role, shiftId);
+      const cellKey = makeCellKey(date, role, shiftId);
       schedule[cellKey] = Array.from(
         new Set([...(schedule[cellKey] || []), employeeKey]),
       );
 
       if (!minDate || date < minDate) minDate = date;
       if (!maxDate || date > maxDate) maxDate = date;
-      if (!suggestedRole) suggestedRole = entry.role;
+      if (!suggestedRole) suggestedRole = role;
     });
   });
 
@@ -436,6 +442,7 @@ function RoleScheduleTable({
   activeCell,
   employeeByKey,
   onRemoveEmployee,
+  onDelete,
   onSave,
   onSelectCell,
   saveDisabled,
@@ -447,6 +454,7 @@ function RoleScheduleTable({
   activeCell: ActiveCell | null;
   employeeByKey: Map<string, Employee>;
   onRemoveEmployee: (cell: ActiveCell, employeeKey: string) => void;
+  onDelete: () => void;
   onSave: () => void;
   onSelectCell: (cell: ActiveCell) => void;
   saveDisabled: boolean;
@@ -550,6 +558,16 @@ function RoleScheduleTable({
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex flex-wrap items-center gap-3" data-html2canvas-ignore="true">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-red-100 px-4 text-sm font-bold text-red-800 shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-red-200 hover:text-red-900 hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-red-800 focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
+              disabled={saving}
+              onClick={onDelete}
+              aria-label={`Xoá lịch phân ca ${role}`}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />Xoá lịch
+            </Button>
             <Button
               type="button"
               className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-[#F6C85F] px-4 text-sm font-bold text-[#064E3B] shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#E1B23D] hover:text-[#064E3B] hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#064E3B] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
@@ -809,11 +827,30 @@ export default function SalaryEstimatePage() {
   const [selectedRole, setSelectedRole] = useState<EstimateRole>(
     CAFE_ESTIMATE_ROLES[0],
   );
+  const [scheduleBoardRoles, setScheduleBoardRoles] = useState<string[]>([CAFE_ESTIMATE_ROLES[0]]);
+  const [pendingDeleteRole, setPendingDeleteRole] = useState<string | null>(null);
+  const pendingBoardRole = useRef<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("schedule");
   const [loadingSavedEstimate, setLoadingSavedEstimate] = useState(false);
   const [savedSchedulesRevision, setSavedSchedulesRevision] = useState(0);
+  const [savedSchedulesCount, setSavedSchedulesCount] = useState<{storeId: string; total: number} | null>(null);
   const [openSavedRevision, setOpenSavedRevision] = useState(0);
+  const [confirmNewSchedule, setConfirmNewSchedule] = useState(false);
+  const savedDraft = useRef("");
   const [managedEstimateRoles, setManagedEstimateRoles] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!storeId || loading || !user) return;
+    let active = true;
+    getSavedEstimateSchedules(storeId)
+      .then(({total}) => { if (active) setSavedSchedulesCount({storeId,total}); })
+      .catch(error => {
+        if (!active) return;
+        setSavedSchedulesCount(null);
+        console.error(error);
+      });
+    return () => { active = false; };
+  }, [storeId, loading, user?.id, savedSchedulesRevision]);
 
   const estimateRoles = useMemo(
     () =>
@@ -832,6 +869,19 @@ export default function SalaryEstimatePage() {
       })),
     [estimateRoles],
   );
+  const displayedScheduleRoles = useMemo(
+    () => Array.from(new Set(scheduleBoardRoles)).filter(role => estimateRoles.includes(role)),
+    [scheduleBoardRoles, estimateRoles],
+  );
+  useEffect(() => {
+    const role = pendingBoardRole.current;
+    if (!role) return;
+    const board = document.getElementById(`estimate-board-${encodeURIComponent(role)}`);
+    if (!board) return;
+    pendingBoardRole.current = null;
+    board.focus({preventScroll:true});
+    board.scrollIntoView({behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'start'});
+  }, [displayedScheduleRoles]);
 
   useEffect(() => {
     if (!loading) {
@@ -888,14 +938,12 @@ export default function SalaryEstimatePage() {
   }, [storeId]);
 
   useEffect(() => {
-    setSelectedRole((currentRole) =>
-      estimateRoles.includes(currentRole)
-        ? currentRole
-        : estimateRoles[0] || "",
-    );
+    setSelectedRole(estimateRoles[0] || "");
     setActiveCell(null);
     setSchedule({});
     setEditingPayrollId("");
+    savedDraft.current = "";
+    setScheduleBoardRoles(estimateRoles.length > 0 ? [estimateRoles[0]] : []);
   }, [estimateRoles, storeId]);
 
   useEffect(() => {
@@ -914,10 +962,10 @@ export default function SalaryEstimatePage() {
   }, [activeCell]);
 
   useEffect(() => {
-    if (activeCell && activeCell.role !== selectedRole) {
+    if (activeCell && !displayedScheduleRoles.includes(activeCell.role)) {
       setActiveCell(null);
     }
-  }, [activeCell, selectedRole]);
+  }, [activeCell, displayedScheduleRoles]);
 
   const normalizedRange = useMemo(() => {
     if (range.startDate <= range.endDate) {
@@ -991,6 +1039,9 @@ export default function SalaryEstimatePage() {
           estimateRoles,
         );
         setSchedule(restored.schedule);
+        savedDraft.current = JSON.stringify({ schedule: restored.schedule, range: {
+          startDate: savedSchedule.startDate, endDate: savedSchedule.endDate,
+        } });
         if (savedSchedule.startDate && savedSchedule.endDate) {
           setRange({
             startDate: savedSchedule.startDate,
@@ -1000,6 +1051,7 @@ export default function SalaryEstimatePage() {
         if (restored.selectedRole) {
           setSelectedRole(restored.selectedRole);
         }
+        setScheduleBoardRoles(savedSchedule.roles);
         setEditingPayrollId(queryPayrollId);
         setSaveMessage("Đã mở lại bản ước tính để tiếp tục sửa.");
       })
@@ -1078,7 +1130,8 @@ export default function SalaryEstimatePage() {
             currentRoleTotal.shiftCount += 1;
             nextSummary.roleTotals[roleName] = currentRoleTotal;
             nextSummary.shifts.push({
-              id: `${employeeKey}-${date}-${shift.id}`,
+              id: `${employeeKey}-${roleName}-${date}-${shift.id}`,
+              role: roleName,
               date,
               inTime: buildShiftDateTime(date, shiftWindow.start),
               outTime: buildShiftDateTime(date, shiftWindow.end),
@@ -1164,6 +1217,7 @@ export default function SalaryEstimatePage() {
     cell: ActiveCell,
     updater: (current: string[]) => string[],
   ) {
+    if (saving || loadingSavedEstimate) return;
     const cellKey = makeCellKey(cell.date, cell.role, cell.shiftId);
 
     setSchedule((current) => {
@@ -1234,6 +1288,7 @@ export default function SalaryEstimatePage() {
   }
 
   function handleSelectScheduleCell(cell: ActiveCell) {
+    if (saving || loadingSavedEstimate) return;
     setRange((current) => {
       const orderedRange =
         current.startDate <= current.endDate
@@ -1260,10 +1315,43 @@ export default function SalaryEstimatePage() {
     setActiveCell(cell);
   }
 
+  function createNewSchedule() {
+    setSchedule({});
+    setEditingPayrollId("");
+    savedDraft.current = "";
+    setActiveCell(null);
+    setScheduleBoardRoles(selectedRole ? [selectedRole] : []);
+    setPendingDeleteRole(null);
+    setSaveMessage("");
+    setSubmitError("");
+    setWorkspaceView("schedule");
+    setConfirmNewSchedule(false);
+    router.replace("/payroll-estimate");
+  }
+
+  function handleCreateSchedule() {
+    if (saving || loadingSavedEstimate) return;
+    const draft = JSON.stringify({ schedule, range: normalizedRange });
+    if ((editingPayrollId || Object.values(schedule).some(employees => employees.length > 0)) && draft !== savedDraft.current) setConfirmNewSchedule(true);
+    else createNewSchedule();
+  }
+
+  function deleteRoleSchedule() {
+    if (!pendingDeleteRole || saving || loadingSavedEstimate) return;
+    const remaining = displayedScheduleRoles.filter(role => role !== pendingDeleteRole);
+    setSchedule(current => removeEstimateRole(current,pendingDeleteRole));
+    setScheduleBoardRoles(remaining);
+    if (selectedRole === pendingDeleteRole && remaining.length > 0) setSelectedRole(remaining[0]);
+    setActiveCell(null);
+    setSaveMessage("");
+    setSubmitError("");
+    setPendingDeleteRole(null);
+  }
+
   async function handleSaveEstimate() {
     if (!storeId || saving || loadingSavedEstimate || employeesLoading || loadError) return false;
 
-    if (estimateSummaries.length === 0) {
+    if (estimateSummaries.length === 0 && !editingPayrollId) {
       setSubmitError("Chưa có lịch phân ca để ước lượng.");
       setSaveMessage("");
       return false;
@@ -1336,6 +1424,7 @@ export default function SalaryEstimatePage() {
       }
 
       setSavedSchedulesRevision(value => value + 1);
+      savedDraft.current = JSON.stringify({ schedule, range: normalizedRange });
       return true;
     } catch (error) {
       console.error(error);
@@ -1360,7 +1449,7 @@ export default function SalaryEstimatePage() {
     <div className="min-h-full min-w-0 bg-slate-50/80">
       <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-5 p-3 sm:p-5 lg:p-6 2xl:px-8">
         <header className="border-b border-slate-200 pb-5">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex flex-col gap-5 2xl:flex-row 2xl:flex-wrap 2xl:items-end 2xl:justify-between">
             <div>
               {canAccessPayroll ? (
                 <Link href="/payroll" className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
@@ -1394,6 +1483,15 @@ export default function SalaryEstimatePage() {
                 triggerClassName="h-10 rounded-lg border-slate-200 bg-white text-emerald-900 shadow-sm hover:border-[#064E3B] focus-visible:border-[#064E3B] focus-visible:ring-0 [&_svg]:text-emerald-800"
                 openTriggerClassName="!border-emerald-800 !ring-0"
               />
+              <Button
+                variant="outline"
+                className={WEEK_SHORTCUT_BUTTON_CLASS}
+                onClick={handleCreateSchedule}
+                disabled={saving || loadingSavedEstimate}
+              >
+                <Plus className="h-4 w-4" />
+                Tạo lịch mới
+              </Button>
               <Button
                 variant="outline"
                 className={WEEK_SHORTCUT_BUTTON_CLASS}
@@ -1453,18 +1551,32 @@ export default function SalaryEstimatePage() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-end">
                   <div className="w-full border-slate-200 md:w-[280px] md:border-l md:pl-6">
                     <span className="mb-2 block text-sm font-medium text-slate-600">
-                      Chọn vai trò cần xem
+                      Vai trò
                     </span>
                     <SelectBox
                       value={selectedRole}
                       options={roleOptions}
                       onValueChange={setSelectedRole}
-                      ariaLabel="Chọn vai trò cần xem"
+                      ariaLabel="Chọn vai trò phân ca và xem tổng lương"
+                      disabled={saving || loadingSavedEstimate}
                       className="w-full"
-                      triggerClassName="h-14 rounded-xl border-slate-200 bg-white px-4 text-base font-bold text-slate-950 shadow-sm hover:border-[#064E3B] hover:bg-white hover:ring-1 hover:ring-[#064E3B]/20 focus-visible:border-[#D6A621] focus-visible:ring-[#E1B23D]/35 [&_svg]:h-5 [&_svg]:w-5 [&_svg:first-child]:text-slate-500"
-                      openTriggerClassName="!border-[#D6A621] !ring-2 !ring-[#E1B23D]/25"
+                      triggerClassName="h-14 rounded-xl border-slate-200 bg-white px-4 text-base font-bold text-slate-950 shadow-sm hover:border-[#064E3B] hover:bg-white focus-visible:border-[#064E3B] focus-visible:ring-0 [&_svg]:h-5 [&_svg]:w-5 [&_svg:first-child]:text-slate-500"
+                      openTriggerClassName="!border-[#064E3B] !ring-0"
                     />
                   </div>
+                  <Button
+                    variant="outline"
+                    className={cn(WEEK_SHORTCUT_BUTTON_CLASS,"h-14")}
+                    disabled={!selectedRole || displayedScheduleRoles.includes(selectedRole) || saving || loadingSavedEstimate || employeesLoading}
+                    onClick={() => {
+                      if (!selectedRole || displayedScheduleRoles.includes(selectedRole)) return;
+                      pendingBoardRole.current = selectedRole;
+                      setScheduleBoardRoles(current => [...current, selectedRole]);
+                      setWorkspaceView("schedule");
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />Thêm lịch phân ca
+                  </Button>
 
                   {/* <Button
                     variant="outline"
@@ -1544,6 +1656,16 @@ export default function SalaryEstimatePage() {
               >
                 <History className="h-4 w-4" aria-hidden="true" />
                 Lịch phân ca đã lưu
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px]",
+                    workspaceView === "saved"
+                      ? "bg-[#F6C85F] text-[#064E3B]"
+                      : "bg-slate-200 text-slate-700",
+                  )}
+                >
+                  {savedSchedulesCount?.storeId === storeId ? savedSchedulesCount.total : "—"}
+                </span>
               </button>
             </nav>
 
@@ -1551,11 +1673,15 @@ export default function SalaryEstimatePage() {
               key={storeId}
               storeId={storeId}
               revision={savedSchedulesRevision}
+              initialRange={normalizedRange}
+              onCreate={handleCreateSchedule}
+              onRefresh={() => setSavedSchedulesRevision(value => value + 1)}
               opening={loadingSavedEstimate || saving}
               onDeleted={(id) => {
                 if (id !== editingPayrollId && id !== queryPayrollId) return;
                 setEditingPayrollId("");
                 setSchedule({});
+                setScheduleBoardRoles(selectedRole ? [selectedRole] : []);
                 setActiveCell(null);
                 setSaveMessage("");
                 router.replace("/payroll-estimate");
@@ -1568,7 +1694,7 @@ export default function SalaryEstimatePage() {
               }}
             />}
 
-            <div className={workspaceView === "schedule" ? "block" : "hidden"}>
+            <div className={workspaceView === "schedule" ? "space-y-5" : "hidden"}>
             {employeesLoading ? (
               <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-14 text-center text-slate-500 shadow-sm">
                 Đang tải nhân viên...
@@ -1584,9 +1710,17 @@ export default function SalaryEstimatePage() {
                   Nhân sự nếu cần.
                 </p>
               </div>
+            ) : displayedScheduleRoles.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center">
+                <h2 className="font-semibold text-slate-900">Chưa có bảng lịch phân ca</h2>
+                <p className="mt-2 text-sm text-slate-500">Chọn vai trò ở trên và bấm Thêm lịch phân ca để bắt đầu.</p>
+                {editingPayrollId && <Button className="mt-4 gap-2 bg-[#F6C85F] text-[#064E3B] hover:bg-[#E1B23D]" isLoading={saving} disabled={saving || loadingSavedEstimate || Boolean(loadError)} onClick={() => void handleSaveEstimate()}>
+                  <Save className="h-4 w-4" />Lưu ước tính
+                </Button>}
+              </div>
             ) : (
-              weekSegments.map((week) => (
-                <section key={week.key} className="space-y-4">
+              displayedScheduleRoles.flatMap(role => weekSegments.map((week,weekIndex) => (
+                <section key={`${role}-${week.key}`} id={weekIndex === 0 ? `estimate-board-${encodeURIComponent(role)}` : undefined} tabIndex={-1} aria-label={`Lịch phân ca ${role}, ${week.label}`} className="scroll-mt-5 space-y-4 focus:outline-none">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     {/* <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -1615,20 +1749,21 @@ export default function SalaryEstimatePage() {
                   </div>
 
                   <RoleScheduleTable
-                    key={`${week.key}-${selectedRole}`}
+                    key={`${week.key}-${role}`}
                     activeCell={activeCell}
                     employeeByKey={employeeByKey}
                     onRemoveEmployee={removeEmployeeFromCell}
+                    onDelete={() => { if (!saving && !loadingSavedEstimate) setPendingDeleteRole(role); }}
                     onSave={() => void handleSaveEstimate()}
                     onSelectCell={handleSelectScheduleCell}
-                    saveDisabled={estimateSummaries.length === 0 || loadingSavedEstimate || employeesLoading || Boolean(loadError)}
+                    saveDisabled={(!editingPayrollId && estimateSummaries.length === 0) || loadingSavedEstimate || employeesLoading || Boolean(loadError)}
                     saving={saving}
-                    role={selectedRole}
+                    role={role}
                     schedule={schedule}
                     week={week}
                   />
                 </section>
-              ))
+              )))
             )}
             </div>
           </div>
@@ -2048,6 +2183,25 @@ export default function SalaryEstimatePage() {
           </div>,
           document.body,
         ) : null}
+        <ConfirmDialog
+          open={pendingDeleteRole !== null}
+          title={`Xoá lịch phân ca ${pendingDeleteRole ?? ""}?`}
+          description="Tất cả phân ca của vai trò này trong bản đang chỉnh sẽ bị bỏ. Các vai trò khác được giữ nguyên. Bấm Lưu ước tính để cập nhật bản đã lưu."
+          confirmLabel="Xoá lịch"
+          cancelLabel="Huỷ"
+          variant="destructive"
+          onConfirm={deleteRoleSchedule}
+          onCancel={() => setPendingDeleteRole(null)}
+        />
+        <ConfirmDialog
+          open={confirmNewSchedule}
+          title="Tạo lịch phân ca mới?"
+          description="Lịch hiện tại có thay đổi chưa lưu. Tạo lịch mới sẽ bỏ các thay đổi này và giữ nguyên khoảng ngày đang chọn."
+          confirmLabel="Tạo lịch mới"
+          cancelLabel="Quay lại"
+          onConfirm={createNewSchedule}
+          onCancel={() => setConfirmNewSchedule(false)}
+        />
       </div>
     </div>
   );

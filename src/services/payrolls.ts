@@ -14,6 +14,7 @@ export type Payroll = {
 
 export interface Shift {
   id: string;
+  role?: string;
   date: string;
   inTime: string;
   outTime: string;
@@ -82,10 +83,14 @@ export type SavedEstimateSchedule = Payroll & {
   employeeCount: number;
   totalHours: number;
   totalSalary: number;
+  roles: string[];
 };
-export function getSavedEstimateSchedules(storeId: string, page = 1) {
-  return apiRequest<{ items: SavedEstimateSchedule[]; total: number; page: number }>(
-    `/payrolls.php?${new URLSearchParams({ resource: 'estimates', storeId, page: String(page) })}`,
+export type SavedEstimateTotals = {
+  startDate: string; endDate: string; scheduleCount: number; employeeCount: number; totalHours: number; totalSalary: number;
+};
+export function getSavedEstimateSchedules(storeId: string, page = 1, range?: {startDate: string; endDate: string}) {
+  return apiRequest<{ items: SavedEstimateSchedule[]; total: number; page: number; summary: SavedEstimateTotals | null }>(
+    `/payrolls.php?${new URLSearchParams({ resource: 'estimates', storeId, page: String(page), ...(range ?? {}) })}`,
   );
 }
 export function getSavedEstimateSchedule(storeId: string, id: string) {

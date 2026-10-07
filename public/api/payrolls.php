@@ -513,7 +513,12 @@ if ($method === 'GET') {
         }
         $page = filter_var($_GET['page'] ?? 1,FILTER_VALIDATE_INT);
         if ($page === false || $page<1 || $page>100000) respond_error('Trang không hợp lệ.',422);
-        respond_ok(payroll_estimates_list(db(),$storeId,$page));
+        try {
+            $result = payroll_estimates_list(db(),$storeId,$page,trim((string)($_GET['startDate'] ?? '')),trim((string)($_GET['endDate'] ?? '')));
+        } catch (InvalidArgumentException $exception) {
+            respond_error($exception->getMessage(),422);
+        }
+        respond_ok($result);
     }
     if ($resource === 'entries') {
         $payrollId = trim((string) ($_GET['payrollId'] ?? ''));
