@@ -1,0 +1,737 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Calculator, RefreshCw, Save } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
+import {
+  getProfitPeriod,
+  saveProfitPeriod,
+  type ProfitPeriodResponse,
+} from "@/services/dailyProfitService";
+import {
+  emptyProfitInputs,
+  PROFIT_FIELDS,
+  type ProfitInputs,
+} from "./dailyProfit";
+import {
+  calculateProfitPeriod,
+  profitPresetRange,
+  type ProfitPreset,
+} from "./profitPeriod";
+import { AmountInput } from "./AmountInput";
+
+export const profitMoney = (value: number) =>
+  value.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) + " đ";
+export const profitDate = (value: string) =>
+  value.split("-").reverse().join("/");
+const today = () =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+const control =
+  "h-10 min-w-0 rounded-sm border border-slate-200 bg-white px-3 text-sm text-emerald-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-800/25";
+
+export function ProfitCalculation({
+  storeId,
+  onSaved,
+}: {
+  storeId: string;
+  onSaved: () => void;
+}) {
+  const [preset, setPreset] = useState<ProfitPreset>("day");
+  const [anchor, setAnchor] = useState(today);
+  const [custom, setCustom] = useState(() => ({
+    startDate: today(),
+    endDate: today(),
+  }));
+  const range = useMemo(() => {
+    if (preset === "custom") return custom;
+    try {
+      return profitPresetRange(preset, anchor);
+    } catch {
+      return { startDate: "", endDate: "" };
+    }
+  }, [preset, anchor, custom]);
+  const scope = `${storeId}:${range.startDate}:${range.endDate}`;
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const drafts = useRef<Record<string, ProfitInputs>>({});
+  const formPanel = useRef<HTMLDivElement>(null);
+  const [loaded, setLoaded] = useState<{
+    scope: string;
+    data: ProfitPeriodResponse;
+  } | null>(null);
+  const [inputs, setInputs] = useState<Record<string, ProfitInputs>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const data = loaded?.scope === scope ? loaded.data : null;
+  const calculation = useMemo(
+    () => calculateProfitPeriod(data?.days ?? [], inputs),
+    [data, inputs],
+  );
+  const selected = calculation.rows.find((row) => row.date === selectedDate);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoaded(null);
+    setInputs({});
+    setDirty(false);
+    setError("");
+    setMessage("");
+    setSelectedDate(range.startDate);
+    if (!range.startDate || !range.endDate || range.startDate > range.endDate) {
+      setError("Vui lòng chọn khoảng ngày hợp lệ.");
+      setLoading(false);
+      return;
+    }
+    getProfitPeriod(storeId, range.startDate, range.endDate)
+      .then((response) => {
+        if (active) {
+          setLoaded({ scope, data: response });
+          setInputs(
+            Object.fromEntries(
+              response.days.map((day) => [
+                day.date,
+                drafts.current[`${storeId}:${day.date}`] ??
+                  day.saved?.inputs ??
+                  emptyProfitInputs(),
+              ]),
+            ),
+          );
+          setDirty(
+            response.days.some((day) =>
+              Object.prototype.hasOwnProperty.call(
+                drafts.current,
+                `${storeId}:${day.date}`,
+              ),
+            ),
+          );
+        }
+      })
+      .catch((reason) => {
+        if (active)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Không tải được báo cáo.",
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [storeId, scope, range.startDate, range.endDate, reload]);
+
+  function edit(date: string, value: ProfitInputs) {
+    drafts.current[`${storeId}:${date}`] = value;
+    setInputs((previous) => ({ ...previous, [date]: value }));
+    setDirty(true);
+    setMessage("");
+  }
+  async function save() {
+    if (!data || !calculation.complete || saving) return;
+    const savingScope = scope;
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await saveProfitPeriod(
+        storeId,
+        range.startDate,
+        range.endDate,
+        inputs,
+      );
+      for (const day of response.days)
+        delete drafts.current[`${storeId}:${day.date}`];
+      if (currentScope.current === savingScope) {
+        setLoaded({ scope, data: response });
+        setInputs(
+          Object.fromEntries(
+            response.days.map((day) => [day.date, day.saved!.inputs]),
+          ),
+        );
+        setDirty(false);
+        setMessage(
+          "Đã lưu báo cáo và chi phí từng ngày. Xem kết quả đã lưu ở tab Lịch sử.",
+        );
+      }
+      onSaved();
+    } catch (reason) {
+      if (currentScope.current === savingScope)
+        setError(
+          reason instanceof Error ? reason.message : "Không lưu được báo cáo.",
+        );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+        <fieldset
+          disabled={saving}
+          className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-end"
+        >
+          <div>
+            <label
+              htmlFor="profit-period"
+              className="mb-1 block text-xs font-medium text-slate-500"
+            >
+              Kỳ báo cáo
+            </label>
+            <select
+              id="profit-period"
+              value={preset}
+              onChange={(event) =>
+                setPreset(event.target.value as ProfitPreset)
+              }
+              className={`${control} w-full sm:w-40`}
+            >
+              <option value="day">Một ngày</option>
+              <option value="week">Một tuần</option>
+              <option value="month">Một tháng</option>
+              <option value="custom">Khoảng ngày</option>
+            </select>
+          </div>
+          {preset === "custom" ? (
+            <DateRangePicker
+              label="Khoảng ngày"
+              startDate={custom.startDate}
+              endDate={custom.endDate}
+              onChange={(startDate, endDate) =>
+                setCustom({ startDate, endDate })
+              }
+              disabled={saving}
+              className="w-full sm:w-80"
+              triggerClassName={control}
+            />
+          ) : (
+            <div className="min-w-0 sm:w-44">
+              <label
+                htmlFor="profit-anchor"
+                className="mb-1 block text-xs font-medium text-slate-500"
+              >
+                {preset === "day"
+                  ? "Ngày báo cáo"
+                  : preset === "week"
+                    ? "Ngày trong tuần cần xem"
+                    : "Ngày trong tháng cần xem"}
+              </label>
+              <Input
+                id="profit-anchor"
+                type="date"
+                value={anchor}
+                onChange={(event) => setAnchor(event.target.value)}
+                className={control}
+              />
+            </div>
+          )}
+        </fieldset>
+        <div className="grid gap-3 sm:flex">
+          <Button
+            variant="outline"
+            disabled={loading || saving || dirty}
+            onClick={() => setReload((value) => value + 1)}
+            className="gap-2 rounded-sm border-slate-200 bg-white text-emerald-900"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Làm mới
+          </Button>
+          <Button
+            disabled={!calculation.complete || loading || saving}
+            isLoading={saving}
+            onClick={() => void save()}
+            className="gap-2 rounded-sm bg-emerald-800 text-white hover:bg-emerald-900"
+          >
+            <Save className="h-4 w-4" />
+            Lưu báo cáo
+          </Button>
+        </div>
+      </div>
+      <div className="flex flex-wrap justify-between gap-2 border-y border-slate-200 py-3 text-xs text-slate-500">
+        <span>
+          {profitDate(range.startDate)} — {profitDate(range.endDate)}
+          {data && ` · ${data.days.length} ngày`}
+        </span>
+        <span>
+          {dirty ? "Có thay đổi chưa lưu" : "Chi phí lưu riêng theo từng ngày"}
+        </span>
+      </div>
+      {error && (
+        <p
+          role="alert"
+          className="rounded-lg bg-red-50 p-4 text-sm text-red-700"
+        >
+          {error}
+        </p>
+      )}
+      {message && (
+        <p
+          role="status"
+          className="rounded-lg bg-emerald-50 p-4 text-sm text-emerald-800"
+        >
+          {message}
+        </p>
+      )}
+      {loading ? (
+        <p
+          role="status"
+          className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500"
+        >
+          Đang tải doanh thu và chi phí trong kỳ...
+        </p>
+      ) : (
+        data && (
+          <>
+            <section
+              aria-label="Kết quả lợi nhuận kỳ"
+              className="grid min-w-0 gap-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5 lg:grid-cols-3"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-500">
+                  Lợi nhuận ròng ước tính
+                </p>
+                <p
+                  className={`mt-2 break-words text-2xl font-bold tabular-nums sm:text-3xl ${calculation.profit === null ? "text-slate-400" : calculation.profit < 0 ? "text-red-700" : "text-emerald-800"}`}
+                >
+                  {calculation.profit === null
+                    ? "Chưa đủ số liệu"
+                    : profitMoney(calculation.profit)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {calculation.margin === null
+                    ? "Tính từ doanh thu và chi phí của từng ngày"
+                    : `Biên lợi nhuận: ${calculation.margin.toFixed(1)}%`}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-500">
+                  Doanh thu thuần
+                </p>
+                <p
+                  className={`mt-2 break-words text-2xl font-bold tabular-nums ${calculation.revenue < 0 ? "text-red-700" : "text-emerald-800"}`}
+                >
+                  {profitMoney(calculation.revenue)}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-500">
+                  Tổng chi phí
+                </p>
+                <p className="mt-2 break-words text-2xl font-bold text-slate-800 tabular-nums">
+                  {calculation.complete
+                    ? profitMoney(calculation.totalCosts)
+                    : "Chưa đủ số liệu"}
+                </p>
+              </div>
+              {!calculation.complete && (
+                <p
+                  role="status"
+                  className="flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 lg:col-span-3"
+                >
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  Còn {calculation.missingDays.length} ngày thiếu chi phí/cost.
+                </p>
+              )}
+            </section>
+            <fieldset
+              disabled={saving}
+              className="min-w-0 space-y-5"
+              key={scope}
+            >
+              {selected && (
+                <div
+                  ref={formPanel}
+                  className="grid min-w-0 gap-5 xl:grid-cols-2"
+                >
+                  <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <h2 className="text-base font-bold">Chi phí cần nhập</h2>
+                      <div className="min-w-0 w-full sm:w-52">
+                        <label
+                          htmlFor="profit-edit-day"
+                          className="mb-1 block text-xs font-medium text-slate-500"
+                        >
+                          Ngày nhập chi phí
+                        </label>
+                        <select
+                          id="profit-edit-day"
+                          value={selectedDate}
+                          onChange={(event) =>
+                            setSelectedDate(event.target.value)
+                          }
+                          className={`${control} w-full`}
+                        >
+                          {calculation.rows.map((row) => (
+                            <option key={row.date} value={row.date}>
+                              {profitDate(row.date)} ·{" "}
+                              {row.result.complete
+                                ? "Đã nhập đủ"
+                                : "Thiếu chi phí"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-500">
+                      Nhập cho riêng ngày {profitDate(selected.date)}. Không
+                      phát sinh thì nhập 0; marketing mặc định là 0.
+                    </p>
+                    <div className="mt-5 grid min-w-0 gap-4 sm:grid-cols-2">
+                      {PROFIT_FIELDS.map((field) => (
+                        <div
+                          key={field.key}
+                          className={`min-w-0 ${field.key === "salary" ? "sm:col-span-2" : ""}`}
+                        >
+                          <label
+                            htmlFor={`profit-${selected.date}-${field.key}`}
+                            className="mb-1.5 block text-sm font-semibold"
+                          >
+                            {field.label}
+                            {field.key !== "marketing" && (
+                              <span className="text-red-600"> *</span>
+                            )}
+                          </label>
+                          <AmountInput
+                            key={`${selected.date}:${field.key}`}
+                            id={`profit-${selected.date}-${field.key}`}
+                            label={`${field.label} ngày ${profitDate(selected.date)}`}
+                            value={selected.inputs[field.key]}
+                            onChange={(value) =>
+                              edit(selected.date, {
+                                ...selected.inputs,
+                                [field.key]: value,
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {selected.inputs.legacyUtilities != null && (
+                      <p className="mt-4 rounded-sm bg-amber-50 p-3 text-xs text-amber-900">
+                        Ngày này trước đây lưu điện/nước gộp:{" "}
+                        {profitMoney(selected.inputs.legacyUtilities)}. Nhập lại
+                        phần tiền điện và tiền nước riêng trước khi lưu.
+                      </p>
+                    )}
+                    {!selected.result.complete && (
+                      <p className="mt-4 text-xs text-amber-800">
+                        Còn thiếu: {selected.result.missingFields.join(", ")}.
+                      </p>
+                    )}
+                  </section>
+                  <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                    <h2 className="flex items-center gap-2 text-base font-bold">
+                      <Calculator
+                        className="h-5 w-5 text-emerald-700"
+                        aria-hidden="true"
+                      />
+                      Bảng tính trong ngày
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {profitDate(selected.date)} · {selected.source.billCount}{" "}
+                      hóa đơn hoàn tất
+                    </p>
+                    <dl className="mt-4 divide-y divide-slate-100 text-sm">
+                      <div className="flex min-w-0 justify-between gap-3 py-2.5">
+                        <dt>Doanh thu thuần</dt>
+                        <dd
+                          className={`shrink-0 text-right font-bold tabular-nums ${selected.source.revenue < 0 ? "text-red-700" : "text-emerald-800"}`}
+                        >
+                          {profitMoney(selected.source.revenue)}
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 justify-between gap-3 py-2.5">
+                        <dt>− Giá vốn món đã bán</dt>
+                        <dd className="shrink-0 text-right font-semibold tabular-nums">
+                          {selected.result.costRows.some(
+                            (row) => row.cost === null,
+                          )
+                            ? "Cần bổ sung cost"
+                            : profitMoney(selected.result.materialCost)}
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 justify-between gap-3 py-2.5">
+                        <dt>− Lương nhân viên (1 ngày)</dt>
+                        <dd className="shrink-0 text-right font-semibold tabular-nums">
+                          {selected.inputs.salary === null
+                            ? "Chưa nhập"
+                            : profitMoney(selected.inputs.salary)}
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 justify-between gap-3 py-2.5">
+                        <dt>− Chi phí tại quầy thu ngân</dt>
+                        <dd className="shrink-0 text-right font-semibold tabular-nums">
+                          {profitMoney(selected.result.voucherCost)}
+                        </dd>
+                      </div>
+                      {(
+                        ["electricity", "water", "other", "marketing"] as const
+                      ).map((key) => (
+                        <div
+                          key={key}
+                          className="flex min-w-0 justify-between gap-3 py-2.5"
+                        >
+                          <dt>
+                            −{" "}
+                            {
+                              PROFIT_FIELDS.find((field) => field.key === key)!
+                                .label
+                            }
+                          </dt>
+                          <dd className="shrink-0 text-right font-semibold tabular-nums">
+                            {selected.inputs[key] === null
+                              ? "Chưa nhập"
+                              : profitMoney(selected.inputs[key]!)}
+                          </dd>
+                        </div>
+                      ))}
+                      <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">
+                        <dt>Tổng chi phí ngày</dt>
+                        <dd className="text-right tabular-nums">
+                          {selected.result.complete
+                            ? profitMoney(selected.result.totalCosts)
+                            : "Chưa đủ số liệu"}
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">
+                        <dt>Lợi nhuận ngày</dt>
+                        <dd
+                          className={`text-right tabular-nums ${selected.result.profit === null ? "text-slate-400" : selected.result.profit < 0 ? "text-red-700" : "text-emerald-800"}`}
+                        >
+                          {selected.result.profit === null
+                            ? "Chưa đủ số liệu"
+                            : profitMoney(selected.result.profit)}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                </div>
+              )}
+              {calculation.rows.length > 1 && (
+                <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <div className="border-b border-slate-100 p-4 sm:p-5">
+                    <h2 className="text-base font-bold">
+                      Tổng hợp lợi nhuận theo ngày
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Chọn ngày để nhập hoặc điều chỉnh chi phí trên form phía
+                      trên.
+                    </p>
+                  </div>
+                  <div className="max-h-[420px] overflow-auto overscroll-contain">
+                    <table className="w-full min-w-[800px] text-sm">
+                      <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
+                        <tr>
+                          {[
+                            "Ngày",
+                            "Doanh thu",
+                            "Tổng chi phí",
+                            "Lợi nhuận",
+                            "Trạng thái",
+                            "",
+                          ].map((label, index) => (
+                            <th
+                              key={index}
+                              scope="col"
+                              className="px-4 py-3 text-left font-semibold"
+                            >
+                              {label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {calculation.rows.map((row) => (
+                          <tr
+                            key={row.date}
+                            className={
+                              selectedDate === row.date
+                                ? "bg-emerald-50/50"
+                                : "hover:bg-slate-50"
+                            }
+                          >
+                            <th
+                              scope="row"
+                              className="whitespace-nowrap px-4 py-3 text-left font-semibold"
+                            >
+                              {profitDate(row.date)}
+                            </th>
+                            <td
+                              className={`whitespace-nowrap px-4 py-3 ${row.source.revenue < 0 ? "text-red-700" : "text-emerald-800"}`}
+                            >
+                              {profitMoney(row.source.revenue)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3">
+                              {row.result.complete
+                                ? profitMoney(row.result.totalCosts)
+                                : "Chưa đủ số liệu"}
+                            </td>
+                            <td
+                              className={`whitespace-nowrap px-4 py-3 font-bold ${row.result.profit === null ? "text-slate-400" : row.result.profit < 0 ? "text-red-700" : "text-emerald-800"}`}
+                            >
+                              {row.result.profit === null
+                                ? "Chưa đủ số liệu"
+                                : profitMoney(row.result.profit)}
+                            </td>
+                            <td
+                              className={`px-4 py-3 text-xs ${row.result.complete ? "text-emerald-700" : "text-amber-700"}`}
+                            >
+                              {!row.result.complete
+                                ? "Thiếu chi phí"
+                                : Object.prototype.hasOwnProperty.call(
+                                      drafts.current,
+                                      `${storeId}:${row.date}`,
+                                    )
+                                  ? "Có thay đổi chưa lưu"
+                                  : row.saved
+                                    ? "Đã lưu chi phí"
+                                    : "Đã nhập đủ"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                aria-pressed={selectedDate === row.date}
+                                onClick={() => {
+                                  setSelectedDate(row.date);
+                                  formPanel.current?.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "start",
+                                  });
+                                }}
+                                className="whitespace-nowrap text-emerald-800"
+                              >
+                                Nhập chi phí
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+              {selected && (
+                <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                  <h2 className="text-base font-bold">
+                    Chi tiết ngày {profitDate(selected.date)}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Cost dùng giá hiện tại trong danh mục. Món thiếu cost cần bổ
+                    sung riêng cho ngày này.
+                  </p>
+                  <div className="mt-4 grid min-w-0 gap-5 2xl:grid-cols-2">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[540px] text-sm">
+                        <thead className="bg-slate-50 text-slate-500">
+                          <tr>
+                            <th className="p-3 text-left">Món</th>
+                            <th className="p-3 text-right">Số lượng</th>
+                            <th className="w-48 p-3 text-right">Cost / món</th>
+                            <th className="p-3 text-right">Giá vốn</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {selected.result.costRows.map((row) => (
+                            <tr key={row.key}>
+                              <td className="p-3">{row.name}</td>
+                              <td className="p-3 text-right">
+                                {row.quantity.toLocaleString("vi-VN")}
+                              </td>
+                              <td className="p-3 text-right">
+                                {row.unitCost === null ||
+                                Object.prototype.hasOwnProperty.call(
+                                  selected.inputs.costOverrides,
+                                  row.key,
+                                ) ? (
+                                  <AmountInput
+                                    key={`${selected.date}:${row.key}`}
+                                    id={`cost-${selected.date}-${encodeURIComponent(row.key)}`}
+                                    label={`Cost ${row.name} ngày ${profitDate(selected.date)}`}
+                                    value={row.unitCost}
+                                    onChange={(value) =>
+                                      edit(selected.date, {
+                                        ...selected.inputs,
+                                        costOverrides: {
+                                          ...selected.inputs.costOverrides,
+                                          [row.key]: value,
+                                        },
+                                      })
+                                    }
+                                  />
+                                ) : (
+                                  profitMoney(row.unitCost)
+                                )}
+                              </td>
+                              <td className="p-3 text-right">
+                                {row.cost === null
+                                  ? "Chưa có cost"
+                                  : profitMoney(row.cost)}
+                              </td>
+                            </tr>
+                          ))}
+                          {!selected.result.costRows.length && (
+                            <tr>
+                              <td
+                                colSpan={4}
+                                className="p-5 text-center text-slate-500"
+                              >
+                                Không có món bán trong ngày này.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold">
+                        Phiếu chi tại quầy ·{" "}
+                        {profitMoney(selected.result.voucherCost)}
+                      </h3>
+                      <div className="mt-2 divide-y divide-slate-100">
+                        {selected.source.vouchers.map((voucher) => (
+                          <div
+                            key={voucher.id}
+                            className="flex gap-3 py-3 text-sm"
+                          >
+                            <span className="min-w-0 flex-1 break-words">
+                              {voucher.category}
+                              <span className="block text-xs text-slate-500">
+                                {voucher.code} · {voucher.note}
+                              </span>
+                            </span>
+                            <span className="shrink-0 font-semibold">
+                              {profitMoney(voucher.amount)}
+                            </span>
+                          </div>
+                        ))}
+                        {!selected.source.vouchers.length && (
+                          <p className="py-3 text-sm text-slate-500">
+                            Không có phiếu chi hợp lệ: 0 đ.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+            </fieldset>
+          </>
+        )
+      )}
+    </div>
+  );
+}

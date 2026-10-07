@@ -1,0 +1,76 @@
+<?php
+declare(strict_types=1);
+require __DIR__ . '/../public/api/_lib/daily_profit.php';
+function check(bool $condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
+function rejected(callable $action): void { try { $action(); } catch (InvalidArgumentException $e) { return; } throw new RuntimeException('Expected invalid input to be rejected'); }
+$inputs = ['salary'=>200000,'electricity'=>0,'water'=>0,'other'=>100000,'marketing'=>0,'costOverrides'=>[]];
+check(daily_profit_validate_inputs($inputs)['marketing'] === 0.0, 'Explicit zero is accepted');
+foreach (['salary','electricity','water','other'] as $field) {
+  $bad = $inputs; unset($bad[$field]); rejected(fn() => daily_profit_validate_inputs($bad));
+  $bad[$field] = -1; rejected(fn() => daily_profit_validate_inputs($bad));
+  $bad[$field] = null; rejected(fn() => daily_profit_validate_inputs($bad));
+}
+rejected(fn() => daily_profit_date('2026-02-30'));
+rejected(fn() => daily_profit_date('2026-10-07 extra'));
+check(daily_profit_date('2026-10-07') === '2026-10-07', 'Valid date accepted');
+rejected(fn() => daily_profit_validate_inputs([...$inputs, 'marketing'=>-1]));
+rejected(fn() => daily_profit_validate_inputs([...$inputs, 'marketing'=>null]));
+$noMarketing = $inputs; unset($noMarketing['marketing']);
+check(daily_profit_validate_inputs($noMarketing)['marketing'] === 0.0, 'Marketing defaults to zero');
+rejected(fn() => daily_profit_validate_inputs([...$inputs, 'costOverrides'=>['coffee'=>null]]));
+$pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
+daily_profit_ensure_schema($pdo);
+daily_profit_save($pdo, 'cafe', '2026-10-07', $inputs, 'test');
+daily_profit_save($pdo, 'cafe', '2026-10-07', [...$inputs,'salary'=>300000], 'test');
+check($pdo->query('SELECT COUNT(*) FROM daily_profit_inputs')->fetchColumn() == 1, 'Save replaces same day instead of duplicating');
+check(daily_profit_load($pdo, 'cafe', '2026-10-07')['inputs']['salary'] == 300000, 'Persisted salary');
+check(daily_profit_load($pdo, 'restaurant', '2026-10-07') === null, 'Store isolation');
+check(daily_profit_load($pdo, 'cafe', '2026-10-08') === null, 'Date isolation');
+$pdo->exec('CREATE TABLE bills (id TEXT, store_id TEXT, status TEXT, created_at TEXT, total REAL)');
+$pdo->exec('CREATE TABLE bill_items (bill_id TEXT, menu_id TEXT, name TEXT, quantity REAL)');
+$pdo->exec('CREATE TABLE products (store_id TEXT, product_code TEXT, cost REAL, has_cost INTEGER)');
+$pdo->exec('CREATE TABLE cash_vouchers (id TEXT, code TEXT, store_id TEXT, voucher_type TEXT, amount REAL, category TEXT, note TEXT, cancelled_at TEXT, include_in_cash_flow INTEGER, happened_at TEXT)');
+$pdo->exec("INSERT INTO bills VALUES ('b1','cafe','completed','2026-10-07 00:00:00',100), ('b2','cafe','completed','2026-10-07 23:59:59',200), ('cancel','cafe','cancelled','2026-10-07 15:00:00',999), ('next','cafe','completed','2026-10-08 00:00:00',888), ('other','restaurant','completed','2026-10-07 12:00:00',777)");
+$pdo->exec("INSERT INTO bill_items VALUES ('b1','coffee','Coffee',2.333),('b2','missing','Missing',3),('cancel','coffee','Coffee',900),('next','coffee','Coffee',888),('other','coffee','Coffee',777)");
+$pdo->exec("INSERT INTO products VALUES ('cafe','coffee',10,1)");
+$pdo->exec("INSERT INTO cash_vouchers VALUES ('v1','PC1','cafe','expense',5,'Repair','',NULL,1,'2026-10-07 12:00:00'),('v2','PC2','cafe','expense',99,'Cancelled','', '2026-10-07',1,'2026-10-07 12:00:00'),('v3','PC3','cafe','expense',99,'Excluded','',NULL,0,'2026-10-07 12:00:00'),('v4','PT1','cafe','income',99,'Income','',NULL,1,'2026-10-07 12:00:00')");
+$source = daily_profit_source($pdo, 'cafe', '2026-10-07');
+check($source['revenue'] === 300.0 && $source['billCount'] === 2, 'Both day boundaries included, canceled/outside/store bills excluded');
+check(count($source['sales']) === 2 && $source['sales'][0]['quantity'] === 2.333, 'Sold quantity precision preserved');
+check($source['sales'][1]['unitCost'] === null, 'Missing costs are null instead of zero');
+check(count($source['vouchers']) === 1 && $source['vouchers'][0]['id'] === 'v1', 'Only eligible expense vouchers');
+rejected(fn() => daily_profit_require_complete($source, $inputs));
+daily_profit_require_complete($source, [...$inputs,'costOverrides'=>['missing'=>0]]);
+check(array_sum(array_column($source['vouchers'], 'amount')) === 5.0, 'Cashier costs automatically include only eligible vouchers');
+$legacy = ['salary'=>200000,'rent'=>100000,'utilities'=>50000,'other'=>10000,'additionalExpenses'=>[['id'=>'a','name'=>'Repair','amount'=>20000]],'costOverrides'=>[],'voucherIds'=>[]];
+daily_profit_save($pdo, 'cafe', '2026-10-06', $legacy, 'test');
+$converted = daily_profit_load($pdo, 'cafe', '2026-10-06')['inputs'];
+check($converted['other'] === 130000 && $converted['legacyUtilities'] === 50000 && $converted['electricity'] === null && $converted['water'] === null && $converted['marketing'] === 0, 'Existing manual costs preserved in other costs');
+echo "PASS daily profit: required amounts, date validation, persistence and isolation\n";
+
+profit_history_ensure_schema($pdo);
+check(count(profit_period_dates('2026-09-01','2026-10-06')) === 36, 'Custom range crosses months inclusively');
+check(count(profit_period_dates('2024-02-01','2024-02-29')) === 29, 'Leap month supported');
+rejected(fn() => profit_period_dates('2026-10-08','2026-10-07'));
+rejected(fn() => profit_period_dates('2025-01-01','2026-01-02'));
+$period = profit_period_load($pdo, 'cafe', '2026-10-07', '2026-10-09');
+check(count($period) === 3 && $period[2]['source']['revenue'] === 0.0, 'Empty days retained for required expenses');
+check($period[0]['saved']['inputs']['salary'] == 300000, 'Saved daily inputs reused in periods');
+$zero = ['salary'=>0,'electricity'=>0,'water'=>0,'other'=>0,'marketing'=>0,'costOverrides'=>[]];
+$periodInputs = ['2026-10-07'=>[...$zero,'salary'=>20,'electricity'=>3,'water'=>2,'other'=>10,'costOverrides'=>['missing'=>0]],'2026-10-08'=>$zero];
+$report = profit_period_save($pdo, 'cafe', '2026-10-07','2026-10-08',$periodInputs,'test');
+check($report['totals']['electricity'] === 3.0 && $report['totals']['water'] === 2.0, 'Separate electricity and water preserved in history');
+check(abs($report['totals']['profit'] - (-7755.33)) < 0.00001, 'Period net profit sums all daily sources and expenses');
+$history = profit_history($pdo,'cafe',1);
+check($history['total'] === 1 && count($history['rows']) === 1, 'Saved period appears in history');
+$detail = profit_history($pdo,'cafe',1,$report['id']);
+check(count($detail['snapshot']['days']) === 2 && $detail['snapshot']['days'][0]['inputs']['salary'] === 20, 'History stores daily inputs');
+rejected(fn() => profit_history($pdo,'restaurant',1,$report['id']));
+$pdo->exec('UPDATE products SET cost=100');
+check(profit_history($pdo,'cafe',1,$report['id'])['snapshot']['totals']['profit'] === $detail['snapshot']['totals']['profit'], 'Snapshot stable when catalog costs change');
+$before = daily_profit_load($pdo,'cafe','2026-10-07');
+$invalid = $periodInputs; $invalid['2026-10-08']['salary'] = null;
+rejected(fn() => profit_period_save($pdo,'cafe','2026-10-07','2026-10-08',$invalid,'test'));
+check(daily_profit_load($pdo,'cafe','2026-10-07') === $before && profit_history($pdo,'cafe',1)['total'] === 1, 'Failed save is atomic');
+check(profit_history($pdo,'restaurant',1)['total'] === 0, 'History store isolation');
+echo "PASS profit period: ranges, daily reuse, snapshot history and atomic saves\n";
