@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Calculator, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Pagination } from "@/components/ui/Pagination";
+import { paginateItems } from "@/lib/listPagination";
 import { SelectBox } from "@/components/ui/SelectBox";
 import { SingleDatePicker } from "@/components/ui/SingleDatePicker";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
@@ -74,12 +76,18 @@ export function ProfitCalculation({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
+  const [costPage, setCostPage] = useState({ scope: "", page: 1 });
   const data = loaded?.scope === scope ? loaded.data : null;
   const calculation = useMemo(
     () => calculateProfitPeriod(data?.days ?? [], inputs),
     [data, inputs],
   );
   const selected = calculation.rows.find((row) => row.date === selectedDate);
+  const costPageScope = `${scope}:${selectedDate}`;
+  const paginatedCosts = paginateItems(
+    selected?.result.costRows ?? [],
+    costPage.scope === costPageScope ? costPage.page : 1,
+  );
   const missingCostCount = selected?.result.costRows.filter((row) => row.unitCost === null).length ?? 0;
   const missingExpenseFields = PROFIT_FIELDS
     .filter((field) => selected?.result.missingFields.includes(field.label))
@@ -655,31 +663,51 @@ export function ProfitCalculation({
               {selected && (
                 <>
                 <section id="profit-cost-details" className="min-w-0 scroll-mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-                  <h2 className="text-base font-bold">
-                    Chi tiết ngày {profitDate(selected.date)}
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Cost lấy từ giá vốn trong danh mục hoặc công thức nguyên liệu của món.
-                    Món chưa có dữ liệu cost cần bổ sung trước khi tính lợi nhuận.
-                  </p>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-bold">
+                        Chi tiết ngày {profitDate(selected.date)}
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Cost lấy từ danh mục hoặc công thức nguyên liệu của món.
+                      </p>
+                    </div>
+                    <div className="sm:text-right">
+                      <p className={`text-base font-bold tabular-nums ${missingCostCount > 0 ? "text-slate-500" : "text-emerald-800"}`}>
+                        <span className="mr-2 text-sm font-normal text-slate-500">Tổng giá vốn</span>
+                        {missingCostCount > 0 ? "Chưa đủ cost" : profitMoney(selected.result.materialCost)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {selected.result.costRows.length} món
+                        {missingCostCount > 0 && <span className="ml-3 text-amber-800">{missingCostCount} món chưa có cost</span>}
+                      </p>
+                    </div>
+                  </div>
                     <div className="mt-4 min-w-0 overflow-x-auto">
-                      <table className="w-full min-w-[540px] text-sm">
+                      <table className="w-full min-w-[600px] table-fixed text-sm">
+                        <colgroup>
+                          <col className="w-[35%]" />
+                          <col className="w-[15%]" />
+                          <col className="w-[25%]" />
+                          <col className="w-[25%]" />
+                        </colgroup>
                         <thead className="bg-slate-50 text-slate-500">
                           <tr>
                             <th scope="col" className="p-3 text-left">Món</th>
-                            <th scope="col" className="whitespace-nowrap p-3 text-right sm:w-28">Số lượng</th>
-                            <th scope="col" className="w-48 p-3 text-right">Cost / món</th>
-                            <th scope="col" className="whitespace-nowrap p-3 text-right sm:w-44">Giá vốn</th>
+                            <th scope="col" className="whitespace-nowrap p-3 text-right">Số lượng</th>
+                            <th scope="col" className="p-3 text-right">Cost / món</th>
+                            <th scope="col" className="whitespace-nowrap p-3 text-right">Tổng giá vốn</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {selected.result.costRows.map((row) => (
+                          {paginatedCosts.items.map((row) => (
                             <tr key={row.key}>
-                              <td className="p-3">{row.name}</td>
-                              <td className="p-3 text-right">
+                              <td className="break-words px-3 py-2.5 font-medium">{row.name}</td>
+                              <td className="px-3 py-2.5 text-right tabular-nums">
                                 {row.quantity.toLocaleString("vi-VN")}
                               </td>
-                              <td className="p-3 text-right">
+                              <td className="px-3 py-2.5 text-right tabular-nums">
+                                <div className="ml-auto max-w-48">
                                 {row.unitCost === null ||
                                 Object.prototype.hasOwnProperty.call(
                                   selected.inputs.costOverrides,
@@ -706,10 +734,11 @@ export function ProfitCalculation({
                                     <span className="mt-1 block text-xs text-slate-500">{row.costSource === "recipe" ? "Từ công thức" : "Từ danh mục"}</span>
                                   </>
                                 )}
+                                </div>
                               </td>
-                              <td className="p-3 text-right">
+                              <td className="relative px-3 py-2.5 text-right font-semibold tabular-nums">
                                 {row.cost === null
-                                  ? "Chưa có cost"
+                                  ? <span className="font-normal text-slate-400"><span aria-hidden="true">—</span><span className="sr-only">Chưa có cost</span></span>
                                   : profitMoney(row.cost)}
                               </td>
                             </tr>
@@ -727,6 +756,15 @@ export function ProfitCalculation({
                         </tbody>
                       </table>
                     </div>
+                    {paginatedCosts.pagination.totalPages > 1 && (
+                      <Pagination
+                        currentPage={paginatedCosts.pagination.currentPage}
+                        totalItems={selected.result.costRows.length}
+                        onPageChange={(page) => setCostPage({ scope: costPageScope, page })}
+                        disabled={saving}
+                        className="px-0 pb-0 sm:px-0"
+                      />
+                    )}
                 </section>
                 <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
