@@ -43,6 +43,7 @@ type EmployeesResponse = {
 
 type EmployeeMutationResponse = {
   id: string;
+  employeeCode: string;
 };
 
 type EmployeeUpdateResponse = {
@@ -61,13 +62,15 @@ export async function getEmployees(storeId: string): Promise<Employee[]> {
   return response.items || [];
 }
 
-export async function addEmployee(employee: Omit<Employee, "id">) {
-  const response = await apiRequest<EmployeeMutationResponse>("/employees.php", {
+export function createEmployee(employee: Omit<Employee, "id">) {
+  return apiRequest<EmployeeMutationResponse>("/employees.php", {
     method: "POST",
     body: JSON.stringify(employee),
   });
+}
 
-  return response.id;
+export async function addEmployee(employee: Omit<Employee, "id">) {
+  return (await createEmployee(employee)).id;
 }
 
 export async function updateEmployee(

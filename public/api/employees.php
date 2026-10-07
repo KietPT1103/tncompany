@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/employee_codes.php';
 
 function employees_ensure_column(string $table, string $column, string $definition): void
 {
@@ -192,8 +193,8 @@ if ($method === 'POST') {
     $employeeCode = trim((string) ($body['employeeCode'] ?? ''));
     $name = trim((string) ($body['name'] ?? ''));
 
-    if ($employeeCode === '' || $name === '') {
-        respond_error('Employee code and name are required', 422);
+    if ($name === '') {
+        respond_error('Vui lòng nhập tên nhân viên.', 422);
     }
 
     $salaryType = employees_normalize_salary_type((string) ($body['salaryType'] ?? ''), $body);
@@ -214,7 +215,7 @@ if ($method === 'POST') {
             :attendance_bonus_amount, :standard_hours, :allowances_json, NOW()
          )'
     );
-    $statement->execute([
+    $params = [
         'id' => $id,
         'store_id' => $storeId,
         'employee_code' => $employeeCode,
@@ -231,10 +232,23 @@ if ($method === 'POST') {
         'attendance_bonus_amount' => (float) ($body['attendanceBonusAmount'] ?? 0),
         'standard_hours' => (float) ($body['standardHours'] ?? 0),
         'allowances_json' => json_encode($body['allowances'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-    ]);
+    ];
+    try {
+        $employeeCode = employees_insert_with_code(db(), $employeeCode, static function (string $code) use ($statement, $params): void {
+            $params['employee_code'] = $code;
+            $statement->execute($params);
+        });
+    } catch (PDOException $exception) {
+        if ((int)($exception->errorInfo[1] ?? 0) === 1062) respond_error('Mã nhân viên đã tồn tại.',409);
+        throw $exception;
+    } catch (RuntimeException $exception) {
+        if ($exception->getCode() === 503) respond_error($exception->getMessage(),503);
+        throw $exception;
+    }
 
     respond_ok([
         'id' => $id,
+        'employeeCode' => $employeeCode,
     ], 201);
 }
 

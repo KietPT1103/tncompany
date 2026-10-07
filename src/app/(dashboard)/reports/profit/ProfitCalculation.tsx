@@ -374,10 +374,6 @@ export function ProfitCalculation({
                         </p>
                       </div>
                     </div>
-                    <p className="mt-3 text-sm text-slate-500">
-                      Nhập cho riêng ngày {profitDate(selected.date)}. Không
-                      phát sinh thì giữ 0; các khoản chi mặc định là 0.
-                    </p>
                     <div className="mt-5 grid min-w-0 gap-4 sm:grid-cols-2">
                       <div className="min-w-0 sm:col-span-2">
                         <p className="mb-1.5 text-sm font-semibold">Lương nhân viên (1 ngày)</p>
