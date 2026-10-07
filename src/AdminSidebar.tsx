@@ -113,6 +113,12 @@ const navGroups: NavGroup[] = [
     icon: FileChartColumn,
     items: [
       {
+        href: "/reports/revenue",
+        label: "Doanh thu theo ngày",
+        icon: CalendarDays,
+        permission: "reports.access",
+      },
+      {
         href: "/reports/products",
         label: "Hàng hoá",
         icon: PackageSearch,

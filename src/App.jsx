@@ -29,6 +29,7 @@ import InventoryWorkspacePage from "./app/(dashboard)/inventory/page";
 import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
 import ReportsPage from "./app/(dashboard)/reports/page";
 import ProductSalesReportPage from "./app/(dashboard)/reports/products/page";
+import DailyRevenueReportPage from "./app/(dashboard)/reports/revenue/page";
 import SocialListeningPage from "./app/(dashboard)/social-listening/page";
 import GestureStudioPage from "./app/(dashboard)/gesture-studio/page";
 import DustRitualPage from "./app/dust-ritual/page";
@@ -228,6 +229,7 @@ export function App() {
               <Route path="payroll-estimate" element={<SalaryEstimatePage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="reports/products" element={<ProductSalesReportPage />} />
+              <Route path="reports/revenue" element={<DailyRevenueReportPage />} />
               <Route path="reports/:id" element={<ReportDetailPage />} />
               <Route path="cash-flow" element={<CashFlowPage />} />
               <Route path="virtual-bills" element={<Navigate to="/admin/sample-bills/coffee" replace />} />
