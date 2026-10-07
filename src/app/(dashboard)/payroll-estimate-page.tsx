@@ -1177,14 +1177,9 @@ export default function SalaryEstimatePage() {
     });
   }, [estimateRoles, estimateSummaries]);
 
-  const selectedRoleTotal = totalsByRole.find(
-    (item) => item.role === selectedRole,
-  ) || {
-    role: selectedRole,
-    employees: 0,
-    totalHours: 0,
-    totalSalary: 0,
-  };
+  const displayedRoleTotals = totalsByRole.filter(
+    item => displayedScheduleRoles.includes(item.role),
+  );
 
   const selectedRoleSummaries = estimateSummaries.filter(
     (item) => item.assignedRoles.includes(selectedRole),
@@ -1517,14 +1512,14 @@ export default function SalaryEstimatePage() {
         <div className="space-y-5">
           <div className="space-y-5">
             <section className={cn("border border-slate-200 bg-white p-4 shadow-[5px_7px_12px_rgba(15,23,42,0.16)] rounded", workspaceView === "saved" && "hidden")}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
+                <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[repeat(auto-fit,minmax(190px,1fr))]">
                   <div className="rounded-lg bg-emerald-50/70 px-4 py-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
                       <Wallet className="h-4 w-4 text-emerald-600" />
                       Tổng toàn khoảng
                     </div>
-                    <div className="mt-3 text-2xl font-semibold text-slate-900">
+                    <div className="mt-3 break-words text-2xl font-semibold tabular-nums text-slate-900">
                       {formatCurrency(totalEstimate)}
                     </div>
                     <div className="mt-1 text-sm text-slate-500">
@@ -1533,22 +1528,22 @@ export default function SalaryEstimatePage() {
                     </div>
                   </div>
 
-                  <div className="rounded-lg bg-sky-50/70 px-4 py-3">
+                  {displayedRoleTotals.map(item => <div key={item.role} className="min-w-0 rounded-lg bg-sky-50/70 px-4 py-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
-                      <Clock3 className="h-4 w-4 text-sky-600" />
-                      Đang xem: {selectedRole}
+                      <Clock3 className="h-4 w-4 shrink-0 text-sky-600" />
+                      {item.role}
                     </div>
-                    <div className="mt-3 text-2xl font-semibold text-slate-900">
-                      {formatCurrency(selectedRoleTotal.totalSalary)}
+                    <div className="mt-3 break-words text-2xl font-semibold tabular-nums text-slate-900">
+                      {formatCurrency(item.totalSalary)}
                     </div>
                     <div className="mt-1 text-sm text-slate-500">
-                      {selectedRoleTotal.employees} người •{" "}
-                      {formatHours(selectedRoleTotal.totalHours)}
+                      {item.employees} người •{" "}
+                      {formatHours(item.totalHours)}
                     </div>
-                  </div>
+                  </div>)}
                 </div>
 
-                <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                <div className="flex flex-col gap-3 sm:self-end md:flex-row md:items-end 2xl:shrink-0">
                   <div className="w-full border-slate-200 md:w-[280px] md:border-l md:pl-6">
                     <span className="mb-2 block text-sm font-medium text-slate-600">
                       Vai trò
@@ -1557,7 +1552,7 @@ export default function SalaryEstimatePage() {
                       value={selectedRole}
                       options={roleOptions}
                       onValueChange={setSelectedRole}
-                      ariaLabel="Chọn vai trò phân ca và xem tổng lương"
+                      ariaLabel="Chọn vai trò phân ca và tổng hợp nhân viên"
                       disabled={saving || loadingSavedEstimate}
                       className="w-full"
                       triggerClassName="h-14 rounded-xl border-slate-200 bg-white px-4 text-base font-bold text-slate-950 shadow-sm hover:border-[#064E3B] hover:bg-white focus-visible:border-[#064E3B] focus-visible:ring-0 [&_svg]:h-5 [&_svg]:w-5 [&_svg:first-child]:text-slate-500"

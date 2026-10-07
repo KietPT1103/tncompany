@@ -5,6 +5,7 @@ Trang Ước lượng lương có ba tab: Lịch phân ca, Tổng hợp nhân vi
 - Nút **Lưu ước tính** nằm cạnh **Chụp lịch**. Nút lưu tất cả vai trò và các tuần trong khoảng ngày đã chọn, không chỉ bảng tuần đang hiển thị.
 - Lưu lần đầu tạo một bản ước tính. Mở lại lịch và lưu tiếp cập nhật bản đó.
 - **Thêm lịch phân ca** thêm bảng cho vai trò khác ngay trong trang, giữ nguyên các bảng đã nhập. Tất cả bảng dùng chung khoảng ngày; **Lưu ước tính** lưu cả nhóm vai trò trong một bản. Mỗi ca lưu kèm vai trò để mở lại đúng bảng, kể cả nhân viên làm nhiều vai trò.
+- Phần tổng hiển thị Tổng toàn khoảng và một ô riêng cho từng vai trò có bảng, gồm lương, số nhân viên và tổng giờ. Thêm/xoá bảng cập nhật các ô tương ứng; giao diện tự xuống hàng khi có nhiều vai trò hoặc màn hình nhỏ.
 - Dùng một ô **Vai trò** để xem tổng lương riêng và chọn vai trò cần thêm; nút **Thêm lịch phân ca** nằm ngay cạnh. Vai trò đã có bảng sẽ không được thêm trùng.
 - Mỗi bảng có **Xoá lịch** và popup xác nhận. Xoá bỏ tất cả phân ca của vai trò đó trong bản đang chỉnh, giữ nguyên các vai trò khác và tính lại tổng lương. Bấm **Lưu ước tính** để cập nhật bản đã lưu. Có thể xoá bảng cuối cùng rồi lưu bản rỗng hoặc chọn vai trò để thêm lại.
 - **Tạo lịch mới** bắt đầu một bản ước tính riêng và giữ khoảng ngày đang chọn. Nếu có thay đổi chưa lưu, trang yêu cầu xác nhận trước khi bỏ chúng.
