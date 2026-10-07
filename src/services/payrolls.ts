@@ -101,6 +101,13 @@ export function deleteSavedEstimateSchedule(storeId: string, id: string) {
   );
 }
 
+export function deleteSavedEstimateSchedules(storeId: string, ids: string[]) {
+  return apiRequest<{ deleted: boolean; count: number }>(
+    `/payrolls.php?${new URLSearchParams({ resource: 'estimates', storeId })}`,
+    { method: 'DELETE', body: JSON.stringify({ ids }) },
+  );
+}
+
 export async function getPayrolls(storeId: string): Promise<Payroll[]> {
   const response = await apiRequest<PayrollListResponse>(
     `/payrolls.php?storeId=${encodeURIComponent(storeId)}`,

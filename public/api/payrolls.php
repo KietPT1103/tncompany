@@ -806,6 +806,20 @@ if ($method === 'PATCH') {
 if ($method === 'DELETE') {
     $user = auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
+    if (($_GET['resource'] ?? '') === 'estimates') {
+        $storeId = payrolls_require_estimate_store($user);
+        $body = read_json_body();
+        $ids = $body['ids'] ?? null;
+        if (!is_array($ids) || !array_is_list($ids)) respond_error('Danh sách lịch không hợp lệ.',422);
+        try {
+            $deleted = payroll_estimates_delete_many(db(),$storeId,$ids);
+        } catch (InvalidArgumentException $exception) {
+            respond_error($exception->getMessage(),422);
+        }
+        if (!$deleted) respond_error('Có lịch không còn tồn tại hoặc không thuộc cửa hàng này. Chưa có lịch nào bị xoá; vui lòng tải lại danh sách.',409);
+        respond_ok(['deleted'=>true, 'count'=>count($ids)]);
+    }
+
     if (($_GET['resource'] ?? '') === 'estimate') {
         $storeId = payrolls_require_estimate_store($user);
         $id = trim((string)($_GET['id'] ?? ''));

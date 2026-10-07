@@ -49,17 +49,30 @@ function payroll_estimates_detail(PDO $pdo, string $store, string $id): ?array
 
 function payroll_estimates_delete(PDO $pdo, string $store, string $id): bool
 {
+    return payroll_estimates_delete_many($pdo, $store, [$id]);
+}
+
+function payroll_estimates_delete_many(PDO $pdo, string $store, array $ids): bool
+{
+    if (count($ids) < 1 || count($ids) > 100) throw new InvalidArgumentException('Chọn từ 1 đến 100 lịch để xoá.');
+    foreach ($ids as $id) {
+        if (!is_string($id) || trim($id) === '' || strlen($id) > 64) throw new InvalidArgumentException('Mã lịch không hợp lệ.');
+    }
+    if (count(array_unique($ids)) !== count($ids)) throw new InvalidArgumentException('Danh sách lịch bị trùng.');
+
     $pdo->beginTransaction();
     try {
         $stmt = $pdo->prepare('DELETE FROM payrolls WHERE id=:id AND store_id=:store
             AND (source=\'payroll_estimate\' OR (source=\'timesheet_import\' AND name LIKE :legacy))');
-        $stmt->execute(['id'=>$id, 'store'=>$store, 'legacy'=>'Ước tính lương %']);
-        if ($stmt->rowCount() !== 1) {
-            $pdo->rollBack();
-            return false;
+        $deleteEntries = $pdo->prepare('DELETE FROM payroll_entries WHERE payroll_id=:id');
+        foreach ($ids as $id) {
+            $stmt->execute(['id'=>$id, 'store'=>$store, 'legacy'=>'Ước tính lương %']);
+            if ($stmt->rowCount() !== 1) {
+                $pdo->rollBack();
+                return false;
+            }
+            $deleteEntries->execute(['id'=>$id]);
         }
-        $stmt = $pdo->prepare('DELETE FROM payroll_entries WHERE payroll_id=:id');
-        $stmt->execute(['id'=>$id]);
         $pdo->commit();
         return true;
     } catch (Throwable $exception) {

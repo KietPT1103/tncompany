@@ -35,4 +35,22 @@ $failed = false;
 try { payroll_estimates_delete($pdo,'cafe','old'); } catch (Throwable $exception) { $failed = true; }
 verify($failed && payroll_estimates_detail($pdo,'cafe','old') !== null, 'Entry deletion failure rolls back the schedule deletion');
 verify((int)$pdo->query("SELECT COUNT(*) FROM payroll_entries WHERE payroll_id='old'")->fetchColumn() === 1, 'Rollback preserves schedule entries');
+$pdo->exec("INSERT INTO payroll_entries VALUES ('batch0','p0','a',5,100000),('batch1','p1','a',5,100000),('batch2','p2','a',5,100000)");
+verify(payroll_estimates_delete_many($pdo,'cafe',['p0','p1']), 'Delete multiple selected schedules');
+verify(payroll_estimates_detail($pdo,'cafe','p0') === null && payroll_estimates_detail($pdo,'cafe','p1') === null, 'All selected schedules are deleted');
+verify((int)$pdo->query("SELECT COUNT(*) FROM payroll_entries WHERE payroll_id IN ('p0','p1')")->fetchColumn() === 0, 'Remove entries for all selected schedules');
+verify((int)$pdo->query("SELECT COUNT(*) FROM payroll_entries WHERE payroll_id='p2'")->fetchColumn() === 1, 'Unselected schedule entries remain intact');
+verify(!payroll_estimates_delete_many($pdo,'cafe',['p2','other']), 'Reject batch containing another store');
+verify(payroll_estimates_detail($pdo,'cafe','p2') !== null, 'Invalid batch does not partially delete');
+verify(!payroll_estimates_delete_many($pdo,'cafe',['p2','actual']), 'Reject batch containing actual payroll');
+verify(!payroll_estimates_delete_many($pdo,'cafe',['p2','missing']), 'Reject stale selection atomically');
+foreach ([[], ['p2','p2'], [''], [123], array_fill(0,101,'p2')] as $ids) {
+    $invalid = false;
+    try { payroll_estimates_delete_many($pdo,'cafe',$ids); } catch (InvalidArgumentException $exception) { $invalid = true; }
+    verify($invalid, 'Validate selected ids and batch size');
+}
+$failed = false;
+try { payroll_estimates_delete_many($pdo,'cafe',['p2','old']); } catch (Throwable $exception) { $failed = true; }
+verify($failed && payroll_estimates_detail($pdo,'cafe','p2') !== null && payroll_estimates_detail($pdo,'cafe','old') !== null, 'Bulk failure rolls back every schedule');
+verify((int)$pdo->query("SELECT COUNT(*) FROM payroll_entries WHERE payroll_id='p2'")->fetchColumn() === 1, 'Bulk failure restores entries already deleted earlier in the batch');
 echo "PASS saved schedules: estimates, store isolation, totals, full date range, pagination and deletion\n";
