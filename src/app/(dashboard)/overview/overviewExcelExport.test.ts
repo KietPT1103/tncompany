@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import ExcelJS from "exceljs";
-import { buildOverviewRangeWorkbook } from "./overviewExcelExport.ts";
+import JSZip from "jszip";
+import { buildOverviewRangeWorkbook, writeOverviewRangeWorkbook } from "./overviewExcelExport.ts";
 import type { OverviewShiftRevenue } from "@/services/overviewShiftData";
 
 const shift = (day: number, totalSales: number, completedBills = 1): OverviewShiftRevenue => ({
@@ -10,6 +11,41 @@ const shift = (day: number, totalSales: number, completedBills = 1): OverviewShi
   variance: 0,
 });
 const result = (sheet: ExcelJS.Worksheet, address: string) => sheet.getCell(address).result;
+
+test("download contains an editable column/line chart with separate axes and the selected daily ranges", async () => {
+  const workbook = buildOverviewRangeWorkbook({ startDate: "2026-10-06", endDate: "2026-10-07", shifts: [shift(6, 100), shift(7, 500)] });
+  const zip = await JSZip.loadAsync(await writeOverviewRangeWorkbook(workbook));
+  const chart = await zip.file("xl/charts/overviewDailyChart.xml")!.async("string");
+  assert.match(chart, /<c:barChart>/);
+  assert.match(chart, /<c:lineChart>/);
+  assert.match(chart, /Theo ngày.*\$B\$7:\$B\$8/);
+  assert.match(chart, /Theo ngày.*\$E\$7:\$E\$8/);
+  assert.match(chart, /<c:ptCount val="2"/);
+  assert.match(chart, /<c:axPos val="r"/);
+  assert.match(chart, /<c:axPos val="l"/);
+  assert.match(chart, /<c:v>500<\/c:v>/);
+  assert.match(chart, /<c:v>2<\/c:v>/);
+  assert.match(chart, /<c:v>06\/10<\/c:v>/);
+  assert.doesNotMatch(chart, /\$B\$9|\$E\$9/); // exclude totals
+  const sheet = await zip.file("xl/worksheets/sheet1.xml")!.async("string");
+  assert.match(sheet, /<drawing r:id="rIdOverviewDailyChart"/);
+  const relationships = await zip.file("xl/worksheets/_rels/sheet1.xml.rels")!.async("string");
+  assert.match(relationships, /overviewDailyDrawing.xml/);
+  assert.match(relationships, /table/); // preserve the existing table relationship
+  assert.match(await zip.file("[Content_Types].xml")!.async("string"), /overviewDailyChart.xml/);
+  const restored = new ExcelJS.Workbook();
+  await restored.xlsx.load(await writeOverviewRangeWorkbook(workbook));
+  assert.equal(restored.getWorksheet("Theo ngày")!.getCell("A9").value, "TỔNG");
+});
+
+test("empty single-day export still contains one chart point with zero values", async () => {
+  const workbook = buildOverviewRangeWorkbook({ startDate: "2026-10-07", endDate: "2026-10-07", shifts: [] });
+  const zip = await JSZip.loadAsync(await writeOverviewRangeWorkbook(workbook));
+  const chart = await zip.file("xl/charts/overviewDailyChart.xml")!.async("string");
+  assert.match(chart, /\$B\$7:\$B\$7/);
+  assert.match(chart, /<c:ptCount val="1"/);
+  assert.match(chart, /<c:v>0<\/c:v>/);
+});
 
 test("export follows the supplied workbook form and preserves it after XLSX serialization", async () => {
   const workbook = buildOverviewRangeWorkbook({ startDate: "2026-10-06", endDate: "2026-10-07", shifts: [shift(6, 100), shift(7, 500, 2)] });

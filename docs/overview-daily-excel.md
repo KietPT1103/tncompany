@@ -14,6 +14,11 @@ file Excel mẫu `doanh-thu-theo-ngay-2026-09-01_2026-10-06.xlsx`, gồm:
   chuyển khoản, phiếu thu/chi, chênh lệch và giá trị đơn trung bình; cuối bảng là dòng tổng.
   Giữ màu tiêu đề xanh đậm, bảng xen kẽ xanh, thanh dữ liệu tím ở cột doanh thu
   và dòng tổng màu vàng theo mẫu.
+  Bên phải bảng là biểu đồ Excel cột kết hợp đường: cột xanh biểu diễn doanh thu
+  theo trục VND bên trái, đường cam biểu diễn số ly theo trục bên phải.
+  Biểu đồ liên kết các dòng ngày A7:A cuối, B7:B cuối và E7:E cuối, không tính dòng tổng.
+  Khi tải file phải dùng `writeOverviewRangeWorkbook` để giữ biểu đồ native;
+  ExcelJS `workbook.xlsx.writeBuffer()` chỉ xuất bảng vì thư viện chưa hỗ trợ tạo biểu đồ.
 - **Dữ liệu theo ca**: ngày mở ca, trạng thái, thu ngân, doanh thu, đơn hàng, số ly, thanh toán,
   thu/chi, tiền cuối ca dự kiến, tiền chốt ca và chênh lệch.
 

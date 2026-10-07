@@ -150,7 +150,7 @@ export default function OverviewPage() {
       ]);
       const cups = getCupProductCodes(products, categories);
       const shifts = await loadOverviewShiftRevenue({ ...options, cupProductCodes: cups });
-      const [{ buildOverviewRangeWorkbook }, { downloadExcelWorkbook }] = await Promise.all([
+      const [{ buildOverviewRangeWorkbook, writeOverviewRangeWorkbook }, { downloadExcelBuffer }] = await Promise.all([
         import("./overviewExcelExport"),
         import("../bills/billExcelExport"),
       ]);
@@ -158,7 +158,7 @@ export default function OverviewPage() {
         startDate: formatDateInputValue(startDate), endDate: formatDateInputValue(endDate),
         shifts,
       });
-      await downloadExcelWorkbook(workbook, `doanh-thu-theo-ngay-${formatDateInputValue(startDate)}_${formatDateInputValue(endDate)}.xlsx`);
+      downloadExcelBuffer(await writeOverviewRangeWorkbook(workbook), `doanh-thu-theo-ngay-${formatDateInputValue(startDate)}_${formatDateInputValue(endDate)}.xlsx`);
     } catch (reason) {
       console.error(reason);
       setExportError("Không thể xuất Excel. Vui lòng kiểm tra kết nối và thử lại.");

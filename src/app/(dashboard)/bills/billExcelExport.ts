@@ -319,7 +319,11 @@ export function buildCashFlowExportWorkbook(bills: Bill[], vouchers: CashVoucher
 
 export async function downloadExcelWorkbook(workbook: ExcelJS.Workbook, fileName: string) {
   const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  downloadExcelBuffer(buffer, fileName);
+}
+
+export function downloadExcelBuffer(buffer: ExcelJS.Buffer | Uint8Array, fileName: string) {
+  const blob = new Blob([new Uint8Array(buffer)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
