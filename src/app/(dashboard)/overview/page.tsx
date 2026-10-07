@@ -144,25 +144,21 @@ export default function OverviewPage() {
     setExportError("");
     try {
       const options = { storeId, startDate, endDate };
-      const [bills, vouchers, products, categories] = await Promise.all([
-        getAllBills({ ...options, includeCancelled: true }),
-        getCashVouchers({ ...options, limitCount: 5000 }),
+      const [products, categories] = await Promise.all([
         getAllProducts(storeId),
         getCategories(storeId),
       ]);
       const cups = getCupProductCodes(products, categories);
       const shifts = await loadOverviewShiftRevenue({ ...options, cupProductCodes: cups });
-      const [{ buildOverviewRangeWorkbook }, { downloadExcelWorkbook }] = await Promise.all([
+      const [{ buildOverviewRangeWorkbook, writeOverviewRangeWorkbook }, { downloadExcelBuffer }] = await Promise.all([
         import("./overviewExcelExport"),
         import("../bills/billExcelExport"),
       ]);
       const workbook = buildOverviewRangeWorkbook({
-        storeName, startDate: formatDateInputValue(startDate), endDate: formatDateInputValue(endDate),
-        snapshot: buildOverviewSnapshot(bills, startDate, endDate, getBakeryProductCodes(products, categories), cups),
-        vouchers: calculateOverviewVoucherTotals(vouchers, startDate, endDate),
+        startDate: formatDateInputValue(startDate), endDate: formatDateInputValue(endDate),
         shifts,
       });
-      await downloadExcelWorkbook(workbook, `tong-quan-${storeId.replace(/[^a-zA-Z0-9_-]/g, "_")}-${formatDateInputValue(startDate)}_${formatDateInputValue(endDate)}.xlsx`);
+      downloadExcelBuffer(await writeOverviewRangeWorkbook(workbook), `doanh-thu-theo-ngay-${formatDateInputValue(startDate)}_${formatDateInputValue(endDate)}.xlsx`);
     } catch (reason) {
       console.error(reason);
       setExportError("Không thể xuất Excel. Vui lòng kiểm tra kết nối và thử lại.");

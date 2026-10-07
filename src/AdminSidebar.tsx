@@ -119,6 +119,12 @@ const navGroups: NavGroup[] = [
         permission: "reports.access",
       },
       {
+        href: "/reports/profit",
+        label: "Lợi nhuận",
+        icon: Calculator,
+        permission: "reports.access",
+      },
+      {
         href: "/reports/products",
         label: "Hàng hoá",
         icon: PackageSearch,

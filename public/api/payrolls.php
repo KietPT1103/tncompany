@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/payroll_estimates.php';
 
 const PAYROLLS_DEFAULT_HOURLY_RATE = 15000.0;
 
@@ -480,14 +481,40 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
     return $entryId;
 }
 
+function payrolls_require_estimate_store(array $user): string
+{
+    $storeId = trim((string)($_GET['storeId'] ?? ''));
+    if (!in_array($storeId,['cafe','restaurant','farm','bakery','warehouse'],true)) respond_error('Cửa hàng không hợp lệ.',422);
+    if (($user['role'] ?? '') !== 'admin' && ($user['storeId'] ?? '') !== $storeId) {
+        $access = db()->prepare('SELECT 1 FROM user_store_access WHERE user_id=:user AND store_id=:store');
+        $access->execute(['user'=>$user['id'],'store'=>$storeId]);
+        if (!$access->fetchColumn()) respond_error('Bạn không có quyền truy cập lịch tại cửa hàng này.',403);
+    }
+    return $storeId;
+}
+
 payrolls_ensure_tables();
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'GET') {
-    auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
+    $user = auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
     $resource = trim((string) ($_GET['resource'] ?? ''));
+    if ($resource === 'estimates' || $resource === 'estimate') {
+        $storeId = payrolls_require_estimate_store($user);
+        if ($resource === 'estimate') {
+            $id = trim((string)($_GET['id'] ?? ''));
+            if ($id === '' || strlen($id)>64) respond_error('Mã lịch không hợp lệ.',422);
+            $detail = payroll_estimates_detail(db(),$storeId,$id);
+            if (!$detail) respond_error('Không tìm thấy lịch phân ca đã lưu tại cửa hàng này.',404);
+            $detail['entries'] = array_map('payrolls_map_entry_row',$detail['entries']);
+            respond_ok($detail);
+        }
+        $page = filter_var($_GET['page'] ?? 1,FILTER_VALIDATE_INT);
+        if ($page === false || $page<1 || $page>100000) respond_error('Trang không hợp lệ.',422);
+        respond_ok(payroll_estimates_list(db(),$storeId,$page));
+    }
     if ($resource === 'entries') {
         $payrollId = trim((string) ($_GET['payrollId'] ?? ''));
         if ($payrollId === '') {
@@ -581,7 +608,7 @@ if ($method === 'POST') {
             'store_id' => $storeId,
             'name' => $name,
             'status' => trim((string) ($body['status'] ?? 'draft')) ?: 'draft',
-            'source' => $entries !== [] ? 'timesheet_import' : 'manual',
+            'source' => $entries !== [] ? (($body['source'] ?? '') === 'payroll_estimate' ? 'payroll_estimate' : 'timesheet_import') : 'manual',
             'period_start' => $body['startDate'] ?: null,
             'period_end' => $body['endDate'] ?: null,
         ]);
@@ -777,7 +804,29 @@ if ($method === 'PATCH') {
 }
 
 if ($method === 'DELETE') {
-    auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
+    $user = auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
+
+    if (($_GET['resource'] ?? '') === 'estimates') {
+        $storeId = payrolls_require_estimate_store($user);
+        $body = read_json_body();
+        $ids = $body['ids'] ?? null;
+        if (!is_array($ids) || !array_is_list($ids)) respond_error('Danh sách lịch không hợp lệ.',422);
+        try {
+            $deleted = payroll_estimates_delete_many(db(),$storeId,$ids);
+        } catch (InvalidArgumentException $exception) {
+            respond_error($exception->getMessage(),422);
+        }
+        if (!$deleted) respond_error('Có lịch không còn tồn tại hoặc không thuộc cửa hàng này. Chưa có lịch nào bị xoá; vui lòng tải lại danh sách.',409);
+        respond_ok(['deleted'=>true, 'count'=>count($ids)]);
+    }
+
+    if (($_GET['resource'] ?? '') === 'estimate') {
+        $storeId = payrolls_require_estimate_store($user);
+        $id = trim((string)($_GET['id'] ?? ''));
+        if ($id === '' || strlen($id)>64) respond_error('Mã lịch không hợp lệ.',422);
+        if (!payroll_estimates_delete(db(),$storeId,$id)) respond_error('Không tìm thấy lịch phân ca đã lưu tại cửa hàng này.',404);
+        respond_ok(['deleted'=>true]);
+    }
 
     $entryId = trim((string) ($_GET['entryId'] ?? ''));
     if ($entryId !== '') {

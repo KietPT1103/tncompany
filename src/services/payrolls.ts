@@ -76,6 +76,38 @@ type PayrollMutationResponse = {
   id: string;
 };
 
+export type SavedEstimateSchedule = Payroll & {
+  id: string;
+  updatedAt: string;
+  employeeCount: number;
+  totalHours: number;
+  totalSalary: number;
+};
+export function getSavedEstimateSchedules(storeId: string, page = 1) {
+  return apiRequest<{ items: SavedEstimateSchedule[]; total: number; page: number }>(
+    `/payrolls.php?${new URLSearchParams({ resource: 'estimates', storeId, page: String(page) })}`,
+  );
+}
+export function getSavedEstimateSchedule(storeId: string, id: string) {
+  return apiRequest<{ schedule: SavedEstimateSchedule; entries: PayrollEntry[] }>(
+    `/payrolls.php?${new URLSearchParams({ resource: 'estimate', storeId, id })}`,
+  );
+}
+
+export function deleteSavedEstimateSchedule(storeId: string, id: string) {
+  return apiRequest<{ deleted: boolean }>(
+    `/payrolls.php?${new URLSearchParams({ resource: 'estimate', storeId, id })}`,
+    { method: 'DELETE' },
+  );
+}
+
+export function deleteSavedEstimateSchedules(storeId: string, ids: string[]) {
+  return apiRequest<{ deleted: boolean; count: number }>(
+    `/payrolls.php?${new URLSearchParams({ resource: 'estimates', storeId })}`,
+    { method: 'DELETE', body: JSON.stringify({ ids }) },
+  );
+}
+
 export async function getPayrolls(storeId: string): Promise<Payroll[]> {
   const response = await apiRequest<PayrollListResponse>(
     `/payrolls.php?storeId=${encodeURIComponent(storeId)}`,
@@ -110,12 +142,14 @@ export async function saveImportedPayroll({
   startDate,
   endDate,
   entries,
+  source = "timesheet_import",
 }: {
   storeId: string;
   name: string;
   startDate: string;
   endDate: string;
   entries: Array<Partial<PayrollEntry>>;
+  source?: "timesheet_import" | "payroll_estimate";
 }) {
   const response = await apiRequest<PayrollMutationResponse>("/payrolls.php", {
     method: "POST",
@@ -126,6 +160,7 @@ export async function saveImportedPayroll({
       endDate,
       status: "draft",
       entries,
+      source,
     }),
   });
 

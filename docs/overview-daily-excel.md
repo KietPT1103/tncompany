@@ -5,16 +5,28 @@ phía trên rồi bấm **Xuất Excel**. Không cần chọn ngày xuất riên
 Báo cáo lấy dữ liệu mới của cửa hàng đang chọn, từ đầu ngày bắt đầu đến hết
 ngày kết thúc. Chọn cùng một ngày bắt đầu và kết thúc để xuất một ngày.
 
-File `tong-quan-{cua-hang}-{ngay-bat-dau}_{ngay-ket-thuc}.xlsx` gồm:
+File `doanh-thu-theo-ngay-{ngay-bat-dau}_{ngay-ket-thuc}.xlsx` dùng form của
+file Excel mẫu `doanh-thu-theo-ngay-2026-09-01_2026-10-06.xlsx`, gồm:
 
-- **Tổng quan**: doanh thu thuần, đơn hoàn tất/hủy, số ly/bánh, giá trị đơn trung
-  bình, tiền mặt, chuyển khoản, phiếu thu và phiếu chi.
-- **Theo ca**: ngày mở ca, trạng thái, thu ngân, doanh thu, đơn hàng, số ly, thanh toán,
+- **Theo ngày**: tiêu đề và khoảng ngày, bốn chỉ số tổng doanh thu, trung bình/ngày,
+  cao nhất/ngày và số ngày. Bảng có một dòng cho mỗi ngày trong khoảng đã chọn,
+  theo thứ tự tăng dần, gồm doanh thu, đơn hoàn tất/hủy, số ly, tiền mặt,
+  chuyển khoản, phiếu thu/chi, chênh lệch và giá trị đơn trung bình; cuối bảng là dòng tổng.
+  Giữ màu tiêu đề xanh đậm, bảng xen kẽ xanh, thanh dữ liệu tím ở cột doanh thu
+  và dòng tổng màu vàng theo mẫu.
+  Bên phải bảng là biểu đồ Excel cột kết hợp đường: cột xanh biểu diễn doanh thu
+  theo trục VND bên trái, đường cam biểu diễn số ly theo trục bên phải.
+  Biểu đồ liên kết các dòng ngày A7:A cuối, B7:B cuối và E7:E cuối, không tính dòng tổng.
+  Khi tải file phải dùng `writeOverviewRangeWorkbook` để giữ biểu đồ native;
+  ExcelJS `workbook.xlsx.writeBuffer()` chỉ xuất bảng vì thư viện chưa hỗ trợ tạo biểu đồ.
+- **Dữ liệu theo ca**: ngày mở ca, trạng thái, thu ngân, doanh thu, đơn hàng, số ly, thanh toán,
   thu/chi, tiền cuối ca dự kiến, tiền chốt ca và chênh lệch.
 
 Đơn hủy không tính vào doanh thu. Phiếu hủy hoặc không tính dòng tiền không
 tính vào tổng thu/chi. Ca chưa chốt để trống tiền chốt ca và chênh lệch.
-Ngày không có dữ liệu vẫn xuất được báo cáo với tổng bằng 0.
+Ngày không có dữ liệu vẫn có dòng với tổng bằng 0. Các chỉ số và bảng theo ngày
+có công thức liên kết tới dữ liệu theo ca, kèm kết quả để xem ngay khi mở file.
+Giá trị đơn trung bình toàn kỳ bằng tổng doanh thu chia tổng đơn hoàn tất.
 
 Kiểm thử:
 
