@@ -27,3 +27,10 @@ test('one missing day prevents a partial result being shown as the full period',
   assert.deepEqual(result.missingDays, ['2026-10-08']);
   assert.equal(calculateProfitPeriod([], {}).complete, false);
 });
+
+test('period includes new daily adjustments without counting inventory or debt as expenses', () => {
+  const adjusted = { ...inputs, thienExpense: 7, ingredientInventory: 12, debt: 3 };
+  const result = calculateProfitPeriod(days, { '2026-10-07': adjusted, '2026-10-08': adjusted });
+  assert.equal(result.totalCosts, 89);
+  assert.equal(result.profit, 229);
+});

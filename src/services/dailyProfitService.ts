@@ -8,7 +8,7 @@ export function saveDailyProfit(storeId: string, date: string, inputs: ProfitInp
   return apiRequest<DailyProfitResponse>("/daily-profit.php", { method: "POST", body: JSON.stringify({ storeId, date, inputs }) });
 }
 export type ProfitDay = DailyProfitResponse & { date: string };
-export type ProfitTotals = { revenue: number; materialCost: number; salary: number; electricity: number; water: number; utilities?: number; other: number; marketing: number; voucherCost: number; totalCosts: number; profit: number; margin: number | null };
+export type ProfitTotals = { revenue: number; materialCost: number; salary: number; electricity: number; water: number; utilities?: number; other: number; marketing: number; thienExpense?: number; ingredientInventory?: number; debt?: number; voucherCost: number; totalCosts: number; profit: number; margin: number | null };
 export type ProfitReport = { id: string; startDate: string; endDate: string; savedAt: string; totals: ProfitTotals };
 export type ProfitHistoryDetail = Omit<ProfitReport, 'totals'> & { snapshot: { totals: ProfitTotals; days: { date: string; inputs: ProfitInputs; result: Omit<ProfitTotals, 'margin'> }[] } };
 export type ProfitPeriodResponse = { days: ProfitDay[]; report: ProfitReport | null };

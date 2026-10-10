@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Calculator, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Pagination } from "@/components/ui/Pagination";
+import { paginateItems } from "@/lib/listPagination";
 import { SelectBox } from "@/components/ui/SelectBox";
 import { SingleDatePicker } from "@/components/ui/SingleDatePicker";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
@@ -12,6 +14,7 @@ import {
 import {
   emptyProfitInputs,
   PROFIT_FIELDS,
+  OPTIONAL_PROFIT_FIELDS,
   type ProfitInputs,
 } from "./dailyProfit";
 import {
@@ -74,12 +77,22 @@ export function ProfitCalculation({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
+  const [costPage, setCostPage] = useState({ scope: "", page: 1 });
   const data = loaded?.scope === scope ? loaded.data : null;
   const calculation = useMemo(
     () => calculateProfitPeriod(data?.days ?? [], inputs),
     [data, inputs],
   );
   const selected = calculation.rows.find((row) => row.date === selectedDate);
+  const costPageScope = `${scope}:${selectedDate}`;
+  const paginatedCosts = paginateItems(
+    selected?.result.costRows ?? [],
+    costPage.scope === costPageScope ? costPage.page : 1,
+  );
+  const missingCostCount = selected?.result.costRows.filter((row) => row.unitCost === null).length ?? 0;
+  const missingExpenseFields = PROFIT_FIELDS
+    .filter((field) => selected?.result.missingFields.includes(field.label))
+    .map((field) => field.label);
 
   useEffect(() => {
     let active = true;
@@ -221,12 +234,17 @@ export function ProfitCalculation({
               label={preset === "day"
                   ? "Ngày báo cáo"
                   : preset === "week"
-                    ? "Ngày trong tuần cần xem"
-                    : "Ngày trong tháng cần xem"}
+                    ? "Tuần báo cáo"
+                    : "Tháng báo cáo"}
               value={anchor}
+              summary={preset === "week"
+                ? `${profitDate(range.startDate)} – ${profitDate(range.endDate)}`
+                : preset === "month"
+                  ? `Tháng ${anchor.slice(5, 7)}/${anchor.slice(0, 4)}`
+                  : undefined}
               onChange={setAnchor}
               disabled={saving}
-              className="min-w-0 sm:w-56"
+              className={preset === "week" ? "min-w-0 sm:w-72" : "min-w-0 sm:w-56"}
               triggerClassName={`${control} aria-expanded:border-[#064E3B] aria-expanded:ring-0`}
             />
           )}
@@ -252,6 +270,13 @@ export function ProfitCalculation({
           </Button>
         </div>
       </div>
+      {(preset === "week" || preset === "month") && (
+        <p className="text-xs text-slate-500">
+          {preset === "week"
+            ? "Chọn một ngày trong lịch để xem cả tuần, từ Thứ Hai đến Chủ nhật."
+            : "Chọn một ngày trong lịch để xem toàn bộ tháng đó."}
+        </p>
+      )}
       <div className="flex flex-wrap justify-between gap-2 border-y border-slate-200 py-3 text-xs text-slate-500">
         <span>
           {profitDate(range.startDate)} — {profitDate(range.endDate)}
@@ -351,25 +376,27 @@ export function ProfitCalculation({
                   <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <h2 className="text-base font-bold">Chi phí cần nhập</h2>
-                      <div className="min-w-0 w-full sm:w-40">
-                        <p
-                          className="mb-1 block text-xs font-medium text-slate-500"
-                        >
-                          Ngày nhập chi phí
-                        </p>
-                        <SelectBox
-                          ariaLabel="Ngày nhập chi phí"
-                          value={selectedDate}
-                          onValueChange={setSelectedDate}
-                          options={calculation.rows.map((row) => ({value:row.date,label:profitDate(row.date)}))}
-                          disabled={saving}
-                          searchable
-                          searchPlaceholder="Tìm ngày..."
-                          triggerClassName={control}
-                          openTriggerClassName={openControl}
-                          searchInputClassName="hover:border-[#064E3B] focus:border-[#064E3B] focus:ring-0"
-                        />
-                        <p className={`mt-1 text-xs ${selected.result.complete ? "text-emerald-700" : "text-amber-700"}`}>
+                      <div className={calculation.rows.length > 1 ? "min-w-0 w-full sm:w-40" : "min-w-0"}>
+                        {calculation.rows.length > 1 && (
+                          <>
+                            <p className="mb-1 block text-xs font-medium text-slate-500">
+                              Ngày nhập chi phí
+                            </p>
+                            <SelectBox
+                              ariaLabel="Ngày nhập chi phí"
+                              value={selectedDate}
+                              onValueChange={setSelectedDate}
+                              options={calculation.rows.map((row) => ({value:row.date,label:profitDate(row.date)}))}
+                              disabled={saving}
+                              searchable
+                              searchPlaceholder="Tìm ngày..."
+                              triggerClassName={control}
+                              openTriggerClassName={openControl}
+                              searchInputClassName="hover:border-[#064E3B] focus:border-[#064E3B] focus:ring-0"
+                            />
+                          </>
+                        )}
+                        <p className={`text-xs ${calculation.rows.length > 1 ? "mt-1" : ""} ${selected.result.complete ? "text-emerald-700" : "text-amber-700"}`}>
                           {selected.result.complete ? "Đã nhập đủ" : "Thiếu chi phí"}
                         </p>
                       </div>
@@ -388,14 +415,14 @@ export function ProfitCalculation({
                       {PROFIT_FIELDS.filter((field) => field.key !== "salary").map((field) => (
                         <div
                           key={field.key}
-                          className="min-w-0"
+                          className={field.key === "debt" ? "min-w-0 sm:col-span-2" : "min-w-0"}
                         >
                           <label
                             htmlFor={`profit-${selected.date}-${field.key}`}
                             className="mb-1.5 block text-sm font-semibold"
                           >
                             {field.label}
-                            {field.key !== "marketing" && (
+                            {field.key !== "marketing" && !OPTIONAL_PROFIT_FIELDS.some((key) => key === field.key) && (
                               <span className="text-red-600"> *</span>
                             )}
                           </label>
@@ -404,6 +431,7 @@ export function ProfitCalculation({
                             id={`profit-${selected.date}-${field.key}`}
                             label={`${field.label} ngày ${profitDate(selected.date)}`}
                             value={selected.inputs[field.key]}
+                            required={!OPTIONAL_PROFIT_FIELDS.some((key) => key === field.key)}
                             onChange={(value) =>
                               edit(selected.date, {
                                 ...selected.inputs,
@@ -422,9 +450,24 @@ export function ProfitCalculation({
                       </p>
                     )}
                     {!selected.result.complete && (
-                      <p className="mt-4 text-xs text-amber-800">
-                        Còn thiếu: {selected.result.missingFields.join(", ")}.
-                      </p>
+                      <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
+                        {missingExpenseFields.length > 0 && (
+                          <p className="text-amber-800">
+                            Cần bổ sung: {missingExpenseFields.join(", ")}.
+                          </p>
+                        )}
+                        {missingCostCount > 0 && (
+                          <p className="flex items-start gap-2 text-slate-600">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden="true" />
+                            <span>
+                              Có {missingCostCount} món chưa có cost.{" "}
+                              <a href="#profit-cost-details" className="font-medium text-emerald-800 underline underline-offset-2 hover:text-emerald-950">
+                                Bổ sung tại chi tiết ngày
+                              </a>
+                            </span>
+                          </p>
+                        )}
+                      </div>
                     )}
                   </section>
                   <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
@@ -473,7 +516,7 @@ export function ProfitCalculation({
                         </dd>
                       </div>
                       {(
-                        ["electricity", "water", "other", "marketing"] as const
+                        ["electricity", "water", "other", "marketing", "thienExpense"] as const
                       ).map((key) => (
                         <div
                           key={key}
@@ -501,6 +544,14 @@ export function ProfitCalculation({
                             : "Chưa đủ số liệu"}
                         </dd>
                       </div>
+                      {(["ingredientInventory", "debt"] as const).map((key) => (
+                        <div key={key} className="flex min-w-0 justify-between gap-3 py-2.5">
+                          <dt>{key === "ingredientInventory" ? "+" : "−"} {PROFIT_FIELDS.find((field) => field.key === key)!.label}</dt>
+                          <dd className="shrink-0 text-right font-semibold tabular-nums">
+                            {selected.inputs[key] === null ? "Chưa nhập" : profitMoney(selected.inputs[key]!)}
+                          </dd>
+                        </div>
+                      ))}
                       <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">
                         <dt>Lợi nhuận ngày</dt>
                         <dd
@@ -620,33 +671,53 @@ export function ProfitCalculation({
                 </section>
               )}
               {selected && (
-                <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-                  <h2 className="text-base font-bold">
-                    Chi tiết ngày {profitDate(selected.date)}
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Cost lấy từ giá vốn trong danh mục hoặc công thức nguyên liệu của món.
-                    Món chưa có dữ liệu cost cần bổ sung trước khi tính lợi nhuận.
-                  </p>
-                  <div className="mt-4 grid min-w-0 gap-5 2xl:grid-cols-2">
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[540px] text-sm">
+                <>
+                <section id="profit-cost-details" className="min-w-0 scroll-mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-bold">
+                        Chi tiết ngày {profitDate(selected.date)}
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Cost lấy từ danh mục hoặc công thức nguyên liệu của món.
+                      </p>
+                    </div>
+                    <div className="sm:text-right">
+                      <p className={`text-base font-bold tabular-nums ${missingCostCount > 0 ? "text-slate-500" : "text-emerald-800"}`}>
+                        <span className="mr-2 text-sm font-normal text-slate-500">Tổng giá vốn</span>
+                        {missingCostCount > 0 ? "Chưa đủ cost" : profitMoney(selected.result.materialCost)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {selected.result.costRows.length} món
+                        {missingCostCount > 0 && <span className="ml-3 text-amber-800">{missingCostCount} món chưa có cost</span>}
+                      </p>
+                    </div>
+                  </div>
+                    <div className="mt-4 min-w-0 overflow-x-auto">
+                      <table className="w-full min-w-[600px] table-fixed text-sm">
+                        <colgroup>
+                          <col className="w-[35%]" />
+                          <col className="w-[15%]" />
+                          <col className="w-[25%]" />
+                          <col className="w-[25%]" />
+                        </colgroup>
                         <thead className="bg-slate-50 text-slate-500">
                           <tr>
-                            <th className="p-3 text-left">Món</th>
-                            <th className="p-3 text-right">Số lượng</th>
-                            <th className="w-48 p-3 text-right">Cost / món</th>
-                            <th className="p-3 text-right">Giá vốn</th>
+                            <th scope="col" className="p-3 text-left">Món</th>
+                            <th scope="col" className="whitespace-nowrap p-3 text-right">Số lượng</th>
+                            <th scope="col" className="p-3 text-right">Cost / món</th>
+                            <th scope="col" className="whitespace-nowrap p-3 text-right">Tổng giá vốn</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {selected.result.costRows.map((row) => (
+                          {paginatedCosts.items.map((row) => (
                             <tr key={row.key}>
-                              <td className="p-3">{row.name}</td>
-                              <td className="p-3 text-right">
+                              <td className="break-words px-3 py-2.5 font-medium">{row.name}</td>
+                              <td className="px-3 py-2.5 text-right tabular-nums">
                                 {row.quantity.toLocaleString("vi-VN")}
                               </td>
-                              <td className="p-3 text-right">
+                              <td className="px-3 py-2.5 text-right tabular-nums">
+                                <div className="ml-auto max-w-48">
                                 {row.unitCost === null ||
                                 Object.prototype.hasOwnProperty.call(
                                   selected.inputs.costOverrides,
@@ -673,10 +744,11 @@ export function ProfitCalculation({
                                     <span className="mt-1 block text-xs text-slate-500">{row.costSource === "recipe" ? "Từ công thức" : "Từ danh mục"}</span>
                                   </>
                                 )}
+                                </div>
                               </td>
-                              <td className="p-3 text-right">
+                              <td className="relative px-3 py-2.5 text-right font-semibold tabular-nums">
                                 {row.cost === null
-                                  ? "Chưa có cost"
+                                  ? <span className="font-normal text-slate-400"><span aria-hidden="true">—</span><span className="sr-only">Chưa có cost</span></span>
                                   : profitMoney(row.cost)}
                               </td>
                             </tr>
@@ -694,37 +766,61 @@ export function ProfitCalculation({
                         </tbody>
                       </table>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold">
-                        Phiếu chi tại quầy ·{" "}
-                        {profitMoney(selected.result.voucherCost)}
-                      </h3>
-                      <div className="mt-2 divide-y divide-slate-100">
-                        {selected.source.vouchers.map((voucher) => (
-                          <div
-                            key={voucher.id}
-                            className="flex gap-3 py-3 text-sm"
-                          >
-                            <span className="min-w-0 flex-1 break-words">
-                              {voucher.category}
-                              <span className="block text-xs text-slate-500">
-                                {voucher.code} · {voucher.note}
-                              </span>
-                            </span>
-                            <span className="shrink-0 font-semibold">
-                              {profitMoney(voucher.amount)}
-                            </span>
-                          </div>
-                        ))}
-                        {!selected.source.vouchers.length && (
-                          <p className="py-3 text-sm text-slate-500">
-                            Không có phiếu chi hợp lệ: 0 đ.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    {paginatedCosts.pagination.totalPages > 1 && (
+                      <Pagination
+                        currentPage={paginatedCosts.pagination.currentPage}
+                        totalItems={selected.result.costRows.length}
+                        onPageChange={(page) => setCostPage({ scope: costPageScope, page })}
+                        disabled={saving}
+                        className="px-0 pb-0 sm:px-0"
+                      />
+                    )}
                 </section>
+                <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-base font-bold">Phiếu chi tại quầy</h2>
+                        <p className="mt-1 text-sm text-slate-500">Ngày {profitDate(selected.date)}</p>
+                      </div>
+                      <p className="text-base font-bold tabular-nums text-emerald-800">
+                        <span className="mr-2 text-sm font-normal text-slate-500">Tổng chi</span>
+                        {profitMoney(selected.result.voucherCost)}
+                      </p>
+                    </div>
+                    {selected.source.vouchers.length ? (
+                      <div className="mt-4 min-w-0 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-slate-500">
+                            <tr>
+                              <th scope="col" className="p-3 text-left sm:w-1/3">Phiếu chi</th>
+                              <th scope="col" className="hidden p-3 text-left sm:table-cell">Nội dung</th>
+                              <th scope="col" className="p-3 text-right">Số tiền</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selected.source.vouchers.map((voucher) => (
+                              <tr key={voucher.id}>
+                                <td className="p-3 align-top">
+                                  <span className="block break-words">{voucher.category}</span>
+                                  <span className="mt-1 block text-xs text-slate-500">{voucher.code}</span>
+                                  {voucher.note && <span className="mt-1 block break-words text-slate-500 sm:hidden">{voucher.note}</span>}
+                                </td>
+                                <td className="hidden break-words p-3 align-top sm:table-cell">{voucher.note || "—"}</td>
+                                <td className="whitespace-nowrap p-3 text-right align-top font-semibold tabular-nums">
+                                  {profitMoney(voucher.amount)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
+                        Không có phiếu chi hợp lệ: 0 đ.
+                      </p>
+                    )}
+                </section>
+                </>
               )}
             </fieldset>
           </>
