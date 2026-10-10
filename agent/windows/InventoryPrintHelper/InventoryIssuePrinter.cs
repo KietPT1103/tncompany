@@ -33,20 +33,20 @@ public sealed class InventoryIssuePrinter(Func<string>? paperSize = null) : IInv
         var selectedSize = printDocument.PrinterSettings.PaperSizes.Cast<PaperSize>().FirstOrDefault(size => size.Kind == kind);
         printDocument.DefaultPageSettings.PaperSize = selectedSize ?? (isA4 ? new PaperSize("A4", 827, 1169) : new PaperSize("A5", 583, 827));
         printDocument.DefaultPageSettings.Margins = new Margins(40, 40, 40, 40);
-        var rowsPerPage = PrintLayout.RowsForPaper(paperSize);
-        var pages = PrintLayout.Paginate(data.Items, rowsPerPage);
+        IReadOnlyList<IReadOnlyList<PrintDocumentItem>>? pages = null;
         var pageIndex = 0;
         printDocument.PrintPage += (_, eventArgs) =>
         {
             if (eventArgs.Graphics is null) throw new InvalidOperationException("Windows không cung cấp bề mặt in.");
-            DrawPage(eventArgs.Graphics, eventArgs.MarginBounds, data, pages[pageIndex], pageIndex + 1, pages.Count, rowsPerPage);
+            pages ??= MeasurePages(eventArgs.Graphics, eventArgs.MarginBounds, data);
+            DrawPage(eventArgs.Graphics, eventArgs.MarginBounds, data, pages[pageIndex], pageIndex + 1, pages.Count, pages.Take(pageIndex).Sum(part => part.Count));
             pageIndex++;
             eventArgs.HasMorePages = pageIndex < pages.Count;
         };
         return printDocument;
     }
 
-    private static void DrawPage(Graphics graphics, Rectangle bounds, PrintDocumentData data, IReadOnlyList<PrintDocumentItem> items, int page, int pageCount, int rowsPerPage)
+    private static void DrawPage(Graphics graphics, Rectangle bounds, PrintDocumentData data, IReadOnlyList<PrintDocumentItem> items, int page, int pageCount, int precedingRows)
     {
         using var titleFont = new Font("Arial", 14, FontStyle.Bold);
         using var boldFont = new Font("Arial", 8, FontStyle.Bold);
@@ -57,31 +57,70 @@ public sealed class InventoryIssuePrinter(Func<string>? paperSize = null) : IInv
         var titleSize = graphics.MeasureString(title, titleFont);
         graphics.DrawString(title, titleFont, Brushes.Black, bounds.Left + (bounds.Width - titleSize.Width) / 2, y);
         y += 34;
-        graphics.DrawString($"Mã phiếu: {data.IssueCode}", boldFont, Brushes.Black, bounds.Left, y);
-        y += 18;
-        graphics.DrawString($"Ngày: {data.CompletedAt}", font, Brushes.Black, bounds.Left, y);
-        y += 18;
-        graphics.DrawString($"Người xuất: {data.IssuedBy}", font, Brushes.Black, bounds.Left, y);
-        y += 18;
-        graphics.DrawString($"Nơi nhận: {data.Destination}", font, Brushes.Black, bounds.Left, y);
-        y += 24;
+        foreach (var text in HeaderLines(data))
+        {
+            var height = TextHeight(graphics, font, bounds.Width, text);
+            graphics.DrawString(text, font, Brushes.Black, new RectangleF(bounds.Left, y, bounds.Width, height));
+            y += height;
+        }
+        y += 6;
 
         var widths = PrintLayout.ColumnWidths(bounds.Width);
         var headers = new[] { "STT", "Mã", "Nguyên liệu", "SL", "ĐVT", "Ghi chú" };
         DrawRow(graphics, pen, boldFont, bounds.Left, ref y, 26, widths, headers);
-        var rowNumber = (page - 1) * rowsPerPage;
+        var rowNumber = precedingRows;
         foreach (var item in items)
         {
             rowNumber++;
-            DrawRow(graphics, pen, font, bounds.Left, ref y, 30, widths,
+            DrawRow(graphics, pen, font, bounds.Left, ref y, RowHeight(graphics, font, widths, item), widths,
                 [rowNumber.ToString(CultureInfo.InvariantCulture), item.IngredientCode, item.IngredientName, PrintLayout.FormatQuantity(item.Quantity), item.Unit, item.Note]);
         }
-        y += 20;
-        if (!string.IsNullOrWhiteSpace(data.Note)) graphics.DrawString("Ghi chú: " + data.Note, font, Brushes.Black, new RectangleF(bounds.Left, y, bounds.Width, 40));
-        y = Math.Max(y + 45, bounds.Bottom - 140);
+        y = bounds.Bottom - 110 - NoteHeight(graphics, font, bounds.Width, data.Note);
+        if (!string.IsNullOrWhiteSpace(data.Note)) graphics.DrawString("Ghi chú: " + data.Note, font, Brushes.Black, new RectangleF(bounds.Left, y, bounds.Width, NoteHeight(graphics, font, bounds.Width, data.Note)));
+        y += NoteHeight(graphics, font, bounds.Width, data.Note) + 12;
         graphics.DrawString("Người xuất\n(Ký, ghi rõ họ tên)", boldFont, Brushes.Black, bounds.Left + 30, y);
         graphics.DrawString("Người nhận\n(Ký, ghi rõ họ tên)", boldFont, Brushes.Black, bounds.Left + bounds.Width / 2 + 30, y);
         graphics.DrawString($"Trang {page}/{pageCount}", font, Brushes.Black, bounds.Right - 60, bounds.Bottom + 12);
+    }
+
+    private static string[] HeaderLines(PrintDocumentData data) =>
+        [$"Mã phiếu: {data.IssueCode}", $"Ngày: {data.CompletedAt}", $"Người xuất: {data.IssuedBy}", $"Nơi nhận: {data.Destination}"];
+
+    private static int TextHeight(Graphics g, Font font, int width, string text) =>
+        Math.Max(18, (int)Math.Ceiling(g.MeasureString(text, font, Math.Max(1, width)).Height) + 4);
+
+    private static int NoteHeight(Graphics g, Font font, int width, string note) =>
+        string.IsNullOrWhiteSpace(note) ? 0 : (int)Math.Ceiling(g.MeasureString("Ghi chú: " + note, font, width).Height) + 8;
+
+    private static int RowHeight(Graphics g, Font font, int[] widths, PrintDocumentItem item)
+    {
+        var cells = new[] { "99999", item.IngredientCode, item.IngredientName, PrintLayout.FormatQuantity(item.Quantity), item.Unit, item.Note };
+        return Math.Max(30, cells.Select((text, index) => (int)Math.Ceiling(g.MeasureString(text, font, Math.Max(1, widths[index] - 6)).Height) + 10).Max());
+    }
+
+    private static IReadOnlyList<IReadOnlyList<PrintDocumentItem>> MeasurePages(Graphics g, Rectangle bounds, PrintDocumentData data)
+    {
+        using var font = new Font("Arial", 8);
+        var capacity = bounds.Height - 34 - HeaderLines(data).Sum(text => TextHeight(g, font, bounds.Width, text)) - 6 - 26 - 122 - NoteHeight(g, font, bounds.Width, data.Note);
+        var widths = PrintLayout.ColumnWidths(bounds.Width);
+        var pages = new List<IReadOnlyList<PrintDocumentItem>>();
+        var current = new List<PrintDocumentItem>();
+        var used = 0;
+        foreach (var item in data.Items)
+        {
+            var height = RowHeight(g, font, widths, item);
+            if (height > capacity) throw new InvalidOperationException("Nội dung quá dài cho khổ giấy. Hãy chọn A4 hoặc rút gọn ghi chú.");
+            if (used + height > capacity && current.Count > 0)
+            {
+                pages.Add(current.ToArray());
+                current.Clear();
+                used = 0;
+            }
+            current.Add(item);
+            used += height;
+        }
+        if (current.Count > 0 || pages.Count == 0) pages.Add(current.ToArray());
+        return pages;
     }
 
     private static void DrawRow(Graphics graphics, Pen pen, Font font, int left, ref int y, int height, int[] widths, string[] cells)

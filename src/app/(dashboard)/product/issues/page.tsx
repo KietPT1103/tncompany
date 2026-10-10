@@ -249,8 +249,8 @@ export default function InventoryIssuesPage() {
             <tfoot className="bg-slate-50 font-bold"><tr><td colSpan={3} className="px-4 py-3 text-right">Tổng số lượng</td><td className="px-4 py-3 text-right">{quantity(total)}</td><td colSpan={2}></td><td className="px-4 py-3 text-right">{form.items.some(item=>ingredientByCode.get(item.ingredientCode)?.cost==null)?"—":`${Math.round(form.items.reduce((sum,item)=>{const ingredient=ingredientByCode.get(item.ingredientCode);return sum+number(item.quantity)*(ingredient?.purchaseToBaseFactor||1)*(ingredient?.cost||0)},0)).toLocaleString("vi-VN")} đ`}</td><td colSpan={3}></td></tr></tfoot>
           </table>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
-          <button onClick={() => setForm((current) => ({ ...current, items: [...current.items, line()] }))} className="inline-flex min-h-10 items-center gap-2 rounded-md border px-4 font-semibold hover:bg-slate-50"><Plus className="h-4 w-4" /> Thêm dòng</button>
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t bg-white p-4">
+          <button disabled={saving} onClick={() => setForm((current) => ({ ...current, items: [...current.items, line()] }))} className="inline-flex min-h-10 items-center gap-2 rounded-md border px-4 font-semibold hover:bg-slate-50"><Plus className="h-4 w-4" /> Thêm dòng</button>
           <div className="flex gap-3">{form.status !== "completed" && <button disabled={saving} onClick={() => void save("draft")} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-emerald-800 px-5 font-bold text-emerald-900 disabled:opacity-50"><Save className="h-4 w-4" /> Lưu nháp</button>}
             <button disabled={saving} onClick={() => void save("completed")} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-emerald-800 px-5 font-bold text-white hover:bg-emerald-900 disabled:opacity-50"><PackageMinus className="h-4 w-4" /> {form.status === "completed" ? "Lưu & điều chỉnh tồn" : "Hoàn thành & trừ kho"}</button></div>
         </div>
