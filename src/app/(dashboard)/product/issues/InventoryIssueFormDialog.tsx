@@ -23,7 +23,7 @@ export function InventoryIssueFormDialog({ children, title, busy, onClose }: { c
     return () => { document.documentElement.style.overflow = overflow; document.removeEventListener("keydown", handleKey); previousFocus?.focus(); };
   }, []);
   return createPortal(<div className="warehouse-ui fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-2 sm:p-4" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={container} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="issue-form-title" className="max-h-[92dvh] w-full max-w-[1500px] overflow-y-auto rounded-xl bg-white shadow-xl outline-none">
+    <section ref={container} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="issue-form-title" className="inventory-issue-dialog max-h-[92dvh] w-full max-w-[1500px] overflow-y-auto rounded-xl bg-white shadow-xl outline-none">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-white px-4 py-3"><h2 id="issue-form-title" className="text-xl font-bold text-emerald-950">{title}</h2><button type="button" aria-label="Đóng form xuất kho" disabled={busy} onClick={onClose} className="rounded-md p-2 hover:bg-slate-100 disabled:opacity-40"><X className="h-5 w-5"/></button></header>
       {children}
     </section>

@@ -358,6 +358,29 @@ button:disabled {
 .warehouse-ui [role=tab][aria-selected=true] {color:#005943;background:linear-gradient(180deg,#effdf7,#e3faf1);border-color:#007c5a}
 .warehouse-ui .rounded-3xl,.warehouse-ui .rounded-sm {border-radius:12px}
 .warehouse-ui section,.warehouse-panel {border:1px solid #e2eaf3;border-radius:14px;background:white;box-shadow:0 2px 3px #17365404;overflow:hidden}
+/* Only the item list scrolls; metadata, totals and actions stay visible. */
+.warehouse-ui section.inventory-issue-dialog {display:flex;flex-direction:column;overflow:hidden}
+.warehouse-ui section.inventory-issue-form {display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.inventory-issue-dialog > header,.inventory-issue-meta,.inventory-issue-footer {flex-shrink:0}
+.inventory-issue-footer {padding-bottom:env(safe-area-inset-bottom,0px)}
+.inventory-issue-items {min-height:0;overflow:auto;flex:1 1 auto}
+@media(max-width:639px){
+  .warehouse-ui section.inventory-issue-dialog {max-height:calc(100dvh - 16px)}
+  .inventory-issue-meta input,.inventory-issue-meta select {min-width:0;width:100%}
+  .inventory-issue-meta label {min-width:0}
+  .inventory-issue-lines {min-width:0!important;display:block}
+  .inventory-issue-lines thead {display:none}
+  .inventory-issue-lines tbody {display:grid;gap:10px;padding:10px}
+  .inventory-issue-lines tbody tr {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border:1px solid #dce5f0;border-radius:10px;overflow:hidden}
+  .warehouse-ui .inventory-issue-lines td {min-width:0;padding:8px;border-right:0;overflow-wrap:anywhere}
+  .inventory-issue-lines td::before {content:attr(data-label);display:block;font-size:12px;font-weight:700;color:#5b7093;margin-bottom:4px;text-align:left}
+  .inventory-issue-lines td[data-label="Nguyên vật liệu"],.inventory-issue-lines td[data-label="Ghi chú"] {grid-column:1/-1}
+  .inventory-issue-lines input,.inventory-issue-lines select {width:100%;min-width:0}
+  .inventory-issue-actions,.inventory-issue-save {display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:100%}
+  .inventory-issue-save,.inventory-issue-actions > button {grid-column:1/-1}
+  .inventory-issue-actions button {justify-content:center;padding-left:8px;padding-right:8px;font-size:14px;min-width:0}
+  .inventory-issue-save button:only-child {grid-column:1/-1}
+}
 .warehouse-ui input:not([type=checkbox]),.warehouse-ui select {border:1px solid #dce5f0;border-radius:8px;background:#fff;min-height:42px;padding:8px 12px;color:#243450;font-size:15px;outline:none}
 .warehouse-ui input.pl-9 {padding-left:36px}
 .warehouse-ui input:focus,.warehouse-ui select:focus {border-color:#008968;box-shadow:0 0 0 2px #00896815}
