@@ -207,6 +207,16 @@ $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? $_GET['storeId'
 field_inventory_require_store($user, $storeId);
 
 if ($method === 'POST') {
+    if ($bodyAction === 'reset-stock') {
+        require_once __DIR__ . '/_lib/reset_ingredient_stock.php';
+        try {
+            $updatedCount = reset_ingredient_stock(db(), $user, $storeId);
+            respond_ok(['updatedCount'=>$updatedCount, 'storeId'=>$storeId]);
+        } catch (DomainException $exception) {
+            respond_error($exception->getMessage(), $exception->getCode());
+        }
+    }
+
     if ($bodyAction === 'migrate-category') {
         $statement = db()->prepare(
             'INSERT INTO ingredients (

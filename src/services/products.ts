@@ -115,6 +115,7 @@ export async function upsertSellingProductsFromExcel(
 export async function updateProductCost(
   productCode: string,
   data: {
+    newProductCode?: string;
     productName?: string;
     cost?: number | null;
     price?: number | null;
@@ -149,7 +150,7 @@ export async function deleteProduct(productCode: string, storeId: string) {
 }
 
 export async function addProduct(product: ProductPayload) {
-  await apiRequest<{ created: boolean }>("/products.php", {
+  return apiRequest<{ created: boolean; item: { productCode: string } }>("/products.php", {
     method: "POST",
     body: JSON.stringify({
       ...product,

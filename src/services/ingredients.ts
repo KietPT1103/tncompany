@@ -75,6 +75,13 @@ export async function createIngredient(input: IngredientInput) {
   return apiRequest("/ingredients.php", { method: "POST", body: JSON.stringify(input) });
 }
 
+export async function resetIngredientStock(storeId: string) {
+  return apiRequest<{ updatedCount: number; storeId: string }>("/ingredients.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "reset-stock", storeId }),
+  });
+}
+
 export async function migrateIngredientCategoryProducts(storeId: string) {
   return apiRequest<{ migratedCount: number; movedCount: number }>("/ingredients.php", {
     method: "POST",

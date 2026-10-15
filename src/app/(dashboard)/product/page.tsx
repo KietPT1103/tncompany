@@ -489,8 +489,10 @@ function ProductModal({
                     label="Mã hàng hóa"
                     value={form.code}
                     onChange={(event) => onChange({ code: event.target.value })}
-                    disabled={mode === "edit"}
-                    placeholder="VD: SP000001"
+                    disabled={saving}
+                    readOnly={mode === "create"}
+                    maxLength={100}
+                    placeholder={mode === "create" ? "Tự động tạo khi lưu" : "VD: SP000001"}
                   />
 
                   <Input
@@ -1284,11 +1286,11 @@ export default function ProductsPage() {
   }
 
   async function handleSaveProduct() {
-    if (!formState.code.trim() || !formState.name.trim()) {
+    if ((modalMode === "edit" && !formState.code.trim()) || !formState.name.trim()) {
       showToast(
         "Thông tin chưa đầy đủ",
         "warning",
-        "Vui lòng nhập mã và tên hàng hóa.",
+        modalMode === "create" ? "Vui lòng nhập tên hàng hóa." : "Vui lòng nhập mã và tên hàng hóa.",
       );
       return;
     }
@@ -1304,7 +1306,7 @@ export default function ProductsPage() {
         .filter((component) => component.productCode && component.quantity > 0);
 
       if (modalMode === "create") {
-        await addProduct({
+        const created = await addProduct({
           product_code: formState.code.trim(),
           product_name: formState.name.trim(),
           cost: formState.cost.trim() ? parseNumberInput(formState.cost) : null,
@@ -1324,7 +1326,7 @@ export default function ProductsPage() {
         showToast(
           "Đã thêm hàng hóa",
           "success",
-          `${formState.name.trim()} đã được thêm vào danh sách.`,
+          `${formState.name.trim()} đã được tạo với mã ${created.item.productCode}.`,
         );
       } else if (!canManageProducts) {
         await updateProductCost(
@@ -1342,6 +1344,7 @@ export default function ProductsPage() {
         await updateProductCost(
           editingProductCode,
           {
+            newProductCode: formState.code.trim(),
             productName: formState.name.trim(),
             cost: formState.cost.trim()
               ? parseNumberInput(formState.cost)

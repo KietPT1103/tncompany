@@ -6,6 +6,7 @@ require_once __DIR__ . '/_lib/search.php';
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
+require_once __DIR__ . '/_lib/product_code_generation.php';
 
 function products_find_category_id(string $storeId, ?string $rawCategory): ?string
 {
@@ -97,13 +98,7 @@ function products_next_sp_code(): string
          LIMIT 1"
     );
     $currentCode = (string) ($statement->fetchColumn() ?: '');
-    if ($currentCode === '') {
-        return 'SP1';
-    }
-
-    $digits = substr($currentCode, 2);
-    $nextNumber = (int) $digits + 1;
-    return 'SP' . str_pad((string) $nextNumber, strlen($digits), '0', STR_PAD_LEFT);
+    return products_increment_sp_code($currentCode);
 }
 
 function products_has_limited_catalog_access(array $user): bool
@@ -422,64 +417,74 @@ if ($method === 'POST') {
 
     $productCode = trim((string) ($body['product_code'] ?? $body['productCode'] ?? ''));
     $productName = trim((string) ($body['product_name'] ?? $body['productName'] ?? ''));
-    if ($productCode === '' || $productName === '') {
-        respond_error('Missing product code or name', 422);
+    if ($productName === '') {
+        respond_error('Vui lòng nhập tên hàng hóa.', 422);
     }
 
     require_once __DIR__ . '/_lib/field_inventory.php';
     field_inventory_require_store($user, $storeId);
-    $normalizedName = products_normalized_name($productName);
-    $duplicate = db()->prepare(
-        'SELECT id,store_id,product_code,product_name,unit FROM products
-         WHERE LOWER(product_code)=LOWER(:code)
-            OR (item_type=:item_type AND (
-                normalized_name=:normalized
-                OR LOWER(TRIM(product_name))=LOWER(TRIM(:name))
-            ))
-         LIMIT 1'
-    );
-    $duplicate->execute(['code' => $productCode, 'item_type' => $itemType, 'normalized' => $normalizedName, 'name' => $productName]);
-    if ($similar = $duplicate->fetch()) {
-        respond_error('Sản phẩm tương tự đã tồn tại.', 409, ['similarProduct' => $similar]);
+    $codeLock = db()->query("SELECT GET_LOCK('tn_company_products_sp_code', 10)")->fetchColumn();
+    if ((int) $codeLock !== 1) {
+        respond_error('Hệ thống đang cấp mã hàng hóa. Vui lòng thử lại sau.', 503);
     }
-    $components = is_array($body['components'] ?? null) ? $body['components'] : [];
-    $categoryId = products_find_category_id($storeId, (string) ($body['category'] ?? ''));
-    $productId = uuidv4();
-    db()->beginTransaction();
-
     try {
-        $statement = db()->prepare(
-            'INSERT INTO products (
-                id, store_id, product_code, product_name, normalized_name, category_id, cost, price, has_cost, is_selling, stock_quantity, item_type, unit, description
-             ) VALUES (
-                :id, :store_id, :product_code, :product_name, :normalized_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity, :item_type, :unit, :description
-             )'
+        if ($productCode === '') $productCode = products_next_sp_code();
+        $normalizedName = products_normalized_name($productName);
+        $duplicate = db()->prepare(
+            'SELECT id,store_id,product_code,product_name,unit FROM products
+             WHERE LOWER(product_code)=LOWER(:code)
+                OR (item_type=:item_type AND (
+                    normalized_name=:normalized
+                    OR LOWER(TRIM(product_name))=LOWER(TRIM(:name))
+                ))
+             LIMIT 1'
         );
-        $statement->execute([
-            'id' => $productId,
-            'store_id' => $storeId,
-            'product_code' => $productCode,
-            'product_name' => $productName,
-            'normalized_name' => $normalizedName,
-            'category_id' => $categoryId,
-            'cost' => is_numeric($body['cost'] ?? null) ? (float) $body['cost'] : null,
-            'price' => is_numeric($body['price'] ?? null) ? (float) $body['price'] : null,
-            'has_cost' => !empty($body['has_cost']) || is_numeric($body['cost'] ?? null) ? 1 : 0,
-            'is_selling' => array_key_exists('isSelling', $body) ? (!empty($body['isSelling']) ? 1 : 0) : 1,
-            'stock_quantity' => products_inventory_parse_decimal($body['stockQuantity'] ?? 0),
-            'item_type' => $itemType,
-            'unit' => trim((string) ($body['unit'] ?? '')) ?: null,
-            'description' => trim((string) ($body['description'] ?? '')) ?: null,
-        ]);
-
-        products_inventory_replace_components($storeId, $productId, $productCode, $components);
-        db()->commit();
-    } catch (Throwable $exception) {
-        if (db()->inTransaction()) {
-            db()->rollBack();
+        $duplicate->execute(['code' => $productCode, 'item_type' => $itemType, 'normalized' => $normalizedName, 'name' => $productName]);
+        if ($similar = $duplicate->fetch()) {
+            db()->query("SELECT RELEASE_LOCK('tn_company_products_sp_code')")->fetchColumn();
+            respond_error('Sản phẩm tương tự đã tồn tại.', 409, ['similarProduct' => $similar]);
         }
+        $components = is_array($body['components'] ?? null) ? $body['components'] : [];
+        $categoryId = products_find_category_id($storeId, (string) ($body['category'] ?? ''));
+        $productId = uuidv4();
+        db()->beginTransaction();
 
-        throw $exception;
+        try {
+            $statement = db()->prepare(
+                'INSERT INTO products (
+                    id, store_id, product_code, product_name, normalized_name, category_id, cost, price, has_cost, is_selling, stock_quantity, item_type, unit, description
+                 ) VALUES (
+                    :id, :store_id, :product_code, :product_name, :normalized_name, :category_id, :cost, :price, :has_cost, :is_selling, :stock_quantity, :item_type, :unit, :description
+                 )'
+            );
+            $statement->execute([
+                'id' => $productId,
+                'store_id' => $storeId,
+                'product_code' => $productCode,
+                'product_name' => $productName,
+                'normalized_name' => $normalizedName,
+                'category_id' => $categoryId,
+                'cost' => is_numeric($body['cost'] ?? null) ? (float) $body['cost'] : null,
+                'price' => is_numeric($body['price'] ?? null) ? (float) $body['price'] : null,
+                'has_cost' => !empty($body['has_cost']) || is_numeric($body['cost'] ?? null) ? 1 : 0,
+                'is_selling' => array_key_exists('isSelling', $body) ? (!empty($body['isSelling']) ? 1 : 0) : 1,
+                'stock_quantity' => products_inventory_parse_decimal($body['stockQuantity'] ?? 0),
+                'item_type' => $itemType,
+                'unit' => trim((string) ($body['unit'] ?? '')) ?: null,
+                'description' => trim((string) ($body['description'] ?? '')) ?: null,
+            ]);
+
+            products_inventory_replace_components($storeId, $productId, $productCode, $components);
+            db()->commit();
+        } catch (Throwable $exception) {
+            if (db()->inTransaction()) {
+                db()->rollBack();
+            }
+
+            throw $exception;
+        }
+    } finally {
+        db()->query("SELECT RELEASE_LOCK('tn_company_products_sp_code')")->fetchColumn();
     }
 
     respond_ok(['created' => true, 'item' => [
@@ -564,8 +569,12 @@ if ($method === 'PATCH') {
     }
 
     $hasComponents = array_key_exists('components', $body);
+    $hasCodeChange = array_key_exists('newProductCode', $body);
+    if ($hasCodeChange && !is_string($body['newProductCode'])) {
+        respond_error('Mã hàng hóa phải là chuỗi ký tự.', 422);
+    }
 
-    if ($fields === [] && !$hasComponents) {
+    if ($fields === [] && !$hasComponents && !$hasCodeChange) {
         respond_error('No changes provided', 422);
     }
 
@@ -602,6 +611,13 @@ if ($method === 'PATCH') {
             $statement->execute($params);
         }
 
+        if ($hasCodeChange) {
+            require_once __DIR__ . '/_lib/product_code_change.php';
+            $product['product_code'] = products_change_code(
+                db(), $storeId, (string) $product['id'], $body['newProductCode']
+            );
+        }
+
         if ($hasComponents) {
             $components = is_array($body['components']) ? $body['components'] : [];
             products_inventory_replace_components(
@@ -618,6 +634,12 @@ if ($method === 'PATCH') {
             db()->rollBack();
         }
 
+        if ($exception instanceof DomainException) {
+            respond_error($exception->getMessage(), $exception->getCode());
+        }
+        if ($hasCodeChange && $exception instanceof PDOException && (int) ($exception->errorInfo[1] ?? 0) === 1062) {
+            respond_error('Mã hàng hóa đã được sử dụng trong khu vực này.', 409);
+        }
         throw $exception;
     }
 
