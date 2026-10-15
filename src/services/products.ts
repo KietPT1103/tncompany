@@ -206,3 +206,10 @@ export async function normalizeProductCategoryReferences(storeId: string): Promi
 export async function migrateOldProducts(targetStoreId = "cafe") {
   return targetStoreId ? 0 : 0;
 }
+
+export async function resetKitchenProductStock() {
+  return apiRequest<{ updatedCount: number; storeId: string }>("/products.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "reset-kitchen-stock", storeId: "restaurant" }),
+  });
+}

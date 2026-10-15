@@ -215,6 +215,7 @@ const navGroups: NavGroup[] = [
         label: "Sản phẩm",
         icon: Package,
         permissions: ["product.access", "products.selling.view"],
+        exact: true,
       },
       {
         href: "/product/ingredients",

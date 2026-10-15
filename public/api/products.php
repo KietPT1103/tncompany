@@ -248,6 +248,16 @@ if ($method === 'POST') {
     $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? 'cafe'));
     $itemType = products_normalize_item_type((string) ($body['itemType'] ?? 'product'));
 
+    if ($action === 'reset-kitchen-stock') {
+        require_once __DIR__ . '/_lib/reset_kitchen_product_stock.php';
+        try {
+            $updatedCount = reset_kitchen_product_stock(db(), $user, $storeId);
+            respond_ok(['updatedCount' => $updatedCount, 'storeId' => 'restaurant']);
+        } catch (DomainException $exception) {
+            respond_error($exception->getMessage(), $exception->getCode());
+        }
+    }
+
     if ($action === 'import-selling-menu') {
         if (($user['role'] ?? '') !== 'admin') {
             respond_error('Chỉ quản trị viên được import danh sách món bán', 403);

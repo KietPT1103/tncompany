@@ -7,8 +7,9 @@ require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
+require_once __DIR__ . '/_lib/inventory_issues_schema.php';
 
-ingredients_ensure_schema();
+inventory_issues_ensure_schema();
 
 function ingredient_component_rows(string $ingredientId): array
 {
