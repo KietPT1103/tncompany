@@ -20,7 +20,8 @@ const STORE_ROLE_GROUPS: Record<StoreType, Array<keyof typeof ROLE_GROUPS>> = {
 };
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN");
-const hourFormatter = new Intl.NumberFormat("vi-VN", {
+const hourFormatter = new Intl.NumberFormat("en-US", {
+  useGrouping: false,
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
