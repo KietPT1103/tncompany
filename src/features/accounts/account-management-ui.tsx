@@ -2,11 +2,13 @@ import { normalizeSearchText } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
+  ChevronDown,
   KeyRound,
   Pencil,
   Search,
   ShieldCheck,
   Store,
+  Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +19,7 @@ import {
 } from "@/features/accounts/accountPermissions";
 import {
   getDefaultPermissionsForRole,
+  getEffectivePermissions,
   MANAGED_PERMISSION_GROUPS,
   normalizePermissionList,
 } from "@/lib/permissions";
@@ -226,7 +229,7 @@ export function AccountDetails({
   ];
 
   return (
-    <div className="border-t border-emerald-200 bg-white">
+    <div className="border-t border-blue-200 bg-white">
       <div className="flex overflow-x-auto border-b border-slate-200 px-4 sm:px-6">
         {tabs.map((itemTab) => (
           <button
@@ -234,7 +237,7 @@ export function AccountDetails({
             type="button"
             className={`shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
               tab === itemTab.id
-                ? "border-emerald-600 text-emerald-700"
+                ? "border-[#0070f4] text-[#0070f4]"
                 : "border-transparent text-slate-500 hover:text-slate-900"
             }`}
             onClick={() => onTabChange(itemTab.id)}
@@ -252,19 +255,21 @@ export function AccountDetails({
             <InfoValue label="Email" value={item.email} />
             <InfoValue label="Vai trò" value={roleLabel(item.role)} />
           </div>
-          <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-6 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
             <Button
               type="button"
-              variant="ghost"
-              className="justify-center text-rose-600 hover:bg-rose-50 hover:text-rose-700 sm:justify-start"
+              variant="outline"
+              size="icon"
+              aria-label="Xóa tài khoản"
+              title="Xóa tài khoản"
+              className="border-rose-600 bg-rose-600 text-white shadow-none hover:border-rose-700 hover:bg-rose-700 hover:text-white"
               disabled={deletingDisabled}
               onClick={onDelete}
             >
-              Xóa tài khoản
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <Button type="button" className="gap-2 bg-emerald-700 hover:bg-emerald-800" onClick={onEditAccount}>
-              <Pencil className="h-4 w-4" />
-              Chỉnh sửa
+            <Button type="button" size="icon" aria-label="Chỉnh sửa tài khoản" title="Chỉnh sửa tài khoản" className="bg-[#0070f4] text-white hover:bg-[#005bd1]" onClick={onEditAccount}>
+              <Pencil className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -280,7 +285,7 @@ export function AccountDetails({
               </p>
             </div>
             {canManageAccess ? (
-              <Button type="button" className="gap-2 bg-emerald-700 hover:bg-emerald-800" onClick={onEditPermissions}>
+              <Button type="button" className="gap-2 bg-[#0070f4] text-white hover:bg-[#005bd1]" onClick={onEditPermissions}>
                 <Pencil className="h-4 w-4" />
                 Chỉnh sửa
               </Button>
@@ -293,12 +298,12 @@ export function AccountDetails({
                 <div key={group.category} className="rounded-sm border border-slate-200 bg-slate-50/70 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <h4 className="text-sm font-semibold text-slate-900">{categoryLabel(group.category)}</h4>
-                    <span className="text-xs font-medium text-emerald-700">{group.items.length} quyền</span>
+                    <span className="text-xs font-medium text-blue-700">{group.items.length} quyền</span>
                   </div>
                   <ul className="mt-3 space-y-2">
                     {group.items.map((permission) => (
                       <li key={permission.id} className="flex items-start gap-2 text-sm text-slate-700">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#B77900]" strokeWidth={2.5} />
                         <span>{permission.label}</span>
                       </li>
                     ))}
@@ -337,7 +342,7 @@ function InfoValue({ label, value }: { label: string; value: string }) {
 function AccessItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="flex gap-3 rounded-sm border border-slate-200 bg-slate-50 p-4">
-      <span className="text-emerald-700">{icon}</span>
+      <span className="text-blue-700">{icon}</span>
       <div className="min-w-0">
         <div className="text-xs font-medium text-slate-500">{label}</div>
         <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
@@ -379,18 +384,16 @@ export function PermissionEditorModal({
   onClear,
   onSave,
 }: PermissionEditorProps) {
-  const [mode, setMode] = useState<"role" | "custom">("role");
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setMode("role");
     setSearch("");
     setActiveCategory("");
   }, [open, target?.id]);
 
-  const enabled = useMemo(() => new Set(permissions), [permissions]);
+  const effective = useMemo(() => new Set(getEffectivePermissions({ role, permissions })), [role, permissions]);
   const filteredGroups = useMemo(() => {
     const keyword = normalizeSearchText(search);
     return MANAGED_PERMISSION_GROUPS.map((group) => ({
@@ -401,8 +404,6 @@ export function PermissionEditorModal({
       }),
     })).filter((group) => group.items.length > 0);
   }, [search]);
-
-  const roleOption = ROLE_OPTIONS.find((item) => item.value === role);
 
   return (
     <Modal
@@ -415,50 +416,37 @@ export function PermissionEditorModal({
         <>
           {error ? <p className="mr-auto text-sm text-rose-600">{error}</p> : null}
           <Button type="button" variant="ghost" onClick={onClose}>Bỏ qua</Button>
-          <Button type="button" className="bg-emerald-700 hover:bg-emerald-800" onClick={onSave} isLoading={saving} disabled={!canManageAccess}>
+          <Button type="button" className="bg-blue-700 hover:bg-blue-800" onClick={onSave} isLoading={saving} disabled={!canManageAccess}>
             Lưu phân quyền
           </Button>
         </>
       }
     >
-      <div className="border-b border-slate-200 px-5 pt-3 sm:px-6">
-        <div className="flex gap-6 overflow-x-auto">
-          {[
-            ["role", "Phân quyền theo vai trò"],
-            ["custom", "Phân quyền khác"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={`shrink-0 border-b-2 pb-3 text-sm font-medium ${
-                mode === value ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500"
-              }`}
-              onClick={() => setMode(value as "role" | "custom")}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="border-b border-slate-200 px-5 py-3 text-sm text-slate-600 sm:px-6">
+        Danh sách tính năng theo nhóm. Quyền kế thừa được bật theo vai trò hoặc quyền đầy đủ đã chọn.
       </div>
 
       <div className="flex flex-col gap-4 bg-slate-50 p-4 sm:p-6 lg:flex-row">
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-3 rounded-sm border border-slate-200 bg-white p-4 sm:flex-row sm:items-end sm:justify-between">
             <label className="min-w-0 flex-1">
-              <span className="mb-1 block text-xs font-medium text-slate-500">Vai trò</span>
-              <select
-                value={role}
-                onChange={(event) => onRoleChange(event.target.value as UserRole)}
-                disabled={!canManageAccess}
-                className="h-10 w-full border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              >
-                {ROLE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
+              <span className="mb-1.5 block text-xs font-medium text-slate-600">Vai trò</span>
+              <span className="relative block">
+                <select
+                  value={role}
+                  onChange={(event) => onRoleChange(event.target.value as UserRole)}
+                  disabled={!canManageAccess}
+                  className="h-10 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-3 pr-10 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-blue-400 hover:bg-blue-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {ROLE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-500" aria-hidden="true" />
+              </span>
             </label>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onReset} disabled={!canManageAccess}>Mặc định</Button>
-              <Button type="button" size="sm" variant="outline" onClick={onSelectAll} disabled={!canManageAccess || role === "admin"}>Bật tất cả</Button>
-              <Button type="button" size="sm" variant="outline" onClick={onClear} disabled={!canManageAccess || role === "admin"}>Bỏ hết</Button>
+            <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0">
+              <Button type="button" variant="outline" className="rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-none hover:border-slate-300 hover:bg-slate-100" onClick={onReset} disabled={!canManageAccess}>Mặc định</Button>
+              <Button type="button" variant="outline" className="rounded-lg border-blue-200 bg-blue-50 px-3 text-sm text-blue-700 shadow-none hover:border-blue-300 hover:bg-blue-100" onClick={onSelectAll} disabled={!canManageAccess || role === "admin"}>Bật tất cả</Button>
+              <Button type="button" variant="outline" className="rounded-lg border-rose-200 bg-white px-3 text-sm text-rose-600 shadow-none hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700" onClick={onClear} disabled={!canManageAccess || role === "admin"}>Bỏ hết</Button>
             </div>
           </div>
 
@@ -468,7 +456,7 @@ export function PermissionEditorModal({
             </div>
           ) : null}
           {role === "admin" ? (
-            <div className="mt-4 flex gap-3 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <div className="mt-4 flex gap-3 border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               <ShieldCheck className="h-5 w-5 shrink-0" />
               Tài khoản quản trị viên luôn có toàn quyền hệ thống.
             </div>
@@ -476,7 +464,7 @@ export function PermissionEditorModal({
 
           <div className="mt-4 space-y-3">
             {filteredGroups.map((group) => {
-              const groupEnabled = group.items.filter((item) => enabled.has(item.id)).length;
+              const groupEnabled = group.items.filter((item) => effective.has(item.id)).length;
               return (
                 <section key={group.category} id={`permission-${permissionSlug(group.category)}`} className="scroll-mt-4 rounded-sm border border-slate-200 bg-white">
                   <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -484,17 +472,19 @@ export function PermissionEditorModal({
                       <h3 className="font-semibold text-slate-950">{categoryLabel(group.category)}</h3>
                       <p className="mt-0.5 text-xs text-slate-500">{groupEnabled}/{group.items.length} tính năng được bật</p>
                     </div>
-                    <span className="text-xs text-slate-400">{roleOption?.description}</span>
                   </div>
                   <div className="space-y-2 p-3 sm:p-4">
                     {group.items.map((item) => {
-                      const checked = role === "admin" || enabled.has(item.id);
+                      const checked = effective.has(item.id);
+                      const inherited = role !== "admin" && getEffectivePermissions({ role, permissions: permissions.filter((permission) => permission !== item.id) }).includes(item.id);
+                      const locked = role === "admin" || !!item.adminOnly || inherited;
                       return (
-                        <label key={item.id} className={`flex items-start gap-3 rounded-sm border px-3 py-3 ${checked ? "border-emerald-200 bg-emerald-50/70" : "border-slate-200"} ${role === "admin" ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/50"}`}>
-                          <input type="checkbox" checked={checked} disabled={!canManageAccess || role === "admin"} onChange={() => onToggle(item.id)} className="mt-0.5 h-4 w-4 accent-emerald-700" />
+                        <label key={item.id} className={`flex items-start gap-3 rounded-sm border px-3 py-3 ${checked ? "border-blue-200 bg-blue-50/70" : "border-slate-200"} ${locked ? "cursor-not-allowed" : "cursor-pointer hover:border-blue-300 hover:bg-blue-50/50"}`}>
+                          <input type="checkbox" checked={checked} disabled={!canManageAccess || locked} onChange={() => onToggle(item.id)} className="mt-0.5 h-4 w-4 accent-blue-700" />
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-slate-800">{item.label}</span>
                             <span className="mt-0.5 block text-xs leading-5 text-slate-500">{item.description}</span>
+                            {item.adminOnly ? <span className="mt-1 block text-xs font-medium text-slate-600">Chỉ quản trị viên</span> : inherited ? <span className="mt-1 block text-xs font-medium text-blue-700">Kế thừa từ vai trò hoặc quyền đầy đủ</span> : null}
                           </span>
                         </label>
                       );
@@ -504,20 +494,21 @@ export function PermissionEditorModal({
               );
             })}
           </div>
+          {filteredGroups.length === 0 ? <p className="px-4 py-8 text-center text-sm text-slate-500">Không tìm thấy tính năng phù hợp.</p> : null}
         </div>
 
         <aside className="order-first h-fit rounded-sm border border-slate-200 bg-white lg:order-last lg:w-56">
           <div className="border-b border-slate-200 p-3">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input type="search" name="permission-search" autoComplete="off" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm phân quyền" className="h-9 w-full rounded-sm border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-emerald-500" />
+              <input type="search" name="permission-search" aria-label="Tìm phân quyền" autoComplete="off" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm phân quyền" className="h-9 w-full rounded-sm border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-500" />
             </label>
           </div>
           <nav className="flex gap-1 overflow-x-auto p-2 lg:block lg:space-y-1">
-            {MANAGED_PERMISSION_GROUPS.map((group) => {
+            {filteredGroups.map((group) => {
               const slug = permissionSlug(group.category);
               return (
-                <a key={group.category} href={`#permission-${slug}`} className={`block shrink-0 whitespace-nowrap px-3 py-2 text-xs font-medium ${activeCategory === slug ? "bg-emerald-50 text-emerald-700" : "text-slate-700 hover:bg-slate-50"}`} onClick={() => setActiveCategory(slug)}>
+                <a key={group.category} href={`#permission-${slug}`} className={`block shrink-0 whitespace-nowrap px-3 py-2 text-xs font-medium ${activeCategory === slug ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"}`} onClick={() => setActiveCategory(slug)}>
                   {categoryLabel(group.category)}
                 </a>
               );

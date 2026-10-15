@@ -26,7 +26,10 @@ if (($user['role'] ?? '') === 'bartender') {
     } else {
         respond_error('Tài khoản pha chế không được phép thực hiện thao tác này', 403);
     }
-} elseif (!auth_has_permission($user, 'bills.access')) {
+} elseif (!auth_has_permission($user, 'bills.access') && !(
+    $method === 'GET' && $resource === 'bills'
+    && (auth_has_permission($user, 'reports.revenue.view') || auth_has_permission($user, 'reports.products.view'))
+)) {
     respond_error('Forbidden', 403);
 }
 

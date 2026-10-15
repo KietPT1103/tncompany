@@ -12,6 +12,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { useAuth } from "@/context/AuthContext";
@@ -135,6 +136,8 @@ export default function AccountManagementPage() {
   const [items, setItems] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
@@ -261,7 +264,7 @@ export default function AccountManagementPage() {
     if (form.role === "admin") return;
     setForm((current) => ({
       ...current,
-      permissions: normalizePermissionList(MANAGED_PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.id)))
+      permissions: normalizePermissionList(MANAGED_PERMISSION_GROUPS.flatMap((group) => group.items.filter((item) => !item.adminOnly).map((item) => item.id)))
         .filter((permission) => permission !== "products.selling.view" && permission !== "products.components.update"),
       storeIds: current.storeIds.length ? current.storeIds : INVENTORY_AREA_OPTIONS.map((option) => option.value),
     }));
@@ -353,18 +356,21 @@ export default function AccountManagementPage() {
     }
   }
 
-  async function handleDelete(item: ManagedUser) {
-    if (item.id === user?.id || !confirm(`Xóa tài khoản ${item.displayName || item.username || item.email}?`)) return;
+  async function handleDelete() {
+    if (!deleteTarget || deleteTarget.id === user?.id || saving) return;
+    const item = deleteTarget;
     setSaving(true);
     setError("");
+    setDeleteError("");
     try {
       await deleteManagedUser(item.id);
       setItems((current) => current.filter((currentItem) => currentItem.id !== item.id));
       setExpandedId("");
+      setDeleteTarget(null);
       setMessage("Đã xóa tài khoản.");
     } catch (deleteErr) {
       console.error(deleteErr);
-      setError(deleteErr instanceof Error ? deleteErr.message : "Không xóa được tài khoản.");
+      setDeleteError(deleteErr instanceof Error ? deleteErr.message : "Không xóa được tài khoản.");
     } finally {
       setSaving(false);
     }
@@ -411,21 +417,38 @@ export default function AccountManagementPage() {
           {loading ? <div className="space-y-3 p-5"><div className="h-14 animate-pulse rounded-sm bg-slate-100" /><div className="h-14 animate-pulse rounded-sm bg-slate-100" /><div className="h-14 animate-pulse rounded-sm bg-slate-100" /></div> : filteredItems.length === 0 ? <div className="px-5 py-16 text-center"><UserRound className="mx-auto h-9 w-9 text-slate-300" /><p className="mt-3 text-sm font-medium text-slate-700">Không có tài khoản phù hợp</p><p className="mt-1 text-sm text-slate-500">Thử thay đổi bộ lọc hoặc tạo tài khoản mới.</p></div> : <div className="divide-y divide-slate-200">
             {filteredItems.map((item) => {
               const expanded = expandedId === item.id;
-              return <div key={item.id} className={`overflow-hidden transition-colors ${expanded ? "bg-emerald-50/40" : "hover:bg-emerald-50"}`}>
-                <button type="button" className={`grid w-full grid-cols-1 gap-2 px-4 py-4 text-left transition-colors duration-150 hover:bg-emerald-50 focus-visible:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 md:grid-cols-[minmax(180px,1.3fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(130px,.8fr)_minmax(120px,.7fr)] md:items-center md:gap-4 md:px-5 2xl:grid-cols-[minmax(280px,1.5fr)_minmax(220px,1fr)_minmax(240px,1fr)_minmax(180px,.8fr)_minmax(160px,.7fr)] 2xl:gap-5 2xl:px-7 2xl:py-5 ${expanded ? "bg-emerald-50" : ""}`} onClick={() => toggleExpanded(item)} aria-expanded={expanded}>
-                  <span className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-800 text-[#F6C85F]"><UserRound className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-900">{item.displayName || item.username || item.email}</span><span className="mt-0.5 block truncate text-xs text-slate-600 md:hidden">{item.email}</span></span></span>
-                  <span className="hidden truncate text-sm text-slate-700 md:block">{item.username || "Chưa có"}</span>
-                  <span className="hidden truncate text-sm text-slate-700 md:block">{storeSummary(item)}</span>
-                  <span className="flex items-center gap-2 text-sm text-slate-700"><span className="md:hidden text-xs text-slate-500">Vai trò:</span>{roleLabel(item.role)}</span>
-                  <span className="flex items-center justify-between gap-3 md:justify-start"><span className={`inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium ${item.isActive ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}><span className={`h-1.5 w-1.5 rounded-full ${item.isActive ? "bg-emerald-600" : "bg-slate-500"}`} />{item.isActive ? "Đang hoạt động" : "Đã khóa"}</span><span className="text-xs text-emerald-800 md:hidden">{permissionCount(item)} quyền</span></span>
+              return <div key={item.id} className={`relative overflow-hidden transition-colors ${expanded ? "bg-[#0070f4] after:pointer-events-none after:absolute after:inset-0 after:z-10 after:border-2 after:border-[#0070f4]" : "hover:bg-[#0070f4]"}`}>
+                <button type="button" className={`group/account grid w-full grid-cols-1 gap-2 px-4 py-4 text-left transition-colors duration-150 hover:bg-[#0070f4] focus-visible:bg-[#0070f4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0070f4] md:grid-cols-[minmax(180px,1.3fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(130px,.8fr)_minmax(120px,.7fr)] md:items-center md:gap-4 md:px-5 2xl:grid-cols-[minmax(280px,1.5fr)_minmax(220px,1fr)_minmax(240px,1fr)_minmax(180px,.8fr)_minmax(160px,.7fr)] 2xl:gap-5 2xl:px-7 2xl:py-5 ${expanded ? "bg-[#0070f4]" : ""}`} onClick={() => toggleExpanded(item)} aria-expanded={expanded}>
+                  <span className="flex min-w-0 items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors group-hover/account:bg-white/20 group-hover/account:text-white group-focus-visible/account:bg-white/20 group-focus-visible/account:text-white ${expanded ? "bg-white/20 text-white" : "bg-[#0070f4] text-white"}`}><UserRound className="h-4 w-4" /></span><span className="min-w-0"><span className={`block truncate text-sm font-semibold group-hover/account:text-white group-focus-visible/account:text-white ${expanded ? "text-white" : "text-slate-900"}`}>{item.displayName || item.username || item.email}</span><span className={`mt-0.5 block truncate text-xs group-hover/account:text-white group-focus-visible/account:text-white ${expanded ? "text-white" : "text-slate-600"} md:hidden`}>{item.email}</span></span></span>
+                  <span className={`hidden truncate text-sm group-hover/account:text-white group-focus-visible/account:text-white ${expanded ? "text-white" : "text-slate-700"} md:block`}>{item.username || "Chưa có"}</span>
+                  <span className={`hidden truncate text-sm group-hover/account:text-white group-focus-visible/account:text-white ${expanded ? "text-white" : "text-slate-700"} md:block`}>{storeSummary(item)}</span>
+                  <span className={`flex items-center gap-2 text-sm group-hover/account:text-white group-focus-visible/account:text-white ${expanded ? "text-white" : "text-slate-700"}`}><span className={`md:hidden text-xs group-hover/account:text-white group-focus-visible/account:text-white ${expanded ? "text-white" : "text-slate-500"}`}>Vai trò:</span>{roleLabel(item.role)}</span>
+                  <span className="flex items-center justify-between gap-3 md:justify-start"><span className={`inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium ${item.isActive ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-600"}`}><span className={`h-1.5 w-1.5 rounded-full ${item.isActive ? "bg-blue-600" : "bg-slate-500"}`} />{item.isActive ? "Đang hoạt động" : "Đã khóa"}</span><span className={`text-xs group-hover/account:text-white group-focus-visible/account:text-white md:hidden ${expanded ? "text-white" : "text-emerald-800"}`}>{permissionCount(item)} quyền</span></span>
                 </button>
-                {expanded ? <AccountDetails item={item} tab={detailTab} canManageAccess={canManageAccess} deletingDisabled={item.id === user?.id || saving} onTabChange={setDetailTab} onEditAccount={() => openEdit(item)} onEditPermissions={() => openPermissionEditor(item)} onDelete={() => void handleDelete(item)} /> : null}
+                {expanded ? <AccountDetails item={item} tab={detailTab} canManageAccess={canManageAccess} deletingDisabled={item.id === user?.id || saving} onTabChange={setDetailTab} onEditAccount={() => openEdit(item)} onEditPermissions={() => openPermissionEditor(item)} onDelete={() => { if (item.id === user?.id || saving) return; setDeleteError(""); setDeleteTarget(item); }} /> : null}
               </div>;
             })}
           </div>}
         </section>
       </div>
 
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Xóa tài khoản?"
+        description={
+          <>
+            <p>Bạn có chắc muốn xóa tài khoản <strong className="font-semibold text-slate-900">{deleteTarget?.displayName || deleteTarget?.username || deleteTarget?.email}</strong>?</p>
+            <p className="mt-1">Thao tác này không thể hoàn tác.</p>
+            {deleteError ? <p role="alert" className="mt-3 text-rose-600">{deleteError}</p> : null}
+          </>
+        }
+        confirmLabel="Xóa tài khoản"
+        cancelLabel="Hủy"
+        variant="destructive"
+        isLoading={saving}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => { if (!saving) { setDeleteTarget(null); setDeleteError(""); } }}
+      />
       <AccountEditorModal open={accountModalOpen} editingId={editingId} form={form} canManageAccess={canManageAccess} saving={saving} error={error} onClose={closeAccountEditor} onChange={patchForm} onRoleChange={handleRoleChange} onSave={() => void handleSubmit()} />
       <PermissionEditorModal open={permissionModalOpen} target={permissionTarget} canManageAccess={canManageAccess} permissions={form.permissions} role={form.role} saving={saving} error={error} onClose={() => setPermissionModalOpen(false)} onRoleChange={handleRoleChange} onToggle={handlePermissionToggle} onReset={handleResetPermissions} onSelectAll={handleSelectAllPermissions} onClear={handleClearPermissions} onSave={() => void savePermissions()} />
     </div>

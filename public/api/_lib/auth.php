@@ -184,6 +184,10 @@ function auth_all_permissions(): array
         'payroll.access',
         'timesheet.access',
         'reports.access',
+        'reports.products.view',
+        'reports.revenue.view',
+        'reports.profit.access',
+        'reports.cost.access',
         'cash_flow.access',
         'product.access',
         'products.selling.view',
@@ -322,6 +326,12 @@ function auth_effective_permissions(array $row): array
         }
         if (in_array('products.components.update', $permissions, true)) {
             $permissions[] = 'products.selling.view';
+        }
+        if (in_array('reports.access', $permissions, true)) {
+            $permissions[] = 'reports.products.view';
+            $permissions[] = 'reports.revenue.view';
+            $permissions[] = 'reports.profit.access';
+            $permissions[] = 'reports.cost.access';
         }
         $permissions = array_values(array_unique($permissions));
         return $permissions;

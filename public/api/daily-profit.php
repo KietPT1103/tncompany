@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/daily_profit.php';
-$user = auth_require_permission('reports.access');
+$user = auth_require_permission(['reports.access', 'reports.profit.access']);
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if (!in_array($method, ['GET','POST'], true)) respond_error('Method not allowed', 405);
 $body = $method === 'POST' ? read_json_body() : $_GET;

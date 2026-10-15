@@ -212,9 +212,9 @@ export function SavedEstimateSchedules({ storeId, revision, onOpen, onDeleted, o
               <div className="text-sm text-slate-600"><span className="mb-1 block text-xs text-slate-500 xl:hidden">Cập nhật lần cuối</span>{savedAtLabel(schedule.updatedAt)}</div>
               <div className="text-sm text-slate-600">{schedule.employeeCount} người<span className="mt-1 block text-xs text-slate-500">{schedule.totalHours.toLocaleString('vi-VN',{maximumFractionDigits:2})} giờ</span></div>
               <div className="break-words text-sm font-bold tabular-nums text-emerald-800"><span className="mb-1 block text-xs font-normal text-slate-500 xl:hidden">Lương ước tính</span>{moneyLabel(schedule.totalSalary)}</div>
-              <div className="flex items-center gap-2 sm:col-span-2 xl:col-span-1 xl:w-36">
-                <Button variant="outline" size="sm" disabled={opening || deleting} className={`h-8 px-2.5 text-xs text-emerald-900 ${outline}`} onClick={()=>onOpen(schedule.id)}>Mở lịch</Button>
-                <Button variant="outline" size="sm" disabled={opening || deleting} className="h-8 gap-1 rounded-md border-red-200 px-2.5 text-xs text-red-700 hover:border-red-700 hover:bg-red-50 hover:text-red-800" onClick={()=>confirmDelete([schedule])}>
+              <div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:flex sm:items-center xl:col-span-1 xl:w-36">
+                <Button variant="outline" size="sm" disabled={opening || deleting} className={`h-11 px-2.5 text-sm text-emerald-900 sm:h-8 sm:text-xs ${outline}`} onClick={()=>onOpen(schedule.id)}>Mở lịch</Button>
+                <Button variant="outline" size="sm" disabled={opening || deleting} className="h-11 gap-1 rounded-md border-red-200 px-2.5 text-sm text-red-700 hover:border-red-700 hover:bg-red-50 hover:text-red-800 sm:h-8 sm:text-xs" onClick={()=>confirmDelete([schedule])}>
                   <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Xoá
                 </Button>
               </div>

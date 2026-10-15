@@ -117,7 +117,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 products_inventory_ensure_schema();
 
 if ($method === 'GET') {
-    $user = auth_require_permission(['product.access', 'products.selling.view', 'products.components.update', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update', 'bills.access', 'bar.checkout']);
+    $user = auth_require_permission(['product.access', 'products.selling.view', 'products.components.update', 'dashboard.access', 'inventory_receipts.access', 'inventory_receipts.update', 'bills.access', 'bar.checkout', 'reports.products.view']);
     $sellingOnly = products_has_limited_catalog_access($user);
 
     $fieldAction = strtolower(trim((string) ($_GET['action'] ?? '')));
