@@ -58,6 +58,7 @@ import {
   AlertCircle,
   ArrowLeft,
   CalendarClock,
+  Camera,
   CheckCircle2,
   Columns3,
   Download,
@@ -906,6 +907,8 @@ export default function PayrollDetail({
 
   const [attendanceBonusAmount, setAttendanceBonusAmount] = useState(0);
 
+  const salaryCaptureRef = useRef<HTMLDivElement>(null);
+  const [isCapturingSalary, setIsCapturingSalary] = useState(false);
   const [salaryDetailEntryId, setSalaryDetailEntryId] = useState<string | null>(
     null,
   );
@@ -2085,6 +2088,40 @@ export default function PayrollDetail({
   const salaryDetailEntry = entries.find(
     (entry) => entry.id === salaryDetailEntryId,
   );
+
+  async function handleCaptureSalary() {
+    const section = salaryCaptureRef.current;
+    if (!section || !salaryDetailEntry || isCapturingSalary) return;
+    setIsCapturingSalary(true);
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      await document.fonts.ready;
+      const canvas = await html2canvas(section, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        width: section.offsetWidth,
+        height: section.scrollHeight,
+        onclone: (doc) => {
+          const panel = doc.querySelector<HTMLElement>("[data-salary-capture]")?.parentElement;
+          if (panel) {
+            panel.style.height = "auto";
+            panel.style.overflow = "visible";
+            panel.scrollTop = 0;
+          }
+        },
+      });
+      const link = document.createElement("a");
+      const name = salaryDetailEntry.employeeName.replace(/[<>:"/\\|?*\x00-\x1f]/g, "-");
+      link.download = `chi-tiet-luong-${name}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (error) {
+      console.error("Salary capture failed", error);
+      showNotice("error", "Không thể chụp ảnh", "Vui lòng thử lại.");
+    } finally {
+      setIsCapturingSalary(false);
+    }
+  }
 
   const salaryDetailBreakdown = salaryDetailEntry
     ? getPayrollBreakdown(salaryDetailEntry)
@@ -3511,6 +3548,13 @@ export default function PayrollDetail({
             className="h-full w-full max-w-xl overflow-y-auto bg-white p-4 shadow-2xl sm:p-5"
             onClick={(event) => event.stopPropagation()}
           >
+            <div className="mb-3 flex justify-end">
+              <Button variant="outline" onClick={() => void handleCaptureSalary()} disabled={isCapturingSalary} className="gap-2">
+                <Camera className="h-4 w-4" />
+                {isCapturingSalary ? "Đang chụp..." : "Chụp ảnh lương"}
+              </Button>
+            </div>
+            <div ref={salaryCaptureRef} data-salary-capture className="bg-white p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
@@ -3523,6 +3567,7 @@ export default function PayrollDetail({
               </div>
               <button
                 type="button"
+                data-html2canvas-ignore="true"
                 onClick={() => setSalaryDetailEntryId(null)}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Đóng"
@@ -3721,6 +3766,8 @@ export default function PayrollDetail({
               <span className="text-xl font-bold text-sky-700">
                 {formatCurrency(salaryDetailEntry.salary || 0)}
               </span>
+            </div>
+
             </div>
 
             {salaryDetailLateSummary?.configuredStartTimes?.length ? (
