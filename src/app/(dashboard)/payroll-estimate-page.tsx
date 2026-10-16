@@ -1,7 +1,7 @@
 "use client";
 import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -68,7 +68,7 @@ const ROLE_THEME =
   "from-[#FFC107] via-[#FFE6A0] via-30% to-white to-60% text-[#064E3B] border-[#E5AE21]";
 
 const WEEK_SHORTCUT_BUTTON_CLASS =
-  "h-10 self-end gap-2 rounded-lg border-slate-200 bg-white px-3.5 text-xs font-semibold text-[#064E3B] shadow-sm transition-[background-color,border-color,box-shadow,color,transform] duration-150 hover:border-[#064E3B] hover:bg-emerald-50/70 hover:text-[#064E3B] hover:shadow-md focus-visible:border-[#D6A621] focus-visible:ring-[#E1B23D]/35 active:scale-[0.97] [&_svg]:text-[#064E3B]";
+  "h-11 w-full gap-1.5 rounded-lg border-slate-200 bg-white px-2 text-xs font-semibold text-[#064E3B] shadow-sm transition-[background-color,border-color,box-shadow,color,transform] duration-150 hover:border-[#064E3B] hover:bg-emerald-50/70 hover:text-[#064E3B] hover:shadow-md focus-visible:border-[#D6A621] focus-visible:ring-[#E1B23D]/35 active:scale-[0.97] sm:h-10 sm:w-auto sm:self-end sm:gap-2 sm:px-3.5 [&_svg]:text-[#064E3B]";
 
 const SHIFT_THEME: Record<ShiftId, { badge: string; surface: string }> = {
   shift_1: {
@@ -467,6 +467,12 @@ function RoleScheduleTable({
   const captureRef = useRef<HTMLElement>(null);
   const captureKey = `${role}__${week.key}`;
   const [captureStatus, setCaptureStatus] = useState<"idle" | "capturing" | "done" | "error">("idle");
+  const [mobileDate, setMobileDate] = useState(() =>
+    (week.days.find((day) => day.isToday && day.inRange) || week.days.find((day) => day.inRange) || week.days[0]).date,
+  );
+  const selectedMobileDate = week.days.some((day) => day.date === mobileDate && day.inRange)
+    ? mobileDate
+    : (week.days.find((day) => day.inRange) || week.days[0]).date;
 
   async function handleCaptureSchedule() {
     const section = captureRef.current;
@@ -481,8 +487,12 @@ function RoleScheduleTable({
       const captureWidth = Math.max(
         section.scrollWidth,
         scheduleScroller?.scrollWidth || 0,
+        1080,
       );
-      const captureHeight = section.scrollHeight;
+      const captureHeight = Math.max(section.scrollHeight,
+        (section.firstElementChild?.getBoundingClientRect().height || 0) + 80 +
+        SHIFT_DEFINITIONS.reduce((height, shift) => height + 24 + getScheduleCellHeight(Math.max(0,
+          ...week.days.map((day) => (schedule[makeCellKey(day.date, role, shift.id)] || []).length))), 0));
       const canvas = await html2canvas(section, {
         backgroundColor: "#ffffff",
         scale: Math.min(window.devicePixelRatio || 1, 2),
@@ -499,6 +509,12 @@ function RoleScheduleTable({
           clonedSection.style.width = `${captureWidth}px`;
           clonedSection.style.maxWidth = "none";
           clonedSection.style.overflow = "visible";
+          clonedSection.querySelectorAll<HTMLElement>('[data-schedule-day]').forEach((element) => {
+            element.style.display = "table-cell";
+          });
+          const clonedTable = clonedSection.querySelector<HTMLElement>('table');
+          if (clonedTable) clonedTable.style.minWidth = "1080px";
+          clonedSection.querySelector<HTMLElement>('[data-mobile-day-picker]')?.style.setProperty('display', 'none');
           clonedSection.querySelectorAll<HTMLElement>('[data-schedule-scroll="true"]').forEach(
             (element) => {
               element.style.overflow = "visible";
@@ -545,7 +561,7 @@ function RoleScheduleTable({
     <section
       ref={captureRef}
       data-schedule-capture={captureKey}
-      className="overflow-hidden rounded border border-slate-200 bg-white shadow-[5px_7px_12px_rgba(15,23,42,0.16)]"
+      className="min-w-0 overflow-hidden rounded border border-slate-200 bg-white shadow-[5px_7px_12px_rgba(15,23,42,0.16)]"
     >
       <div
         className={cn(
@@ -557,12 +573,12 @@ function RoleScheduleTable({
           <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70">Lịch phân ca</p>
           <h3 className="text-lg font-bold">{role}</h3>
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex flex-wrap items-center gap-3" data-html2canvas-ignore="true">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="grid grid-cols-2 gap-3 pb-1 sm:flex sm:flex-wrap sm:items-center" data-html2canvas-ignore="true">
             <Button
               type="button"
               variant="outline"
-              className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-red-100 px-4 text-sm font-bold text-red-800 shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-red-200 hover:text-red-900 hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-red-800 focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
+              className="col-span-2 h-11 min-w-0 gap-1 rounded-[3px] border-2 border-slate-950 bg-red-100 px-2 text-xs font-bold text-red-800 sm:h-12 sm:gap-2 sm:px-4 sm:text-sm shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-red-200 hover:text-red-900 hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-red-800 focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
               disabled={saving}
               onClick={onDelete}
               aria-label={`Xoá lịch phân ca ${role}`}
@@ -571,7 +587,7 @@ function RoleScheduleTable({
             </Button>
             <Button
               type="button"
-              className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-[#F6C85F] px-4 text-sm font-bold text-[#064E3B] shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#E1B23D] hover:text-[#064E3B] hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#064E3B] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
+              className="h-11 min-w-0 gap-1 rounded-[3px] border-2 border-slate-950 bg-[#F6C85F] px-2 text-xs font-bold text-[#064E3B] sm:h-12 sm:gap-2 sm:px-4 sm:text-sm shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#E1B23D] hover:text-[#064E3B] hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#064E3B] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
               title="Lưu toàn bộ lịch phân ca trong khoảng ngày đã chọn"
               isLoading={saving}
               disabled={saveDisabled || saving}
@@ -585,7 +601,7 @@ function RoleScheduleTable({
               variant="outline"
               size="sm"
               data-html2canvas-ignore="true"
-              className="h-12 gap-2 rounded-[3px] border-2 border-slate-950 bg-[#087A62] px-4 text-sm font-bold text-white shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#066B56] hover:text-white hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
+              className="h-11 min-w-0 gap-1 rounded-[3px] border-2 border-slate-950 bg-[#087A62] px-2 text-xs font-bold text-white sm:h-12 sm:gap-2 sm:px-4 sm:text-sm shadow-[5px_6px_0_#0F172A] transition-[background-color,box-shadow,transform] duration-150 hover:translate-x-px hover:translate-y-px hover:border-slate-950 hover:bg-[#066B56] hover:text-white hover:shadow-[3px_4px_0_#0F172A] focus-visible:ring-2 focus-visible:ring-[#F6C85F] focus-visible:ring-offset-2 active:translate-x-[3px] active:translate-y-[4px] active:shadow-[1px_2px_0_#0F172A] disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[5px_6px_0_#0F172A]"
               onClick={() => void handleCaptureSchedule()}
               disabled={captureStatus === "capturing"}
             >
@@ -603,7 +619,7 @@ function RoleScheduleTable({
                     : "Chụp lịch"}
             </Button>
           </div>
-          <div className="rounded border border-emerald-900/15 bg-white/75 px-3 py-2 text-right shadow-sm backdrop-blur-sm">
+          <div className="order-first rounded border border-emerald-900/15 bg-white/75 px-3 py-2 text-left shadow-sm backdrop-blur-sm sm:order-none sm:text-right">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-800/70">
               Khoảng ngày
             </p>
@@ -621,18 +637,35 @@ function RoleScheduleTable({
         </div>
       </div>
 
-      <div data-schedule-scroll="true" className="overflow-x-auto">
-        <table className="w-full min-w-[920px] table-fixed border-separate border-spacing-0 2xl:min-w-[1080px]">
+      <div className="border-b border-slate-200 bg-white p-3 md:hidden" data-mobile-day-picker="true" data-html2canvas-ignore="true">
+        <p className="mb-2 text-sm font-medium text-slate-600">Chọn ngày phân ca</p>
+        <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1" role="group" aria-label={`Ngày phân ca ${role}`}>
+          {week.days.filter((day) => day.inRange).map((day) => (
+            <button key={day.date} type="button" aria-pressed={day.date === selectedMobileDate}
+              onClick={() => setMobileDate(day.date)}
+              className={cn("min-h-14 min-w-14 shrink-0 rounded-lg border px-2 py-2 text-center text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700",
+                day.date === selectedMobileDate ? "border-emerald-900 bg-emerald-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-900")}
+              aria-label={`${longDateFormatter.format(parseDateKey(day.date))}${day.isToday ? ', hôm nay' : ''}`}>
+              <span className="block">{day.weekdayLabel}</span>
+              <span className="mt-1 block font-bold tabular-nums">{day.shortDateLabel}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div data-schedule-scroll="true" className="min-w-0 overflow-x-auto overscroll-x-contain">
+        <table className="w-full table-fixed border-separate border-spacing-0 md:min-w-[920px] 2xl:min-w-[1080px]">
           <thead className="bg-slate-50/80">
             <tr className="text-left text-xs uppercase tracking-[0.16em] text-slate-500">
-              <th className="sticky left-0 z-20 min-w-[110px] border-b border-r border-slate-200 bg-white px-3 py-3 2xl:min-w-[130px] 2xl:px-4 2xl:py-4">
+              <th className="sticky left-0 z-20 w-24 border-b border-r border-slate-200 bg-white px-3 py-3 md:w-auto md:min-w-[110px] 2xl:min-w-[130px] 2xl:px-4 2xl:py-4">
                 Ca
               </th>
               {week.days.map((day) => (
                 <th
                   key={day.date}
+                  data-schedule-day={day.date}
                   className={cn(
-                    "min-w-[115px] border-b border-slate-200 px-2.5 py-3 2xl:min-w-[135px] 2xl:px-3",
+                    "border-b border-slate-200 px-2.5 py-3 md:min-w-[115px] 2xl:min-w-[135px] 2xl:px-3",
+                    day.date !== selectedMobileDate && "hidden md:table-cell",
                     day.inRange ? "bg-white" : "bg-slate-50 text-slate-400",
                   )}
                 >
@@ -723,8 +756,11 @@ function RoleScheduleTable({
                   return (
                     <td
                       key={day.date}
+                      data-schedule-day={day.date}
+                      style={{ "--schedule-cell-height": `${synchronizedCellHeight}px` } as CSSProperties}
                       className={cn(
                         "h-full border-b border-slate-200 px-2 py-3 align-top",
+                        day.date !== selectedMobileDate && "hidden md:table-cell",
                         !day.inRange && "bg-slate-50",
                       )}
                     >
@@ -739,7 +775,7 @@ function RoleScheduleTable({
                           }
                         }}
                         className={cn(
-                          "rounded-lg border bg-white p-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 2xl:p-2.5",
+                          "!h-auto min-h-24 rounded-lg border bg-white p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 md:!h-[var(--schedule-cell-height)] md:p-2 2xl:p-2.5",
                           isActive
                             ? "border-slate-900 bg-slate-50"
                             : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50",
@@ -773,13 +809,13 @@ function RoleScheduleTable({
                                 >
                                   <span
                                     data-employee-name="true"
-                                    className="min-w-0 flex-1 truncate text-xs font-semibold leading-5"
+                                    className="min-w-0 flex-1 break-words text-sm font-semibold leading-5 md:truncate md:text-xs"
                                   >
                                     {employee.name}
                                   </span>
                                   <button
                                     type="button"
-                                    className="mt-1 shrink-0 rounded-full text-slate-400 transition hover:text-rose-600"
+                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:text-rose-600 md:mt-1 md:h-5 md:w-5"
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       onRemoveEmployee(cell, employeeKey);
@@ -1468,15 +1504,15 @@ export default function SalaryEstimatePage() {
               </div>
             </div>
 
-            <div className={cn("min-w-0 flex-wrap gap-2 sm:flex-row sm:items-end sm:self-end xl:shrink-0", workspaceView === "saved" ? "hidden" : "flex flex-col")}>
+            <div className={cn("min-w-0 grid-cols-3 gap-2 sm:flex-wrap sm:items-end sm:self-end xl:shrink-0", workspaceView === "saved" ? "hidden" : "grid sm:flex")}>
               <DateRangePicker
                 label="Khoảng ngày"
                 startDate={range.startDate}
                 endDate={range.endDate}
                 onChange={(startDate, endDate) => setRange({ startDate, endDate })}
                 disabled={saving || loadingSavedEstimate}
-                className="w-full sm:w-80"
-                triggerClassName="h-10 rounded-lg border-slate-200 bg-white text-emerald-900 shadow-sm hover:border-[#064E3B] focus-visible:border-[#064E3B] focus-visible:ring-0 [&_svg]:text-emerald-800"
+                className="col-span-3 w-full sm:w-80"
+                triggerClassName="h-11 rounded-lg border-slate-200 bg-white text-emerald-900 shadow-sm hover:border-[#064E3B] focus-visible:border-[#064E3B] focus-visible:ring-0 sm:h-10 [&_svg]:text-emerald-800"
                 openTriggerClassName="!border-emerald-800 !ring-0"
               />
               <Button
@@ -1544,8 +1580,8 @@ export default function SalaryEstimatePage() {
                   </div>)}
                 </div>
 
-                <div className="flex flex-col gap-3 sm:self-end md:flex-row md:items-end 2xl:shrink-0">
-                  <div className="w-full border-slate-200 md:w-[280px] md:border-l md:pl-6">
+                <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end 2xl:shrink-0">
+                  <div className="min-w-0 w-full border-slate-200 2xl:w-[280px] 2xl:border-l 2xl:pl-6">
                     <span className="mb-2 block text-sm font-medium text-slate-600">
                       Vai trò
                     </span>
@@ -1562,7 +1598,7 @@ export default function SalaryEstimatePage() {
                   </div>
                   <Button
                     variant="outline"
-                    className={cn(WEEK_SHORTCUT_BUTTON_CLASS,"h-14")}
+                    className={cn(WEEK_SHORTCUT_BUTTON_CLASS,"h-11 sm:h-14")}
                     disabled={!selectedRole || displayedScheduleRoles.includes(selectedRole) || saving || loadingSavedEstimate || employeesLoading}
                     onClick={() => {
                       if (!selectedRole || displayedScheduleRoles.includes(selectedRole)) return;
@@ -1598,7 +1634,7 @@ export default function SalaryEstimatePage() {
             </section>
 
             <nav
-              className="flex overflow-x-auto border-b border-slate-200 bg-slate-50"
+              className="grid grid-cols-3 gap-1 border-b border-slate-200 bg-slate-50 sm:flex"
               aria-label="Nội dung ước lượng lương"
             >
               <button
@@ -1606,7 +1642,7 @@ export default function SalaryEstimatePage() {
                 onClick={() => setWorkspaceView("schedule")}
                 aria-current={workspaceView === "schedule" ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-12 rounded shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset",
+                  "inline-flex min-h-12 min-w-0 items-center justify-center gap-1 rounded border-b-2 px-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset sm:h-12 sm:shrink-0 sm:gap-2 sm:px-4 sm:text-sm",
                   workspaceView === "schedule"
                     ? "border-[#E1B23D] bg-[#064E3B] text-[#F6C85F]"
                     : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800",
@@ -1618,16 +1654,17 @@ export default function SalaryEstimatePage() {
               <button
                 type="button"
                 onClick={() => setWorkspaceView("summary")}
+                aria-label="Tổng hợp nhân viên"
                 aria-current={workspaceView === "summary" ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-12 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset",
+                  "inline-flex min-h-12 min-w-0 items-center justify-center gap-1 border-b-2 px-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset sm:h-12 sm:shrink-0 sm:gap-2 sm:px-4 sm:text-sm",
                   workspaceView === "summary"
                     ? "border-[#E1B23D] bg-[#064E3B] text-[#F6C85F]"
                     : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800",
                 )}
               >
-                <Users className="h-4 w-4" aria-hidden="true" />
-                Tổng hợp nhân viên
+                <Users className="hidden h-4 w-4 sm:block" aria-hidden="true" />
+                <span className="sm:hidden">Nhân viên</span><span className="hidden sm:inline">Tổng hợp nhân viên</span>
                 <span
                   className={cn(
                     "rounded-full px-2 py-0.5 text-[10px]",
@@ -1642,16 +1679,17 @@ export default function SalaryEstimatePage() {
               <button
                 type="button"
                 onClick={() => setWorkspaceView("saved")}
+                aria-label="Lịch phân ca đã lưu"
                 aria-current={workspaceView === "saved" ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-12 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset",
+                  "inline-flex min-h-12 min-w-0 items-center justify-center gap-1 border-b-2 px-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset sm:h-12 sm:shrink-0 sm:gap-2 sm:px-4 sm:text-sm",
                   workspaceView === "saved"
                     ? "border-[#E1B23D] bg-[#064E3B] text-[#F6C85F]"
                     : "border-transparent text-slate-500 hover:border-[#064E3B] hover:bg-white hover:text-[#064E3B]",
                 )}
               >
-                <History className="h-4 w-4" aria-hidden="true" />
-                Lịch phân ca đã lưu
+                <History className="hidden h-4 w-4 sm:block" aria-hidden="true" />
+                <span className="sm:hidden">Đã lưu</span><span className="hidden sm:inline">Lịch phân ca đã lưu</span>
                 <span
                   className={cn(
                     "rounded-full px-2 py-0.5 text-[10px]",
@@ -1764,7 +1802,7 @@ export default function SalaryEstimatePage() {
             </div>
           </div>
 
-          <aside className={workspaceView === "summary" ? "block" : "hidden"}>
+          <aside className={workspaceView === "summary" ? "block min-w-0" : "hidden"}>
             <section hidden className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -1930,7 +1968,7 @@ export default function SalaryEstimatePage() {
                 <h2 className="text-base font-bold text-slate-900">Tổng hợp nhân viên</h2>
                 <p className="mt-0.5 text-xs text-slate-500">{selectedRole} · {selectedRoleSummaries.length} người</p>
               </div>
-              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid min-w-0 grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
                 {selectedRoleSummaries.length === 0 ? (
                   <div className="flex min-h-44 flex-col items-center justify-center px-5 py-8 text-center sm:col-span-2 xl:col-span-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
@@ -1947,12 +1985,12 @@ export default function SalaryEstimatePage() {
                     return (
                       <div
                         key={item.employeeKey}
-                        className="rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
+                        className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
                       >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 sm:flex-1">
                           <div
-                            className="truncate font-semibold text-slate-900"
+                            className="break-words font-semibold text-slate-900 sm:truncate"
                             title={item.employee.name}
                           >
                             {item.employee.name}
@@ -1964,7 +2002,7 @@ export default function SalaryEstimatePage() {
                             ) : null}
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="shrink-0 text-left sm:text-right">
                           {!fixedSalary ? (
                             <div className="font-semibold text-emerald-700">
                               {formatCurrency(item.totalSalary)}
@@ -2020,7 +2058,7 @@ export default function SalaryEstimatePage() {
                   </div>
                   <button
                     type="button"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     onClick={() => setActiveCell(null)}
                     aria-label="Đóng popup"
                   >
@@ -2051,7 +2089,7 @@ export default function SalaryEstimatePage() {
                     value={cellSearch}
                     onChange={(event) => setCellSearch(event.target.value)}
                     placeholder="Tìm theo tên hoặc mã nhân viên"
-                    className="h-10 rounded-xl border-slate-200 bg-slate-50 pl-10 pr-10 text-sm focus:bg-white"
+                    className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-10 pr-10 text-base sm:h-10 sm:text-sm focus:bg-white"
                     autoFocus
                   />
                   {cellSearch ? (
@@ -2091,24 +2129,25 @@ export default function SalaryEstimatePage() {
                         <button
                           key={employeeKey}
                           type="button"
+                          aria-pressed={selected}
                           onClick={() =>
                             toggleEmployeeInActiveCell(employeeKey)
                           }
                           className={cn(
-                            "group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+                            "group grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:flex",
                             selected
                               ? "border-emerald-300 bg-emerald-50/80"
                               : "border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50",
                           )}
                         >
                           <div className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
+                            "hidden h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xs font-bold sm:flex",
                             selected ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600",
                           )}>
                             {employee.name.trim().slice(0, 2).toLocaleUpperCase("vi-VN")}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-slate-900" title={employee.name}>
+                          <div className="col-span-2 min-w-0 sm:flex-1">
+                            <span className="block break-words text-sm font-semibold text-slate-900 sm:truncate" title={employee.name}>
                               {employee.name}
                             </span>
                             {!fixedSalary ? (
@@ -2117,13 +2156,13 @@ export default function SalaryEstimatePage() {
                               </div>
                             ) : null}
                           </div>
-                          <div className="flex shrink-0 items-center gap-3">
+                          <div className="col-span-2 flex shrink-0 items-center justify-between gap-3 border-t border-slate-200/70 pt-2 sm:justify-start sm:border-0 sm:pt-0">
                             {fixedSalary ? (
                               <div className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">
                                 Không tính theo ca
                               </div>
                             ) : (
-                              <div className="text-right">
+                              <div className="text-left sm:text-right">
                                 <div className="text-sm font-bold text-slate-900">
                                   {formatCurrency(shiftCost)}
                                 </div>
@@ -2159,7 +2198,7 @@ export default function SalaryEstimatePage() {
                   <div className="flex flex-wrap justify-end gap-2">
                     <Button
                       variant="outline"
-                      className="h-9 rounded-lg px-3 text-xs"
+                      className="h-11 rounded-lg px-3 text-sm sm:h-9 sm:text-xs"
                       onClick={() => clearCell(activeCell)}
                       disabled={activeSelection.length === 0}
                     >
@@ -2167,7 +2206,7 @@ export default function SalaryEstimatePage() {
                     </Button>
                     <Button
                       variant="outline"
-                      className="h-9 rounded-lg px-4 text-xs"
+                      className="h-11 rounded-lg px-4 text-sm sm:h-9 sm:text-xs"
                       onClick={() => setActiveCell(null)}
                     >
                       Đóng

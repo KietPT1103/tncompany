@@ -4,16 +4,15 @@ import { inventoryToday } from "@/lib/inventoryPeriods";
 import { Pagination } from "@/components/ui/Pagination";
 import { paginateItems } from "@/lib/listPagination";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import Link from "next/link";
-import { Boxes, Download, Eye, EyeOff, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { Boxes, Download, Eye, EyeOff, LoaderCircle, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
-import { hasPermission } from "@/lib/permissions";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import {
-  createIngredient, deleteIngredient, getIngredients, restoreIngredient,
-  updateIngredient, type Ingredient,
+  createIngredient, deleteIngredient, getIngredients, getNextIngredientCode, restoreIngredient,
+  updateIngredient, resetIngredientStock, type Ingredient,
 } from "@/services/ingredients";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
 import { exportIngredientsToExcel, parseIngredientWorkbook } from "@/services/catalogExcel";
@@ -32,6 +31,7 @@ type ToastState = {
   variant: ToastVariant;
 };
 type PendingDelete = { item: Ingredient; mode: "hide" | "hard" };
+type IngredientAction = "" | "reset-stock" | "export" | "import";
 const blank = (): Form => ({
   itemKind: "ingredient",
   code: "", name: "", unit: "", purchaseUnit: "", conversionFactor: "1", stock: "0", cost: "0",
@@ -48,8 +48,9 @@ const defaultPeriod = () => {
 const kindLabels = { ingredient: "Nguyên liệu", consumable: "Vật liệu tiêu hao", fresh: "Nguyên liệu tươi" } as const;
 
 export default function IngredientsPage() {
-  const { storeId } = useStore();
+  const { storeId, storeName } = useStore();
   const { user } = useAuth();
+  const canResetIngredientStock = user?.role === "admin" && storeId === "restaurant";
   const isConstructionWarehouse = storeId === "warehouse";
   const itemLabel = isConstructionWarehouse ? "vật tư" : "nguyên liệu";
   const itemTitle = isConstructionWarehouse ? "Vật tư xây dựng" : "Nguyên liệu";
@@ -66,11 +67,17 @@ export default function IngredientsPage() {
   const [form, setForm] = useState<Form>(blank());
   const [editing, setEditing] = useState<Ingredient | null>(null);
   const [open, setOpen] = useState(false);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState("");
+  const [codeRefresh, setCodeRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState("");
   const [restoring, setRestoring] = useState("");
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resettingStock, setResettingStock] = useState(false);
+  const [resetError, setResetError] = useState("");
   const [toast, setToast] = useState<ToastState>({
     open: false,
     title: "",
@@ -81,6 +88,23 @@ export default function IngredientsPage() {
 
   function showToast(title: string, variant: ToastVariant, description?: string) {
     setToast({ open: true, title, description, variant });
+  }
+
+  async function confirmResetStock() {
+    if (!canResetIngredientStock || !resetTarget || resetTarget.id !== storeId || resettingStock) return;
+    setResettingStock(true);
+    setResetError("");
+    try {
+      const { updatedCount } = await resetIngredientStock(resetTarget.id);
+      loadSequence.current++;
+      setItems((current) => current.map((item) => ({ ...item, stockQuantity: 0 })));
+      setResetTarget(null);
+      showToast(`Đã reset tồn ${itemLabel}`, "success", `Đã đưa tồn hiện tại của ${updatedCount} ${itemLabel} tại ${resetTarget.name} về 0.`);
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : "Không reset được tồn kho. Vui lòng thử lại.");
+    } finally {
+      setResettingStock(false);
+    }
   }
 
   async function reload() {
@@ -116,6 +140,22 @@ export default function IngredientsPage() {
   useEffect(() => { setPage(1); }, [search, visibility, kind, storeId, dateFrom, dateTo, pageSize]);
   const paged = paginateItems(filtered, page, pageSize);
 
+  useEffect(() => {
+    if (!open || editing) return;
+    let active = true;
+    setCodeLoading(true);
+    setCodeError("");
+    getNextIngredientCode(storeId)
+      .then((code) => { if (active) setForm((current) => ({ ...current, code })); })
+      .catch((error) => {
+        if (!active) return;
+        setForm((current) => ({ ...current, code: "" }));
+        setCodeError(error instanceof Error ? error.message : "Không lấy được mã nguyên liệu.");
+      })
+      .finally(() => { if (active) setCodeLoading(false); });
+    return () => { active = false; };
+  }, [open, editing, storeId, codeRefresh]);
+
   function startCreate() {
     setEditing(null);
     setForm(blank());
@@ -143,6 +183,7 @@ export default function IngredientsPage() {
     setOpen(true);
   }
   async function save() {
+    if (!editing && (codeLoading || !form.code)) return;
     if (!form.name.trim() || !form.unit.trim() || !form.purchaseUnit.trim() || decimal(form.conversionFactor) <= 0) {
       showToast("Thông tin chưa đầy đủ", "warning", `Vui lòng nhập tên, đơn vị thu ngân, đơn vị pha chế và hệ số quy đổi của ${itemLabel}.`);
       return;
@@ -166,7 +207,7 @@ export default function IngredientsPage() {
     };
     try {
       if (editing) await updateIngredient(editing.ingredientCode, payload);
-      else await createIngredient({ ...payload, stockQuantity: 0 });
+      else await createIngredient({ ...payload, ingredientCode: form.code, stockQuantity: 0 });
       await reload();
       setOpen(false);
       showToast(
@@ -175,6 +216,7 @@ export default function IngredientsPage() {
         `${form.name.trim()} đã được lưu thành công.`,
       );
     } catch (e) {
+      if (!editing) setCodeRefresh((current) => current + 1);
       showToast(
         `Không thể lưu ${itemLabel}`,
         "error",
@@ -270,16 +312,39 @@ export default function IngredientsPage() {
     }
   }
 
+  const actionOptions: readonly SelectBoxOption<IngredientAction>[] = [
+    ...(canResetIngredientStock ? [{ value: "reset-stock" as const, label: `Reset tồn ${itemLabel}`, icon: RotateCcw, disabled: loading || saving || !!deleting || !!restoring || resettingStock }] : []),
+    { value: "export", label: "Xuất Excel", icon: Download, disabled: saving || loading || !items.some((item) => item.isActive) },
+    { value: "import", label: "Import Excel", icon: Upload, disabled: saving },
+  ];
+
   return <div className="warehouse-ui min-h-screen min-w-0 bg-slate-50 p-4 font-sans md:p-8"><div className="mx-auto max-w-[1680px]">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="text-3xl font-bold">{itemTitle}</h1><p className="mt-1 text-slate-500">{isConstructionWarehouse ? "Danh mục độc lập của kho thợ, phục vụ nhập, xuất và kiểm kê vật tư xây dựng." : "Dữ liệu riêng cho định mức, nhập hàng và kiểm kho."}</p></div>
       <div className="flex flex-wrap gap-2">
-        {(hasPermission(user, "inventory_receipts.view") || hasPermission(user, "inventory_issues.access") || hasPermission(user, "inventory_checks.access")) && <Link href="/inventory" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 hover:bg-emerald-50"><Boxes className="h-4 w-4" /> Sổ kho</Link>}
-        <button disabled={saving || !items.some((item) => item.isActive)} onClick={() => exportIngredientsToExcel(items.filter((item) => item.isActive), storeId)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 disabled:opacity-50"><Download className="h-4 w-4" /> Xuất Excel</button>
-        <button disabled={saving} onClick={() => importInputRef.current?.click()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 font-bold text-emerald-800 disabled:opacity-50"><Upload className="h-4 w-4" /> Import Excel</button>
+        <button type="button" onClick={startCreate} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[2px] border-2 border-slate-900 bg-emerald-700 px-3 text-sm font-semibold text-white shadow-[4px_4px_0_#0f172a] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-[6px_6px_0_#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#0f172a] disabled:opacity-60">
+          <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{`Thêm ${itemLabel}`}</button>
+        <SelectBox<IngredientAction>
+          ariaLabel="Thao tác nguyên liệu"
+          value=""
+          placeholder="Thao tác"
+          options={actionOptions}
+          disabled={saving || resettingStock}
+          onValueChange={(action) => {
+            if (action === "reset-stock" && canResetIngredientStock && !loading && !deleting && !restoring) {
+              setResetError("");
+              setResetTarget({ id: storeId, name: storeName });
+            } else if (action === "export") {
+              void exportIngredientsToExcel(items.filter((item) => item.isActive), storeId);
+            } else if (action === "import") {
+              importInputRef.current?.click();
+            }
+          }}
+          className="w-[180px]"
+          triggerClassName="h-10 rounded-[2px] border-2 border-slate-900 bg-white px-3 font-semibold text-slate-900 shadow-[4px_4px_0_#0f172a] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-[6px_6px_0_#0f172a] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#0f172a]"
+        />
         <input ref={importInputRef} type="file" accept=".xls,.xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importExcel(file); event.target.value = ""; }} />
-        <button onClick={startCreate} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">
-          <Plus className="h-5 w-5" />{`Thêm ${itemLabel}`}</button>
+
       </div>
     </header>
     <div className="my-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[
@@ -289,14 +354,37 @@ export default function IngredientsPage() {
       {label:"Hết hàng",value:items.filter(i=>i.isActive&&i.stockQuantity<=0).length,tone:"tone-3"}
     ].map(stat=><div className="warehouse-stat" key={stat.label}><span className={`warehouse-stat-icon ${stat.tone}`}><Boxes className="h-7 w-7"/></span><div><p className="text-sm text-slate-500">{stat.label}</p><strong className="mt-2 block text-3xl">{stat.value}</strong></div></div>)}</div>
     <div className="mt-6 min-w-0 overflow-hidden rounded-3xl border bg-white shadow-sm">
-      <div className="grid min-w-0 items-end gap-3 border-b p-4 sm:grid-cols-2 2xl:grid-cols-[minmax(200px,1fr)_minmax(440px,1.5fr)_150px_160px]"><label className="min-w-0 space-y-1 sm:col-span-2 2xl:col-span-1"><span className="text-sm font-medium text-slate-700">Tìm kiếm</span><span className="relative block"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={"Tìm mã, tên " + itemLabel + " hoặc nhà phân phối"} className="h-10 w-full min-w-0 rounded-md border bg-white pl-9 pr-3" /></span></label><InventoryDateFilter from={dateFrom} to={dateTo} disabled={loading} onChange={(from,to)=>{setDateFrom(from);setDateTo(to)}}/><label className="min-w-0 space-y-1 text-sm font-medium text-slate-700">Loại
-          <select aria-label="Lọc loại nguyên vật liệu" value={kind} onChange={(event) => setKind(event.target.value as typeof kind)} className="block h-10 w-full min-w-0 rounded-md border bg-white px-3"><option value="all">Tất cả</option><option value="ingredient">Nguyên liệu</option><option value="consumable">Vật liệu tiêu hao</option><option value="fresh">Nguyên liệu tươi</option></select>
-        </label>
-        <label className="min-w-0 space-y-1 text-sm font-medium text-slate-700">Trạng thái
-          <select aria-label="Lọc trạng thái nguyên liệu" value={visibility} onChange={(event) => setVisibility(event.target.value as "active" | "hidden" | "all")} className="block h-10 w-full min-w-0 rounded-md border bg-white px-3">
-            <option value="active">Đang sử dụng</option><option value="hidden">Đã ẩn</option><option value="all">Tất cả</option>
-          </select>
-        </label></div>
+      <div className="grid min-w-0 items-end gap-3 border-b p-4 sm:grid-cols-2 2xl:grid-cols-[minmax(200px,1fr)_minmax(440px,1.5fr)_150px_160px]"><label className="min-w-0 space-y-1 sm:col-span-2 2xl:col-span-1"><span className="text-sm font-medium text-slate-700">Tìm kiếm</span><span className="relative block"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={"Tìm mã, tên " + itemLabel + " hoặc nhà phân phối"} className="h-10 w-full min-w-0 rounded-md border bg-white pl-9 pr-3" /></span></label><InventoryDateFilter from={dateFrom} to={dateTo} disabled={loading} onChange={(from,to)=>{setDateFrom(from);setDateTo(to)}}/><div className="min-w-0 space-y-1">
+          <span className="block text-sm font-medium text-slate-700">Loại</span>
+          <SelectBox<typeof kind>
+            ariaLabel="Lọc loại nguyên vật liệu"
+            value={kind}
+            options={[
+              { value: "all", label: "Tất cả" },
+              { value: "ingredient", label: "Nguyên liệu" },
+              { value: "consumable", label: "Vật liệu tiêu hao" },
+              { value: "fresh", label: "Nguyên liệu tươi" },
+            ]}
+            onValueChange={setKind}
+            className="w-full"
+            triggerClassName="h-10 rounded-md border-slate-200 bg-white text-slate-700 shadow-none hover:border-emerald-400 hover:bg-emerald-50/50 focus-visible:ring-emerald-200"
+          />
+        </div>
+        <div className="min-w-0 space-y-1">
+          <span className="block text-sm font-medium text-slate-700">Trạng thái</span>
+          <SelectBox<typeof visibility>
+            ariaLabel="Lọc trạng thái nguyên liệu"
+            value={visibility}
+            options={[
+              { value: "active", label: "Đang sử dụng" },
+              { value: "hidden", label: "Đã ẩn" },
+              { value: "all", label: "Tất cả" },
+            ]}
+            onValueChange={setVisibility}
+            className="w-full"
+            triggerClassName="h-10 rounded-md border-slate-200 bg-white text-slate-700 shadow-none hover:border-emerald-400 hover:bg-emerald-50/50 focus-visible:ring-emerald-200"
+          />
+        </div></div>
       <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left">
         <thead className="bg-slate-50 text-sm text-slate-600"><tr><th className="p-4">Mã</th><th className="p-4">Tên {itemLabel}</th><th className="p-4">Nhà phân phối</th><th className="p-4 text-right">Tồn hiện tại</th><th className="p-4">Đơn vị</th><th className="p-4 text-right">Giá vốn</th><th className="p-4">Trạng thái</th><th className="p-4 text-right">Thao tác</th></tr></thead>
         <tbody className="divide-y">{loading ? <tr><td colSpan={8} className="p-14 text-center"><LoaderCircle className="mx-auto animate-spin" /></td></tr>
@@ -314,7 +402,10 @@ export default function IngredientsPage() {
     <div className="flex justify-between"><h2 className="text-2xl font-bold">{editing ? `Sửa ${itemLabel}` : `Thêm ${itemLabel}`}</h2><button disabled={saving} onClick={() => setOpen(false)}><X /></button></div>
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <Field label="Loại nguyên vật liệu *"><select value={form.itemKind} onChange={(e) => setForm({ ...form, itemKind: e.target.value as Form["itemKind"] })}><option value="ingredient">Nguyên liệu</option><option value="consumable">Vật liệu tiêu hao (tính tồn kho)</option><option value="fresh">Nguyên liệu tươi (không tồn kho)</option></select></Field>
-      <Field label={`Mã ${itemLabel}`}><input readOnly value={editing ? form.code : "Tự tạo khi lưu"} className="bg-slate-50" /></Field>
+      <div>
+        <Field label={`Mã ${itemLabel}`}><input readOnly value={form.code} placeholder={codeLoading && !editing ? "Đang lấy mã…" : ""} aria-busy={codeLoading && !editing} className="bg-slate-50" /></Field>
+        {!editing && codeError ? <div className="mt-2 text-sm"><p role="alert" className="text-rose-600">{codeError}</p><button type="button" onClick={() => setCodeRefresh((current) => current + 1)} className="mt-1 font-semibold text-emerald-700 underline underline-offset-4">Lấy lại mã</button></div> : null}
+      </div>
       <Field label={`Tên ${itemLabel} *`}><input value={form.name} placeholder={isConstructionWarehouse ? "Ví dụ: Xi măng, thép, dây điện" : "Ví dụ: Cà phê hạt"} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
       <Field label="Đơn vị thu ngân/nhập kho *"><input value={form.purchaseUnit} placeholder="túi, bịch, chai, thùng…" onChange={(e) => setForm({ ...form, purchaseUnit: e.target.value })} /></Field>
       <Field label="Đơn vị pha chế/công thức *"><input value={form.unit} placeholder="g, ml, cái…" onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
@@ -355,8 +446,26 @@ export default function IngredientsPage() {
         </p>
       </div>}
     </div>}
-    <div className="mt-6 flex justify-end gap-3"><button disabled={saving} onClick={() => setOpen(false)} className="px-5">Hủy</button><button disabled={saving} onClick={() => void save()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">{saving && <LoaderCircle className="h-5 w-5 animate-spin" />}{saving ? "Đang lưu…" : `Lưu ${itemLabel}`}</button></div>
+    <div className="mt-6 flex justify-end gap-3"><button disabled={saving} onClick={() => setOpen(false)} className="px-5">Hủy</button><button disabled={saving || (!editing && (codeLoading || !form.code))} onClick={() => void save()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-60">{saving && <LoaderCircle className="h-5 w-5 animate-spin" />}{saving ? "Đang lưu…" : `Lưu ${itemLabel}`}</button></div>
   </div></div>}
+  <ConfirmDialog
+    open={canResetIngredientStock && !!resetTarget && resetTarget.id === storeId}
+    title={`Reset tồn ${itemLabel} hiện tại?`}
+    description={
+      <div className="space-y-2">
+        <p>Đưa cột <strong>Tồn hiện tại</strong> của toàn bộ {itemLabel} tại <strong>{resetTarget?.name}</strong> về 0, kể cả các mục đang bị ẩn bởi bộ lọc.</p>
+        <p>Tồn tại quầy pha chế, tồn hàng hóa, giá vốn và lịch sử nhập xuất được giữ nguyên. Thao tác này không thể hoàn tác từ màn hình này.</p>
+        {resetError ? <p role="alert" className="text-rose-600">{resetError}</p> : null}
+      </div>
+    }
+    confirmLabel="Reset về 0"
+    cancelLabel="Hủy"
+    variant="destructive"
+    icon={RotateCcw}
+    isLoading={resettingStock}
+    onCancel={() => { if (!resettingStock) setResetTarget(null); }}
+    onConfirm={() => void confirmResetStock()}
+  />
   <ConfirmDialog
     open={Boolean(pendingDelete)}
     title={pendingDelete?.mode === "hard" ? `Xóa vĩnh viễn ${itemLabel}?` : `Tạm ẩn ${itemLabel}?`}

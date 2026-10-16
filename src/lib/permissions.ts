@@ -7,22 +7,24 @@ type PermissionDefinition = {
   category: string;
   path: string;
   hidden?: boolean;
+  adminOnly?: boolean;
+  routePermission?: boolean;
 };
 
 export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   {
     id: "dashboard.access",
-    label: "Sổ quỹ",
-    description: "Xem trang sổ quỹ và nhập báo cáo.",
-    category: "Tong quan",
+    label: "Tổng quan và sổ quỹ",
+    description: "Xem tổng quan vận hành và nhập báo cáo sổ quỹ. Chỉ dành cho quản trị viên.",
+    category: "Tổng quan",
     path: "/cost",
-    hidden: true,
+    adminOnly: true,
   },
   {
     id: "bills.access",
-    label: "Hoa don",
-    description: "Xem va thao tac danh sach hoa don.",
-    category: "Giao dich",
+    label: "Hóa đơn",
+    description: "Xem và thao tác danh sách hóa đơn.",
+    category: "Giao dịch",
     path: "/pos",
   },
   {
@@ -52,7 +54,6 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: "Xem và cập nhật tiến độ các bill pha chế.",
     category: "Giao dịch",
     path: "/bar",
-    hidden: true,
   },
   {
     id: "bar.checkout",
@@ -63,59 +64,89 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   },
   {
     id: "virtual_bills.access",
-    label: "Tao bill ao",
-    description: "Sinh bill ao theo tong doanh thu va so luong bill.",
-    category: "Giao dich",
+    label: "Tạo bill ảo",
+    description: "Sinh bill ảo theo tổng doanh thu và số lượng bill.",
+    category: "Giao dịch",
     path: "/virtual-bills",
     hidden: true,
   },
   {
     id: "sample_bills.access",
-    label: "Tao bill mau",
-    description: "Quan ly san pham va tao file bill mau.",
-    category: "Giao dich",
+    label: "Tạo bill mẫu",
+    description: "Quản lý sản phẩm và tạo file bill mẫu. Chỉ dành cho quản trị viên.",
+    category: "Giao dịch",
     path: "/sample-bills",
+    adminOnly: true,
   },
   {
     id: "payroll_estimate.access",
-    label: "Uoc luong luong",
-    description: "Lap lich va uoc luong luong.",
-    category: "Nhan su",
+    label: "Ước lượng lương",
+    description: "Lập lịch và ước lượng lương.",
+    category: "Nhân sự",
     path: "/payroll-estimate",
   },
   {
     id: "payroll.access",
-    label: "Tinh luong",
-    description: "Quan ly bang luong va nhan su.",
-    category: "Nhan su",
+    label: "Tính lương",
+    description: "Quản lý bảng lương và nhân sự.",
+    category: "Nhân sự",
     path: "/payroll",
   },
   {
     id: "timesheet.access",
-    label: "Cham cong",
-    description: "Xem va cap nhat bang cham cong.",
-    category: "Nhan su",
+    label: "Chấm công",
+    description: "Xem và cập nhật bảng chấm công.",
+    category: "Nhân sự",
     path: "/timesheet",
   },
   {
     id: "reports.access",
-    label: "Bao cao",
-    description: "Xem va luu bao cao doanh thu, chi phi.",
-    category: "Bao cao",
+    label: "Tất cả báo cáo",
+    description: "Xem và lưu toàn bộ báo cáo doanh thu, lợi nhuận, hàng hóa và cost.",
+    category: "Báo cáo",
+    path: "/reports",
+    routePermission: false,
+  },
+  {
+    id: "reports.revenue.view",
+    label: "Doanh thu theo ngày",
+    description: "Xem và xuất báo cáo doanh thu theo ngày.",
+    category: "Báo cáo",
+    path: "/reports/revenue",
+  },
+  {
+    id: "reports.profit.access",
+    label: "Báo cáo lợi nhuận",
+    description: "Xem, nhập chi phí và lưu báo cáo lợi nhuận.",
+    category: "Báo cáo",
+    path: "/reports/profit",
+  },
+  {
+    id: "reports.cost.access",
+    label: "Báo cáo cost",
+    description: "Xem, tạo, cập nhật và xóa báo cáo cost.",
+    category: "Báo cáo",
     path: "/reports",
   },
   {
+    id: "reports.products.view",
+    label: "Xem báo cáo hàng hóa",
+    description: "Chỉ xem và xuất Báo cáo / Hàng hóa, không mở các báo cáo khác.",
+    category: "Báo cáo",
+    path: "/reports/products",
+  },
+  {
     id: "cash_flow.access",
-    label: "Dong tien",
-    description: "Theo doi dong tien va tong hop thu chi.",
-    category: "Bao cao",
+    label: "Dòng tiền",
+    description: "Theo dõi dòng tiền và tổng hợp thu chi.",
+    category: "Báo cáo",
     path: "/cash-flow",
   },
   {
     id: "product.access",
-    label: "San pham",
-    description: "Quan ly danh muc san pham va gia ban.",
-    category: "Hang hoa",
+    label: "Sản phẩm",
+    description: "Quản lý danh mục sản phẩm và giá bán.",
+    category: "Hàng hóa",
     path: "/product",
   },
   {
@@ -148,9 +179,9 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   },
   {
     id: "inventory_checks.access",
-    label: "Kiem kho",
-    description: "Lap va quan ly phieu kiem kho.",
-    category: "Hang hoa",
+    label: "Kiểm kho",
+    description: "Lập và quản lý phiếu kiểm kho.",
+    category: "Hàng hóa",
     path: "/product/checks",
   },
   {
@@ -275,58 +306,58 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   },
   {
     id: "categories.access",
-    label: "Danh muc",
-    description: "Quan ly nhom danh muc hang hoa.",
-    category: "Hang hoa",
+    label: "Danh mục",
+    description: "Quản lý nhóm danh mục hàng hóa.",
+    category: "Hàng hóa",
     path: "/categories",
   },
   {
     id: "internal_invoices.access",
-    label: "Hoa don noi bo",
-    description: "Quan ly hoa don noi bo.",
-    category: "Ke toan",
+    label: "Hóa đơn nội bộ",
+    description: "Quản lý hóa đơn nội bộ.",
+    category: "Kế toán",
     path: "/internal-invoices",
   },
   {
     id: "tax_invoices.access",
-    label: "Hoa don thue",
-    description: "Quan ly hoa don thue.",
-    category: "Ke toan",
+    label: "Hóa đơn thuế",
+    description: "Quản lý hóa đơn thuế.",
+    category: "Kế toán",
     path: "/tax-invoices",
   },
   {
     id: "social_listening.access",
     label: "Social listening",
-    description: "Theo doi va tong hop du lieu social listening.",
+    description: "Theo dõi và tổng hợp dữ liệu social listening.",
     category: "Marketing",
     path: "/social-listening",
   },
   {
     id: "gesture_studio.access",
     label: "Gesture studio",
-    description: "Dung khung 4 ngon tay de thay doi vung anh bang AI.",
+    description: "Dùng khung 4 ngón tay để thay đổi vùng ảnh bằng AI.",
     category: "Marketing",
     path: "/gesture-studio",
   },
   {
     id: "seo_articles.access",
-    label: "Bai viet SEO",
-    description: "Quan ly bai viet SEO.",
+    label: "Bài viết SEO",
+    description: "Quản lý bài viết SEO.",
     category: "Marketing",
     path: "/seo-articles",
   },
   {
     id: "activity_logs.access",
-    label: "Nhat ky may",
-    description: "Xem lich su hoat dong may tram.",
-    category: "He thong",
+    label: "Nhật ký máy",
+    description: "Xem lịch sử hoạt động máy trạm.",
+    category: "Hệ thống",
     path: "/activity-logs",
   },
   {
     id: "accounts.access",
-    label: "Tai khoan",
-    description: "Tao, sua, khoa va phan quyen tai khoan.",
-    category: "He thong",
+    label: "Tài khoản",
+    description: "Tạo, sửa, khóa và phân quyền tài khoản.",
+    category: "Hệ thống",
     path: "/accounts",
   },
 ];
@@ -366,6 +397,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
 };
 
 const PATH_PERMISSION_RULES = [...PERMISSION_DEFINITIONS]
+  .filter((item) => item.routePermission !== false)
   .sort((left, right) => right.path.length - left.path.length)
   .map((item) => ({
     path: item.path,
@@ -435,6 +467,12 @@ export function getEffectivePermissions(
       normalized.push("bills.access");
     }
     const inherited = new Set<AppPermission>();
+    if (normalized.includes("reports.access")) {
+      inherited.add("reports.products.view");
+      inherited.add("reports.revenue.view");
+      inherited.add("reports.profit.access");
+      inherited.add("reports.cost.access");
+    }
     if (normalized.includes("inventory_receipts.access")) {
       [
         "inventory_receipts.view", "inventory_receipts.create", "inventory_receipts.update",
@@ -526,6 +564,9 @@ const DEFAULT_ROUTE_ORDER = [
   "/payroll",
   "/timesheet",
   "/reports",
+  "/reports/products",
+  "/reports/revenue",
+  "/reports/profit",
   "/cash-flow",
   "/product/ingredients",
   "/product/suppliers",

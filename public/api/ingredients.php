@@ -7,8 +7,9 @@ require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
+require_once __DIR__ . '/_lib/inventory_issues_schema.php';
 
-ingredients_ensure_schema();
+inventory_issues_ensure_schema();
 
 function ingredient_component_rows(string $ingredientId): array
 {
@@ -206,6 +207,16 @@ $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? $_GET['storeId'
 field_inventory_require_store($user, $storeId);
 
 if ($method === 'POST') {
+    if ($bodyAction === 'reset-stock') {
+        require_once __DIR__ . '/_lib/reset_ingredient_stock.php';
+        try {
+            $updatedCount = reset_ingredient_stock(db(), $user, $storeId);
+            respond_ok(['updatedCount'=>$updatedCount, 'storeId'=>$storeId]);
+        } catch (DomainException $exception) {
+            respond_error($exception->getMessage(), $exception->getCode());
+        }
+    }
+
     if ($bodyAction === 'migrate-category') {
         $statement = db()->prepare(
             'INSERT INTO ingredients (

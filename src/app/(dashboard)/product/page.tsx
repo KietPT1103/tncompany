@@ -8,6 +8,7 @@ import {
   deleteProduct,
   getAllProducts,
   normalizeProductCategoryReferences,
+  resetKitchenProductStock,
   Product,
   setProductSellingStatus,
   updateProductCost,
@@ -76,7 +77,8 @@ type ProductAction =
   | "import"
   | "export"
   | "categories"
-  | "normalize";
+  | "normalize"
+  | "reset-stock";
 
 type CategoryFilterValue = `category:${string}` | "all";
 
@@ -120,6 +122,11 @@ const productActionOptions: readonly SelectBoxOption<
   {
     value: "normalize",
     label: "Chuẩn hóa category",
+    icon: RefreshCcw,
+  },
+  {
+    value: "reset-stock",
+    label: "Reset tồn kho Bếp",
     icon: RefreshCcw,
   },
 ];
@@ -269,6 +276,9 @@ function ProductModal({
   saving,
   newCategoryName,
   componentQuery,
+  ingredientsLoading,
+  ingredientsError,
+  onRetryIngredients,
   tab,
   componentsOnly,
   onClose,
@@ -290,6 +300,9 @@ function ProductModal({
   saving: boolean;
   newCategoryName: string;
   componentQuery: string;
+  ingredientsLoading: boolean;
+  ingredientsError: string;
+  onRetryIngredients: () => void;
   tab: ModalTab;
   componentsOnly: boolean;
   onClose: () => void;
@@ -303,8 +316,6 @@ function ProductModal({
   onRemoveComponent: (localId: string) => void;
   onUpdateComponentQuantity: (localId: string, quantity: string) => void;
 }) {
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
-
   const selectedCodes = useMemo(
     () => new Set(form.components.map((item) => item.productCode)),
     [form.components],
@@ -335,20 +346,16 @@ function ProductModal({
   const componentSuggestions = useMemo(() => {
     const keyword = adminSearchText(componentQuery.trim());
 
-    if (!keyword) return [];
-
     return products
       .filter((product) => {
         if (product.product_code === form.code) return false;
-        if (selectedCodes.has(product.product_code)) return false;
 
         return (
           adminSearchText(product.product_code).includes(keyword) ||
           adminSearchText(product.product_name).includes(keyword)
         );
-      })
-      .slice(0, 8);
-  }, [componentQuery, form.code, products, selectedCodes]);
+      });
+  }, [componentQuery, form.code, products]);
 
   const componentRows = useMemo(
     () =>
@@ -380,28 +387,6 @@ function ProductModal({
     () => componentRows.reduce((sum, item) => sum + item.lineTotal, 0),
     [componentRows],
   );
-
-  useEffect(() => {
-    if (!open) return;
-
-    const handleMouseDown = (event: MouseEvent) => {
-      const target = event.target;
-
-      if (
-        dropdownRef.current &&
-        target instanceof Node &&
-        !dropdownRef.current.contains(target)
-      ) {
-        onComponentQueryChange("");
-      }
-    };
-
-    window.addEventListener("mousedown", handleMouseDown);
-
-    return () => {
-      window.removeEventListener("mousedown", handleMouseDown);
-    };
-  }, [onComponentQueryChange, open]);
 
   if (!open) return null;
 
@@ -504,8 +489,10 @@ function ProductModal({
                     label="Mã hàng hóa"
                     value={form.code}
                     onChange={(event) => onChange({ code: event.target.value })}
-                    disabled={mode === "edit"}
-                    placeholder="VD: SP000001"
+                    disabled={saving}
+                    readOnly={mode === "create"}
+                    maxLength={100}
+                    placeholder={mode === "create" ? "Tự động tạo khi lưu" : "VD: SP000001"}
                   />
 
                   <Input
@@ -609,7 +596,7 @@ function ProductModal({
                       Hàng hóa thành phần
                     </h3>
                     <p className="mt-1 text-xs text-slate-500">
-                      Tìm và thêm nguyên liệu cấu thành sản phẩm.
+                      Tick để thêm nguyên liệu, bỏ tick để gỡ khỏi thành phần.
                     </p>
                   </div>
 
@@ -618,51 +605,54 @@ function ProductModal({
                   </span>
                 </div>
 
-                <div ref={dropdownRef} className="relative">
+                <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-
                   <input
                     value={componentQuery}
-                    onChange={(event) =>
-                      onComponentQueryChange(event.target.value)
-                    }
-                    placeholder="Tìm theo mã hoặc tên hàng hóa"
-                    className="h-11 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow] placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    onChange={(event) => onComponentQueryChange(event.target.value)}
+                    aria-label="Tìm nguyên liệu theo mã hoặc tên"
+                    autoComplete="off"
+                    placeholder="Tìm nguyên liệu theo mã hoặc tên"
+                    className="h-11 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   />
-
-                  {componentSuggestions.length > 0 ? (
-                    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
-                      {componentSuggestions.map((product) => (
-                        <button
-                          key={product.product_code}
-                          type="button"
-                          onClick={() => onAddComponent(product)}
-                          className="flex w-full items-center justify-between gap-4 rounded-md px-3 py-3 text-left transition-colors hover:bg-emerald-50"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-900">
-                              {product.product_name}
-                            </p>
-                            <p className="mt-0.5 font-mono text-xs text-slate-500">
-                              {product.product_code}
-                            </p>
-                          </div>
-
-                          <div className="shrink-0 text-right text-xs text-slate-500">
-                            <p>
-                              Giá vốn:{" "}
-                              <span className="font-semibold text-slate-800">
-                                {formatCurrency(product.cost)}đ
-                              </span>
-                            </p>
-                            <p className="mt-0.5">
-                              Tồn: {formatQuantity(product.stockQuantity)}
-                            </p>
-                          </div>
-                        </button>
-                      ))}
+                </div>
+                <div className="mt-3 max-h-64 overflow-y-auto rounded-md border border-slate-200" aria-label="Danh sách nguyên liệu">
+                  {ingredientsLoading ? (
+                    <p role="status" className="px-4 py-6 text-center text-sm text-slate-500">Đang tải nguyên liệu…</p>
+                  ) : ingredientsError ? (
+                    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 bg-rose-50 px-4 py-4">
+                      <p className="text-sm text-rose-700">{ingredientsError}</p>
+                      <Button type="button" variant="outline" size="sm" onClick={onRetryIngredients}>Thử lại</Button>
                     </div>
-                  ) : null}
+                  ) : componentSuggestions.length === 0 ? (
+                    <p role="status" className="px-4 py-6 text-center text-sm text-slate-500">{componentQuery.trim() ? "Không tìm thấy nguyên liệu phù hợp." : "Khu vực này chưa có nguyên liệu. Thêm nguyên liệu trong mục Sản phẩm → Nguyên liệu."}</p>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {componentSuggestions.map((product) => {
+                        const checked = selectedCodes.has(product.product_code);
+                        return (
+                          <label key={product.product_code} className={`flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-emerald-50 ${checked ? "bg-emerald-50/70" : "bg-white"}`}>
+                            <input type="checkbox" checked={checked} className="h-4 w-4 shrink-0 accent-emerald-700" onChange={() => {
+                              if (checked) {
+                                const component = form.components.find((item) => item.productCode === product.product_code);
+                                if (component) onRemoveComponent(component.localId);
+                              } else {
+                                onAddComponent(product);
+                              }
+                            }} />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-slate-900">{product.product_name}</span>
+                              <span className="mt-0.5 block text-xs text-slate-500">{product.product_code}{product.unit ? ` · ${product.unit}` : ""}</span>
+                            </span>
+                            <span className="shrink-0 text-right text-xs text-slate-500">
+                              <span className="block">Giá vốn: <span className="font-semibold text-slate-800">{formatCurrency(product.cost)}đ</span></span>
+                              <span className="mt-0.5 block">Tồn: {formatQuantity(product.stockQuantity)}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -690,7 +680,7 @@ function ProductModal({
                               Chưa có thành phần
                             </p>
                             <p className="mt-1 text-xs text-slate-500">
-                              Tìm sản phẩm phía trên để thêm vào danh sách.
+                              Tick nguyên liệu trong danh sách phía trên để thêm thành phần.
                             </p>
                           </td>
                         </tr>
@@ -856,11 +846,18 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Product[]>([]);
+  const [ingredientsLoading, setIngredientsLoading] = useState(false);
+  const [ingredientsError, setIngredientsError] = useState("");
+  const ingredientsRequestId = useRef(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resetStockOpen, setResetStockOpen] = useState(false);
+  const [resettingStock, setResettingStock] = useState(false);
+  const [resetStockError, setResetStockError] = useState("");
+  const canResetKitchenStock = user?.role === "admin" && storeId === "restaurant";
   const [importing, setImporting] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -976,6 +973,12 @@ export default function ProductsPage() {
         case "normalize":
           await handleNormalizeCategoryRefs();
           break;
+        case "reset-stock":
+          if (canResetKitchenStock && !loading && !saving && !importing && !deleting && !resettingStock) {
+            setResetStockError("");
+            setResetStockOpen(true);
+          }
+          break;
       }
     } finally {
       window.setTimeout(() => {
@@ -986,7 +989,7 @@ export default function ProductsPage() {
 
   const resolvedProductActionOptions = useMemo(
     () =>
-      productActionOptions.map((option) =>
+      productActionOptions.filter((option) => option.value !== "reset-stock" || canResetKitchenStock).map((option) =>
         option.value === "import"
           ? {
               ...option,
@@ -1001,9 +1004,11 @@ export default function ProductsPage() {
                   : "Chuẩn hóa category",
                 disabled: isNormalizingCategoryRefs,
               }
-            : option,
+            : option.value === "reset-stock"
+              ? { ...option, disabled: loading || saving || importing || deleting || resettingStock }
+              : option,
       ),
-    [importing, isNormalizingCategoryRefs],
+    [importing, isNormalizingCategoryRefs, canResetKitchenStock, loading, saving, deleting, resettingStock],
   );
 
   async function loadProducts() {
@@ -1017,25 +1022,42 @@ export default function ProductsPage() {
   }
 
   async function loadIngredients() {
-    const { items } = await getIngredients(storeId);
-    setIngredients(items.map((item) => ({
-      product_code: item.ingredientCode,
-      product_name: item.ingredientName,
-      cost: item.cost,
-      price: null,
-      has_cost: item.cost !== null,
-      isSelling: item.isActive,
-      stockQuantity: item.stockQuantity,
-      unit: item.unit,
-      conversionSourceCode: item.conversionSourceCode,
-      conversionSourceName: item.conversionSourceName,
-      conversionSourceUnit: item.conversionSourceUnit,
-      conversionInputQuantity: item.conversionInputQuantity,
-      conversionOutputQuantity: item.conversionOutputQuantity,
-      description: item.description,
-      storeId: item.storeId,
-    })));
+    const requestId = ++ingredientsRequestId.current;
+    setIngredientsLoading(true);
+    setIngredientsError("");
+    try {
+      const { items } = await getIngredients(storeId);
+      if (requestId !== ingredientsRequestId.current) return;
+      setIngredients(items.map((item) => ({
+        product_code: item.ingredientCode,
+        product_name: item.ingredientName,
+        cost: item.cost,
+        price: null,
+        has_cost: item.cost !== null,
+        isSelling: item.isActive,
+        stockQuantity: item.stockQuantity,
+        unit: item.unit,
+        conversionSourceCode: item.conversionSourceCode,
+        conversionSourceName: item.conversionSourceName,
+        conversionSourceUnit: item.conversionSourceUnit,
+        conversionInputQuantity: item.conversionInputQuantity,
+        conversionOutputQuantity: item.conversionOutputQuantity,
+        description: item.description,
+        storeId: item.storeId,
+      })));
+    } catch (error) {
+      if (requestId === ingredientsRequestId.current) setIngredientsError(error instanceof Error ? error.message : "Không tải được danh sách nguyên liệu.");
+    } finally {
+      if (requestId === ingredientsRequestId.current) setIngredientsLoading(false);
+    }
   }
+
+  useEffect(() => {
+    if (showModal && canEditComponents) void loadIngredients();
+    return () => { ingredientsRequestId.current += 1; };
+    // Reload the catalog on opening and after authentication permissions resolve.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showModal, storeId, canEditComponents]);
 
   async function loadCategories() {
     const items = await getCategories(storeId);
@@ -1048,7 +1070,6 @@ export default function ProductsPage() {
       try {
         await Promise.all([
           loadProducts(),
-          canEditComponents ? loadIngredients() : Promise.resolve(),
           loadCategories(),
         ]);
       } finally {
@@ -1265,11 +1286,11 @@ export default function ProductsPage() {
   }
 
   async function handleSaveProduct() {
-    if (!formState.code.trim() || !formState.name.trim()) {
+    if ((modalMode === "edit" && !formState.code.trim()) || !formState.name.trim()) {
       showToast(
         "Thông tin chưa đầy đủ",
         "warning",
-        "Vui lòng nhập mã và tên hàng hóa.",
+        modalMode === "create" ? "Vui lòng nhập tên hàng hóa." : "Vui lòng nhập mã và tên hàng hóa.",
       );
       return;
     }
@@ -1285,7 +1306,7 @@ export default function ProductsPage() {
         .filter((component) => component.productCode && component.quantity > 0);
 
       if (modalMode === "create") {
-        await addProduct({
+        const created = await addProduct({
           product_code: formState.code.trim(),
           product_name: formState.name.trim(),
           cost: formState.cost.trim() ? parseNumberInput(formState.cost) : null,
@@ -1305,7 +1326,7 @@ export default function ProductsPage() {
         showToast(
           "Đã thêm hàng hóa",
           "success",
-          `${formState.name.trim()} đã được thêm vào danh sách.`,
+          `${formState.name.trim()} đã được tạo với mã ${created.item.productCode}.`,
         );
       } else if (!canManageProducts) {
         await updateProductCost(
@@ -1323,6 +1344,7 @@ export default function ProductsPage() {
         await updateProductCost(
           editingProductCode,
           {
+            newProductCode: formState.code.trim(),
             productName: formState.name.trim(),
             cost: formState.cost.trim()
               ? parseNumberInput(formState.cost)
@@ -1414,6 +1436,22 @@ export default function ProductsPage() {
       alert("Không thể chuẩn hoá category.");
     } finally {
       setIsNormalizingCategoryRefs(false);
+    }
+  }
+
+  async function handleResetKitchenStock() {
+    if (!canResetKitchenStock || resettingStock) return;
+    setResettingStock(true);
+    setResetStockError("");
+    try {
+      const { updatedCount } = await resetKitchenProductStock();
+      setProducts((current) => current.map((product) => ({ ...product, stockQuantity: 0 })));
+      setResetStockOpen(false);
+      showToast("Đã reset tồn kho Bếp", "success", `Đã đưa tồn kho của ${updatedCount} hàng hóa về 0.`);
+    } catch (error) {
+      setResetStockError(error instanceof Error ? error.message : "Không reset được tồn kho. Vui lòng thử lại.");
+    } finally {
+      setResettingStock(false);
     }
   }
 
@@ -1734,6 +1772,23 @@ export default function ProductsPage() {
       </main>
 
       <ConfirmDialog
+        open={resetStockOpen && canResetKitchenStock}
+        title="Reset tồn kho hàng hóa bên Bếp?"
+        description={
+          <>
+            <p>Đưa cột tồn kho của toàn bộ hàng hóa bên Bếp về 0, kể cả hàng hóa đang bị ẩn bởi bộ lọc.</p>
+            <p className="mt-2">Tồn kho nguyên liệu và bán thành phẩm được giữ nguyên. Thao tác này không thể hoàn tác từ màn hình này.</p>
+            {resetStockError ? <p role="alert" className="mt-3 text-rose-600">{resetStockError}</p> : null}
+          </>
+        }
+        confirmLabel="Reset về 0"
+        cancelLabel="Hủy"
+        variant="destructive"
+        isLoading={resettingStock}
+        onConfirm={() => void handleResetKitchenStock()}
+        onCancel={() => { if (!resettingStock) setResetStockOpen(false); }}
+      />
+      <ConfirmDialog
         open={Boolean(deletingProduct)}
         title="Xóa hàng hóa?"
         description={
@@ -1787,6 +1842,9 @@ export default function ProductsPage() {
         saving={saving}
         newCategoryName={newCategoryName}
         componentQuery={componentQuery}
+        ingredientsLoading={ingredientsLoading}
+        ingredientsError={ingredientsError}
+        onRetryIngredients={() => void loadIngredients()}
         tab={modalTab}
         componentsOnly={!canManageProducts}
         onClose={closeModal}
@@ -1812,7 +1870,6 @@ export default function ProductsPage() {
             ],
           }));
 
-          setComponentQuery("");
           setModalTab("components");
         }}
         onRemoveComponent={(localId) =>

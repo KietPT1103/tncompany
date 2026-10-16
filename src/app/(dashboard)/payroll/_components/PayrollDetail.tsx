@@ -828,6 +828,33 @@ const mergeEntryWithEmployeeProfile = (
   return nextEntry;
 };
 
+function DecimalHoursInput({ value, onValueChange, onBlur, className, label }: {
+  value: number | undefined;
+  onValueChange: (value: number) => void;
+  onBlur: () => void;
+  className: string;
+  label: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return <input
+    type="text"
+    inputMode="decimal"
+    aria-label={label}
+    value={draft ?? (value || "")}
+    onFocus={() => setDraft(String(value || ""))}
+    onChange={(event) => {
+      const text = event.target.value.replace(/,/g, ".");
+      if (!/^-?\d*(\.\d*)?$/.test(text)) return;
+      const number = Number(text);
+      if (text !== "" && text !== "-" && text !== "." && text !== "-." && !Number.isFinite(number)) return;
+      setDraft(text);
+      onValueChange(Number.isFinite(number) ? number : 0);
+    }}
+    onBlur={() => { setDraft(null); onBlur(); }}
+    className={className}
+  />;
+}
+
 export default function PayrollDetail({
   payrollId,
   onBack,
@@ -2973,13 +3000,12 @@ export default function PayrollDetail({
                       {visibleColumns.hours ? (
                         <td className={centeredCellClass}>
                           <div className="inline-flex items-center justify-center gap-2">
-                            <input
-                              type="number"
-                              onWheel={preventNumberInputScroll}
-                              value={entry.totalHours || ""}
-                              onChange={(event) =>
+                            <DecimalHoursInput
+                              label="Số giờ"
+                              value={entry.totalHours}
+                              onValueChange={(value) =>
                                 applyEntryPatch(entry.id!, {
-                                  totalHours: Number(event.target.value) || 0,
+                                  totalHours: value,
                                 })
                               }
                               onBlur={() => debouncedUpdate.flush()}
@@ -3055,13 +3081,12 @@ export default function PayrollDetail({
                       {visibleColumns.weekend ? (
                         <td className={centeredCellClass}>
                           <div className="mx-auto max-w-[112px]">
-                            <input
-                              type="number"
-                              onWheel={preventNumberInputScroll}
-                              value={entry.weekendHours || ""}
-                              onChange={(event) =>
+                            <DecimalHoursInput
+                              label="Bonus"
+                              value={entry.weekendHours}
+                              onValueChange={(value) =>
                                 applyEntryPatch(entry.id!, {
-                                  weekendHours: Number(event.target.value) || 0,
+                                  weekendHours: value,
                                 })
                               }
                               onBlur={() => debouncedUpdate.flush()}
