@@ -71,7 +71,7 @@ function receipt_item_recalculate(string $id): void
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$user = field_inventory_require_permission('inventory_receipts.update');
+$user = field_inventory_require_permission('inventory_receipts.explain');
 $body = receipt_item_body();
 
 if ($method === 'POST') {
@@ -80,6 +80,10 @@ if ($method === 'POST') {
     field_inventory_assert_receipt_editable($user, $receipt);
     if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
         respond_error('Phiếu đã khóa.', 409);
+    }
+    if (($receipt['entry_source'] ?? '') === 'mobile_photo'
+        && ($body['itemType'] ?? 'ingredient') !== ($receipt['warehouse_type'] ?? 'ingredient')) {
+        respond_error('Loại hàng không khớp với kho đã chọn. Vui lòng tải lại phiếu.', 409);
     }
     $product = receipt_item_product((string) $receipt['store_id'], $body);
     [$quantity, $unitPrice, $lineTotal] = receipt_item_values($body);

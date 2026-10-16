@@ -123,7 +123,7 @@ export function App() {
             />
           }
         >
-          <Route path="/pos" element={<PosPage />} />
+          <Route path="/pos" element={<RoleGuard permission={["bills.access", "bar.checkout"]}><PosPage /></RoleGuard>} />
           <Route path="/bar" element={<BarBoardPage />} />
         </Route>
         <Route path="/gesture-studio" element={<GestureStudioPage />} />

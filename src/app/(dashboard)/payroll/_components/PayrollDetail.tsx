@@ -2121,6 +2121,11 @@ export default function PayrollDetail({
     if (!section || !salaryDetailEntry || isCapturingSalary) return;
     setIsCapturingSalary(true);
     try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        showNotice("error", "Kh\u00f4ng th\u1ec3 sao ch\u00e9p \u1ea3nh", "Vui l\u00f2ng m\u1edf trang b\u1eb1ng HTTPS tr\u00ean tr\u00ecnh duy\u1ec7t h\u1ed7 tr\u1ee3 clipboard \u1ea3nh.");
+        return;
+      }
+      const imagePromise = (async () => {
       const { default: html2canvas } = await import("html2canvas");
       await document.fonts.ready;
       const canvas = await html2canvas(section, {
@@ -2137,11 +2142,17 @@ export default function PayrollDetail({
           }
         },
       });
-      const link = document.createElement("a");
-      const name = salaryDetailEntry.employeeName.replace(/[<>:"/\\|?*\x00-\x1f]/g, "-");
-      link.download = `chi-tiet-luong-${name}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
+      return await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("Could not encode salary image"));
+        }, "image/png");
+      });
+      })();
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": imagePromise }),
+      ]);
+      showNotice("success", "\u0110\u00e3 sao ch\u00e9p \u1ea3nh l\u01b0\u01a1ng", "D\u00e1n \u1ea3nh v\u00e0o tin nh\u1eafn b\u1eb1ng Ctrl+V ho\u1eb7c ch\u1ecdn D\u00e1n.");
     } catch (error) {
       console.error("Salary capture failed", error);
       showNotice("error", "Không thể chụp ảnh", "Vui lòng thử lại.");
@@ -3576,7 +3587,7 @@ export default function PayrollDetail({
             <div className="mb-3 flex justify-end">
               <Button variant="outline" onClick={() => void handleCaptureSalary()} disabled={isCapturingSalary} className="gap-2">
                 <Camera className="h-4 w-4" />
-                {isCapturingSalary ? "Đang chụp..." : "Chụp ảnh lương"}
+                {isCapturingSalary ? "Đang chụp..." : "Sao ch\u00e9p \u1ea3nh l\u01b0\u01a1ng"}
               </Button>
             </div>
             <div ref={salaryCaptureRef} data-salary-capture className="bg-white p-4">

@@ -1,5 +1,6 @@
 import { apiRequest } from "@/lib/api";
 
+export type WarehouseType = "ingredient" | "equipment";
 export type ReceiptStatus = "pending_explanation" | "draft" | "completed" | "cancelled" | "deleted";
 export type InventoryReceiptItem = {
   id: number; productId: string; itemType?: "ingredient" | "equipment"; productCode: string; productName: string; unit: string;
@@ -10,6 +11,7 @@ export type InventoryReceiptImage = {
   capturedAt: string; locationAddress?: string | null;
 };
 export type InventoryReceipt = {
+  warehouseType?: WarehouseType;
   evidenceReceiptId?: string | null; linkedReceipts?: Array<{id: string; receipt_code: string}>;
   id: string; receiptCode: string; areaId: string; storeId: string;
   entrySource?: "mobile_photo" | "web_manual";
@@ -26,6 +28,7 @@ export type InventoryReceipt = {
 };
 export type ReceiptCounts = Record<ReceiptStatus | "all", number>;
 export type ReceiptFilters = {
+  warehouseType?: WarehouseType;
   evidenceStatus?: "linked" | "unlinked" | "review"; view?: "ledger" | "evidence"; status?: ReceiptStatus; areaId?: string; employeeId?: string; dateFrom?: string; dateTo?: string;
   keyword?: string; productKeyword?: string; page?: number; limit?: number; sort?: "newest" | "oldest" | "amount_desc";
 };
@@ -49,6 +52,8 @@ export const updateInventoryReceipt = async (id: string, payload: object) =>
   (await apiRequest<{ item: InventoryReceipt }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(payload) })).item;
 export const completeInventoryReceipt = async (id: string) =>
   (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=complete", { method: "POST", body: JSON.stringify({ id }) })).item;
+export const lockInventoryReceipt = async (id: string) =>
+  (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=lock", { method: "POST", body: JSON.stringify({ id }) })).item;
 export const unlockInventoryReceipt = async (id: string) =>
   (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=unlock", { method: "POST", body: JSON.stringify({ id }) })).item;
 export const cancelInventoryReceipt = async (id: string, reason: string) =>
@@ -61,6 +66,8 @@ export const searchReceiptProducts = async (search: string, areaId: string) =>
       id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
       unit: item.purchaseUnit || item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
     }));
+export const searchWarehouseProducts = async (search: string, areaId: string, warehouseType: WarehouseType) =>
+  (await apiRequest<{ items: ProductResult[] }>(`/inventory-warehouse-products.php?areaId=${encodeURIComponent(areaId)}&warehouseType=${warehouseType}&search=${encodeURIComponent(search)}`)).items;
 export const attachReceiptProduct = async (productId: string, areaId: string) =>
   (await apiRequest<{ item: { id: string } }>("/area-products.php", { method: "POST", body: JSON.stringify({ productId, areaId }) })).item;
 export const createReceiptProduct = async (payload: object): Promise<ProductResult> => {

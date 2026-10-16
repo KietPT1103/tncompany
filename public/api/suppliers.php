@@ -32,6 +32,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if ($method === 'GET') {
     $user = auth_require_permission([
         'suppliers.access',
+        'inventory_receipts.update',
         'product.access',
         'inventory_receipts.access',
         'inventory_receipts.view',

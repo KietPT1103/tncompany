@@ -207,6 +207,7 @@ function auth_all_permissions(): array
         'inventory_receipts.view',
         'inventory_receipts.create',
         'inventory_receipts.update',
+        'inventory_receipts.explain', 'inventory_receipts.lock', 'inventory_receipts.unlock',
         'inventory_receipts.complete',
         'inventory_receipts.cancel',
         'inventory_receipts.upload_image',
@@ -301,19 +302,11 @@ function auth_effective_permissions(array $row): array
 
     if (array_key_exists('permissions_json', $row) && $row['permissions_json'] !== null && $row['permissions_json'] !== '') {
         $permissions = auth_normalize_permissions($row['permissions_json']);
-        if ($role === 'user') {
-            $permissions = array_merge($permissions, [
-                'bills.access',
-                'inventory_receipts.access',
-                'inventory_issues.access',
-            ]);
-        } elseif ($role === 'server' && !in_array('bills.access', $permissions, true)) {
-            $permissions[] = 'bills.access';
-        }
         if (in_array('inventory_receipts.access', $permissions, true)) {
             $permissions = array_merge($permissions, [
                 'inventory_receipts.view', 'inventory_receipts.create', 'inventory_receipts.update',
                 'inventory_receipts.complete', 'inventory_receipts.cancel', 'inventory_receipts.upload_image',
+                'inventory_receipts.explain', 'inventory_receipts.lock', 'inventory_receipts.unlock',
                 'products.create', 'products.attach_area',
             ]);
         }
@@ -337,7 +330,7 @@ function auth_effective_permissions(array $row): array
         return $permissions;
     }
 
-    return auth_default_permissions_for_role($role);
+    return auth_effective_permissions(array_merge($row, ['permissions_json' => json_encode(auth_default_permissions_for_role($role))]));
 }
 
 function auth_map_user(array $row): array

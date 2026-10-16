@@ -560,6 +560,7 @@ export function AccountEditorModal({
   );
   const permissionCount = form.role === "admin" ? MANAGED_PERMISSION_GROUPS.reduce((count, group) => count + group.items.length, 0) : normalizePermissionList(form.permissions).length;
   const warehouseQuickPermissions = [
+    { id: "bills.access" as const, label: "Sử dụng POS", description: "Bỏ chọn để tắt POS; tài khoản chỉ có quyền kho sẽ vào thẳng kho." },
     { id: "inventory_receipts.access" as const, label: "Nhập kho", description: "Lập và hoàn thành phiếu nhập kho." },
     { id: "inventory_issues.access" as const, label: "Xuất kho", description: "Lập và hoàn thành phiếu xuất kho." },
   ];

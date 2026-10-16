@@ -7,15 +7,13 @@ require_once __DIR__ . '/ingredients.php';
 
 auth_ensure_column('inventory_receipts', 'evidence_receipt_id', 'VARCHAR(64) NULL');
 
+auth_ensure_column('inventory_receipts', 'warehouse_type', "ENUM('ingredient','equipment') NOT NULL DEFAULT 'ingredient'");
+
 const FIELD_RECEIPT_STATUSES = ['pending_explanation', 'draft', 'completed', 'cancelled', 'deleted'];
 
 function field_inventory_has_permission(array $user, string $permission): bool
 {
-    if (auth_has_permission($user, $permission)) {
-        return true;
-    }
-
-    return auth_has_permission($user, 'inventory_receipts.access');
+    return auth_has_permission($user, $permission);
 }
 
 function field_inventory_require_permission(string $permission): array
@@ -60,7 +58,7 @@ function field_inventory_can_edit_receipt(array $user, array $receipt): bool
 function field_inventory_assert_receipt_editable(array $user, array $receipt): void
 {
     if (!field_inventory_can_edit_receipt($user, $receipt)) {
-        respond_error('Phiếu đã tự động khóa sau 24 giờ. Chỉ admin mới có thể giải trình hoặc mở khóa.', 423);
+        respond_error('Phiếu đang khóa. Cần mở khóa trước khi tiếp tục giải trình.', 423);
     }
 }
 
@@ -186,6 +184,7 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
     return [
         'id' => (string) $row['id'],
         'receiptCode' => (string) $row['receipt_code'],
+        'warehouseType' => (string) ($row['warehouse_type'] ?? 'ingredient'),
         'clientRequestId' => $row['client_request_id'] ?: null,
         'areaId' => (string) $row['store_id'],
         'storeId' => (string) $row['store_id'],
@@ -202,7 +201,7 @@ function field_inventory_receipt_payload(array $row, array $items = [], array $i
         'lockedBy' => $row['locked_by'] ?? null,
         'unlockedAt' => $row['unlocked_at'] ?? null,
         'canEdit' => !$isLocked || $isAdmin,
-        'canUnlock' => $isLocked && $isAdmin,
+        'canUnlock' => $isLocked && field_inventory_has_permission($user, 'inventory_receipts.unlock'),
         'autoLockAt' => $autoLockAt,
         'status' => (string) $row['status'],
         'receiptDate' => (string) $row['receipt_date'],

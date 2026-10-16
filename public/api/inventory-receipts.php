@@ -83,6 +83,12 @@ function receipts_list(): void
     if ($view === 'ledger') $where[] = 'NOT EXISTS (SELECT 1 FROM inventory_receipts linked_target WHERE linked_target.evidence_receipt_id=r.id AND linked_target.status<>"deleted")';
     if ($view === 'ledger') $where[] = '(r.entry_source="web_manual" OR EXISTS (SELECT 1 FROM inventory_receipt_items li WHERE li.receipt_id=r.id))';
     $params = [];
+    if (isset($_GET['warehouseType'])) {
+        $type = (string) $_GET['warehouseType'];
+        if (!in_array($type, ['ingredient', 'equipment'], true)) respond_error('Loại kho không hợp lệ.', 422);
+        $where[] = 'EXISTS (SELECT 1 FROM inventory_receipt_items wi WHERE wi.receipt_id=r.id AND wi.item_type=:warehouse_type)';
+        $params['warehouse_type'] = $type;
+    }
     $allowedSql = [];
     foreach ($allowed as $index => $value) {
         $key = 'area_' . $index;
@@ -105,8 +111,8 @@ function receipts_list(): void
         $where[] = 'r.status = :status';
         $params['status'] = $status;
     }
-    foreach (['dateFrom' => [$view === 'ledger' ? 'r.receipt_date >= :date_from' : 'r.created_at >= :date_from', 'date_from', $view === 'ledger' ? '' : ' 00:00:00'],
-              'dateTo' => [$view === 'ledger' ? 'r.receipt_date <= :date_to' : 'r.created_at <= :date_to', 'date_to', $view === 'ledger' ? '' : ' 23:59:59']] as $queryKey => $definition) {
+    foreach (['dateFrom' => [in_array($view, ['ledger', 'evidence'], true) ? 'r.receipt_date >= :date_from' : 'r.created_at >= :date_from', 'date_from', in_array($view, ['ledger', 'evidence'], true) ? '' : ' 00:00:00'],
+              'dateTo' => [in_array($view, ['ledger', 'evidence'], true) ? 'r.receipt_date <= :date_to' : 'r.created_at <= :date_to', 'date_to', in_array($view, ['ledger', 'evidence'], true) ? '' : ' 23:59:59']] as $queryKey => $definition) {
         $value = trim((string) ($_GET[$queryKey] ?? ''));
         if ($value !== '') {
             $where[] = $definition[0];
@@ -250,13 +256,21 @@ function receipts_create(array $body): void
     if ($orderCreatorName !== null && mb_strlen($orderCreatorName) > 255) {
         respond_error('Tên người tạo đơn không được vượt quá 255 ký tự.', 422);
     }
+    $receiptDate = (new DateTimeImmutable('now', new DateTimeZone('Asia/Ho_Chi_Minh')))->format('Y-m-d');
+    if (array_key_exists('receiptDate', $body)) {
+        if (!field_inventory_is_admin($user)) respond_error('Chỉ admin được chọn ngày nhập minh chứng.', 403);
+        $requestedDate = trim((string) $body['receiptDate']);
+        $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $requestedDate);
+        if (!$parsedDate || $parsedDate->format('Y-m-d') !== $requestedDate) respond_error('Ngày nhập không hợp lệ.', 422);
+        $receiptDate = $requestedDate;
+    }
     $id = uuidv4();
     $statement = db()->prepare(
         'INSERT INTO inventory_receipts (
           id,store_id,supplier_id,order_creator_name,receipt_code,client_request_id,receipt_date,status,note,received_at,captured_at,
           latitude,longitude,location_accuracy,location_address,total_quantity,total_amount,created_by
          ) VALUES (
-          :id,:store_id,:supplier_id,:order_creator_name,:code,:client_id,CURDATE(),"draft",:note,:received_at,:captured_at,
+          :id,:store_id,:supplier_id,:order_creator_name,:code,:client_id,:receipt_date,"draft",:note,:received_at,:captured_at,
           :latitude,:longitude,:accuracy,:address,0,0,:created_by)'
     );
     $statement->execute([
@@ -264,7 +278,7 @@ function receipts_create(array $body): void
         'supplier_id' => $supplierId,
         'order_creator_name' => $orderCreatorName,
         'code' => products_inventory_generate_receipt_code($storeId),
-        'client_id' => $clientId ?: null, 'note' => trim((string) ($body['note'] ?? '')),
+        'receipt_date' => $receiptDate, 'client_id' => $clientId ?: null, 'note' => trim((string) ($body['note'] ?? '')),
         'received_at' => field_inventory_datetime($body['receivedAt'] ?? null),
         'captured_at' => field_inventory_datetime($body['capturedAt'] ?? null),
         'latitude' => field_inventory_nullable_decimal($location['latitude'] ?? null),
@@ -283,6 +297,13 @@ function receipts_update(array $body): void
     field_inventory_assert_receipt_editable($user, $receipt);
     if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
         respond_error('Phiếu đã khóa, không thể chỉnh sửa.', 409);
+    }
+    $warehouseType = (string) ($body['warehouseType'] ?? $receipt['warehouse_type'] ?? 'ingredient');
+    if (!in_array($warehouseType, ['ingredient', 'equipment'], true)) respond_error('Loại kho không hợp lệ.', 422);
+    if ($warehouseType !== ($receipt['warehouse_type'] ?? 'ingredient')) {
+        $check = db()->prepare('SELECT COUNT(*) FROM inventory_receipt_items WHERE receipt_id=:id');
+        $check->execute(['id' => $id]);
+        if ((int) $check->fetchColumn() > 0) respond_error('Vui lòng xóa các dòng hàng trước khi đổi kho.', 409);
     }
     $status = strtolower(trim((string) ($body['status'] ?? $receipt['status'])));
     if (!in_array($status, ['pending_explanation', 'draft'], true)) {
@@ -313,9 +334,9 @@ function receipts_update(array $body): void
     if (mb_strlen($orderCreatorName) > 255) {
         respond_error('Tên người tạo đơn không được vượt quá 255 ký tự.', 422);
     }
-    $statement = db()->prepare('UPDATE inventory_receipts SET status=:status,note=:note,supplier_id=:supplier_id,order_creator_name=:order_creator_name,updated_at=NOW() WHERE id=:id');
+    $statement = db()->prepare('UPDATE inventory_receipts SET warehouse_type=:warehouse_type,status=:status,note=:note,supplier_id=:supplier_id,order_creator_name=:order_creator_name,updated_at=NOW() WHERE id=:id');
     $statement->execute([
-        'id' => $id, 'status' => $status,
+        'id' => $id, 'status' => $status, 'warehouse_type' => $warehouseType,
         'note' => trim((string) ($body['note'] ?? $receipt['note'])),
         'supplier_id' => $supplierId,
         'order_creator_name' => $orderCreatorName ?: null,
@@ -446,12 +467,19 @@ function receipts_cancel(array $body): void
     respond_ok(['item' => receipts_full($user, $id)]);
 }
 
+function receipts_lock(array $body): void
+{
+    $user = field_inventory_require_permission('inventory_receipts.lock');
+    $id = trim((string) ($body['id'] ?? $_GET['id'] ?? ''));
+    $receipt = field_inventory_require_receipt($user, $id);
+    if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) respond_error('Chỉ có thể khóa phiếu chưa hoàn thành.', 409);
+    db()->prepare('UPDATE inventory_receipts SET locked_at=COALESCE(locked_at,NOW()),locked_by=COALESCE(locked_by,:actor),updated_at=NOW() WHERE id=:id AND status IN ("pending_explanation","draft")')->execute(['id'=>$id,'actor'=>$user['id']]);
+    respond_ok(['item'=>receipts_full($user, $id)]);
+}
+
 function receipts_unlock(array $body): void
 {
-    $user = field_inventory_require_permission('inventory_receipts.update');
-    if (!field_inventory_is_admin($user)) {
-        respond_error('Chỉ admin mới có thể mở khóa phiếu.', 403);
-    }
+    $user = field_inventory_require_permission('inventory_receipts.unlock');
     $id = trim((string) ($body['id'] ?? $_GET['id'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $id);
     if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
@@ -475,6 +503,7 @@ if ($method === 'GET') receipts_list();
 $body = read_json_body();
 if ($method === 'POST' && $action === 'complete') receipts_complete($body);
 if ($method === 'POST' && $action === 'cancel') receipts_cancel($body);
+if ($method === 'POST' && $action === 'lock') receipts_lock($body);
 if ($method === 'POST' && $action === 'unlock') receipts_unlock($body);
 if ($method === 'POST') receipts_create($body);
 if (in_array($method, ['PUT', 'PATCH'], true)) receipts_update($body);

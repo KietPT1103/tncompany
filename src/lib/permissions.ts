@@ -22,7 +22,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   },
   {
     id: "bills.access",
-    label: "Hóa đơn",
+    label: "Sử dụng POS và hóa đơn",
     description: "Xem và thao tác danh sách hóa đơn.",
     category: "Giao dịch",
     path: "/pos",
@@ -250,7 +250,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   },
   {
     id: "inventory_receipts.view",
-    label: "Xem phiếu nhập hiện trường",
+    label: "Xem minh chứng và phiếu nhập",
     description: "Xem danh sách, chi tiết và ảnh phiếu nhập.",
     category: "Hàng hóa",
     path: "/inventory-receipts",
@@ -264,10 +264,34 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   },
   {
     id: "inventory_receipts.update",
-    label: "Giải trình phiếu nhập",
-    description: "Thêm, sửa và xóa dòng hàng khi phiếu chưa khóa.",
+    label: "Chỉnh sửa minh chứng",
+    description: "Chỉnh sửa kho nhập, nhà phân phối, người nhập và ghi chú minh chứng.",
     category: "Hàng hóa",
     path: "/inventory-receipts",
+  },
+  {
+    id: "inventory_receipts.explain",
+    label: "Giải trình hàng hóa",
+    description: "Thêm, sửa, xóa hàng hóa trên minh chứng trước khi hoàn thành.",
+    category: "Hàng hóa",
+    path: "/inventory-receipts",
+    routePermission: false,
+  },
+  {
+    id: "inventory_receipts.lock",
+    label: "Khóa minh chứng",
+    description: "Khóa phiếu để ngừng chỉnh sửa và giải trình.",
+    category: "Hàng hóa",
+    path: "/inventory-receipts",
+    routePermission: false,
+  },
+  {
+    id: "inventory_receipts.unlock",
+    label: "Mở khóa minh chứng",
+    description: "Mở khóa để tiếp tục chỉnh sửa và giải trình.",
+    category: "Hàng hóa",
+    path: "/inventory-receipts",
+    routePermission: false,
   },
   {
     id: "inventory_receipts.complete",
@@ -459,13 +483,6 @@ export function getEffectivePermissions(
 
   if (Array.isArray(source.permissions)) {
     const normalized = normalizePermissionList(source.permissions);
-    if (source.role === "user") {
-      ["bills.access", "inventory_receipts.access", "inventory_issues.access"].forEach((permission) => {
-        if (!normalized.includes(permission as AppPermission)) normalized.push(permission as AppPermission);
-      });
-    } else if (source.role === "server" && !normalized.includes("bills.access")) {
-      normalized.push("bills.access");
-    }
     const inherited = new Set<AppPermission>();
     if (normalized.includes("reports.access")) {
       inherited.add("reports.products.view");
@@ -477,6 +494,7 @@ export function getEffectivePermissions(
       [
         "inventory_receipts.view", "inventory_receipts.create", "inventory_receipts.update",
         "inventory_receipts.complete", "inventory_receipts.cancel", "inventory_receipts.upload_image",
+        "inventory_receipts.explain", "inventory_receipts.lock", "inventory_receipts.unlock",
         "products.create", "products.attach_area",
       ].forEach((permission) => inherited.add(permission as AppPermission));
     }
@@ -493,7 +511,7 @@ export function getEffectivePermissions(
     return ALL_APP_PERMISSIONS.filter((permission) => normalized.includes(permission) || inherited.has(permission));
   }
 
-  return getDefaultPermissionsForRole(source.role);
+  return getEffectivePermissions({ role: source.role, permissions: getDefaultPermissionsForRole(source.role) });
 }
 
 export function hasPermission(
@@ -549,6 +567,7 @@ export function canAccessPath(
     | undefined,
   pathname: string
 ) {
+  if (pathname.split(/[?#]/, 1)[0] === "/pos") return hasAnyPermission(source, ["bills.access", "bar.checkout"]);
   const permission = getPermissionForPath(pathname);
   if (!permission) {
     return true;
@@ -598,6 +617,7 @@ export function getDefaultRouteForUser(user: AppUser | null | undefined) {
     return "/admin/overview";
   }
 
+  if (!hasPermission(user, "bills.access") && hasAnyPermission(user, ["inventory_receipts.view", "inventory_issues.access", "inventory_stock.view", "inventory_history.access"])) return "/inventory";
   const matchedPath = DEFAULT_ROUTE_ORDER.find((path) => canAccessPath(user, path));
   if (matchedPath) {
     return matchedPath;
@@ -617,5 +637,5 @@ export function getDefaultRouteForUser(user: AppUser | null | undefined) {
   ])) {
     return "/inventory";
   }
-  return "/pos";
+  return "/login";
 }

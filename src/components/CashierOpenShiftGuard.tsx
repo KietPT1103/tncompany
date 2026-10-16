@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { hasPermission } from "@/lib/permissions";
 import { useAuth } from "@/context/AuthContext";
 import { getOpenShiftByCashier } from "@/services/shiftService";
 
@@ -11,6 +12,7 @@ const SHIFT_EXEMPT_ADMIN_PATHS = [
   "/admin/product/issues",
   "/admin/product/receipts",
   "/admin/inventory-receipts",
+  "/admin/inventory",
 ];
 
 export const isShiftExemptAdminPath = (pathname: string) =>
@@ -27,6 +29,7 @@ export default function CashierOpenShiftGuard() {
 
   const mustHaveOpenShift =
     role === "user" &&
+    hasPermission(user, "bills.access") &&
     !!user?.storeId &&
     SHIFT_ENABLED_STORES.has(user.storeId) &&
     !isShiftExemptAdminPath(location.pathname);

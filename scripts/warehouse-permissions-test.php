@@ -1,0 +1,37 @@
+<?php
+declare(strict_types=1);
+$source=file_get_contents(__DIR__.'/../public/api/_lib/auth.php');
+$start=strpos($source,'function auth_normalize_role(');
+$end=strpos($source,'function auth_map_user(', $start);
+eval(substr($source,$start,$end-$start));
+function check($condition,$message) { if (!$condition) throw new RuntimeException($message); }
+check(in_array('inventory_receipts.explain',auth_effective_permissions(['role'=>'user']),true),'Legacy defaults expand consistently');
+$viewer=auth_effective_permissions(['role'=>'user','permissions_json'=>'["inventory_receipts.view"]']);
+check($viewer===['inventory_receipts.view'],'Explicit viewer permissions must not acquire POS or mutation grants');
+$grants=auth_effective_permissions(['role'=>'user','permissions_json'=>'["inventory_receipts.explain","inventory_receipts.lock"]']);
+check(in_array('inventory_receipts.explain',$grants,true),'Explain grant preserved');
+check(in_array('inventory_receipts.lock',$grants,true),'Lock grant preserved');
+check(!in_array('inventory_receipts.unlock',$grants,true),'Lock does not grant unlock');
+check(!in_array('bills.access',$grants,true),'Warehouse does not grant POS');
+check(auth_effective_permissions(['role'=>'server','permissions_json'=>'[]'])===[],'Explicit empty permissions respected');
+$authSource=file_get_contents(__DIR__.'/../public/api/_lib/auth.php');
+$start=strpos($authSource,'function auth_has_permission(');
+$end=strpos($authSource,'function auth_require_permission(', $start);
+eval(substr($authSource,$start,$end-$start));
+$fieldSource=file_get_contents(__DIR__.'/../public/api/_lib/field_inventory.php');
+$start=strpos($fieldSource,'function field_inventory_has_permission(');
+$end=strpos($fieldSource,'function field_inventory_require_permission(', $start);
+eval(substr($fieldSource,$start,$end-$start));
+check(!field_inventory_has_permission(['permissions'=>['inventory_receipts.access']],'inventory_receipts.unlock'),'Raw access flag cannot bypass action authorization');
+check(!field_inventory_has_permission(['permissions'=>['inventory_receipts.lock']],'inventory_receipts.unlock'),'Lock permission cannot bypass unlock authorization');
+check(field_inventory_has_permission(['permissions'=>['inventory_receipts.explain']],'inventory_receipts.explain'),'Explicit explain action authorized');
+$source=file_get_contents(__DIR__.'/../public/api/inventory-equipment-stock.php');
+preg_match("/prepare\\('(.+?)'\\);/s",$source,$match);
+$pdo=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+$pdo->exec('CREATE TABLE inventory_receipts(id TEXT,store_id TEXT,status TEXT)');
+$pdo->exec('CREATE TABLE inventory_receipt_items(receipt_id TEXT,product_code TEXT,product_name TEXT,unit TEXT,quantity REAL,item_type TEXT)');
+$pdo->exec("INSERT INTO inventory_receipts VALUES ('done','cafe','completed'),('draft','cafe','draft'),('other','farm','completed'),('cancel','cafe','cancelled')");
+$pdo->exec("INSERT INTO inventory_receipt_items VALUES ('done','C','Cup','piece',3,'equipment'),('done','A','Coffee','kg',5,'ingredient'),('draft','C','Cup','piece',10,'equipment'),('other','C','Cup','piece',20,'equipment'),('cancel','C','Cup','piece',50,'equipment')");
+$stmt=$pdo->prepare($match[1]);$stmt->execute(['store'=>'cafe']);$rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
+check(count($rows)===1&&(float)$rows[0]['quantity']===3.0,'Only completed equipment in authorized store enters equipment stock');
+echo "PASS server permissions and completed equipment stock\n";

@@ -63,6 +63,7 @@ const INVENTORY_ACCOUNT_PERMISSIONS = new Set<AppPermission>([
   "inventory_receipts.view",
   "inventory_receipts.create",
   "inventory_receipts.update",
+  "inventory_receipts.explain", "inventory_receipts.lock", "inventory_receipts.unlock",
   "inventory_receipts.complete",
   "inventory_receipts.cancel",
   "inventory_receipts.upload_image",

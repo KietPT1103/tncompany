@@ -3,9 +3,11 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { AlertCircle, ArrowLeft, Camera, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, PackageOpen, Pencil, Plus, RefreshCw, Store, Trash2, UserRound, X, ZoomIn } from "lucide-react";
 import {
   addInventoryReceiptItem, attachReceiptProduct, completeInventoryReceipt, createReceiptProduct,
-  cancelInventoryReceipt, deleteInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchReceiptProducts,
-  unlockInventoryReceipt, updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ProductResult, type ReceiptStatus
+  cancelInventoryReceipt, deleteInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchReceiptProducts, searchWarehouseProducts, updateInventoryReceipt, type WarehouseType,
+  lockInventoryReceipt, unlockInventoryReceipt, updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ProductResult, type ReceiptStatus
 } from "@/services/inventoryReceiptService";
+import { hasPermission } from "@/lib/permissions";
+import { getSuppliers, type Supplier } from "@/services/suppliers";
 import PrivateApiImage from "@/components/PrivateApiImage";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
@@ -31,7 +33,7 @@ export default function FieldInventoryReceiptDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [receipt, setReceipt] = useState<InventoryReceipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -53,7 +55,18 @@ export default function FieldInventoryReceiptDetailPage() {
   const [editNote, setEditNote] = useState("");
   const [newCode, setNewCode] = useState("");
   const [newUnit, setNewUnit] = useState("");
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierId, setSupplierId] = useState("");
+  const [orderCreator, setOrderCreator] = useState("");
   const searchSequence = useRef(0);
+  useEffect(() => { setSupplierId(receipt?.supplierId || ""); setOrderCreator(receipt?.orderCreatorName || ""); }, [receipt?.id, receipt?.supplierId, receipt?.orderCreatorName]);
+  useEffect(() => {
+    if (!receipt?.areaId || !hasPermission(user, "inventory_receipts.update")) return;
+    let active = true;
+    getSuppliers(receipt.areaId).then(data => { if (active) setSuppliers(data.items.filter(item => item.isActive)); }).catch(error => { if (active) setLoadError(error.message); });
+    return () => { active = false; };
+  }, [receipt?.areaId, user]);
+  const warehouseType = receipt?.warehouseType || "ingredient";
   const reload = async () => {
     setLoading(true);
     setLoadError("");
@@ -69,7 +82,11 @@ export default function FieldInventoryReceiptDetailPage() {
   useEffect(() => {
     if (!receipt || !suggestionsOpen) return;
     const sequence = ++searchSequence.current;
-    const timer = setTimeout(() => searchReceiptProducts(query, receipt.areaId).then((items) => {
+    const timer = setTimeout(() => Promise.all([
+      searchWarehouseProducts(query, receipt.areaId, warehouseType),
+      warehouseType === "ingredient" && query.trim() ? searchReceiptProducts(query, receipt.areaId) : Promise.resolve([]),
+    ]).then(([history, catalog]) => {
+      const items = [...history, ...catalog.filter(item => !history.some(previous => previous.id === item.id))];
       if (searchSequence.current === sequence) {
         setResults(items); setActiveResult(0); setSearchError("");
       }
@@ -79,15 +96,15 @@ export default function FieldInventoryReceiptDetailPage() {
         setSearchError(error instanceof Error ? error.message : "Không thể tải danh sách sản phẩm.");
       }
     }), 250);
-    return () => clearTimeout(timer);
-  }, [query, receipt?.areaId, suggestionsOpen]);
+    return () => { clearTimeout(timer); searchSequence.current++; };
+  }, [query, receipt?.areaId, warehouseType, suggestionsOpen]);
   if (loading && !receipt) {
     return (
       <div className="warehouse-ui min-h-full bg-slate-50 p-4 sm:p-6 2xl:p-8" aria-busy="true" aria-label="Đang tải chi tiết phiếu nhập">
-        <div className="mx-auto max-w-[1720px] space-y-5">
+        <div className="mx-auto max-w-[1440px] space-y-5">
           <div className="h-10 w-40 animate-pulse rounded-md bg-slate-200" />
           <div className="h-56 animate-pulse rounded-xl border border-slate-200 bg-white" />
-          <div className="grid gap-5 xl:grid-cols-[minmax(360px,.82fr)_minmax(0,1.18fr)]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(240px,.55fr)_minmax(0,1.45fr)]">
             <div className="h-[520px] animate-pulse rounded-xl border border-slate-200 bg-white" />
             <div className="h-[520px] animate-pulse rounded-xl border border-slate-200 bg-white" />
           </div>
@@ -110,7 +127,8 @@ export default function FieldInventoryReceiptDetailPage() {
     );
   }
   const editableStatus = receipt.status === "pending_explanation" || receipt.status === "draft";
-  const editable = editableStatus && receipt.canEdit;
+  const editableMetadata = editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.update");
+  const editable = editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.explain");
   const canCorrect = editable || (role === "admin" && receipt.status === "completed");
   const listReturnTo = (location.state as { returnTo?: string } | null)?.returnTo || "/admin/inventory-receipts";
 
@@ -126,9 +144,9 @@ export default function FieldInventoryReceiptDetailPage() {
     if (!selected || !receipt) return;
     setBusy(true);
     try {
-      await addInventoryReceiptItem({ receiptId: receipt.id, productId: selected.id, quantity: Number(quantity), unitPrice: Number(unitPrice), note });
+      await addInventoryReceiptItem({ receiptId: receipt.id, productId: selected.id, itemType: warehouseType, productCode: selected.productCode, productName: selected.productName, unit: selected.unit, quantity: Number(quantity), unitPrice: Number(unitPrice), note });
       setQuery(""); setSelected(null); setQuantity(""); setUnitPrice(""); setNote(""); await reload();
-    } finally { setBusy(false); }
+    } catch (error) { alert(error instanceof Error ? error.message : "Không thể thêm hàng hóa."); } finally { setBusy(false); }
   }
   async function finish() {
     if (!confirm(`Hoàn thành ${receipt.items.length} món, tổng ${receipt.totalAmount.toLocaleString("vi-VN")} ₫?`)) return;
@@ -187,10 +205,36 @@ export default function FieldInventoryReceiptDetailPage() {
     catch (error) { alert(error instanceof Error ? error.message : "Không thể mở khóa phiếu."); }
     finally { setBusy(false); }
   }
+  async function saveMetadata() {
+    setBusy(true);
+    try { setReceipt(await updateInventoryReceipt(receipt.id, { supplierId: supplierId || null, orderCreatorName: orderCreator })); }
+    catch (error) { alert(error instanceof Error ? error.message : "Không thể lưu thông tin."); }
+    finally { setBusy(false); }
+  }
+  async function lockReceipt() {
+    if (!confirm("Khóa minh chứng để ngừng chỉnh sửa và giải trình?")) return;
+    setBusy(true);
+    try { setReceipt(await lockInventoryReceipt(receipt.id)); }
+    catch (error) { alert(error instanceof Error ? error.message : "Không thể khóa minh chứng."); }
+    finally { setBusy(false); }
+  }
+  async function changeWarehouse(type: WarehouseType) {
+    if (!receipt || type === warehouseType) return;
+    setBusy(true);
+    try {
+      const updated = await updateInventoryReceipt(receipt.id, { warehouseType: type });
+      searchSequence.current++;
+      setReceipt(updated); setQuery(""); setSelected(null); setResults([]); setSuggestionsOpen(false); setShowCreate(false);
+      setNewCode(""); setNewUnit(""); setSearchError("");
+    } catch (error) { alert(error instanceof Error ? error.message : "Không thể đổi kho."); }
+    finally { setBusy(false); }
+  }
   async function createNew() {
     setBusy(true);
     try {
-      const product = await createReceiptProduct({ areaId: receipt.areaId, ingredientCode: newCode, ingredientName: query.trim(), unit: newUnit });
+      const product: ProductResult = warehouseType === "equipment"
+        ? { id: crypto.randomUUID(), productCode: newCode.trim(), productName: query.trim(), unit: newUnit.trim(), areaId: receipt.areaId, areaName: receipt.area.name, attachedToCurrentArea: true, similar: false }
+        : await createReceiptProduct({ areaId: receipt.areaId, ingredientCode: newCode, ingredientName: query.trim(), unit: newUnit });
       setSelected(product); setResults([]); setShowCreate(false);
     } catch (error) { alert(error instanceof Error ? error.message : "Không thể tạo sản phẩm."); }
     finally { setBusy(false); }
@@ -198,7 +242,7 @@ export default function FieldInventoryReceiptDetailPage() {
 
   return (
     <div className="warehouse-ui min-h-full bg-slate-50 p-3 sm:p-5 lg:p-6 2xl:p-8">
-      <div className="mx-auto max-w-[1720px]">
+      <div className="mx-auto max-w-[1440px]">
         <Button
           variant="ghost"
           onClick={() => navigate(listReturnTo, { replace: true })}
@@ -212,14 +256,14 @@ export default function FieldInventoryReceiptDetailPage() {
           <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50/90 px-4 py-3 text-amber-950">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-bold">Phiếu đã tự động khóa sau 24 giờ</p>
+                <p className="font-bold">Minh chứng đang khóa</p>
                 <p className="mt-1 text-sm text-amber-900">
-                  {role === "admin" ? "Admin vẫn có thể giải trình trực tiếp hoặc mở khóa cho nhân viên." : "Chỉ admin mới có thể giải trình hoặc mở khóa phiếu này."}
+                  {role === "admin" ? "Admin vẫn có thể giải trình trực tiếp hoặc mở khóa cho nhân viên." : "Cần quyền mở khóa minh chứng để tiếp tục giải trình."}
                 </p>
               </div>
               {receipt.canUnlock && (
                 <Button disabled={busy} onClick={unlockReceipt} className="bg-amber-600 font-bold text-white hover:bg-amber-700">
-                  Mở khóa cho nhân viên
+                  Mở khóa minh chứng
                 </Button>
               )}
             </div>
@@ -241,17 +285,18 @@ export default function FieldInventoryReceiptDetailPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {editable && (
+              {editableStatus && !receipt.isLocked && hasPermission(user, "inventory_receipts.lock") && <Button variant="outline" disabled={busy} onClick={lockReceipt}>Khóa minh chứng</Button>}
+              {editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.cancel") && (
                 <Button variant="outline" disabled={busy} onClick={cancelReceipt} className="border-rose-200 font-semibold text-rose-700 hover:bg-rose-50">Hủy phiếu</Button>
               )}
-              {receipt.status !== "deleted" && (
+              {receipt.status !== "deleted" && hasPermission(user, "inventory_receipts.cancel") && (
                 <Button variant="outline" disabled={busy} onClick={deleteReceipt} className="gap-2 border-rose-300 font-semibold text-rose-700 hover:bg-rose-50"><Trash2 className="h-4 w-4" /> Xóa phiếu</Button>
               )}
             </div>
           </div>
 
-          <dl className="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-            <div className="px-5 py-4 sm:px-6 2xl:px-7">
+          <dl className="grid border-t border-slate-200 grid-cols-2 lg:grid-cols-6">
+            <div className="px-3 py-2 sm:px-4">
               <dt className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500"><Store className="h-4 w-4" />Khu vực</dt>
               <dd className="mt-1.5 font-semibold text-slate-900">{receipt.area.name}</dd>
             </div>
@@ -282,7 +327,7 @@ export default function FieldInventoryReceiptDetailPage() {
           </div>
         </section>
 
-        <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(360px,.82fr)_minmax(0,1.18fr)] 2xl:mt-5 2xl:gap-5">
+        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(240px,.55fr)_minmax(0,1.45fr)] 2xl:mt-5 2xl:gap-5">
           <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><Camera className="h-5 w-5 text-emerald-700" />Ảnh hóa đơn</h2>
@@ -293,7 +338,7 @@ export default function FieldInventoryReceiptDetailPage() {
                 <div><Camera className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-medium text-slate-500">Phiếu chưa có ảnh hóa đơn.</p></div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-2">
+              <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-4 lg:grid-cols-2">
                 {receipt.images.map((image, index) => (
                   <button
                     key={image.id}
@@ -301,7 +346,7 @@ export default function FieldInventoryReceiptDetailPage() {
                     className="group relative overflow-hidden rounded-xl bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                     aria-label={`Xem ảnh hóa đơn ${index + 1}`}
                   >
-                    <PrivateApiImage src={image.thumbnailUrl} className="aspect-[4/5] w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none" />
+                    <PrivateApiImage src={image.thumbnailUrl} className="aspect-square max-h-60 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none" />
                     <span className="absolute inset-0 grid place-items-center bg-slate-950/0 text-white opacity-0 transition-[background-color,opacity] duration-200 group-hover:bg-slate-950/35 group-hover:opacity-100 group-focus-visible:bg-slate-950/35 group-focus-visible:opacity-100">
                       <ZoomIn className="h-6 w-6" />
                     </span>
@@ -318,6 +363,20 @@ export default function FieldInventoryReceiptDetailPage() {
               <span className="text-sm font-semibold text-slate-500">{receipt.itemCount} dòng hàng</span>
             </div>
 
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+              <label htmlFor="receipt-warehouse" className="mb-1 block text-sm font-bold text-slate-800">Kho nhập hàng</label>
+              <select id="receipt-warehouse" value={warehouseType} disabled={!editableMetadata || busy || receipt.items.length > 0} onChange={event => void changeWarehouse(event.target.value as WarehouseType)} className="min-h-11 w-full rounded-md border border-emerald-200 bg-white px-3 text-sm sm:max-w-xs">
+                <option value="ingredient">Kho nguyên liệu</option>
+                <option value="equipment">Kho dụng cụ</option>
+              </select>
+              <p className="mt-1 text-xs text-slate-500">{receipt.items.length ? "Xóa các dòng hàng nếu cần đổi kho nhập." : "Gợi ý hàng hóa lấy từ lịch sử nhập của kho đã chọn."}</p>
+            </div>
+            {editableMetadata && <div className="grid gap-3 border-b border-slate-200 px-4 py-3 sm:grid-cols-2 sm:px-5">
+              <label className="text-sm font-semibold text-slate-800">Nhà phân phối<select value={supplierId} disabled={busy} onChange={event => setSupplierId(event.target.value)} className="mt-1 min-h-11 w-full rounded-md border border-slate-200 bg-white px-2"><option value="">Chọn nhà phân phối</option>{suppliers.map(item => <option value={item.id} key={item.id}>{item.supplierName}</option>)}</select></label>
+              <Input label="Người nhập hàng" value={orderCreator} disabled={busy} onChange={event => setOrderCreator(event.target.value)} className="h-11" />
+              {loadError && <p role="alert" className="text-sm text-rose-700">{loadError}</p>}
+              <Button variant="outline" disabled={busy} onClick={saveMetadata} className="sm:col-span-2">Lưu thông tin nhập hàng</Button>
+            </div>}
             <div className="px-4 py-4 sm:px-5">
               {receipt.items.length === 0 ? (
                 <div className="rounded-lg bg-slate-50 px-4 py-8 text-center">
@@ -351,12 +410,13 @@ export default function FieldInventoryReceiptDetailPage() {
             {editable && (
               <div className="border-t border-emerald-100 bg-emerald-50/60 px-4 py-5 sm:px-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="font-bold text-emerald-950">Thêm hàng hóa</h3>
+                  <button type="button" onClick={() => { setSuggestionsOpen(true); document.getElementById("receipt-product-search")?.focus(); }} className="flex min-h-11 items-center gap-2 font-bold text-emerald-950"><Plus className="h-4 w-4" />Thêm hàng hóa</button>
                   <span className="text-xs font-semibold text-emerald-800">Chọn món rồi nhập số lượng và đơn giá</span>
                 </div>
                 <div className="relative z-10 mt-3">
                   <label htmlFor="receipt-product-search" className="mb-1.5 block text-sm font-semibold text-emerald-950">Tên hoặc mã hàng</label>
                   <input
+                    disabled={busy}
                     id="receipt-product-search"
                     value={query}
                     onFocus={() => setSuggestionsOpen(true)}
@@ -370,6 +430,7 @@ export default function FieldInventoryReceiptDetailPage() {
                     placeholder="Nhập tên hoặc mã hàng"
                     className="h-12 w-full rounded-md border border-emerald-200 bg-white px-3 text-sm text-slate-900 outline-none transition-[border-color,box-shadow] placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                   />
+                  {suggestionsOpen && !query && !results.length && !searchError && <p className="mt-2 text-xs text-slate-500">Kho chưa có hàng gợi ý. Nhập tên hàng để tìm hoặc tạo mới.</p>}
                   {searchError && <p className="mt-2 text-sm font-medium text-rose-700">{searchError}</p>}
                   {suggestionsOpen && results.length > 0 && (
                     <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.14)]">
@@ -379,10 +440,10 @@ export default function FieldInventoryReceiptDetailPage() {
                           {!product.attachedToCurrentArea && <span className="block text-xs text-amber-700">Đã tồn tại – chưa sử dụng tại {receipt.area.name}. Nhấn để thêm.</span>}
                         </button>
                       ))}
-                      {query.trim().length >= 2 && <button onClick={() => setShowCreate(true)} className="w-full rounded-md p-3 text-left font-bold text-emerald-700"><Plus className="mr-2 inline h-4 w-4" />Tạo mới “{query}”</button>}
+                      {hasPermission(user, "products.create") && query.trim().length >= 2 && <button onClick={() => setShowCreate(true)} className="w-full rounded-md p-3 text-left font-bold text-emerald-700"><Plus className="mr-2 inline h-4 w-4" />Tạo mới “{query}”</button>}
                     </div>
                   )}
-                  {suggestionsOpen && query.trim().length >= 2 && results.length === 0 && !selected && !searchError && (
+                  {hasPermission(user, "products.create") && suggestionsOpen && query.trim().length >= 2 && results.length === 0 && !selected && !searchError && (
                     <button onMouseDown={(event) => event.preventDefault()} onClick={() => setShowCreate(true)} className="mt-2 min-h-12 w-full rounded-md border border-emerald-100 bg-white p-3 text-left font-bold text-emerald-700 shadow-sm">
                       <Plus className="mr-2 inline h-4 w-4" />Tạo mới “{query.trim()}”
                     </button>
@@ -395,7 +456,7 @@ export default function FieldInventoryReceiptDetailPage() {
                 <Input label="Ghi chú" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Thông tin bổ sung (nếu có)" className="mt-3 h-11 border-emerald-200 bg-white" />
                 <div className="mt-4 flex flex-col gap-3 border-t border-emerald-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="font-semibold text-emerald-950">Tạm tính: <b className="tabular-nums">{((Number(quantity) || 0) * (Number(unitPrice) || 0)).toLocaleString("vi-VN")} ₫</b></p>
-                  <Button disabled={busy || !selected || Number(quantity) <= 0 || unitPrice === ""} onClick={addItem} className="h-11 bg-emerald-700 px-5 font-bold text-white hover:bg-emerald-800">Thêm món</Button>
+                  <Button disabled={busy || !selected || Number(quantity) <= 0 || !Number.isFinite(Number(quantity)) || unitPrice === "" || Number(unitPrice) < 0 || !Number.isFinite(Number(unitPrice))} onClick={addItem} className="h-11 bg-emerald-700 px-5 font-bold text-white hover:bg-emerald-800">Thêm món</Button>
                 </div>
               </div>
             )}
@@ -405,7 +466,7 @@ export default function FieldInventoryReceiptDetailPage() {
                 <p className="text-sm text-slate-300">Tổng số lượng {receipt.totalQuantity}</p>
                 <p className="mt-1 text-2xl font-bold tabular-nums sm:text-3xl">{receipt.totalAmount.toLocaleString("vi-VN")} ₫</p>
               </div>
-              {editable && (
+              {editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.complete") && (
                 <Button disabled={busy || !receipt.items.length || !receipt.images.length} onClick={finish} className="h-12 gap-2 bg-emerald-600 px-6 font-bold text-white hover:bg-emerald-500">
                   <CheckCircle2 className="h-5 w-5" />Hoàn thành nhập kho
                 </Button>
@@ -433,7 +494,7 @@ export default function FieldInventoryReceiptDetailPage() {
             <Input label="Đơn vị tính" value={newUnit} onChange={(event) => setNewUnit(event.target.value)} placeholder="Ví dụ: kg, chai, hộp" className="mt-3 h-11" />
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setShowCreate(false)}>Hủy</Button>
-              <Button disabled={!newCode || !newUnit || busy} onClick={createNew} className="bg-emerald-700 font-bold text-white hover:bg-emerald-800">Tạo và chọn</Button>
+              <Button disabled={!newCode.trim() || !newUnit.trim() || !query.trim() || busy} onClick={createNew} className="bg-emerald-700 font-bold text-white hover:bg-emerald-800">Tạo và chọn</Button>
             </div>
           </div>
         </div>
