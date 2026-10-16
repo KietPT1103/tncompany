@@ -24,7 +24,8 @@ const getBillsPage = async (options: GetBillsOptions = {}, limit = 100, offset =
     shiftIds: options.shiftIds?.join(","),
   })).items;
 
-export async function saveBill(data: NewBill) { return (await posRequest<{ id: string }>("bills", { method: "POST", body: JSON.stringify(data) })).id; }
+const notifyStockChange = () => { if (typeof window !== "undefined") window.dispatchEvent(new Event("pos-stock-changed")); };
+export async function saveBill(data: NewBill) { const result=await posRequest<{ id: string }>("bills", { method: "POST", body: JSON.stringify(data) }); notifyStockChange(); return result.id; }
 export async function getBills(options: GetBillsOptions = {}) {
   return getBillsPage(options, options.limitCount || 100);
 }
@@ -34,7 +35,7 @@ export const getAllBills = (options: Omit<GetBillsOptions, "limitCount"> = {}) =
     BILL_API_PAGE_SIZE,
   );
 export const getRecentBills = (storeId = "cafe", limitCount = 20, includeCancelled = false) => getBills({ storeId, limitCount, includeCancelled });
-export async function updateBill(id: string, data: Partial<NewBill> & { createdAt?: Date; cancelledAt?: Date }) { await posRequest("bills", { method: "PATCH", body: JSON.stringify({ id, ...data }) }); }
-export async function cancelBill(id: string, cancelledBy?: string, cancelNote?: string) { await posRequest("bills", { method: "PATCH", body: JSON.stringify({ id, action: "cancel", cancelledBy, note: cancelNote }) }); }
+export async function updateBill(id: string, data: Partial<NewBill> & { createdAt?: Date; cancelledAt?: Date }) { await posRequest("bills", { method: "PATCH", body: JSON.stringify({ id, ...data }) }); notifyStockChange(); }
+export async function cancelBill(id: string, cancelledBy?: string, cancelNote?: string) { await posRequest("bills", { method: "PATCH", body: JSON.stringify({ id, action: "cancel", cancelledBy, note: cancelNote }) }); notifyStockChange(); }
 export const getBillsByShift = (shiftId: string) => getBills({ shiftId, includeCancelled: true, limitCount: 2000 });
-export async function deleteBill(id: string) { await posRequest("bills", { method: "DELETE" }, { id }); }
+export async function deleteBill(id: string) { await posRequest("bills", { method: "DELETE" }, { id }); notifyStockChange(); }

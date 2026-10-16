@@ -1,3 +1,4 @@
+import { apiRequest as linkedStockRequest } from "@/lib/api";
 ﻿"use client";
 
 import { Fragment, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -274,6 +275,8 @@ export default function CafePosPage() {
     (role === "user" || role === "server" || role === "bartender") && assignedStoreId
       ? assignedStoreId
       : selectedStoreId;
+  const [linkedStock,setLinkedStock]=useState<Record<string,{received:number;quantity:number}>>({});
+  useEffect(()=>{let active=true;const load=()=>linkedStockRequest<{items:Array<{posCode:string;received:number;quantity:number}>}>(`/inventory-pos-stock.php?storeId=${encodeURIComponent(storeId)}`).then(data=>{if(active)setLinkedStock(Object.fromEntries(data.items.map(item=>[item.posCode,item])))}).catch(()=>{if(active)setLinkedStock({})});void load();const timer=window.setInterval(load,15000);window.addEventListener('focus',load);window.addEventListener('pos-stock-changed',load);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);window.removeEventListener('pos-stock-changed',load)}},[storeId]);
   const isHotpotStore = storeId === HOTPOT_STORE_ID;
   const isBakeryStore = storeId === BAKERY_STORE_ID;
   const isFarmStore = storeId === FARM_STORE_ID;
@@ -3906,6 +3909,7 @@ export default function CafePosPage() {
                               <p className="text-xs font-semibold leading-snug text-slate-900 sm:text-sm sm:leading-tight">
                                 {item.name}
                               </p>
+                              {linkedStock[item.id]&&<div className="grid grid-cols-2 gap-1 border-t pt-1 text-[11px] text-emerald-900"><span>Nhập hôm nay<br/><b>{linkedStock[item.id].received.toLocaleString('vi-VN')}</b></span><span>Tồn hiện tại<br/><b>{linkedStock[item.id].quantity.toLocaleString('vi-VN')}</b></span></div>}
                             </div>
                           </div>
                         </button>
