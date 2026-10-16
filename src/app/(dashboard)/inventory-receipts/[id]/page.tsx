@@ -8,6 +8,7 @@ import {
 } from "@/services/inventoryReceiptService";
 import { apiRequest } from "@/lib/api";
 import { inventoryToday } from "@/lib/inventoryPeriods";
+import { normalizeSearchText } from "@/lib/utils";
 import { hasPermission } from "@/lib/permissions";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
 import PrivateApiImage from "@/components/PrivateApiImage";
@@ -61,6 +62,11 @@ export default function FieldInventoryReceiptDetailPage() {
   const [newUnit, setNewUnit] = useState("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState("");
+  const [supplierQuery, setSupplierQuery] = useState("");
+  const [supplierOpen, setSupplierOpen] = useState(false);
+  const [supplierError, setSupplierError] = useState("");
+  const supplierCreating = useRef(false);
+  useEffect(() => { if (supplierId) setSupplierQuery(suppliers.find(item => item.id === supplierId)?.supplierName || receipt?.supplier?.supplierName || ""); }, [supplierId, suppliers, receipt?.supplier?.supplierName]);
   const [orderCreator, setOrderCreator] = useState("");
   const photoInput = useRef<HTMLInputElement>(null);
   const photoUploadActive = useRef(false);
@@ -210,6 +216,7 @@ export default function FieldInventoryReceiptDetailPage() {
     } catch (error) { alert(error instanceof Error ? error.message : "Không thể thêm hàng hóa."); } finally { setBusy(false); }
   }
   async function finish() {
+    if (supplierQuery.trim() && !supplierId) { setSupplierError("Vui lòng chọn nhà phân phối trong gợi ý hoặc bấm Tạo nhà phân phối."); setSupplierOpen(true); return; }
     if (!confirm(`Hoàn thành ${receipt.items.length} món, tổng ${receipt.totalAmount.toLocaleString("vi-VN")} ₫?`)) return;
     setBusy(true);
     try {
@@ -271,7 +278,22 @@ export default function FieldInventoryReceiptDetailPage() {
     catch (error) { alert(error instanceof Error ? error.message : "Không thể mở khóa phiếu."); }
     finally { setBusy(false); }
   }
+  const supplierMatches = suppliers.filter(item => normalizeSearchText(`${item.supplierName} ${item.supplierCode}`).includes(normalizeSearchText(supplierQuery.trim())));
+  const supplierExact = suppliers.find(item => normalizeSearchText(item.supplierName) === normalizeSearchText(supplierQuery.trim()));
+  function pickSupplier(item: Supplier) { setSupplierId(item.id); setSupplierQuery(item.supplierName); setSupplierOpen(false); setSupplierError(""); }
+  async function quickCreateSupplier() {
+    if (!supplierQuery.trim() || busy || supplierCreating.current) return;
+    if (supplierExact) { pickSupplier(supplierExact); return; }
+    supplierCreating.current = true; setBusy(true); setSupplierError("");
+    try {
+      const result = await apiRequest<{ item: Supplier }>("/suppliers.php?action=quick-create", { method: "POST", body: JSON.stringify({ storeId: receipt.areaId, supplierName: supplierQuery.trim(), quickCreate: true }) });
+      setSuppliers(current => [...current.filter(item => item.id !== result.item.id), result.item]);
+      pickSupplier(result.item);
+    } catch (error) { setSupplierError(error instanceof Error ? error.message : "Không thể tạo nhà phân phối."); }
+    finally { supplierCreating.current = false; setBusy(false); }
+  }
   async function saveMetadata() {
+    if (supplierQuery.trim() && !supplierId) { setSupplierError("Vui lòng chọn nhà phân phối trong gợi ý hoặc bấm Tạo nhà phân phối."); setSupplierOpen(true); return; }
     setBusy(true);
     try { setReceipt(await updateInventoryReceipt(receipt.id, { supplierId: supplierId || null, orderCreatorName: orderCreator })); }
     catch (error) { alert(error instanceof Error ? error.message : "Không thể lưu thông tin."); }
@@ -452,7 +474,16 @@ export default function FieldInventoryReceiptDetailPage() {
               <p className="mt-1 text-xs text-slate-500">{receipt.items.length ? "Xóa các dòng hàng nếu cần đổi kho nhập." : "Gợi ý hàng hóa lấy từ lịch sử nhập của kho đã chọn."}</p>
             </div>
             {editableMetadata && <details open={!receipt.supplierId || !receipt.orderCreatorName} className="border-b border-slate-200 px-3 py-2 sm:px-5"><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-emerald-950">Thông tin nhập hàng{receipt.supplierId && receipt.orderCreatorName ? " · Đã lưu" : " · Cần điền"}</summary><div className="grid gap-3 pb-2 sm:grid-cols-2">
-              <label className="text-sm font-semibold text-slate-800">Nhà phân phối<select value={supplierId} disabled={busy} onChange={event => setSupplierId(event.target.value)} className="mt-1 min-h-11 w-full rounded-md border border-slate-200 bg-white px-2"><option value="">Chọn nhà phân phối</option>{suppliers.map(item => <option value={item.id} key={item.id}>{item.supplierName}</option>)}</select></label>
+              <div className="min-w-0 text-sm font-semibold text-slate-800">
+                <label htmlFor="receipt-supplier-search">Nhà phân phối</label>
+                <input id="receipt-supplier-search" autoComplete="off" value={supplierQuery} disabled={busy} onFocus={() => setSupplierOpen(true)} onChange={event => { setSupplierQuery(event.target.value); setSupplierId(""); setSupplierOpen(true); setSupplierError(""); }} onKeyDown={event => { if (event.key === "Escape") setSupplierOpen(false); if (event.key === "Enter") { event.preventDefault(); if (supplierExact) pickSupplier(supplierExact); else if (supplierMatches.length === 1) pickSupplier(supplierMatches[0]); } }} placeholder="Gõ tên để tìm hoặc tạo mới…" className="mt-1 min-h-11 w-full rounded-md border border-slate-200 bg-white px-3"/>
+                {supplierOpen && <div className="mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white p-1">
+                  {supplierMatches.slice(0, 20).map(item => <button key={item.id} type="button" disabled={busy} onClick={() => pickSupplier(item)} className="block min-h-11 w-full rounded-md px-3 py-2 text-left hover:bg-emerald-50"><span>{item.supplierName}</span><small className="ml-2 font-normal text-slate-500">{item.supplierCode}</small></button>)}
+                  {!supplierMatches.length && <p className="px-3 py-2 text-sm font-normal text-slate-500">Chưa có nhà phân phối phù hợp.</p>}
+                  {supplierQuery.trim() && !supplierExact && <button type="button" disabled={busy} onClick={() => void quickCreateSupplier()} className="flex min-h-11 w-full items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-left font-bold text-emerald-800"><Plus className="h-4 w-4 shrink-0"/>Tạo nhà phân phối “{supplierQuery.trim()}”</button>}
+                </div>}
+                {supplierError && <p role="alert" className="mt-1 font-normal text-rose-700">{supplierError}</p>}
+              </div>
               <Input label="Người nhập hàng" value={orderCreator} disabled={busy} onChange={event => setOrderCreator(event.target.value)} className="h-11" />
               {loadError && <p role="alert" className="text-sm text-rose-700">{loadError}</p>}
               <Button variant="outline" disabled={busy} onClick={saveMetadata} className="sm:col-span-2">Lưu thông tin</Button>
