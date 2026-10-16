@@ -6,6 +6,8 @@ import {
   cancelInventoryReceipt, deleteInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchReceiptProducts, searchWarehouseProducts, updateInventoryReceipt, type WarehouseType,
   lockInventoryReceipt, unlockInventoryReceipt, updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ProductResult, type ReceiptStatus
 } from "@/services/inventoryReceiptService";
+import { apiRequest } from "@/lib/api";
+import { inventoryToday } from "@/lib/inventoryPeriods";
 import { hasPermission } from "@/lib/permissions";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
 import PrivateApiImage from "@/components/PrivateApiImage";
@@ -37,6 +39,8 @@ export default function FieldInventoryReceiptDetailPage() {
   const [receipt, setReceipt] = useState<InventoryReceipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [extraActionsOpen, setExtraActionsOpen] = useState(false);
+  const [metadataOpen, setMetadataOpen] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductResult[]>([]);
@@ -58,6 +62,13 @@ export default function FieldInventoryReceiptDetailPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState("");
   const [orderCreator, setOrderCreator] = useState("");
+  const photoInput = useRef<HTMLInputElement>(null);
+  const photoUploadActive = useRef(false);
+  const photoRequestIds = useRef(new Map<string, string>());
+  const [photoDate, setPhotoDate] = useState(inventoryToday);
+  const [photoError, setPhotoError] = useState("");
+  const [photoProgress, setPhotoProgress] = useState("");
+  useEffect(() => { setPhotoDate(receipt?.capturedAt?.slice(0, 10) || inventoryToday()); }, [receipt?.id]);
   const searchSequence = useRef(0);
   useEffect(() => { setSupplierId(receipt?.supplierId || ""); setOrderCreator(receipt?.orderCreatorName || ""); }, [receipt?.id, receipt?.supplierId, receipt?.orderCreatorName]);
   useEffect(() => {
@@ -132,6 +143,43 @@ export default function FieldInventoryReceiptDetailPage() {
   const canCorrect = editable || (role === "admin" && receipt.status === "completed");
   const listReturnTo = (location.state as { returnTo?: string } | null)?.returnTo || "/admin/inventory-receipts";
 
+  const canUploadPhotos = hasPermission(user, "inventory_receipts.upload_image") && (
+    (editableStatus && (receipt.canEdit || role === "admin")) || (role === "admin" && receipt.status === "completed")
+  );
+  async function uploadPhotos(fileList: FileList | null) {
+    if (!fileList?.length || !canUploadPhotos || photoUploadActive.current || busy) return;
+    const files = Array.from(fileList);
+    if (photoInput.current) photoInput.current.value = "";
+    setPhotoError(""); setPhotoProgress("");
+    if (files.some(file => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 12 * 1024 * 1024)) {
+      setPhotoError("Chỉ chọn ảnh JPEG, PNG, WebP tối đa 12 MB mỗi ảnh."); return;
+    }
+    if (role === "admin" && !photoDate) { setPhotoError("Vui lòng chọn ngày chụp."); return; }
+    photoUploadActive.current = true; setBusy(true);
+    let uploaded = 0;
+    const capturedAt = role === "admin" ? `${photoDate}T12:00:00+07:00` : new Date().toISOString();
+    try {
+      for (const file of files) {
+        setPhotoProgress(`Đang tải ảnh ${uploaded + 1}/${files.length}…`);
+        const key = `${receipt.id}:${file.name}:${file.size}:${file.lastModified}`;
+        let requestId = photoRequestIds.current.get(key);
+        if (!requestId) { requestId = crypto.randomUUID(); photoRequestIds.current.set(key, requestId); }
+        const form = new FormData();
+        form.set("receiptId", receipt.id); form.set("clientFileId", requestId);
+        form.set("capturedAt", capturedAt); form.set("photo", file);
+        await apiRequest("/inventory-receipt-images.php", { method: "POST", body: form });
+        uploaded++;
+      }
+      setPhotoProgress(`Đã bổ sung ${uploaded} ảnh.`);
+    } catch (error) {
+      setPhotoProgress(uploaded ? `Đã bổ sung ${uploaded}/${files.length} ảnh.` : "");
+      setPhotoError(error instanceof Error ? error.message : "Không thể tải ảnh minh chứng.");
+    } finally {
+      try { setReceipt(await getInventoryReceipt(receipt.id)); }
+      catch { setPhotoError(value => `${value ? value + " " : ""}Không thể làm mới danh sách ảnh. Vui lòng tải lại trang.`); }
+      photoUploadActive.current = false; setBusy(false);
+    }
+  }
   async function choose(product: ProductResult) {
     if (!receipt) return;
     if (!product.attachedToCurrentArea) {
@@ -151,7 +199,12 @@ export default function FieldInventoryReceiptDetailPage() {
   async function finish() {
     if (!confirm(`Hoàn thành ${receipt.items.length} món, tổng ${receipt.totalAmount.toLocaleString("vi-VN")} ₫?`)) return;
     setBusy(true);
-    try { setReceipt(await completeInventoryReceipt(receipt.id)); } catch (error) { alert(error instanceof Error ? error.message : "Không thể hoàn thành."); }
+    try {
+      if (editableMetadata && (supplierId !== (receipt.supplierId || "") || orderCreator !== receipt.orderCreatorName)) {
+        await updateInventoryReceipt(receipt.id, { supplierId: supplierId || null, orderCreatorName: orderCreator });
+      }
+      setReceipt(await completeInventoryReceipt(receipt.id));
+    } catch (error) { alert(error instanceof Error ? error.message : "Không thể hoàn thành."); }
     finally { setBusy(false); }
   }
   function beginEdit(item: InventoryReceiptItem) {
@@ -241,7 +294,7 @@ export default function FieldInventoryReceiptDetailPage() {
   }
 
   return (
-    <div className="warehouse-ui min-h-full bg-slate-50 p-3 sm:p-5 lg:p-6 2xl:p-8">
+    <div className="warehouse-ui receipt-detail min-h-full bg-slate-50 p-3 sm:p-5 lg:p-6 2xl:p-8">
       <div className="mx-auto max-w-[1440px]">
         <Button
           variant="ghost"
@@ -271,7 +324,7 @@ export default function FieldInventoryReceiptDetailPage() {
         )}
 
         <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-4 px-5 py-5 sm:px-6 lg:flex-row lg:items-start lg:justify-between 2xl:px-7">
+          <div className="flex flex-col gap-2 px-3 py-3 sm:gap-4 sm:px-6 sm:py-5 lg:flex-row lg:items-start lg:justify-between 2xl:px-7">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-xl font-bold tracking-[-0.02em] text-slate-950 sm:text-2xl">{receipt.receiptCode}</h1>
@@ -284,7 +337,8 @@ export default function FieldInventoryReceiptDetailPage() {
                 {new Date(receipt.createdAt).toLocaleString("vi-VN")}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <button type="button" aria-expanded={extraActionsOpen} onClick={() => setExtraActionsOpen(value => !value)} className="min-h-11 self-start text-sm font-semibold text-slate-600 sm:hidden">{extraActionsOpen ? "Ẩn thao tác khác" : "Thao tác khác · Khóa / Hủy / Xóa"}</button>
+            <div className={`${extraActionsOpen ? "flex" : "hidden"} sm:flex flex-wrap gap-2`}>
               {editableStatus && !receipt.isLocked && hasPermission(user, "inventory_receipts.lock") && <Button variant="outline" disabled={busy} onClick={lockReceipt}>Khóa minh chứng</Button>}
               {editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.cancel") && (
                 <Button variant="outline" disabled={busy} onClick={cancelReceipt} className="border-rose-200 font-semibold text-rose-700 hover:bg-rose-50">Hủy phiếu</Button>
@@ -295,7 +349,8 @@ export default function FieldInventoryReceiptDetailPage() {
             </div>
           </div>
 
-          <dl className="grid border-t border-slate-200 grid-cols-2 lg:grid-cols-6">
+          <button type="button" aria-expanded={metadataOpen} onClick={() => setMetadataOpen(value => !value)} className="flex min-h-11 w-full items-center justify-between gap-2 border-t px-3 text-left text-sm text-slate-600 sm:hidden"><span>{receipt.area.name} · {receipt.itemCount} món · {receipt.totalAmount.toLocaleString("vi-VN")} ₫</span><span className="shrink-0 font-semibold">{metadataOpen ? "Thu gọn" : "Chi tiết"}</span></button>
+          <dl className={`${metadataOpen ? "grid" : "hidden"} sm:grid border-t border-slate-200 grid-cols-2 lg:grid-cols-6`}>
             <div className="px-3 py-2 sm:px-4">
               <dt className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500"><Store className="h-4 w-4" />Khu vực</dt>
               <dd className="mt-1.5 font-semibold text-slate-900">{receipt.area.name}</dd>
@@ -321,7 +376,7 @@ export default function FieldInventoryReceiptDetailPage() {
               <dd className="mt-1.5 text-lg font-bold tabular-nums text-emerald-800">{receipt.totalAmount.toLocaleString("vi-VN")} ₫</dd>
             </div>
           </dl>
-          <div className="flex items-start gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3 text-sm text-slate-700 sm:px-6 2xl:px-7">
+          <div className={`${metadataOpen ? "flex" : "hidden"} sm:flex items-start gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3 text-sm text-slate-700 sm:px-6 2xl:px-7`}>
             <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
             <span><b className="font-semibold text-slate-900">Địa điểm:</b> {receipt.images[0]?.locationAddress || "Tọa độ đã được lưu trong ảnh"}</span>
           </div>
@@ -329,10 +384,20 @@ export default function FieldInventoryReceiptDetailPage() {
 
         <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(240px,.55fr)_minmax(0,1.45fr)] 2xl:mt-5 2xl:gap-5">
           <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
+            <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 sm:px-6 sm:py-4">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><Camera className="h-5 w-5 text-emerald-700" />Ảnh hóa đơn</h2>
               <span className="text-sm font-semibold text-slate-500">{receipt.imageCount} ảnh</span>
             </div>
+            {canUploadPhotos && <div className="space-y-2 border-b border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-wrap items-end gap-2">
+                {role === "admin" && <label className="min-w-0 flex-1 text-xs font-semibold text-slate-700">Ngày chụp ảnh bổ sung<input type="date" value={photoDate} disabled={busy} onChange={event => setPhotoDate(event.target.value)} className="mt-1 block min-h-11 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"/></label>}
+                <Button variant="outline" disabled={busy || (role === "admin" && !photoDate)} onClick={() => photoInput.current?.click()} className="min-h-11 gap-2 border-emerald-200 text-emerald-800"><Plus className="h-4 w-4"/>Bổ sung ảnh</Button>
+              </div>
+              <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={event => void uploadPhotos(event.target.files)}/>
+              <p className="text-xs text-slate-500">Chọn nhiều ảnh JPEG, PNG, WebP; tối đa 12 MB mỗi ảnh.</p>
+            </div>}
+            {photoProgress && <p role="status" className="px-3 py-2 text-sm text-emerald-800">{photoProgress}</p>}
+            {photoError && <p role="alert" className="px-3 py-2 text-sm text-rose-700">{photoError}</p>}
             {receipt.images.length === 0 ? (
               <div className="grid min-h-52 place-items-center px-5 py-10 text-center">
                 <div><Camera className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-medium text-slate-500">Phiếu chưa có ảnh hóa đơn.</p></div>
@@ -357,8 +422,8 @@ export default function FieldInventoryReceiptDetailPage() {
             )}
           </section>
 
-          <section className="min-w-0 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-6">
+          <section className="receipt-goods-panel min-w-0 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 sm:px-6 sm:py-4">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><PackageOpen className="h-5 w-5 text-emerald-700" />Giải trình hàng hóa</h2>
               <span className="text-sm font-semibold text-slate-500">{receipt.itemCount} dòng hàng</span>
             </div>
@@ -371,18 +436,18 @@ export default function FieldInventoryReceiptDetailPage() {
               </select>
               <p className="mt-1 text-xs text-slate-500">{receipt.items.length ? "Xóa các dòng hàng nếu cần đổi kho nhập." : "Gợi ý hàng hóa lấy từ lịch sử nhập của kho đã chọn."}</p>
             </div>
-            {editableMetadata && <div className="grid gap-3 border-b border-slate-200 px-4 py-3 sm:grid-cols-2 sm:px-5">
+            {editableMetadata && <details open={!receipt.supplierId || !receipt.orderCreatorName} className="border-b border-slate-200 px-3 py-2 sm:px-5"><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-emerald-950">Thông tin nhập hàng{receipt.supplierId && receipt.orderCreatorName ? " · Đã lưu" : " · Cần điền"}</summary><div className="grid gap-3 pb-2 sm:grid-cols-2">
               <label className="text-sm font-semibold text-slate-800">Nhà phân phối<select value={supplierId} disabled={busy} onChange={event => setSupplierId(event.target.value)} className="mt-1 min-h-11 w-full rounded-md border border-slate-200 bg-white px-2"><option value="">Chọn nhà phân phối</option>{suppliers.map(item => <option value={item.id} key={item.id}>{item.supplierName}</option>)}</select></label>
               <Input label="Người nhập hàng" value={orderCreator} disabled={busy} onChange={event => setOrderCreator(event.target.value)} className="h-11" />
               {loadError && <p role="alert" className="text-sm text-rose-700">{loadError}</p>}
-              <Button variant="outline" disabled={busy} onClick={saveMetadata} className="sm:col-span-2">Lưu thông tin nhập hàng</Button>
-            </div>}
+              <Button variant="outline" disabled={busy} onClick={saveMetadata} className="sm:col-span-2">Lưu thông tin</Button>
+            </div></details>}
             <div className="px-4 py-4 sm:px-5">
               {receipt.items.length === 0 ? (
-                <div className="rounded-lg bg-slate-50 px-4 py-8 text-center">
-                  <PackageOpen className="mx-auto h-8 w-8 text-slate-300" />
-                  <p className="mt-3 font-semibold text-slate-700">Chưa có hàng hóa được giải trình</p>
-                  <p className="mt-1 text-sm text-slate-500">Tìm và thêm món từ biểu mẫu bên dưới.</p>
+                <div className="rounded-lg bg-slate-50 px-3 py-3 text-center sm:px-4 sm:py-8">
+                  <PackageOpen className="mx-auto hidden h-8 w-8 text-slate-300 sm:block" />
+                  <p className="mt-3 font-semibold text-slate-700">Chưa thêm hàng hóa</p>
+                  <p className="mt-1 text-sm text-slate-500">Nhập tên hàng ở bên dưới để bắt đầu.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-slate-200 rounded-lg border border-slate-200" role="list">
@@ -411,7 +476,7 @@ export default function FieldInventoryReceiptDetailPage() {
               <div className="border-t border-emerald-100 bg-emerald-50/60 px-4 py-5 sm:px-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <button type="button" onClick={() => { setSuggestionsOpen(true); document.getElementById("receipt-product-search")?.focus(); }} className="flex min-h-11 items-center gap-2 font-bold text-emerald-950"><Plus className="h-4 w-4" />Thêm hàng hóa</button>
-                  <span className="text-xs font-semibold text-emerald-800">Chọn món rồi nhập số lượng và đơn giá</span>
+                  <span className="hidden text-xs font-semibold text-emerald-800 sm:inline">Chọn món rồi nhập số lượng và đơn giá</span>
                 </div>
                 <div className="relative z-10 mt-3">
                   <label htmlFor="receipt-product-search" className="mb-1.5 block text-sm font-semibold text-emerald-950">Tên hoặc mã hàng</label>
@@ -449,22 +514,22 @@ export default function FieldInventoryReceiptDetailPage() {
                     </button>
                   )}
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid grid-cols-2 gap-3">
                   <Input label="Số lượng" value={quantity} onChange={(event) => setQuantity(event.target.value)} type="number" min="0" step="0.001" placeholder="0" className="h-11 border-emerald-200 bg-white" />
                   <Input label="Đơn giá" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} type="number" min="0" step="100" placeholder="0 VND" className="h-11 border-emerald-200 bg-white" />
                 </div>
-                <Input label="Ghi chú" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Thông tin bổ sung (nếu có)" className="mt-3 h-11 border-emerald-200 bg-white" />
+                <details className="mt-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-600">Thêm ghi chú (không bắt buộc)</summary><Input label="Ghi chú" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Thông tin bổ sung" className="h-11 border-emerald-200 bg-white" /></details>
                 <div className="mt-4 flex flex-col gap-3 border-t border-emerald-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="font-semibold text-emerald-950">Tạm tính: <b className="tabular-nums">{((Number(quantity) || 0) * (Number(unitPrice) || 0)).toLocaleString("vi-VN")} ₫</b></p>
-                  <Button disabled={busy || !selected || Number(quantity) <= 0 || !Number.isFinite(Number(quantity)) || unitPrice === "" || Number(unitPrice) < 0 || !Number.isFinite(Number(unitPrice))} onClick={addItem} className="h-11 bg-emerald-700 px-5 font-bold text-white hover:bg-emerald-800">Thêm món</Button>
+                  <Button disabled={busy || !selected || Number(quantity) <= 0 || !Number.isFinite(Number(quantity)) || unitPrice === "" || Number(unitPrice) < 0 || !Number.isFinite(Number(unitPrice))} onClick={addItem} className="h-11 bg-emerald-700 px-5 font-bold text-white hover:bg-emerald-800">Thêm vào phiếu</Button>
                 </div>
               </div>
             )}
 
-            <div className="flex flex-col gap-4 rounded-b-xl border-t border-slate-200 bg-slate-950 px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between">
+            <div className="receipt-complete-bar flex flex-col gap-2 rounded-b-xl border-t border-slate-200 bg-slate-950 px-3 py-3 sm:gap-4 sm:px-5 sm:py-5 text-white sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-slate-300">Tổng số lượng {receipt.totalQuantity}</p>
-                <p className="mt-1 text-2xl font-bold tabular-nums sm:text-3xl">{receipt.totalAmount.toLocaleString("vi-VN")} ₫</p>
+                <p className="mt-1 text-xl font-bold tabular-nums sm:text-3xl">{receipt.totalAmount.toLocaleString("vi-VN")} ₫</p>
               </div>
               {editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.complete") && (
                 <Button disabled={busy || !receipt.items.length || !receipt.images.length} onClick={finish} className="h-12 gap-2 bg-emerald-600 px-6 font-bold text-white hover:bg-emerald-500">

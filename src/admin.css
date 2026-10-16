@@ -409,3 +409,37 @@ button:disabled {
 .warehouse-badge.status-draft {background:#e1efff;color:#0869e6}
 .warehouse-badge.status-cancelled,.warehouse-badge.status-deleted {background:#fee7e7;color:#d72f3d}
 @media(max-width:767px){.warehouse-ui [role=tab]{flex:none;padding:12px}.warehouse-stat{padding:14px}.inventory-ledger{padding:12px}}
+
+/* Compact warehouse workflows on phones. */
+@media (max-width: 639px) {
+  .inventory-workspace-header h1 {font-size:22px;line-height:1.25}
+  .inventory-ledger > header {margin-bottom:12px;gap:10px}
+  .inventory-ledger > header h2 {font-size:22px;margin-top:0}
+  .inventory-ledger > header > div > p:first-child {display:none}
+  .inventory-ledger > header > button {width:100%;min-height:44px}
+  .ledger-overview {flex-direction:column-reverse;gap:10px}
+  .ledger-overview > div:last-child {width:100%}
+  .ledger-overview > div:last-child > div {display:grid;grid-template-columns:minmax(0,1fr) auto}
+  .ledger-overview .warehouse-button {min-height:44px;justify-content:center;padding:8px 10px;font-size:14px}
+  .ledger-stats .warehouse-stat {min-width:0;min-height:68px;padding:10px;gap:8px;border-radius:10px}
+  .ledger-stats .warehouse-stat-icon {width:30px;height:30px;border-radius:9px}
+  .ledger-stats .warehouse-stat-icon svg {width:18px;height:18px}
+  .ledger-stats .warehouse-stat strong {font-size:22px;margin-top:2px}
+  .ledger-stats .warehouse-stat small {display:none}
+  .ledger-stats .warehouse-stat p {font-size:11px;line-height:1.3}
+  .ledger-filters > * {max-width:100%;min-width:0}
+  .ledger-filters > select, .ledger-filters > label {width:100%}
+  .warehouse-ui input:not([type=checkbox]), .warehouse-ui select {font-size:16px;min-height:44px}
+  .receipt-detail h1 {font-size:21px;overflow-wrap:anywhere}
+  .receipt-detail h2 {font-size:16px}
+  .receipt-detail .receipt-complete-bar > div {display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .receipt-detail .receipt-complete-bar p {margin-top:0}
+  .receipt-detail .receipt-complete-bar button {width:100%;min-height:48px}
+  .receipt-detail [role=listitem] {padding:10px;gap:8px}
+}
+
+.warehouse-ui .receipt-goods-panel {overflow:visible}
+@media (max-width: 639px) {
+  .inventory-ledger .ledger-manual-create {display:none}
+  .inventory-ledger .warehouse-button,.inventory-ledger .warehouse-primary {min-height:44px}
+}

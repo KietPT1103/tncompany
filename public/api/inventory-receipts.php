@@ -87,9 +87,9 @@ function receipts_list(): void
         $params[$key] = $value;
     }
     $where[] = 'r.store_id IN (' . implode(',', $allowedSql) . ')';
-    if (!field_inventory_is_admin($user)) {
-        $where[] = 'r.status <> "deleted"';
-    }
+    $deletedOnly = strtolower(trim((string) ($_GET['status'] ?? ''))) === 'deleted';
+    if ($deletedOnly && !field_inventory_is_admin($user)) respond_error('Chỉ admin được xem phiếu đã xóa.', 403);
+    if (!$deletedOnly) $where[] = 'r.status <> "deleted"';
 
     $storeId = receipts_store();
     if ($storeId !== '') {
@@ -199,9 +199,7 @@ function receipts_list(): void
     $counts = array_fill_keys(FIELD_RECEIPT_STATUSES, 0);
     $allowedParams = array_filter($params, static fn(string $key): bool => strpos($key, 'area_') === 0, ARRAY_FILTER_USE_KEY);
     $countWhere = 'r.store_id IN (' . implode(',', $allowedSql) . ')';
-    if (!field_inventory_is_admin($user)) {
-        $countWhere .= ' AND r.status <> "deleted"';
-    }
+    $countWhere .= $deletedOnly ? ' AND r.status = "deleted"' : ' AND r.status <> "deleted"';
     if ($storeId !== '') {
         $countWhere .= ' AND r.store_id = :count_store_id';
         $allowedParams['count_store_id'] = $storeId;
