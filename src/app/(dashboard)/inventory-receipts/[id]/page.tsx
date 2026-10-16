@@ -146,6 +146,19 @@ export default function FieldInventoryReceiptDetailPage() {
   const canUploadPhotos = hasPermission(user, "inventory_receipts.upload_image") && (
     (editableStatus && (receipt.canEdit || role === "admin")) || (role === "admin" && receipt.status === "completed")
   );
+  const canDeletePhotos = editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.upload_image");
+  async function deletePhoto(imageId: string, index: number) {
+    if (busy || !canDeletePhotos || !confirm(`Xóa ảnh ${index + 1} khỏi minh chứng này?`)) return;
+    setBusy(true); setPhotoError(""); setPhotoProgress("");
+    try {
+      await apiRequest(`/inventory-receipt-images.php?id=${encodeURIComponent(imageId)}`, { method: "DELETE" });
+      setLightbox(null);
+      setReceipt(await getInventoryReceipt(receipt.id));
+      setPhotoProgress("Đã xóa ảnh.");
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Không thể xóa ảnh. Vui lòng tải lại danh sách ảnh để kiểm tra.");
+    } finally { setBusy(false); }
+  }
   async function uploadPhotos(fileList: FileList | null) {
     if (!fileList?.length || !canUploadPhotos || photoUploadActive.current || busy) return;
     const files = Array.from(fileList);
@@ -405,10 +418,10 @@ export default function FieldInventoryReceiptDetailPage() {
             ) : (
               <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-4 lg:grid-cols-2">
                 {receipt.images.map((image, index) => (
+                  <div key={image.id} className="min-w-0">
                   <button
-                    key={image.id}
                     onClick={() => setLightbox(index)}
-                    className="group relative overflow-hidden rounded-xl bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+                    className="group relative block w-full overflow-hidden rounded-xl bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                     aria-label={`Xem ảnh hóa đơn ${index + 1}`}
                   >
                     <PrivateApiImage src={image.thumbnailUrl} className="aspect-square max-h-60 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none" />
@@ -417,6 +430,8 @@ export default function FieldInventoryReceiptDetailPage() {
                     </span>
                     <span className="absolute bottom-2 left-2 rounded-md bg-slate-950/75 px-2 py-1 text-xs font-semibold text-white">Ảnh {index + 1}</span>
                   </button>
+                  {canDeletePhotos && <button type="button" disabled={busy} onClick={() => void deletePhoto(image.id, index)} aria-label={`Xóa ảnh ${index + 1}`} className="mt-1 flex min-h-11 w-full items-center justify-center gap-1 rounded-md border border-rose-200 bg-white text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 className="h-4 w-4"/>Xóa ảnh</button>}
+                  </div>
                 ))}
               </div>
             )}
