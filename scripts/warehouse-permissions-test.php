@@ -32,6 +32,13 @@ $pdo->exec('CREATE TABLE inventory_receipts(id TEXT,store_id TEXT,status TEXT)')
 $pdo->exec('CREATE TABLE inventory_receipt_items(receipt_id TEXT,product_code TEXT,product_name TEXT,unit TEXT,quantity REAL,item_type TEXT)');
 $pdo->exec("INSERT INTO inventory_receipts VALUES ('done','cafe','completed'),('draft','cafe','draft'),('other','farm','completed'),('cancel','cafe','cancelled')");
 $pdo->exec("INSERT INTO inventory_receipt_items VALUES ('done','C','Cup','piece',3,'equipment'),('done','A','Coffee','kg',5,'ingredient'),('draft','C','Cup','piece',10,'equipment'),('other','C','Cup','piece',20,'equipment'),('cancel','C','Cup','piece',50,'equipment')");
+$pdo->exec('ALTER TABLE inventory_receipts ADD COLUMN previous_status TEXT');
+$pdo->exec('ALTER TABLE inventory_receipt_items ADD COLUMN unit_cost REAL DEFAULT 10');
+$pdo->exec("INSERT INTO inventory_receipts VALUES ('deleted-done','cafe','deleted','completed')");
+$pdo->exec("INSERT INTO inventory_receipt_items VALUES ('deleted-done','C','Cup','piece',2,'equipment',10)");
 $stmt=$pdo->prepare($match[1]);$stmt->execute(['store'=>'cafe']);$rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
-check(count($rows)===1&&(float)$rows[0]['quantity']===3.0,'Only completed equipment in authorized store enters equipment stock');
+check(count($rows)===1&&(float)$rows[0]['quantity']===5.0 && (float)$rows[0]['value']===50.0,'Only completed equipment in authorized store enters equipment stock');
+check(auth_has_permission(['role'=>'admin','permissions'=>[]],'inventory_receipts.explain'),'Admin has explain without stored grant');
+check(auth_has_permission(['role'=>'admin','permissions'=>[]],'inventory_receipts.unlock'),'Admin has unlock without stored grant');
+check(!auth_has_permission(['role'=>'user','permissions'=>[]],'inventory_receipts.unlock'),'Regular user still needs unlock grant');
 echo "PASS server permissions and completed equipment stock\n";

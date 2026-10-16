@@ -1,3 +1,4 @@
+import EquipmentWarehouseStock from './equipment-stock';
 import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
 import { InventoryPagination } from "@/components/ui/InventoryPagination";
@@ -16,7 +17,8 @@ const qty=(value:number|null)=>value===null?'Chưa kiểm':value.toLocaleString(
 const money=(value:number)=>`${Math.round(value).toLocaleString('vi-VN')} ₫`;
 
 export default function InventoryStockTab(){
- return h(MainWarehouseStock);
+ const [warehouseType,setWarehouseType]=useState<'ingredient'|'equipment'>('ingredient');
+ return h('div',{},h('div',{className:'mx-auto max-w-[1680px] px-4 pt-4 sm:px-6'},h('label',{className:'flex flex-wrap items-center gap-3 text-sm font-bold text-emerald-950'},'Loại kho',h('select',{'aria-label':'Loại kho tồn',value:warehouseType,onChange:(event:any)=>setWarehouseType(event.target.value),className:'min-h-11 w-full rounded-lg border bg-white px-3 sm:w-64'},h('option',{value:'ingredient'},'Kho nguyên liệu'),h('option',{value:'equipment'},'Kho dụng cụ')))),warehouseType==='equipment'?h(EquipmentWarehouseStock):h(MainWarehouseStock));
 }
 
 function MainWarehouseStock(){

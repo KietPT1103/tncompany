@@ -127,7 +127,7 @@ export default function FieldInventoryReceiptDetailPage() {
     );
   }
   const editableStatus = receipt.status === "pending_explanation" || receipt.status === "draft";
-  const editableMetadata = editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.update");
+  const editableMetadata = (editableStatus || (role === "admin" && receipt.status === "completed")) && (role === "admin" || receipt.canEdit) && hasPermission(user, "inventory_receipts.update");
   const editable = editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.explain");
   const canCorrect = editable || (role === "admin" && receipt.status === "completed");
   const listReturnTo = (location.state as { returnTo?: string } | null)?.returnTo || "/admin/inventory-receipts";

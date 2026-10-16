@@ -295,7 +295,8 @@ function receipts_update(array $body): void
     $id = trim((string) ($_GET['id'] ?? $body['id'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $id);
     field_inventory_assert_receipt_editable($user, $receipt);
-    if (!in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
+    $adminCorrection = field_inventory_is_admin($user) && $receipt['status'] === 'completed';
+    if (!$adminCorrection && !in_array($receipt['status'], ['pending_explanation', 'draft'], true)) {
         respond_error('Phiếu đã khóa, không thể chỉnh sửa.', 409);
     }
     $warehouseType = (string) ($body['warehouseType'] ?? $receipt['warehouse_type'] ?? 'ingredient');
@@ -306,7 +307,7 @@ function receipts_update(array $body): void
         if ((int) $check->fetchColumn() > 0) respond_error('Vui lòng xóa các dòng hàng trước khi đổi kho.', 409);
     }
     $status = strtolower(trim((string) ($body['status'] ?? $receipt['status'])));
-    if (!in_array($status, ['pending_explanation', 'draft'], true)) {
+    if (($adminCorrection && $status !== 'completed') || (!$adminCorrection && !in_array($status, ['pending_explanation', 'draft'], true))) {
         respond_error('Chuyển trạng thái không hợp lệ.', 422);
     }
     if ($status === 'pending_explanation') {

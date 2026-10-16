@@ -398,6 +398,9 @@ function auth_require(array $roles = []): array
 
 function auth_has_permission(array $user, string $permission): bool
 {
+    if (strtolower(trim((string) ($user['role'] ?? ''))) === 'admin') {
+        return in_array($permission, auth_all_permissions(), true);
+    }
     $permissions = auth_normalize_permissions($user['permissions'] ?? []);
     return in_array($permission, $permissions, true);
 }

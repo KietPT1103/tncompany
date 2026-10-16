@@ -477,7 +477,7 @@ export function getEffectivePermissions(
     return getDefaultPermissionsForRole(source);
   }
 
-  if (source.role === "admin") {
+  if (String(source.role).trim().toLowerCase() === "admin") {
     return [...ALL_APP_PERMISSIONS];
   }
 
