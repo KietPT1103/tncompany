@@ -43,11 +43,6 @@ function inventory_complete_receipt(string $id, array $user): bool
         $checkLink->execute(['source'=>$evidenceId, 'target'=>$id]);
         if ($checkLink->fetchColumn()) throw new ReceiptValidationException('Minh chứng đã liên kết với phiếu khác.', 409);
     }
-    if (($receipt['entry_source'] ?? 'mobile_photo') !== 'web_manual' || $evidenceId !== '') {
-        $imageCheck = db()->prepare('SELECT COUNT(*) FROM inventory_receipt_images WHERE receipt_id=:id');
-        $imageCheck->execute(['id' => $evidenceId ?: $id]);
-        if ((int) $imageCheck->fetchColumn() < 1) throw new ReceiptValidationException('Cần ít nhất một ảnh minh chứng.');
-    }
     $query = db()->prepare(
         'SELECT i.id,i.ingredient_id,i.item_type,i.quantity,i.unit_cost,p.stock_quantity,p.store_id,p.item_kind,
                 COALESCE(NULLIF(p.base_unit,""),p.unit) base_unit,

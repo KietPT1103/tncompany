@@ -9,7 +9,7 @@ $pdo->exec('CREATE TABLE inventory_receipts(id TEXT,store_id TEXT,status TEXT,en
 $pdo->exec('CREATE TABLE inventory_receipt_images(receipt_id TEXT)');
 $pdo->exec('CREATE TABLE inventory_receipt_items(receipt_id TEXT)');
 $pdo->exec("INSERT INTO inventory_receipts VALUES ('active','cafe','completed','web_manual',NULL),('deleted','cafe','deleted','web_manual',NULL),('other-store','farm','deleted','web_manual',NULL)");
-$pdo->exec("INSERT INTO inventory_receipt_images VALUES ('active'),('deleted'),('other-store')");
+// No images: unified evidence view must still include these receipts.
 class FilterResult extends RuntimeException { public array $ids; public function __construct(array $ids){parent::__construct('captured');$this->ids=$ids;} }
 class FilterStatement {
  public function __construct(private string $sql){}

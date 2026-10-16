@@ -141,10 +141,10 @@ export default function FieldInventoryReceiptDetailPage() {
   const editableMetadata = (editableStatus || (role === "admin" && receipt.status === "completed")) && (role === "admin" || receipt.canEdit) && hasPermission(user, "inventory_receipts.update");
   const editable = editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.explain");
   const canCorrect = editable || (role === "admin" && receipt.status === "completed");
-  const listReturnTo = (location.state as { returnTo?: string } | null)?.returnTo || "/admin/inventory-receipts";
+  const listReturnTo = (location.state as { returnTo?: string } | null)?.returnTo || "/admin/inventory?tab=evidence";
 
   const canUploadPhotos = hasPermission(user, "inventory_receipts.upload_image") && (
-    (editableStatus && (receipt.canEdit || role === "admin")) || (role === "admin" && receipt.status === "completed")
+    (editableStatus && (receipt.canEdit || role === "admin")) || (receipt.status === "completed")
   );
   const canDeletePhotos = editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.upload_image");
   async function deletePhoto(imageId: string, index: number) {
@@ -413,7 +413,7 @@ export default function FieldInventoryReceiptDetailPage() {
             {photoError && <p role="alert" className="px-3 py-2 text-sm text-rose-700">{photoError}</p>}
             {receipt.images.length === 0 ? (
               <div className="grid min-h-52 place-items-center px-5 py-10 text-center">
-                <div><Camera className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-medium text-slate-500">Phiếu chưa có ảnh hóa đơn.</p></div>
+                <div><Camera className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-medium text-slate-500">Chưa có ảnh. Bạn có thể nhập hàng trước và bổ sung ảnh sau.</p></div>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-4 lg:grid-cols-2">
@@ -547,8 +547,8 @@ export default function FieldInventoryReceiptDetailPage() {
                 <p className="mt-1 text-xl font-bold tabular-nums sm:text-3xl">{receipt.totalAmount.toLocaleString("vi-VN")} ₫</p>
               </div>
               {editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.complete") && (
-                <Button disabled={busy || !receipt.items.length || !receipt.images.length} onClick={finish} className="h-12 gap-2 bg-emerald-600 px-6 font-bold text-white hover:bg-emerald-500">
-                  <CheckCircle2 className="h-5 w-5" />Hoàn thành nhập kho
+                <Button disabled={busy || !receipt.items.length } onClick={finish} className="h-12 gap-2 bg-emerald-600 px-6 font-bold text-white hover:bg-emerald-500">
+                  <CheckCircle2 className="h-5 w-5" />Lưu & cộng kho
                 </Button>
               )}
             </div>

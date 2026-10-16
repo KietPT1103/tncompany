@@ -34,36 +34,9 @@ $pdo->exec('UPDATE inventory_receipts SET previous_status="completed",status="de
 receipt('bad','web_manual');line('bad',1);line('bad',-1);rejected('bad');check(stock()===4510.0,'Failed completion rolls back stock');check(field_inventory_load_receipt('bad')['status']==='draft','Failed completion stays draft');check((int)$pdo->query('SELECT COUNT(*) FROM inventory_stock_movements WHERE receipt_id="bad"')->fetchColumn()===0,'Failed completion rolls back movement');
 receipt('special');line('special',3,'f');line('special',4,'','equipment');finish('special');check(stock()===4510.0,'Equipment/fresh do not alter raw stock');check((float)field_inventory_load_receipt('special')['total_quantity']===7.0,'Equipment/fresh included in receipt totals');
 receipt('locked');line('locked',1);$pdo->exec('UPDATE inventory_receipts SET locked_at="2026-10-16" WHERE id="locked"');rejected('locked');
-receipt('missing-photo');line('missing-photo',1);$pdo->exec('DELETE FROM inventory_receipt_images WHERE receipt_id="missing-photo"');rejected('missing-photo');
-check((int)$pdo->query('SELECT COUNT(*) FROM inventory_stock_movements')->fetchColumn()===4,'Exactly one movement per stock-bearing line');
+receipt('missing-photo');line('missing-photo',1);$pdo->exec('DELETE FROM inventory_receipt_images WHERE receipt_id="missing-photo"');finish('missing-photo');check(stock()===5510.0,'Receipt without image posts stock');finish('missing-photo');check(stock()===5510.0,'Receipt without image posts once');
+check((int)$pdo->query('SELECT COUNT(*) FROM inventory_stock_movements')->fetchColumn()===5,'Exactly one movement per stock-bearing line');
 
-// Exercise the manual endpoint itself, not a simulated alternate implementation.
-foreach (['client_request_id TEXT','receipt_code TEXT','receipt_date TEXT','note TEXT','created_by TEXT','shift_id TEXT','shift_type TEXT'] as $column) $pdo->exec('ALTER TABLE inventory_receipts ADD COLUMN '.$column);
-$pdo->exec('CREATE UNIQUE INDEX uniq_client ON inventory_receipts(store_id,client_request_id)');
-foreach (['ingredient_code TEXT','ingredient_name TEXT','purchase_unit TEXT','is_active INTEGER'] as $column) $pdo->exec('ALTER TABLE ingredients ADD COLUMN '.$column);
-$pdo->exec('UPDATE ingredients SET ingredient_code="A",ingredient_name="Coffee",purchase_unit="bag",is_active=1 WHERE id="a"');
-foreach (['product_id TEXT','product_code TEXT','product_name TEXT','unit TEXT','note TEXT'] as $column) $pdo->exec('ALTER TABLE inventory_receipt_items ADD COLUMN '.$column);
-class CompletionResponse extends RuntimeException { public array $data; public function __construct(array $data) { parent::__construct('response');$this->data=$data; } }
-function auth_require(): array { global $user;return $user; }
-function field_inventory_has_permission(array $user,string $permission): bool { return true; }
-function field_inventory_require_store(array $user,string $store): string { return $store; }
-function field_inventory_require_receipt(array $user,string $id): array { return field_inventory_load_receipt($id); }
-function field_inventory_load_images(string $id): array { $q=db()->prepare('SELECT * FROM inventory_receipt_images WHERE receipt_id=:id');$q->execute(['id'=>$id]);return $q->fetchAll(); }
-function field_inventory_load_items(string $id): array { $q=db()->prepare('SELECT * FROM inventory_receipt_items WHERE receipt_id=:id');$q->execute(['id'=>$id]);return $q->fetchAll(); }
-function field_inventory_receipt_payload(array $receipt,array $items,array $images,array $user): array { return $receipt+['items'=>$items,'images'=>$images]; }
-function read_json_body(): array { return ['storeId'=>'cafe','receiptDate'=>'2026-10-16','enteredBy'=>'Employee','clientRequestId'=>'retry-manual','items'=>[['ingredientCode'=>'A','quantity'=>1,'unitCost'=>20]]]; }
-function products_inventory_generate_receipt_code(string $store): string { return 'NK-test'; }
-function respond_error(string $message,int $code): never { throw new RuntimeException($message,$code); }
-function respond_ok(array $data,int $code=200): never { throw new CompletionResponse($data); }
-$_SERVER['REQUEST_METHOD']='POST';
-$source=file_get_contents(__DIR__.'/../public/api/inventory-manual-receipts.php');
-$start=strpos($source,"if ((\$_SERVER[");
-try { eval(substr($source,$start)); throw new RuntimeException('Missing endpoint response'); }
-catch(CompletionResponse $response) { $createdId=$response->data['item']['id']; }
-check(stock()===5510.0,'Manual endpoint uses shared stock conversion');
-check(field_inventory_load_receipt($createdId)['status']==='completed','Manual endpoint completes through common engine');
-try { manual_existing_request('cafe','retry-manual',$user); throw new RuntimeException('Missing retry response'); }
-catch(CompletionResponse $response) { check($response->data['idempotent']===true && $response->data['item']['id']===$createdId,'Manual retry returns same receipt'); }
-check(stock()===5510.0,'Manual endpoint retry cannot add stock again');
-check((int)$pdo->query('SELECT COUNT(*) FROM inventory_stock_movements')->fetchColumn()===5,'Manual endpoint writes one shared movement');
-echo "PASS shared completion and manual endpoint: conversion, idempotence/retry, linked evidence, soft deletion, rollback, fresh/equipment, locks, photo validation\n";
+$manual=file_get_contents(__DIR__.'/../public/api/inventory-manual-receipts.php');
+check(str_contains($manual, "respond_error('Vui lòng tạo phiếu nhập tại Kho minh chứng.', 410)"),'Legacy manual creation is disabled');
+echo "PASS unified receipt entry: photo optional, stock posted once, conversion, linked evidence, rollback, locks, equipment/fresh, legacy endpoint disabled\n";

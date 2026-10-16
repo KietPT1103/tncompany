@@ -70,7 +70,7 @@ function receipts_list(): void
     }
     $where = [];
     $view = trim((string) ($_GET['view'] ?? ''));
-    if ($view === 'evidence') $where[] = 'EXISTS (SELECT 1 FROM inventory_receipt_images ev WHERE ev.receipt_id=r.id)';
+    // Unified receipts include drafts without photos; images may be attached later.
     if ($view === 'ledger') $where[] = 'NOT EXISTS (SELECT 1 FROM inventory_receipts linked_target WHERE linked_target.evidence_receipt_id=r.id AND linked_target.status<>"deleted")';
     if ($view === 'ledger') $where[] = '(r.entry_source="web_manual" OR EXISTS (SELECT 1 FROM inventory_receipt_items li WHERE li.receipt_id=r.id))';
     $params = [];
@@ -137,6 +137,7 @@ function receipts_list(): void
         $params['product_name'] = $needle;
     }
     $evidenceStatus = trim((string) ($_GET['evidenceStatus'] ?? ''));
+    if ($view === 'evidence' && $evidenceStatus === 'missing_image') $where[] = 'NOT EXISTS (SELECT 1 FROM inventory_receipt_images missing_img WHERE missing_img.receipt_id=r.id OR missing_img.receipt_id=r.evidence_receipt_id)';
     $linkedSql = '(EXISTS (SELECT 1 FROM inventory_receipts evidence_target WHERE evidence_target.evidence_receipt_id=r.id AND evidence_target.status<>"deleted") OR (r.status="completed" AND EXISTS (SELECT 1 FROM inventory_receipt_items evidence_item WHERE evidence_item.receipt_id=r.id)))';
     if ($view === 'evidence' && $evidenceStatus === 'linked') $where[] = $linkedSql;
     if ($view === 'evidence' && in_array($evidenceStatus, ['unlinked','review'], true)) $where[] = 'NOT ' . $linkedSql;
@@ -307,13 +308,6 @@ function receipts_update(array $body): void
     $status = strtolower(trim((string) ($body['status'] ?? $receipt['status'])));
     if (($adminCorrection && $status !== 'completed') || (!$adminCorrection && !in_array($status, ['pending_explanation', 'draft'], true))) {
         respond_error('Chuyển trạng thái không hợp lệ.', 422);
-    }
-    if ($status === 'pending_explanation') {
-        $check = db()->prepare('SELECT COUNT(*) FROM inventory_receipt_images WHERE receipt_id=:id');
-        $check->execute(['id' => $id]);
-        if ((int) $check->fetchColumn() < 1) {
-            respond_error('Phiếu chưa giải trình phải có ít nhất một ảnh watermark.', 422);
-        }
     }
     $supplierId = array_key_exists('supplierId', $body)
         ? (trim((string) $body['supplierId']) ?: null)

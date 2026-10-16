@@ -29,7 +29,7 @@ export type InventoryReceipt = {
 export type ReceiptCounts = Record<ReceiptStatus | "all", number>;
 export type ReceiptFilters = {
   warehouseType?: WarehouseType;
-  evidenceStatus?: "linked" | "unlinked" | "review"; view?: "ledger" | "evidence"; status?: ReceiptStatus; areaId?: string; employeeId?: string; dateFrom?: string; dateTo?: string;
+  evidenceStatus?: "linked" | "unlinked" | "review" | "missing_image"; view?: "ledger" | "evidence"; status?: ReceiptStatus; areaId?: string; employeeId?: string; dateFrom?: string; dateTo?: string;
   keyword?: string; productKeyword?: string; page?: number; limit?: number; sort?: "newest" | "oldest" | "amount_desc";
 };
 export type Area = { id: string; code: string; name: string };

@@ -37,6 +37,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 }
 
 $user = auth_require();
+respond_error('Vui lòng tạo phiếu nhập tại Kho minh chứng.', 410);
 if (!field_inventory_has_permission($user, 'inventory_receipts.create')
     || !field_inventory_has_permission($user, 'inventory_receipts.complete')) {
     respond_error('Bạn không có quyền nhập và hoàn thành phiếu nhập kho.', 403);

@@ -183,7 +183,7 @@ export function App() {
           path="/admin/product/receipts"
           element={
             <InventoryAdminPage permission="inventory_receipts.view">
-              <InventoryReceiptsPage />
+              <Navigate to="/admin/inventory?tab=evidence" replace />
             </InventoryAdminPage>
           }
         />
@@ -191,12 +191,13 @@ export function App() {
           path="/admin/inventory-receipts"
           element={
             <InventoryAdminPage permission="inventory_receipts.view">
-              <FieldInventoryReceiptsPage />
+              <Navigate to="/admin/inventory?tab=evidence" replace />
             </InventoryAdminPage>
           }
         />
         <Route
-          path="/admin/inventory-receipts/:id"
+          path="/admin/inventory-receipts/manual" element={<Navigate to="/admin/inventory?tab=evidence" replace />} />
+        <Route path="/admin/inventory-receipts/:id"
           element={
             <InventoryAdminPage permission="inventory_receipts.view">
               <FieldInventoryReceiptDetailPage />
@@ -243,9 +244,9 @@ export function App() {
               <Route path="product/suppliers" element={<SuppliersPage />} />
               <Route path="product/checks" element={<InventoryChecksPage />} />
               <Route path="product/issues" element={<InventoryIssuesPage />} />
-              <Route path="product/receipts" element={<InventoryReceiptsPage />} />
-              <Route path="inventory-receipts" element={<FieldInventoryReceiptsPage />} />
-              <Route path="inventory-receipts/manual" element={<ManualInventoryReceiptPage />} />
+              <Route path="product/receipts" element={<Navigate to="/admin/inventory?tab=evidence" replace />} />
+              <Route path="inventory-receipts" element={<Navigate to="/admin/inventory?tab=evidence" replace />} />
+              <Route path="inventory-receipts/manual" element={<Navigate to="/admin/inventory?tab=evidence" replace />} />
               <Route path="inventory-receipts/:id" element={<FieldInventoryReceiptDetailPage />} />
               <Route path="categories" element={<CategoryManagementPage />} />
               <Route path="accounts" element={<AccountManagementPage />} />
