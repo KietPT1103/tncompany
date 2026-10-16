@@ -447,7 +447,7 @@ export default function FieldInventoryReceiptDetailPage() {
               <label htmlFor="receipt-warehouse" className="mb-1 block text-sm font-bold text-slate-800">Kho nhập hàng</label>
               <select id="receipt-warehouse" value={warehouseType} disabled={!editableMetadata || busy || receipt.items.length > 0} onChange={event => void changeWarehouse(event.target.value as WarehouseType)} className="min-h-11 w-full rounded-md border border-emerald-200 bg-white px-3 text-sm sm:max-w-xs">
                 <option value="ingredient">Kho nguyên liệu</option>
-                <option value="equipment">Kho dụng cụ</option>
+                <option value="equipment">Kho hàng</option>
               </select>
               <p className="mt-1 text-xs text-slate-500">{receipt.items.length ? "Xóa các dòng hàng nếu cần đổi kho nhập." : "Gợi ý hàng hóa lấy từ lịch sử nhập của kho đã chọn."}</p>
             </div>
