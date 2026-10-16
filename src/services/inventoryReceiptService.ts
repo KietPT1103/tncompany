@@ -100,6 +100,7 @@ export const deleteInventoryReceipt = (id: string) =>
 
 export async function createManualInventoryReceipt(payload: {
   storeId: string;
+  clientRequestId?: string;
   receiptDate: string;
   enteredBy: string;
   evidenceReceiptId?: string;

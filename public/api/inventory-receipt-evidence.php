@@ -19,7 +19,7 @@ $target=$rows[$id];$source=$rows[$sourceId];
 if (in_array($target['status'],['deleted','cancelled'],true)) throw new RuntimeException('Phiếu không còn được sửa.');
 if ($target['store_id']!==$source['store_id'] || in_array($source['status'],['completed','deleted','cancelled'],true) || field_inventory_load_images($sourceId)===[]) throw new RuntimeException('Minh chứng không khả dụng.');
 if (!empty($target['evidence_receipt_id']) && $target['evidence_receipt_id']!==$sourceId) throw new RuntimeException('Phiếu đã liên kết minh chứng khác.');
-$check=$pdo->prepare('SELECT id FROM inventory_receipts WHERE evidence_receipt_id=:source AND id<>:target AND status<>"deleted" LIMIT 1');
+$check=$pdo->prepare('SELECT id FROM inventory_receipts WHERE evidence_receipt_id=:source AND id<>:target AND (status<>"deleted" OR previous_status="completed") LIMIT 1');
 $check->execute(['source'=>$sourceId,'target'=>$id]);
 if($check->fetchColumn()) throw new RuntimeException('Minh chứng đã liên kết với phiếu khác.');
 $statement=$pdo->prepare('UPDATE inventory_receipts SET evidence_receipt_id=:source,updated_at=NOW() WHERE id=:target');

@@ -7,9 +7,13 @@ require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
+require_once __DIR__ . '/_lib/inventory_receipt_completion.php';
 
 products_inventory_ensure_schema();
 ingredients_ensure_schema();
+auth_ensure_column('inventory_receipt_items', 'item_type', "ENUM('ingredient','equipment') NOT NULL DEFAULT 'ingredient' AFTER ingredient_id");
+auth_ensure_column('inventory_receipts', 'previous_status', 'VARCHAR(32) NULL');
+
 auth_ensure_column('inventory_receipts', 'entry_source', "ENUM('mobile_photo','web_manual') NOT NULL DEFAULT 'mobile_photo' AFTER receipt_date");
 auth_ensure_column('inventory_receipts', 'order_creator_name', 'VARCHAR(255) NULL AFTER supplier_id');
 auth_ensure_column('inventory_receipts', 'total_quantity', 'DECIMAL(15,3) NOT NULL DEFAULT 0 AFTER note');
@@ -40,6 +44,22 @@ if (!field_inventory_has_permission($user, 'inventory_receipts.create')
 
 $body = read_json_body();
 $storeId = field_inventory_require_store($user, trim((string) ($body['storeId'] ?? '')));
+$clientRequestId = trim((string) ($body['clientRequestId'] ?? '')) ?: null;
+if ($clientRequestId !== null && strlen($clientRequestId) > 64) respond_error('Mã yêu cầu không hợp lệ.', 422);
+function manual_existing_request(string $store, ?string $requestId, array $user): void
+{
+    if ($requestId === null) return;
+    $find = db()->prepare('SELECT id FROM inventory_receipts WHERE store_id=:store AND client_request_id=:client LIMIT 1');
+    $find->execute(['store'=>$store, 'client'=>$requestId]);
+    $id = $find->fetchColumn();
+    if (!$id) return;
+    $receipt = field_inventory_require_receipt($user, (string) $id);
+    if ($receipt['status'] !== 'completed') respond_error('Yêu cầu đã tồn tại nhưng chưa hoàn thành. Vui lòng mở phiếu để kiểm tra.', 409);
+    $images = field_inventory_load_images((string) $id);
+    if (!empty($receipt['evidence_receipt_id'])) $images = array_merge($images, field_inventory_load_images((string) $receipt['evidence_receipt_id']));
+    respond_ok(['item'=>field_inventory_receipt_payload($receipt, field_inventory_load_items((string) $id), $images, $user), 'idempotent'=>true]);
+}
+manual_existing_request($storeId, $clientRequestId, $user);
 $receiptDate = trim((string) ($body['receiptDate'] ?? ''));
 $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $receiptDate);
 if (!$parsedDate || $parsedDate->format('Y-m-d') !== $receiptDate) {
@@ -102,7 +122,6 @@ ksort($items, SORT_NATURAL | SORT_FLAG_CASE);
 
 $receiptId = uuidv4();
 $actorId = (string) $user['id'];
-$actorName = trim((string) ($user['displayName'] ?? $user['username'] ?? $user['email'] ?? $actorId));
 $totalQuantity = round(array_sum(array_column($items, 'quantity')), 3);
 $totalAmount = round(array_sum(array_column($items, 'lineTotal')), 2);
 $shiftId = trim((string) ($body['shiftId'] ?? '')) ?: null;
@@ -122,11 +141,11 @@ $pdo->beginTransaction();
 try {
     $insertReceipt = $pdo->prepare(
         'INSERT INTO inventory_receipts (
-            id,store_id,supplier_id,order_creator_name,receipt_code,receipt_date,entry_source,status,note,
+            id,store_id,supplier_id,order_creator_name,receipt_code,client_request_id,receipt_date,entry_source,status,note,
             total_quantity,total_amount,completed_at,completed_by,completed_by_user_id,created_by,shift_id,shift_type
          ) VALUES (
-            :id,:store_id,:supplier_id,:entered_by,:code,:receipt_date,"web_manual","completed",:note,
-            :total_quantity,:total_amount,NOW(),:completed_by,:completed_actor_id,:created_actor_id,:shift_id,:shift_type
+            :id,:store_id,:supplier_id,:entered_by,:code,:client_request_id,:receipt_date,"web_manual","draft",:note,
+            :total_quantity,:total_amount,NULL,NULL,NULL,:created_actor_id,:shift_id,:shift_type
          )'
     );
     $insertReceipt->execute([
@@ -136,11 +155,10 @@ try {
         'entered_by' => $enteredBy,
         'code' => products_inventory_generate_receipt_code($storeId),
         'receipt_date' => $receiptDate,
+        'client_request_id' => $clientRequestId,
         'note' => trim((string) ($body['note'] ?? '')) ?: null,
         'total_quantity' => $totalQuantity,
         'total_amount' => $totalAmount,
-        'completed_by' => $actorName,
-        'completed_actor_id' => $actorId,
         'created_actor_id' => $actorId,
         'shift_id' => $shiftId,
         'shift_type' => $shiftType,
@@ -154,17 +172,13 @@ try {
         if (!$source || in_array($source['status'], ['completed','deleted','cancelled'], true) || field_inventory_load_images($evidenceId) === []) {
             throw new InvalidArgumentException('Minh chứng không hợp lệ hoặc không thuộc cửa hàng này.');
         }
-        $existingLink = $pdo->prepare('SELECT id FROM inventory_receipts WHERE evidence_receipt_id=:id AND status<>"deleted" LIMIT 1');
+        $existingLink = $pdo->prepare('SELECT id FROM inventory_receipts WHERE evidence_receipt_id=:id AND (status<>"deleted" OR previous_status="completed") LIMIT 1');
         $existingLink->execute(['id' => $evidenceId]);
         if ($existingLink->fetchColumn()) throw new InvalidArgumentException('Minh chứng đã được liên kết với phiếu nhập khác.');
         $link = $pdo->prepare('UPDATE inventory_receipts SET evidence_receipt_id=:evidence WHERE id=:id');
         $link->execute(['evidence' => $evidenceId, 'id' => $receiptId]);
     }
 
-    $lockIngredient = $pdo->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');
-    $updateIngredient = $pdo->prepare(
-        'UPDATE ingredients SET stock_quantity=:stock,cost=:cost,updated_at=NOW() WHERE id=:id'
-    );
     $insertItem = $pdo->prepare(
         'INSERT INTO inventory_receipt_items (
             receipt_id,product_id,ingredient_id,product_code,product_name,unit,quantity,unit_cost,line_total,note
@@ -172,22 +186,8 @@ try {
             :receipt_id,NULL,:ingredient_id,:code,:name,:unit,:quantity,:unit_cost,:line_total,:note
          )'
     );
-    $insertMovement = $pdo->prepare(
-        'INSERT INTO inventory_stock_movements (
-            id,receipt_id,receipt_item_id,store_id,product_id,ingredient_id,quantity,stock_before,stock_after,created_by
-         ) VALUES (
-            :id,:receipt_id,:receipt_item_id,:store_id,NULL,:ingredient_id,:quantity,:stock_before,:stock_after,:created_by
-         )'
-    );
-
     foreach ($items as $line) {
         $ingredient = $line['ingredient'];
-        $lockIngredient->execute(['id' => $ingredient['id']]);
-        $stockBefore = (float) $lockIngredient->fetchColumn();
-        $lockIngredient->closeCursor();
-        $conversionFactor = max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1));
-        $stockAfter = round($stockBefore + $line['baseQuantity'], 3);
-
         $insertItem->execute([
             'receipt_id' => $receiptId,
             'ingredient_id' => $ingredient['id'],
@@ -199,33 +199,19 @@ try {
             'line_total' => $line['lineTotal'],
             'note' => $line['note'] ?: null,
         ]);
-        $receiptItemId = (int) $pdo->lastInsertId();
-        if (($ingredient['item_kind'] ?? 'ingredient') === 'fresh') {
-            continue;
-        }
-        $updateIngredient->execute([
-            'id' => $ingredient['id'],
-            'stock' => $stockAfter,
-            'cost' => round($line['unitCost'] / $conversionFactor, 6),
-        ]);
-        $insertMovement->execute([
-            'id' => uuidv4(),
-            'receipt_id' => $receiptId,
-            'receipt_item_id' => $receiptItemId,
-            'store_id' => $storeId,
-            'ingredient_id' => $ingredient['id'],
-            'quantity' => $line['baseQuantity'],
-            'stock_before' => $stockBefore,
-            'stock_after' => $stockAfter,
-            'created_by' => $actorId,
-        ]);
     }
+
+    inventory_complete_receipt($receiptId, $user);
 
     $pdo->commit();
 } catch (Throwable $exception) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    if ($exception instanceof PDOException && (int) ($exception->errorInfo[1] ?? 0) === 1062) {
+        manual_existing_request($storeId, $clientRequestId, $user);
+    }
+    if ($exception instanceof ReceiptValidationException) respond_error($exception->getMessage(), $exception->status);
     if ($exception instanceof InvalidArgumentException) respond_error($exception->getMessage(), 422);
     throw $exception;
 }

@@ -31,7 +31,7 @@ export default function InventoryWorkspacePage(){
  const [active,setActive]=useState<TabId>(tabs.some(tab=>tab.id===requested)?requested as TabId:'receipts');
  const visibleTabs=useMemo(()=>tabs.filter(tab=>{
   if(tab.id==='evidence')return hasPermission(user,'inventory_receipts.view');
-  if(tab.id==='equipment')return hasPermission(user,'inventory_receipts.view');
+  if(tab.id==='equipment')return false;
   if(tab.id==='receipts')return hasPermission(user,'inventory_receipts.view');
   if(tab.id==='issues')return hasPermission(user,'inventory_issues.access');
   if(tab.id==='preparation-receipts')return !isConstructionWarehouse&&hasPermission(user,'preparation_receipts.access');
@@ -42,6 +42,7 @@ export default function InventoryWorkspacePage(){
   return false;
  }),[isConstructionWarehouse,user]);
  const safeActive=visibleTabs.some(tab=>tab.id===active)?active:visibleTabs[0]?.id;
+ useEffect(()=>{if(requested==='equipment'&&safeActive){const next=new URLSearchParams(params);next.set('tab',safeActive);setParams(next,{replace:true});}},[requested,safeActive,params,setParams]);
  useEffect(()=>{if(safeActive&&safeActive!==active)setActive(safeActive);},[active,safeActive]);
  function select(id:TabId){setActive(id);const next=new URLSearchParams(params);next.set('tab',id);setParams(next,{replace:true});}
  useEffect(()=>{const id=params.get('tab');if(visibleTabs.some(tab=>tab.id===id))setActive(id as TabId);},[params,visibleTabs]);

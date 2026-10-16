@@ -35,7 +35,13 @@ runCreation(['receiptDate'=>'2026-10-07','capturedAt'=>'2026-10-07T12:00:00+07:0
 if ($saved['receipt_date']!=='2026-10-07' || strpos($sql, ':receipt_date')===false || strpos($sql, 'CURDATE()')!==false) throw new RuntimeException('Selected date not persisted');
 foreach (['2026-02-30','2026-13-01','','07/10/2026','2026-1-1'] as $invalid) runCreation(['receiptDate'=>$invalid],422);
 runCreation(['receiptDate'=>'2024-02-29'],201);
+runCreation(['capturedDate'=>'2026-10-07'],201);
+if ($saved['captured_at']!=='2026-10-07 12:00:00') throw new RuntimeException('Selected capture date not persisted');
+$today=(new DateTimeImmutable('now',new DateTimeZone('Asia/Ho_Chi_Minh')))->format('Y-m-d');
+if ($saved['receipt_date']!==$today) throw new RuntimeException('Capture date must not change warehouse entry date');
+foreach (['2026-02-30','2026-13-01','','07/10/2026'] as $invalid) runCreation(['capturedDate'=>$invalid],422);
 $admin=false;
+runCreation(['capturedDate'=>'2026-10-07'],403);
 runCreation(['receiptDate'=>'2026-10-07'],403);
 runCreation([],201);
 $today=(new DateTimeImmutable('now',new DateTimeZone('Asia/Ho_Chi_Minh')))->format('Y-m-d');

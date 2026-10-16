@@ -1,5 +1,5 @@
 import { SelectBox } from "@/components/ui/SelectBox";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, PackagePlus, Plus, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -32,6 +32,8 @@ const getPurchaseUnitCost = (ingredient?: Ingredient) => ingredient?.cost == nul
 
 export default function ManualInventoryReceiptPage() {
   const navigate = useNavigate();
+  const [clientRequestId] = useState(localKey);
+  const submitInFlight = useRef(false);
   const { storeId } = useStore();
   const [params] = useSearchParams();
   const [evidenceId, setEvidenceId] = useState(params.get("evidence") || "");
@@ -86,6 +88,7 @@ export default function ManualInventoryReceiptPage() {
   }
 
   async function submit() {
+    if (submitInFlight.current) return;
     const normalized = items
       .filter((item) => item.ingredientCode || item.quantity.trim() || item.unitCost.trim())
       .map((item) => ({
@@ -107,11 +110,13 @@ export default function ManualInventoryReceiptPage() {
       return;
     }
     if (!window.confirm(`Hoàn thành nhập ${formatQuantity(totals.quantity)} đơn vị, tổng tiền ${formatMoney(totals.amount)} ₫ và cộng tồn kho ngay?`)) return;
+    submitInFlight.current = true;
     setSaving(true);
     setError("");
     try {
       const receipt = await createManualInventoryReceipt({
         storeId,
+        clientRequestId,
         receiptDate,
         enteredBy: enteredBy.trim(),
         evidenceReceiptId: evidenceId || undefined,
@@ -125,6 +130,7 @@ export default function ManualInventoryReceiptPage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể hoàn thành nhập kho.");
     } finally {
+      submitInFlight.current = false;
       setSaving(false);
     }
   }
