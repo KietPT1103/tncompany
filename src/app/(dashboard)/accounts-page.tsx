@@ -46,6 +46,7 @@ import {
 } from "@/features/accounts/account-management-ui";
 
 const INVENTORY_ACCOUNT_PERMISSIONS = new Set<AppPermission>([
+  "stores.switch",
   "products.selling.view",
   "products.components.update",
   "inventory_checks.access",

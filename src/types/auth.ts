@@ -1,5 +1,6 @@
 export type UserRole = "admin" | "manager" | "user" | "server" | "bartender";
 export type AppPermission =
+  | "stores.switch"
   | "dashboard.access"
   | "bills.access"
   | "bills.cancelled.view"
@@ -62,6 +63,7 @@ export type AppUser = {
   displayName?: string | null;
   role: UserRole;
   storeId?: string | null;
+  storeIds?: string[];
   permissions?: AppPermission[];
 };
 

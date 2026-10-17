@@ -550,7 +550,8 @@ export function AccountEditorModal({
   onSave,
 }: AccountEditorProps) {
   const requiresAreas = form.role === "bartender" || form.permissions.some((permission) =>
-    permission.startsWith("inventory_")
+    permission === "stores.switch"
+    || permission.startsWith("inventory_")
     || permission === "products.selling.view"
     || permission === "products.components.update"
     || permission === "ingredients.access"
@@ -606,7 +607,7 @@ export function AccountEditorModal({
 
         {requiresAreas ? (
           <fieldset className="rounded-sm border border-emerald-200 bg-emerald-50/60 p-4">
-            <div className="flex items-start justify-between gap-3"><div><legend className="text-sm font-semibold text-emerald-950">Khu vực được truy cập</legend><p className="mt-1 text-xs text-emerald-800">Chọn ít nhất một khu vực cho tài khoản có quyền kho.</p></div><button type="button" className="text-xs font-semibold text-emerald-700" onClick={() => onChange({ storeIds: INVENTORY_AREA_OPTIONS.map((option) => option.value) })}>Chọn tất cả</button></div>
+            <div className="flex items-start justify-between gap-3"><div><legend className="text-sm font-semibold text-emerald-950">Khu vực được truy cập</legend><p className="mt-1 text-xs text-emerald-800">Chọn ít nhất một khu vực cho tài khoản có quyền kho hoặc đổi quầy.</p></div><button type="button" className="text-xs font-semibold text-emerald-700" onClick={() => onChange({ storeIds: INVENTORY_AREA_OPTIONS.map((option) => option.value) })}>Chọn tất cả</button></div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{INVENTORY_AREA_OPTIONS.map((option) => { const checked = form.storeIds.includes(option.value); return <label key={option.value} className={`flex cursor-pointer items-center gap-2 border px-3 py-2.5 text-sm ${checked ? "border-emerald-400 bg-white text-emerald-900" : "border-slate-200 bg-white/70 text-slate-600"}`}><input type="checkbox" checked={checked} onChange={() => onChange({ storeIds: checked ? form.storeIds.filter((id) => id !== option.value) : [...form.storeIds, option.value] })} className="h-4 w-4 accent-emerald-700" />{option.label}</label>; })}</div>
           </fieldset>
         ) : null}

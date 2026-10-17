@@ -13,6 +13,14 @@ type PermissionDefinition = {
 
 export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   {
+    id: "stores.switch",
+    label: "Thay đổi quầy trực tiếp",
+    description: "Đổi quầy trên web trong phạm vi khu vực được cấp, bất kể vai trò.",
+    category: "Hệ thống",
+    path: "/admin",
+    routePermission: false,
+  },
+  {
     id: "dashboard.access",
     label: "Tổng quan và sổ quỹ",
     description: "Xem tổng quan vận hành và nhập báo cáo sổ quỹ. Chỉ dành cho quản trị viên.",
@@ -638,4 +646,18 @@ export function getDefaultRouteForUser(user: AppUser | null | undefined) {
     return "/inventory";
   }
   return "/login";
+}
+
+// Preserve existing admin/manager switching; other roles require an explicit grant.
+export function canSwitchStore(user: AppUser | null | undefined): boolean {
+  if (!user) return false;
+  return user.role === "admin" || user.role === "manager" || hasPermission(user, "stores.switch");
+}
+
+// null means unrestricted for the existing admin/manager selector.
+export function getSelectableStoreIds(user: AppUser | null | undefined): string[] | null {
+  if (user?.role === "admin" || user?.role === "manager") return null;
+  const validIds = ["cafe", "restaurant", "bakery", "farm", "warehouse"];
+  const assignedIds = user?.storeIds?.length ? user.storeIds : user?.storeId ? [user.storeId] : [];
+  return [...new Set(assignedIds.filter((id) => validIds.includes(id)))];
 }

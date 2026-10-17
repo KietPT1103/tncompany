@@ -58,7 +58,6 @@ export default function FieldInventoryReceiptDetailPage() {
   const [editQuantity, setEditQuantity] = useState("");
   const [editUnitPrice, setEditUnitPrice] = useState("");
   const [editNote, setEditNote] = useState("");
-  const [newCode, setNewCode] = useState("");
   const [newUnit, setNewUnit] = useState("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState("");
@@ -313,16 +312,16 @@ export default function FieldInventoryReceiptDetailPage() {
       const updated = await updateInventoryReceipt(receipt.id, { warehouseType: type });
       searchSequence.current++;
       setReceipt(updated); setQuery(""); setSelected(null); setResults([]); setSuggestionsOpen(false); setShowCreate(false);
-      setNewCode(""); setNewUnit(""); setSearchError("");
+      setNewUnit(""); setSearchError("");
     } catch (error) { alert(error instanceof Error ? error.message : "Không thể đổi kho."); }
     finally { setBusy(false); }
   }
   async function createNew() {
     setBusy(true);
     try {
-      const product: ProductResult = warehouseType === "equipment"
-        ? { id: crypto.randomUUID(), productCode: newCode.trim(), productName: query.trim(), unit: newUnit.trim(), areaId: receipt.areaId, areaName: receipt.area.name, attachedToCurrentArea: true, similar: false }
-        : await createReceiptProduct({ areaId: receipt.areaId, ingredientCode: newCode, ingredientName: query.trim(), unit: newUnit });
+      const product = await createReceiptProduct({
+        areaId: receipt.areaId, ingredientName: query.trim(), unit: newUnit, warehouseType,
+      });
       setSelected(product); setResults([]); setShowCreate(false);
     } catch (error) { alert(error instanceof Error ? error.message : "Không thể tạo sản phẩm."); }
     finally { setBusy(false); }
@@ -601,11 +600,10 @@ export default function FieldInventoryReceiptDetailPage() {
           <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-[0_18px_48px_rgba(15,23,42,0.25)]">
             <h2 id="create-product-title" className="text-2xl font-bold text-slate-950">Tạo hàng hóa mới</h2>
             <p className="mt-2 text-slate-600">Tên hàng: <b>{query}</b></p>
-            <Input label="Mã sản phẩm" value={newCode} onChange={(event) => setNewCode(event.target.value)} placeholder="Nhập mã sản phẩm" className="mt-4 h-11" />
-            <Input label="Đơn vị tính" value={newUnit} onChange={(event) => setNewUnit(event.target.value)} placeholder="Ví dụ: kg, chai, hộp" className="mt-3 h-11" />
+            <Input label="Đơn vị tính (không bắt buộc)" value={newUnit} onChange={(event) => setNewUnit(event.target.value)} placeholder="Mặc định: cái" className="mt-3 h-11" />
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setShowCreate(false)}>Hủy</Button>
-              <Button disabled={!newCode.trim() || !newUnit.trim() || !query.trim() || busy} onClick={createNew} className="bg-emerald-700 font-bold text-white hover:bg-emerald-800">Tạo và chọn</Button>
+              <Button disabled={!query.trim() || busy} onClick={createNew} className="bg-emerald-700 font-bold text-white hover:bg-emerald-800">Tạo và chọn</Button>
             </div>
           </div>
         </div>

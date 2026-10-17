@@ -70,10 +70,23 @@ export const searchWarehouseProducts = async (search: string, areaId: string, wa
   (await apiRequest<{ items: ProductResult[] }>(`/inventory-warehouse-products.php?areaId=${encodeURIComponent(areaId)}&warehouseType=${warehouseType}&search=${encodeURIComponent(search)}`)).items;
 export const attachReceiptProduct = async (productId: string, areaId: string) =>
   (await apiRequest<{ item: { id: string } }>("/area-products.php", { method: "POST", body: JSON.stringify({ productId, areaId }) })).item;
-export const createReceiptProduct = async (payload: object): Promise<ProductResult> => {
+export const createReceiptProduct = async (payload: {
+  areaId: string;
+  ingredientName: string;
+  unit?: string;
+  warehouseType?: WarehouseType;
+}): Promise<ProductResult> => {
+  const name = payload.ingredientName.trim();
+  const unit = payload.unit?.trim() || "cái";
+  if (payload.warehouseType === "equipment") {
+    const { item } = await apiRequest<{ item: { id: string; productCode: string; productName: string; unit: string; areaId: string } }>(
+      "/products.php", { method: "POST", body: JSON.stringify({ areaId: payload.areaId, productName: name, unit, isSelling: false }) }
+    );
+    return { ...item, areaName: "", attachedToCurrentArea: true, similar: false };
+  }
   const item = (await apiRequest<{ item: {
     id: string; ingredientCode: string; ingredientName: string; unit: string; purchaseUnit?: string; storeId: string;
-  } }>("/ingredients.php", { method: "POST", body: JSON.stringify(payload) })).item;
+  } }>("/ingredients.php", { method: "POST", body: JSON.stringify({ areaId: payload.areaId, ingredientName: name, unit }) })).item;
   return {
     id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
     unit: item.purchaseUnit || item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { hasPermission } from "@/lib/permissions";
+import { canSwitchStore, getSelectableStoreIds, hasPermission } from "@/lib/permissions";
 import {
   Activity,
   BarChart3,
@@ -337,15 +337,23 @@ export default function AdminSidebar({
   const { logout, user, loading } = useAuth();
   const userRole = user?.role || null;
   const { setStoreId, storeId, storeName } = useStore();
-  const isStoreLocked = userRole === "user" || userRole === "server" || userRole === "bartender";
+  const isStoreLocked = !canSwitchStore(user);
+  const selectableStoreIds = getSelectableStoreIds(user);
+  const availableStoreOptions = storeOptions.filter((option) =>
+    selectableStoreIds === null || selectableStoreIds.includes(option.id)
+  );
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const storeMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const assignedStoreId = user?.storeId;
+    const assignedStoreId = isStoreLocked
+      ? user?.storeId
+      : availableStoreOptions.some((option) => option.id === storeId)
+        ? storeId
+        : availableStoreOptions[0]?.id;
     if (
-      isStoreLocked &&
+      !loading &&
       (assignedStoreId === "cafe" ||
         assignedStoreId === "restaurant" ||
         assignedStoreId === "bakery" ||
@@ -355,7 +363,7 @@ export default function AdminSidebar({
     ) {
       setStoreId(assignedStoreId);
     }
-  }, [isStoreLocked, setStoreId, storeId, user?.storeId]);
+  }, [isStoreLocked, loading, setStoreId, storeId, user?.storeId, user?.storeIds]);
 
   useEffect(() => {
     if (!showStoreMenu) return;
@@ -495,7 +503,7 @@ export default function AdminSidebar({
             collapsed && "lg:left-[calc(100%+12px)] lg:top-0 lg:w-60",
           )}
         >
-          {storeOptions.map((option) => {
+          {availableStoreOptions.map((option) => {
             const Icon = option.icon;
             const active = option.id === storeId;
 

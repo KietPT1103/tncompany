@@ -443,3 +443,7 @@ button:disabled {
   .inventory-ledger .ledger-manual-create {display:none}
   .inventory-ledger .warehouse-button,.inventory-ledger .warehouse-primary {min-height:44px}
 }
+
+/* Dialogs must scroll independently of warehouse panels. */
+.warehouse-ui section.evidence-detail-dialog,
+.warehouse-ui section.equipment-edit-dialog {overflow-y:auto;}

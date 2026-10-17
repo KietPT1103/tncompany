@@ -221,6 +221,7 @@ function auth_all_permissions(): array
         'seo_articles.access',
         'activity_logs.access',
         'accounts.access',
+        'stores.switch',
     ];
 }
 
@@ -335,6 +336,16 @@ function auth_effective_permissions(array $row): array
 
 function auth_map_user(array $row): array
 {
+    $statement = db()->prepare(
+        'SELECT store_id FROM user_store_access WHERE user_id=:user_id ORDER BY store_id'
+    );
+    $statement->execute(['user_id' => $row['id']]);
+    $storeIds = $statement->fetchAll(PDO::FETCH_COLUMN);
+    $primaryStoreId = trim((string) ($row['store_id'] ?? ''));
+    if ($primaryStoreId !== '' && !in_array($primaryStoreId, $storeIds, true)) {
+        $storeIds[] = $primaryStoreId;
+    }
+
     return [
         'id' => (string) $row['id'],
         'uid' => (string) $row['id'],
@@ -343,6 +354,7 @@ function auth_map_user(array $row): array
         'displayName' => $row['display_name'] ?: ($row['username'] ?: $row['email']),
         'role' => auth_normalize_role($row),
         'storeId' => $row['store_id'] ?: null,
+        'storeIds' => array_values($storeIds),
         'permissions' => auth_effective_permissions($row),
     ];
 }

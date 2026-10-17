@@ -61,6 +61,7 @@ function users_requires_store_access(string $role, array $permissions): bool
     }
 
     $inventoryPermissions = [
+        'stores.switch',
         'products.selling.view',
         'products.components.update',
         'ingredients.access',
