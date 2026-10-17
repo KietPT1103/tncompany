@@ -53,7 +53,8 @@ export default function EquipmentWarehouseStock() {
     setEditBusy(true);setError("");
     try {
       await apiRequest('/inventory-pos-stock.php',{method:'PATCH',body:JSON.stringify({
-        ...editTarget,storeId,action:'edit-stock',date,newProductCode:editForm.code.trim(),newProductName:editForm.name.trim(),newUnit:editForm.unit.trim(),
+        productCode:editTarget.productCode,productName:editTarget.productName,unit:editTarget.unit,
+        storeId,action:'edit-stock',date,newProductCode:editForm.code.trim(),newProductName:editForm.name.trim(),newUnit:editForm.unit.trim(),
         ...(changed?{quantity,reason:editForm.reason.trim()}:{}),
       })});
       setEditTarget(null);setVersion(value=>value+1);window.dispatchEvent(new Event('pos-stock-changed'));
