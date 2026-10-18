@@ -43,6 +43,7 @@ export default function FieldInventoryReceiptDetailPage() {
   const [loadError, setLoadError] = useState("");
   const [extraActionsOpen, setExtraActionsOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [pendingLines, setPendingLines] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -361,7 +362,7 @@ export default function FieldInventoryReceiptDetailPage() {
 
         <div className="mt-4 grid min-w-0 gap-5 2xl:mt-5">
           <section className="receipt-goods-panel min-w-0 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 sm:px-6 sm:py-4">
+            <div className="hidden flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 sm:flex sm:px-6 sm:py-4">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><PackageOpen className="h-5 w-5 text-emerald-700" />Giải trình hàng hóa</h2>
               <span className="text-sm font-semibold text-slate-500">{receipt.itemCount} dòng hàng</span>
             </div>
@@ -389,11 +390,11 @@ export default function FieldInventoryReceiptDetailPage() {
               {loadError && <p role="alert" className="text-sm text-rose-700">{loadError}</p>}
               <Button variant="outline" disabled={busy} onClick={saveMetadata} className="sm:col-span-2">Lưu thông tin</Button>
             </div></details>}
-            {receipt.items.length > 0 && <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm">
+            {receipt.items.length > 0 && <div className="receipt-saved-scroll overflow-x-auto"><table className="receipt-saved-table w-full min-w-[900px] text-left text-sm">
               <thead className="bg-slate-100 text-slate-700"><tr>{["STT", "Mã hàng", "Tên mặt hàng", "Số lượng", "Đơn vị", "Đơn giá", "Thành tiền", "Ghi chú", "Thao tác"].map(label => <th key={label} className="p-3 whitespace-nowrap">{label}</th>)}</tr></thead>
               <tbody className="divide-y">{receipt.items.map((item, index) => <tr key={item.id}>
                 <td className="p-3">{index + 1}</td><td className="p-3 text-emerald-800">{item.productCode}</td><td className="p-3 font-semibold">{item.productName}</td>
-                <td className="p-3 text-right">{item.quantity.toLocaleString("vi-VN")}</td><td className="p-3">{item.unit}</td><td className="p-3 text-right whitespace-nowrap">{item.unitPrice.toLocaleString("vi-VN")} ₫</td><td className="p-3 text-right font-bold whitespace-nowrap">{item.lineTotal.toLocaleString("vi-VN")} ₫</td><td className="p-3">{item.note || "—"}</td>
+                <td data-label="Số lượng" className="p-3 text-right">{item.quantity.toLocaleString("vi-VN")}</td><td data-label="Đơn vị" className="p-3">{item.unit}</td><td data-label="Đơn giá" className="p-3 text-right whitespace-nowrap">{item.unitPrice.toLocaleString("vi-VN")} ₫</td><td className="p-3 text-right font-bold whitespace-nowrap">{item.lineTotal.toLocaleString("vi-VN")} ₫</td><td className="p-3">{item.note ? <details><summary className="cursor-pointer text-xs font-semibold text-emerald-700">Ghi chú</summary><p className="mt-1 whitespace-pre-wrap break-words">{item.note}</p></details> : null}</td>
                 <td className="p-2"><div className="flex">{canCorrect && <Button disabled={busy || pendingLines} variant="ghost" size="icon" onClick={() => beginEdit(item)} aria-label={`Sửa ${item.productName}`}><Pencil className="h-4 w-4 text-emerald-700"/></Button>}{editable && <Button disabled={busy || pendingLines} variant="ghost" size="icon" onClick={async () => { if (!confirm("Xóa dòng hàng?")) return; setBusy(true); try { await deleteInventoryReceiptItem(item.id); await reload(); } catch (error) { alert(error instanceof Error ? error.message : "Không thể xóa dòng hàng."); } finally { setBusy(false); } }} aria-label={`Xóa ${item.productName}`}><Trash2 className="h-4 w-4 text-rose-600"/></Button>}</div></td>
               </tr>)}</tbody>
             </table></div>}
@@ -415,8 +416,9 @@ export default function FieldInventoryReceiptDetailPage() {
           <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 sm:px-6 sm:py-4">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><Camera className="h-5 w-5 text-emerald-700" />Ảnh hóa đơn</h2>
-              <span className="text-sm font-semibold text-slate-500">{receipt.imageCount} ảnh</span>
+              <div className="flex items-center gap-3"><span className="text-sm font-semibold text-slate-500">{receipt.imageCount} ảnh</span><button type="button" aria-expanded={photosOpen} aria-controls="receipt-photos" onClick={() => setPhotosOpen(value => !value)} className="min-h-10 rounded-md border border-emerald-200 px-3 text-sm font-semibold text-emerald-800">{photosOpen ? "Ẩn ảnh" : "Mở ảnh"}</button></div>
             </div>
+            {photosOpen && <div id="receipt-photos">
             {canUploadPhotos && <div className="space-y-2 border-b border-slate-200 bg-slate-50 p-3">
               <div className="flex flex-wrap items-end gap-2">
                 {role === "admin" && <label className="min-w-0 w-full sm:max-w-xs text-xs font-semibold text-slate-700">Ngày chụp ảnh bổ sung<input type="date" value={photoDate} disabled={busy} onChange={event => setPhotoDate(event.target.value)} className="mt-1 block min-h-11 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"/></label>}
@@ -451,6 +453,7 @@ export default function FieldInventoryReceiptDetailPage() {
                 ))}
               </div>
             )}
+            </div>}
           </section>
         </div>
       </div>
@@ -473,7 +476,7 @@ export default function FieldInventoryReceiptDetailPage() {
               <Input label="Số lượng" value={editQuantity} onChange={(event) => setEditQuantity(event.target.value)} type="number" min="0" step="0.001" className="h-11" />
               <Input label="Đơn giá" value={editUnitPrice} onChange={(event) => setEditUnitPrice(event.target.value)} type="number" min="0" step="100" className="h-11" />
             </div>
-            <Input label="Ghi chú" value={editNote} onChange={(event) => setEditNote(event.target.value)} className="mt-3 h-11" />
+            <details className="mt-3"><summary className="cursor-pointer py-2 text-sm font-semibold text-emerald-700">{editNote ? "Sửa ghi chú" : "Thêm ghi chú"}</summary><Input label="Ghi chú" value={editNote} onChange={(event) => setEditNote(event.target.value)} className="h-11" /></details>
             <div className="mt-4 rounded-lg bg-slate-50 p-3 text-right font-bold text-slate-900">Thành tiền: {((Number(editQuantity) || 0) * (Number(editUnitPrice) || 0)).toLocaleString("vi-VN")} ₫</div>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="ghost" disabled={busy} onClick={() => setEditingItem(null)}>Đóng</Button>

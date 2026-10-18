@@ -447,3 +447,54 @@ button:disabled {
 /* Dialogs must scroll independently of warehouse panels. */
 .warehouse-ui section.evidence-detail-dialog,
 .warehouse-ui section.equipment-edit-dialog {overflow-y:auto;}
+
+/* Keep each receipt line within the phone viewport; desktop keeps its table. */
+@media (max-width: 639px) {
+  .receipt-detail .receipt-entry-scroll,
+  .receipt-detail .receipt-saved-scroll {overflow:visible;min-width:0;}
+  .receipt-detail .receipt-entry-table,
+  .receipt-detail .receipt-saved-table {display:block;width:100%;min-width:0;}
+  .receipt-detail .receipt-entry-table thead,
+  .receipt-detail .receipt-saved-table thead {display:none;}
+  .receipt-detail .receipt-entry-table tbody,
+  .receipt-detail .receipt-saved-table tbody {display:block;width:100%;}
+  .receipt-detail .receipt-entry-table tbody > tr,
+  .receipt-detail .receipt-saved-table tbody > tr {
+    display:grid;grid-template-columns:repeat(6,minmax(0,1fr));align-items:center;
+    gap:6px 8px;padding:10px 12px;border-bottom:1px solid #e2e8f0;
+  }
+  .receipt-detail .receipt-entry-table tbody > tr > td,
+  .receipt-detail .receipt-saved-table tbody > tr > td {
+    display:block;width:auto;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;
+  }
+  .receipt-detail .receipt-entry-table tbody td:nth-child(1),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(1) {order:0;grid-column:span 1;color:#64748b;font-size:12px;}
+  .receipt-detail .receipt-entry-table tbody td:nth-child(2),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(2) {order:1;grid-column:span 3;font-size:12px;}
+  .receipt-detail .receipt-entry-table tbody td:nth-child(9),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(9) {order:2;grid-column:span 2;justify-self:end;}
+  .receipt-detail .receipt-entry-table tbody td:nth-child(3),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(3) {order:3;grid-column:1/-1;}
+  .receipt-detail .receipt-entry-table tbody td:nth-child(4),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(4) {order:4;grid-column:span 2;}
+  .receipt-detail .receipt-entry-table tbody td:nth-child(5),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(5) {order:5;grid-column:span 2;}
+  .receipt-detail .receipt-entry-table tbody td:nth-child(6),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(6) {order:6;grid-column:span 2;}
+  .receipt-detail .receipt-entry-table tbody td:nth-child(7),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(7) {order:7;grid-column:span 3;text-align:left;padding-top:4px;}
+  .receipt-detail .receipt-entry-table tbody td:nth-child(8),
+  .receipt-detail .receipt-saved-table tbody td:nth-child(8) {order:8;grid-column:span 3;}
+  .receipt-detail .receipt-entry-table td[data-label]::before,
+  .receipt-detail .receipt-saved-table td[data-label]::before {
+    content:attr(data-label);display:block;margin-bottom:4px;font-size:11px;font-weight:600;color:#64748b;text-align:left;
+  }
+  .receipt-detail .receipt-saved-table td[data-label] {text-align:left;}
+  .receipt-detail .receipt-entry-table input {min-width:0;padding-left:8px;padding-right:8px;}
+  .receipt-detail .receipt-entry-table tfoot,
+  .receipt-detail .receipt-entry-table tfoot tr {display:block;}
+  .receipt-detail .receipt-entry-table tfoot tr {display:flex;flex-wrap:wrap;justify-content:space-between;padding:10px 12px;gap:8px;}
+  .receipt-detail .receipt-entry-table tfoot td {display:block;padding:0;min-width:0;}
+  .receipt-detail .receipt-entry-table tfoot td:last-child {display:none;}
+  .receipt-detail .receipt-line-note summary {font-size:11px;}
+}
