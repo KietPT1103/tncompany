@@ -72,6 +72,8 @@ export const searchReceiptProducts = async (search: string, areaId: string) =>
     }));
 export const searchWarehouseProducts = async (search: string, areaId: string, warehouseType: WarehouseType) =>
   warehouseType === "ingredient" ? searchReceiptProducts(search, areaId) :
+  search.trim() ?
+  (await apiRequest<{ items: ProductResult[] }>(`/products.php?areaId=${encodeURIComponent(areaId)}&search=${encodeURIComponent(search.trim())}`)).items :
   (await apiRequest<{ items: ProductResult[] }>(`/inventory-warehouse-products.php?areaId=${encodeURIComponent(areaId)}&warehouseType=${warehouseType}&search=${encodeURIComponent(search)}`)).items;
 export const attachReceiptProduct = async (productId: string, areaId: string) =>
   (await apiRequest<{ item: { id: string } }>("/area-products.php", { method: "POST", body: JSON.stringify({ productId, areaId }) })).item;

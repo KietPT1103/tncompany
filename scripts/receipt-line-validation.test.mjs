@@ -1,0 +1,11 @@
+﻿import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
+const source = readFileSync('src/components/inventory/receiptLineValidation.ts', 'utf8');
+const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
+const { validReceiptLine } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+assert.equal(validReceiptLine({ product: null, quantity: '2', unitPrice: '100' }), false);
+for (const quantity of ['', '0', '-1', 'Infinity', 'abc']) assert.equal(validReceiptLine({ product: { id: 'p' }, quantity, unitPrice: '100' }), false);
+for (const unitPrice of ['', '-1', 'Infinity', 'abc']) assert.equal(validReceiptLine({ product: { id: 'p' }, quantity: '2', unitPrice }), false);
+assert.equal(validReceiptLine({ product: { id: 'p' }, quantity: '0.125', unitPrice: '0' }), true);
+console.log('PASS receipt table line validation');

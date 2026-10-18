@@ -2,15 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { AlertCircle, ArrowLeft, Camera, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, PackageOpen, Pencil, Plus, RefreshCw, Store, Trash2, UserRound, X, ZoomIn } from "lucide-react";
 import {
-  addInventoryReceiptItem, attachReceiptProduct, completeInventoryReceipt, createReceiptProduct,
-  cancelInventoryReceipt, deleteInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchWarehouseProducts, updateInventoryReceipt, type WarehouseType,
-  lockInventoryReceipt, unlockInventoryReceipt, updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ProductResult, type ReceiptStatus
+  completeInventoryReceipt,
+  cancelInventoryReceipt, deleteInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, updateInventoryReceipt, type WarehouseType,
+  lockInventoryReceipt, unlockInventoryReceipt, updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ReceiptStatus
 } from "@/services/inventoryReceiptService";
 import { apiRequest } from "@/lib/api";
 import { inventoryToday } from "@/lib/inventoryPeriods";
 import { normalizeSearchText } from "@/lib/utils";
 import { hasPermission } from "@/lib/permissions";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
+import ReceiptEntryTable from "@/components/inventory/ReceiptEntryTable";
 import PrivateApiImage from "@/components/PrivateApiImage";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
@@ -43,22 +44,12 @@ export default function FieldInventoryReceiptDetailPage() {
   const [extraActionsOpen, setExtraActionsOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ProductResult[]>([]);
-  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
-  const [searchError, setSearchError] = useState("");
-  const [activeResult, setActiveResult] = useState(0);
-  const [selected, setSelected] = useState<ProductResult | null>(null);
-  const [quantity, setQuantity] = useState("");
-  const [unitPrice, setUnitPrice] = useState("");
-  const [note, setNote] = useState("");
+  const [pendingLines, setPendingLines] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryReceiptItem | null>(null);
   const [editQuantity, setEditQuantity] = useState("");
   const [editUnitPrice, setEditUnitPrice] = useState("");
   const [editNote, setEditNote] = useState("");
-  const [newUnit, setNewUnit] = useState("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState("");
   const [supplierQuery, setSupplierQuery] = useState("");
@@ -74,7 +65,6 @@ export default function FieldInventoryReceiptDetailPage() {
   const [photoError, setPhotoError] = useState("");
   const [photoProgress, setPhotoProgress] = useState("");
   useEffect(() => { setPhotoDate(receipt?.capturedAt?.slice(0, 10) || inventoryToday()); }, [receipt?.id]);
-  const searchSequence = useRef(0);
   useEffect(() => { setSupplierId(receipt?.supplierId || ""); setOrderCreator(receipt?.orderCreatorName || ""); }, [receipt?.id, receipt?.supplierId, receipt?.orderCreatorName]);
   useEffect(() => {
     if (!receipt?.areaId || !hasPermission(user, "inventory_receipts.update")) return;
@@ -95,28 +85,13 @@ export default function FieldInventoryReceiptDetailPage() {
     }
   };
   useEffect(() => { void reload(); }, [id]);
-  useEffect(() => {
-    if (!receipt || !suggestionsOpen) return;
-    const sequence = ++searchSequence.current;
-    const timer = setTimeout(() => searchWarehouseProducts(query, receipt.areaId, warehouseType).then((items) => {
-      if (searchSequence.current === sequence) {
-        setResults(items); setActiveResult(0); setSearchError("");
-      }
-    }).catch((error) => {
-      if (searchSequence.current === sequence) {
-        setResults([]);
-        setSearchError(error instanceof Error ? error.message : "Không thể tải danh sách sản phẩm.");
-      }
-    }), 250);
-    return () => { clearTimeout(timer); searchSequence.current++; };
-  }, [query, receipt?.areaId, warehouseType, suggestionsOpen]);
   if (loading && !receipt) {
     return (
       <div className="warehouse-ui min-h-full bg-slate-50 p-4 sm:p-6 2xl:p-8" aria-busy="true" aria-label="Đang tải chi tiết phiếu nhập">
         <div className="mx-auto max-w-[1440px] space-y-5">
           <div className="h-10 w-40 animate-pulse rounded-md bg-slate-200" />
           <div className="h-56 animate-pulse rounded-xl border border-slate-200 bg-white" />
-          <div className="grid gap-5 lg:grid-cols-[minmax(240px,.55fr)_minmax(0,1.45fr)]">
+          <div className="grid gap-5">
             <div className="h-[520px] animate-pulse rounded-xl border border-slate-200 bg-white" />
             <div className="h-[520px] animate-pulse rounded-xl border border-slate-200 bg-white" />
           </div>
@@ -194,24 +169,8 @@ export default function FieldInventoryReceiptDetailPage() {
       photoUploadActive.current = false; setBusy(false);
     }
   }
-  async function choose(product: ProductResult) {
-    if (!receipt) return;
-    if (!product.attachedToCurrentArea) {
-      const attached = await attachReceiptProduct(product.id, receipt.areaId);
-      product = { ...product, id: attached.id, attachedToCurrentArea: true, areaId: receipt.areaId };
-    }
-    setUnitPrice(warehouseType === "ingredient" && product.unitPrice != null ? String(product.unitPrice) : "");
-    setSelected(product); setQuery(product.productName); setResults([]); setSuggestionsOpen(false); setSearchError("");
-  }
-  async function addItem() {
-    if (!selected || !receipt) return;
-    setBusy(true);
-    try {
-      await addInventoryReceiptItem({ receiptId: receipt.id, productId: selected.id, itemType: warehouseType, productCode: selected.productCode, productName: selected.productName, unit: selected.unit, quantity: Number(quantity), unitPrice: Number(unitPrice), note });
-      setQuery(""); setSelected(null); setQuantity(""); setUnitPrice(""); setNote(""); await reload();
-    } catch (error) { alert(error instanceof Error ? error.message : "Không thể thêm hàng hóa."); } finally { setBusy(false); }
-  }
   async function finish() {
+    if (pendingLines) return;
     if (supplierQuery.trim() && !supplierId) { setSupplierError("Vui lòng chọn nhà phân phối trong gợi ý hoặc bấm Tạo nhà phân phối."); setSupplierOpen(true); return; }
     if (!confirm(`Hoàn thành ${receipt.items.length} món, tổng ${receipt.totalAmount.toLocaleString("vi-VN")} ₫?`)) return;
     setBusy(true);
@@ -307,23 +266,10 @@ export default function FieldInventoryReceiptDetailPage() {
     setBusy(true);
     try {
       const updated = await updateInventoryReceipt(receipt.id, { warehouseType: type });
-      searchSequence.current++;
-      setReceipt(updated); setQuery(""); setSelected(null); setResults([]); setSuggestionsOpen(false); setShowCreate(false);
-      setNewUnit(""); setSearchError("");
+      setReceipt(updated);
     } catch (error) { alert(error instanceof Error ? error.message : "Không thể đổi kho."); }
     finally { setBusy(false); }
   }
-  async function createNew() {
-    setBusy(true);
-    try {
-      const product = await createReceiptProduct({
-        areaId: receipt.areaId, ingredientName: query.trim(), unit: newUnit, warehouseType,
-      });
-      setSelected(product); setResults([]); setShowCreate(false);
-    } catch (error) { alert(error instanceof Error ? error.message : "Không thể tạo sản phẩm."); }
-    finally { setBusy(false); }
-  }
-
   return (
     <div className="warehouse-ui receipt-detail min-h-full bg-slate-50 p-3 sm:p-5 lg:p-6 2xl:p-8">
       <div className="mx-auto max-w-[1440px]">
@@ -413,48 +359,7 @@ export default function FieldInventoryReceiptDetailPage() {
           </div>
         </section>
 
-        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(240px,.55fr)_minmax(0,1.45fr)] 2xl:mt-5 2xl:gap-5">
-          <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 sm:px-6 sm:py-4">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><Camera className="h-5 w-5 text-emerald-700" />Ảnh hóa đơn</h2>
-              <span className="text-sm font-semibold text-slate-500">{receipt.imageCount} ảnh</span>
-            </div>
-            {canUploadPhotos && <div className="space-y-2 border-b border-slate-200 bg-slate-50 p-3">
-              <div className="flex flex-wrap items-end gap-2">
-                {role === "admin" && <label className="min-w-0 flex-1 text-xs font-semibold text-slate-700">Ngày chụp ảnh bổ sung<input type="date" value={photoDate} disabled={busy} onChange={event => setPhotoDate(event.target.value)} className="mt-1 block min-h-11 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"/></label>}
-                <Button variant="outline" disabled={busy || (role === "admin" && !photoDate)} onClick={() => photoInput.current?.click()} className="min-h-11 gap-2 border-emerald-200 text-emerald-800"><Plus className="h-4 w-4"/>Bổ sung ảnh</Button>
-              </div>
-              <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={event => void uploadPhotos(event.target.files)}/>
-              <p className="text-xs text-slate-500">Chọn nhiều ảnh JPEG, PNG, WebP; tối đa 12 MB mỗi ảnh.</p>
-            </div>}
-            {photoProgress && <p role="status" className="px-3 py-2 text-sm text-emerald-800">{photoProgress}</p>}
-            {photoError && <p role="alert" className="px-3 py-2 text-sm text-rose-700">{photoError}</p>}
-            {receipt.images.length === 0 ? (
-              <div className="grid min-h-52 place-items-center px-5 py-10 text-center">
-                <div><Camera className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-medium text-slate-500">Chưa có ảnh. Bạn có thể nhập hàng trước và bổ sung ảnh sau.</p></div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-4 lg:grid-cols-2">
-                {receipt.images.map((image, index) => (
-                  <div key={image.id} className="min-w-0">
-                  <button
-                    onClick={() => setLightbox(index)}
-                    className="group relative block w-full overflow-hidden rounded-xl bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
-                    aria-label={`Xem ảnh hóa đơn ${index + 1}`}
-                  >
-                    <PrivateApiImage src={image.thumbnailUrl} className="aspect-square max-h-60 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none" />
-                    <span className="absolute inset-0 grid place-items-center bg-slate-950/0 text-white opacity-0 transition-[background-color,opacity] duration-200 group-hover:bg-slate-950/35 group-hover:opacity-100 group-focus-visible:bg-slate-950/35 group-focus-visible:opacity-100">
-                      <ZoomIn className="h-6 w-6" />
-                    </span>
-                    <span className="absolute bottom-2 left-2 rounded-md bg-slate-950/75 px-2 py-1 text-xs font-semibold text-white">Ảnh {index + 1}</span>
-                  </button>
-                  {canDeletePhotos && <button type="button" disabled={busy} onClick={() => void deletePhoto(image.id, index)} aria-label={`Xóa ảnh ${index + 1}`} className="mt-1 flex min-h-11 w-full items-center justify-center gap-1 rounded-md border border-rose-200 bg-white text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 className="h-4 w-4"/>Xóa ảnh</button>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
+        <div className="mt-4 grid min-w-0 gap-5 2xl:mt-5">
           <section className="receipt-goods-panel min-w-0 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 sm:px-6 sm:py-4">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><PackageOpen className="h-5 w-5 text-emerald-700" />Giải trình hàng hóa</h2>
@@ -463,7 +368,7 @@ export default function FieldInventoryReceiptDetailPage() {
 
             <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
               <label htmlFor="receipt-warehouse" className="mb-1 block text-sm font-bold text-slate-800">Kho nhập hàng</label>
-              <select id="receipt-warehouse" value={warehouseType} disabled={!editableMetadata || busy || receipt.items.length > 0} onChange={event => void changeWarehouse(event.target.value as WarehouseType)} className="min-h-11 w-full rounded-md border border-emerald-200 bg-white px-3 text-sm sm:max-w-xs">
+              <select id="receipt-warehouse" value={warehouseType} disabled={!editableMetadata || busy || pendingLines || receipt.items.length > 0} onChange={event => void changeWarehouse(event.target.value as WarehouseType)} className="min-h-11 w-full rounded-md border border-emerald-200 bg-white px-3 text-sm sm:max-w-xs">
                 <option value="ingredient">Kho nguyên liệu</option>
                 <option value="equipment">Kho hàng</option>
               </select>
@@ -484,95 +389,15 @@ export default function FieldInventoryReceiptDetailPage() {
               {loadError && <p role="alert" className="text-sm text-rose-700">{loadError}</p>}
               <Button variant="outline" disabled={busy} onClick={saveMetadata} className="sm:col-span-2">Lưu thông tin</Button>
             </div></details>}
-            <div className="px-4 py-4 sm:px-5">
-              {receipt.items.length === 0 ? (
-                <div className="rounded-lg bg-slate-50 px-3 py-3 text-center sm:px-4 sm:py-8">
-                  <PackageOpen className="mx-auto hidden h-8 w-8 text-slate-300 sm:block" />
-                  <p className="mt-3 font-semibold text-slate-700">Chưa thêm hàng hóa</p>
-                  <p className="mt-1 text-sm text-slate-500">Nhập tên hàng ở bên dưới để bắt đầu.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-200 rounded-lg border border-slate-200" role="list">
-                  {receipt.items.map((item) => (
-                    <div key={item.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" role="listitem">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900">{item.productName}</p>
-                        <p className="mt-1 text-sm text-slate-500">{item.productCode} • {item.quantity} {item.unit} × {item.unitPrice.toLocaleString("vi-VN")} ₫</p>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 sm:justify-end">
-                        <b className="mr-1 whitespace-nowrap tabular-nums text-slate-950">{item.lineTotal.toLocaleString("vi-VN")} ₫</b>
-                        {canCorrect && (
-                          <>
-                            <Button variant="ghost" size="icon" onClick={() => beginEdit(item)} className="h-10 w-10 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800" aria-label={`Sửa ${item.productName}`}><Pencil className="h-4 w-4" /></Button>
-                            {editable && <Button variant="ghost" size="icon" onClick={async () => { if (confirm("Xóa dòng hàng?")) { await deleteInventoryReceiptItem(item.id); reload(); } }} className="h-10 w-10 text-rose-600 hover:bg-rose-50 hover:text-rose-700" aria-label={`Xóa ${item.productName}`}><Trash2 className="h-4 w-4" /></Button>}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {editable && (
-              <div className="border-t border-emerald-100 bg-emerald-50/60 px-4 py-5 sm:px-5">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <button type="button" onClick={() => { setSuggestionsOpen(true); document.getElementById("receipt-product-search")?.focus(); }} className="flex min-h-11 items-center gap-2 font-bold text-emerald-950"><Plus className="h-4 w-4" />Thêm hàng hóa</button>
-                  <span className="hidden text-xs font-semibold text-emerald-800 sm:inline">Chọn món rồi nhập số lượng và đơn giá</span>
-                </div>
-                <div className="relative z-10 mt-3">
-                  <label htmlFor="receipt-product-search" className="mb-1.5 block text-sm font-semibold text-emerald-950">Tên hoặc mã hàng</label>
-                  <input
-                    disabled={busy}
-                    id="receipt-product-search"
-                    value={query}
-                    onFocus={() => setSuggestionsOpen(true)}
-                    onChange={(event) => { setQuery(event.target.value); setSelected(null); setSuggestionsOpen(true); }}
-                    onKeyDown={(event) => {
-                      if (event.key === "ArrowDown") { event.preventDefault(); setActiveResult((value) => Math.min(results.length - 1, value + 1)); }
-                      if (event.key === "ArrowUp") { event.preventDefault(); setActiveResult((value) => Math.max(0, value - 1)); }
-                      if (event.key === "Enter" && results[activeResult]) { event.preventDefault(); choose(results[activeResult]); }
-                      if (event.key === "Escape") setResults([]);
-                    }}
-                    placeholder="Nhập tên hoặc mã hàng"
-                    className="h-12 w-full rounded-md border border-emerald-200 bg-white px-3 text-sm text-slate-900 outline-none transition-[border-color,box-shadow] placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-                  />
-                  {suggestionsOpen && !query && !results.length && !searchError && <p className="mt-2 text-xs text-slate-500">Kho chưa có hàng gợi ý. Nhập tên hàng để tìm hoặc tạo mới.</p>}
-                  {searchError && <p className="mt-2 text-sm font-medium text-rose-700">{searchError}</p>}
-                  {suggestionsOpen && results.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.14)]">
-                      {results.map((product, index) => (
-                        <button key={`${product.areaId}-${product.id}`} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(product)} className={`block w-full rounded-md p-3 text-left ${activeResult === index ? "bg-emerald-50" : "hover:bg-slate-50"}`}>
-                          <b>{product.productName}</b><small className="ml-2 text-slate-500">{product.productCode} • {product.unit}</small>
-                          {!product.attachedToCurrentArea && <span className="block text-xs text-amber-700">Đã tồn tại – chưa sử dụng tại {receipt.area.name}. Nhấn để thêm.</span>}
-                        </button>
-                      ))}
-                      {hasPermission(user, "products.create") && query.trim().length >= 2 && <button onClick={() => setShowCreate(true)} className="w-full rounded-md p-3 text-left font-bold text-emerald-700"><Plus className="mr-2 inline h-4 w-4" />Tạo mới “{query}”</button>}
-                    </div>
-                  )}
-                  {hasPermission(user, "products.create") && suggestionsOpen && query.trim().length >= 2 && results.length === 0 && !selected && !searchError && (
-                    <button onMouseDown={(event) => event.preventDefault()} onClick={() => setShowCreate(true)} className="mt-2 min-h-12 w-full rounded-md border border-emerald-100 bg-white p-3 text-left font-bold text-emerald-700 shadow-sm">
-                      <Plus className="mr-2 inline h-4 w-4" />Tạo mới “{query.trim()}”
-                    </button>
-                  )}
-                </div>
-                {warehouseType === "ingredient" && selected && (
-                  <div className="mt-3 text-sm text-emerald-950">
-                    <span>Đơn vị tính: <b>{selected.unit || "—"}</b></span>
-                    {(selected.purchaseToBaseFactor || 1) !== 1 && <small className="mt-1 block text-slate-600">1 {selected.unit} = {selected.purchaseToBaseFactor?.toLocaleString("vi-VN")} {selected.baseUnit}</small>}
-                  </div>
-                )}
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <Input label="Số lượng" value={quantity} onChange={(event) => setQuantity(event.target.value)} type="number" min="0" step="0.001" placeholder="0" className="h-11 border-emerald-200 bg-white" />
-                  <Input label="Đơn giá" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} type="number" min="0" step="100" placeholder="0 VND" className="h-11 border-emerald-200 bg-white" />
-                </div>
-                <details className="mt-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-600">Thêm ghi chú (không bắt buộc)</summary><Input label="Ghi chú" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Thông tin bổ sung" className="h-11 border-emerald-200 bg-white" /></details>
-                <div className="mt-4 flex flex-col gap-3 border-t border-emerald-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-semibold text-emerald-950">Tạm tính: <b className="tabular-nums">{((Number(quantity) || 0) * (Number(unitPrice) || 0)).toLocaleString("vi-VN")} ₫</b></p>
-                  <Button disabled={busy || !selected || Number(quantity) <= 0 || !Number.isFinite(Number(quantity)) || unitPrice === "" || Number(unitPrice) < 0 || !Number.isFinite(Number(unitPrice))} onClick={addItem} className="h-11 bg-emerald-700 px-5 font-bold text-white hover:bg-emerald-800">Thêm vào phiếu</Button>
-                </div>
-              </div>
-            )}
+            {receipt.items.length > 0 && <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="bg-slate-100 text-slate-700"><tr>{["STT", "Mã hàng", "Tên mặt hàng", "Số lượng", "Đơn vị", "Đơn giá", "Thành tiền", "Ghi chú", "Thao tác"].map(label => <th key={label} className="p-3 whitespace-nowrap">{label}</th>)}</tr></thead>
+              <tbody className="divide-y">{receipt.items.map((item, index) => <tr key={item.id}>
+                <td className="p-3">{index + 1}</td><td className="p-3 text-emerald-800">{item.productCode}</td><td className="p-3 font-semibold">{item.productName}</td>
+                <td className="p-3 text-right">{item.quantity.toLocaleString("vi-VN")}</td><td className="p-3">{item.unit}</td><td className="p-3 text-right whitespace-nowrap">{item.unitPrice.toLocaleString("vi-VN")} ₫</td><td className="p-3 text-right font-bold whitespace-nowrap">{item.lineTotal.toLocaleString("vi-VN")} ₫</td><td className="p-3">{item.note || "—"}</td>
+                <td className="p-2"><div className="flex">{canCorrect && <Button disabled={busy || pendingLines} variant="ghost" size="icon" onClick={() => beginEdit(item)} aria-label={`Sửa ${item.productName}`}><Pencil className="h-4 w-4 text-emerald-700"/></Button>}{editable && <Button disabled={busy || pendingLines} variant="ghost" size="icon" onClick={async () => { if (!confirm("Xóa dòng hàng?")) return; setBusy(true); try { await deleteInventoryReceiptItem(item.id); await reload(); } catch (error) { alert(error instanceof Error ? error.message : "Không thể xóa dòng hàng."); } finally { setBusy(false); } }} aria-label={`Xóa ${item.productName}`}><Trash2 className="h-4 w-4 text-rose-600"/></Button>}</div></td>
+              </tr>)}</tbody>
+            </table></div>}
+            {editable && <ReceiptEntryTable key={`${receipt.id}-${warehouseType}`} receiptId={receipt.id} areaId={receipt.areaId} warehouseType={warehouseType} disabled={busy} canCreate={hasPermission(user, "products.create")} onSaved={reload} onPendingChange={setPendingLines} onSavingChange={setBusy}/>}
 
             <div className="receipt-complete-bar flex flex-col gap-2 rounded-b-xl border-t border-slate-200 bg-slate-950 px-3 py-3 sm:gap-4 sm:px-5 sm:py-5 text-white sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -580,11 +405,52 @@ export default function FieldInventoryReceiptDetailPage() {
                 <p className="mt-1 text-xl font-bold tabular-nums sm:text-3xl">{receipt.totalAmount.toLocaleString("vi-VN")} ₫</p>
               </div>
               {editableStatus && receipt.canEdit && hasPermission(user, "inventory_receipts.complete") && (
-                <Button disabled={busy || !receipt.items.length } onClick={finish} className="h-12 gap-2 bg-emerald-600 px-6 font-bold text-white hover:bg-emerald-500">
+                <Button disabled={busy || pendingLines || !receipt.items.length } onClick={finish} className="h-12 gap-2 bg-emerald-600 px-6 font-bold text-white hover:bg-emerald-500">
                   <CheckCircle2 className="h-5 w-5" />Lưu & cộng kho
                 </Button>
               )}
             </div>
+          </section>
+
+          <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 sm:px-6 sm:py-4">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><Camera className="h-5 w-5 text-emerald-700" />Ảnh hóa đơn</h2>
+              <span className="text-sm font-semibold text-slate-500">{receipt.imageCount} ảnh</span>
+            </div>
+            {canUploadPhotos && <div className="space-y-2 border-b border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-wrap items-end gap-2">
+                {role === "admin" && <label className="min-w-0 w-full sm:max-w-xs text-xs font-semibold text-slate-700">Ngày chụp ảnh bổ sung<input type="date" value={photoDate} disabled={busy} onChange={event => setPhotoDate(event.target.value)} className="mt-1 block min-h-11 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"/></label>}
+                <Button variant="outline" disabled={busy || (role === "admin" && !photoDate)} onClick={() => photoInput.current?.click()} className="min-h-11 gap-2 border-emerald-200 text-emerald-800"><Plus className="h-4 w-4"/>Bổ sung ảnh</Button>
+              </div>
+              <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={event => void uploadPhotos(event.target.files)}/>
+              <p className="text-xs text-slate-500">Chọn nhiều ảnh JPEG, PNG, WebP; tối đa 12 MB mỗi ảnh.</p>
+            </div>}
+            {photoProgress && <p role="status" className="px-3 py-2 text-sm text-emerald-800">{photoProgress}</p>}
+            {photoError && <p role="alert" className="px-3 py-2 text-sm text-rose-700">{photoError}</p>}
+            {receipt.images.length === 0 ? (
+              <div className="grid min-h-52 place-items-center px-5 py-10 text-center">
+                <div><Camera className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-medium text-slate-500">Chưa có ảnh. Bạn có thể nhập hàng trước và bổ sung ảnh sau.</p></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {receipt.images.map((image, index) => (
+                  <div key={image.id} className="min-w-0">
+                  <button
+                    onClick={() => setLightbox(index)}
+                    className="group relative block w-full overflow-hidden rounded-xl bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+                    aria-label={`Xem ảnh hóa đơn ${index + 1}`}
+                  >
+                    <PrivateApiImage src={image.thumbnailUrl} className="aspect-square max-h-60 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none" />
+                    <span className="absolute inset-0 grid place-items-center bg-slate-950/0 text-white opacity-0 transition-[background-color,opacity] duration-200 group-hover:bg-slate-950/35 group-hover:opacity-100 group-focus-visible:bg-slate-950/35 group-focus-visible:opacity-100">
+                      <ZoomIn className="h-6 w-6" />
+                    </span>
+                    <span className="absolute bottom-2 left-2 rounded-md bg-slate-950/75 px-2 py-1 text-xs font-semibold text-white">Ảnh {index + 1}</span>
+                  </button>
+                  {canDeletePhotos && <button type="button" disabled={busy} onClick={() => void deletePhoto(image.id, index)} aria-label={`Xóa ảnh ${index + 1}`} className="mt-1 flex min-h-11 w-full items-center justify-center gap-1 rounded-md border border-rose-200 bg-white text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 className="h-4 w-4"/>Xóa ảnh</button>}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </div>
@@ -595,20 +461,6 @@ export default function FieldInventoryReceiptDetailPage() {
           <Button variant="ghost" size="icon" onClick={() => setLightbox((lightbox - 1 + receipt.images.length) % receipt.images.length)} className="absolute left-3 h-12 w-12 text-white hover:bg-white/10 hover:text-white" aria-label="Ảnh trước"><ChevronLeft className="h-9 w-9" /></Button>
           <PrivateApiImage src={receipt.images[lightbox].url} className="max-h-[90vh] max-w-[88vw] object-contain" />
           <Button variant="ghost" size="icon" onClick={() => setLightbox((lightbox + 1) % receipt.images.length)} className="absolute right-3 h-12 w-12 text-white hover:bg-white/10 hover:text-white" aria-label="Ảnh sau"><ChevronRight className="h-9 w-9" /></Button>
-        </div>
-      )}
-
-      {showCreate && (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" aria-labelledby="create-product-title">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-[0_18px_48px_rgba(15,23,42,0.25)]">
-            <h2 id="create-product-title" className="text-2xl font-bold text-slate-950">Tạo hàng hóa mới</h2>
-            <p className="mt-2 text-slate-600">Tên hàng: <b>{query}</b></p>
-            <Input label="Đơn vị tính (không bắt buộc)" value={newUnit} onChange={(event) => setNewUnit(event.target.value)} placeholder="Mặc định: cái" className="mt-3 h-11" />
-            <div className="mt-5 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setShowCreate(false)}>Hủy</Button>
-              <Button disabled={!query.trim() || busy} onClick={createNew} className="bg-emerald-700 font-bold text-white hover:bg-emerald-800">Tạo và chọn</Button>
-            </div>
-          </div>
         </div>
       )}
 
