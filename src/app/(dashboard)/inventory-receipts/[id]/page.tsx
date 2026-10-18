@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { AlertCircle, ArrowLeft, Camera, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, PackageOpen, Pencil, Plus, RefreshCw, Store, Trash2, UserRound, X, ZoomIn } from "lucide-react";
 import {
   addInventoryReceiptItem, attachReceiptProduct, completeInventoryReceipt, createReceiptProduct,
-  cancelInventoryReceipt, deleteInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchReceiptProducts, searchWarehouseProducts, updateInventoryReceipt, type WarehouseType,
+  cancelInventoryReceipt, deleteInventoryReceipt, deleteInventoryReceiptItem, getInventoryReceipt, searchWarehouseProducts, updateInventoryReceipt, type WarehouseType,
   lockInventoryReceipt, unlockInventoryReceipt, updateInventoryReceiptItem, type InventoryReceipt, type InventoryReceiptItem, type ProductResult, type ReceiptStatus
 } from "@/services/inventoryReceiptService";
 import { apiRequest } from "@/lib/api";
@@ -98,11 +98,7 @@ export default function FieldInventoryReceiptDetailPage() {
   useEffect(() => {
     if (!receipt || !suggestionsOpen) return;
     const sequence = ++searchSequence.current;
-    const timer = setTimeout(() => Promise.all([
-      searchWarehouseProducts(query, receipt.areaId, warehouseType),
-      warehouseType === "ingredient" && query.trim() ? searchReceiptProducts(query, receipt.areaId) : Promise.resolve([]),
-    ]).then(([history, catalog]) => {
-      const items = [...history, ...catalog.filter(item => !history.some(previous => previous.id === item.id))];
+    const timer = setTimeout(() => searchWarehouseProducts(query, receipt.areaId, warehouseType).then((items) => {
       if (searchSequence.current === sequence) {
         setResults(items); setActiveResult(0); setSearchError("");
       }
@@ -204,6 +200,7 @@ export default function FieldInventoryReceiptDetailPage() {
       const attached = await attachReceiptProduct(product.id, receipt.areaId);
       product = { ...product, id: attached.id, attachedToCurrentArea: true, areaId: receipt.areaId };
     }
+    setUnitPrice(warehouseType === "ingredient" && product.unitPrice != null ? String(product.unitPrice) : "");
     setSelected(product); setQuery(product.productName); setResults([]); setSuggestionsOpen(false); setSearchError("");
   }
   async function addItem() {
@@ -559,6 +556,12 @@ export default function FieldInventoryReceiptDetailPage() {
                     </button>
                   )}
                 </div>
+                {warehouseType === "ingredient" && selected && (
+                  <div className="mt-3 text-sm text-emerald-950">
+                    <span>Đơn vị tính: <b>{selected.unit || "—"}</b></span>
+                    {(selected.purchaseToBaseFactor || 1) !== 1 && <small className="mt-1 block text-slate-600">1 {selected.unit} = {selected.purchaseToBaseFactor?.toLocaleString("vi-VN")} {selected.baseUnit}</small>}
+                  </div>
+                )}
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <Input label="Số lượng" value={quantity} onChange={(event) => setQuantity(event.target.value)} type="number" min="0" step="0.001" placeholder="0" className="h-11 border-emerald-200 bg-white" />
                   <Input label="Đơn giá" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} type="number" min="0" step="100" placeholder="0 VND" className="h-11 border-emerald-200 bg-white" />

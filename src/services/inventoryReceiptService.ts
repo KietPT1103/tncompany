@@ -34,6 +34,7 @@ export type ReceiptFilters = {
 };
 export type Area = { id: string; code: string; name: string };
 export type ProductResult = {
+  unitPrice?: number; baseUnit?: string; purchaseToBaseFactor?: number;
   id: string; productCode: string; productName: string; unit: string;
   areaId: string; areaName: string; attachedToCurrentArea: boolean; similar: boolean;
 };
@@ -60,13 +61,17 @@ export const cancelInventoryReceipt = async (id: string, reason: string) =>
   (await apiRequest<{ item: InventoryReceipt }>("/inventory-receipts.php?action=cancel", { method: "POST", body: JSON.stringify({ id, reason }) })).item;
 export const searchReceiptProducts = async (search: string, areaId: string) =>
   (await apiRequest<{ items: Array<{
-    id: string; ingredientCode: string; ingredientName: string; unit: string; purchaseUnit?: string; storeId: string;
+    id: string; ingredientCode: string; ingredientName: string; unit: string; purchaseUnit?: string; baseUnit?: string; purchaseToBaseFactor?: number; cost?: number | null; storeId: string;
   }> }>(`/ingredients.php?search=${encodeURIComponent(search)}&areaId=${encodeURIComponent(areaId)}`)).items
     .map((item) => ({
       id: item.id, productCode: item.ingredientCode, productName: item.ingredientName,
-      unit: item.purchaseUnit || item.unit, areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
+      unit: item.purchaseUnit || item.unit, baseUnit: item.baseUnit || item.unit,
+      purchaseToBaseFactor: item.purchaseToBaseFactor || 1,
+      unitPrice: item.cost == null ? undefined : Math.round(item.cost * (item.purchaseToBaseFactor || 1) * 100) / 100,
+      areaId: item.storeId, areaName: "", attachedToCurrentArea: true, similar: false,
     }));
 export const searchWarehouseProducts = async (search: string, areaId: string, warehouseType: WarehouseType) =>
+  warehouseType === "ingredient" ? searchReceiptProducts(search, areaId) :
   (await apiRequest<{ items: ProductResult[] }>(`/inventory-warehouse-products.php?areaId=${encodeURIComponent(areaId)}&warehouseType=${warehouseType}&search=${encodeURIComponent(search)}`)).items;
 export const attachReceiptProduct = async (productId: string, areaId: string) =>
   (await apiRequest<{ item: { id: string } }>("/area-products.php", { method: "POST", body: JSON.stringify({ productId, areaId }) })).item;
