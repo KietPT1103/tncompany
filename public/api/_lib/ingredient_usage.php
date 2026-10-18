@@ -4,8 +4,20 @@ declare(strict_types=1);
 // Reporting snapshots do not move inventory. Each recipe is stored per one sold unit.
 function ingredient_usage_ensure_schema(): void
 {
+    // String foreign keys must use the parent column's charset and collation.
+    // Existing installations can use a different collation from new tables.
+    $column = db()->query("SELECT COLUMN_TYPE, CHARACTER_SET_NAME, COLLATION_NAME
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bills' AND COLUMN_NAME='id'")->fetch(PDO::FETCH_ASSOC);
+    if (!$column || !preg_match('/^varchar\([0-9]+\)$/i', $column['COLUMN_TYPE'])
+        || !preg_match('/^[a-zA-Z0-9_]+$/', $column['CHARACTER_SET_NAME'] ?? '')
+        || !preg_match('/^[a-zA-Z0-9_]+$/', $column['COLLATION_NAME'] ?? '')) {
+        throw new RuntimeException('Cannot determine bills.id definition for recipe snapshots');
+    }
+    $billIdDefinition = $column['COLUMN_TYPE'] . ' CHARACTER SET ' . $column['CHARACTER_SET_NAME']
+        . ' COLLATE ' . $column['COLLATION_NAME'];
     db()->exec('CREATE TABLE IF NOT EXISTS bill_recipe_snapshots (
-        bill_id VARCHAR(64) NOT NULL,
+        bill_id ' . $billIdDefinition . ' NOT NULL,
         menu_id VARCHAR(100) NOT NULL,
         unit VARCHAR(50) NULL,
         recipe_json LONGTEXT NULL,

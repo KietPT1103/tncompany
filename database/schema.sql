@@ -745,4 +745,4 @@ CREATE TABLE IF NOT EXISTS bill_recipe_snapshots (
         snapshot_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (bill_id, menu_id),
         CONSTRAINT fk_bill_recipe_snapshot_bill FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    );
