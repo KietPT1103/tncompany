@@ -10,7 +10,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {MemoryRouter, Routes, Route} from 'react-router-dom';
 import Page from './src/app/(dashboard)/inventory-receipts/[id]/page.tsx';
-const product={id:'bread',productCode:'SP000164',productName:'Bánh Mì Hàn Quốc',unit:'Cái',areaId:'cafe',areaName:'Cafe',attachedToCurrentArea:true,similar:false};
+const product={id:'bread',productCode:'SP000164',productName:'Bánh Mì Hàn Quốc',unit:'',areaId:'cafe',areaName:'Cafe',attachedToCurrentArea:true,similar:false};
 const receipt={id:'r1',receiptCode:'NK20261018-021',warehouseType:'equipment',areaId:'cafe',area:{name:'Cà phê'},status:'draft',createdAt:'2026-10-18T12:00:00Z',createdByName:'admin',orderCreatorName:'admin',supplierId:'s1',supplier:{supplierName:'Nhà cung cấp'},canEdit:true,items:[],images:[],imageCount:0,itemCount:0,totalQuantity:0,totalAmount:0};
 let posts=0, failSecond=true;
 window.fetch=async(url,options)=>{
@@ -19,6 +19,8 @@ window.fetch=async(url,options)=>{
  if(path.endsWith('/inventory-receipts.php'))data={item:{...receipt}};
  if(path.endsWith('/products.php'))data={items:[product]};
  if(path.endsWith('/inventory-receipt-items.php')){
+  const payload=JSON.parse(options.body);
+  if(!payload.productName?.trim()||!payload.unit?.trim()) throw new Error("Missing required product name/unit");
   posts++;
   if(posts===2&&failSecond){failSecond=false;ok=false;}
   else {const body=JSON.parse(options.body);receipt.items.push({...body,id:posts,lineTotal:body.quantity*body.unitPrice});receipt.itemCount++;receipt.totalAmount+=body.quantity*body.unitPrice;receipt.totalQuantity+=body.quantity;}
@@ -42,6 +44,7 @@ createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries=
   button('Bánh Mì Hàn Quốc').click();await wait();
   fill(input('Số lượng dòng '+index),String(index));fill(input('Đơn giá dòng '+index),'10000');await wait();
  }
+ check('missing catalog unit defaults to editable unit',input('Đơn vị dòng 1')?.value==='cái');
  check('multiple editable rows',!!input('Số lượng dòng 2'));
  check('completion blocked until rows saved',button('Lưu & cộng kho').disabled);
  button('Lưu nháp').click();await wait(600);

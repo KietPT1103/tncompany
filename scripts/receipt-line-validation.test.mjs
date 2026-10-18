@@ -1,11 +1,20 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 const source = readFileSync('src/components/inventory/receiptLineValidation.ts', 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
-const { validReceiptLine } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const { validReceiptLine, receiptEntryProduct } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 assert.equal(validReceiptLine({ product: null, quantity: '2', unitPrice: '100' }), false);
-for (const quantity of ['', '0', '-1', 'Infinity', 'abc']) assert.equal(validReceiptLine({ product: { id: 'p' }, quantity, unitPrice: '100' }), false);
-for (const unitPrice of ['', '-1', 'Infinity', 'abc']) assert.equal(validReceiptLine({ product: { id: 'p' }, quantity: '2', unitPrice }), false);
-assert.equal(validReceiptLine({ product: { id: 'p' }, quantity: '0.125', unitPrice: '0' }), true);
+for (const quantity of ['', '0', '-1', 'Infinity', 'abc']) assert.equal(validReceiptLine({ product: { id: 'p', productName: 'Cake', unit: 'cái' }, quantity, unitPrice: '100' }), false);
+for (const unitPrice of ['', '-1', 'Infinity', 'abc']) assert.equal(validReceiptLine({ product: { id: 'p', productName: 'Cake', unit: 'cái' }, quantity: '2', unitPrice }), false);
+assert.equal(validReceiptLine({ product: { id: 'p', productName: 'Cake', unit: 'cái' }, quantity: '0.125', unitPrice: '0' }), true);
 console.log('PASS receipt table line validation');
+for (const unit of ['', '   ', undefined]) {
+  assert.equal(validReceiptLine({ product: { id: 'p', productName: 'Cake', unit }, quantity: '18', unitPrice: '22000' }), false, 'Missing unit must not be sent to API');
+}
+assert.equal(validReceiptLine({ product: { id: 'p', productName: ' ', unit: 'cái' }, quantity: '18', unitPrice: '22000' }), false);
+assert.equal(receiptEntryProduct({ id: 'p', unit: '' }, 'equipment').unit, 'cái');
+assert.equal(receiptEntryProduct({ id: 'p', unit: '   ' }, 'equipment').unit, 'cái');
+assert.equal(receiptEntryProduct({ id: 'p', unit: ' kg ' }, 'equipment').unit, 'kg');
+assert.equal(receiptEntryProduct({ id: 'p', unit: '' }, 'ingredient').unit, '');
+console.log('PASS missing-unit regression and warehouse defaults');

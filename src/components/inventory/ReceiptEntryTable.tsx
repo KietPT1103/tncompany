@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { addInventoryReceiptItem, attachReceiptProduct, createReceiptProduct, searchWarehouseProducts, type ProductResult, type WarehouseType } from "@/services/inventoryReceiptService";
-import { validReceiptLine } from "./receiptLineValidation";
+import { receiptEntryProduct, validReceiptLine } from "./receiptLineValidation";
 
 type Line = { key: string; product: ProductResult | null; query: string; quantity: string; unitPrice: string; note: string };
 const emptyLine = (): Line => ({ key: crypto.randomUUID(), product: null, query: "", quantity: "", unitPrice: "", note: "" });
@@ -36,6 +36,7 @@ export default function ReceiptEntryTable({ receiptId, areaId, warehouseType, di
         const attached = await attachReceiptProduct(product.id, areaId);
         product = { ...product, id: attached.id, areaId, attachedToCurrentArea: true };
       }
+      product = receiptEntryProduct(product, warehouseType);
       update(key, { product, query: product.productName, unitPrice: product.unitPrice == null ? "" : String(product.unitPrice) });
       setActive(null); setError("");
     } catch (error) { setError(error instanceof Error ? error.message : "Không thể chọn hàng hóa."); }
@@ -56,7 +57,7 @@ export default function ReceiptEntryTable({ receiptId, areaId, warehouseType, di
     try {
       for (const line of filled) {
         const product = line.product!;
-        await addInventoryReceiptItem({ receiptId, productId: product.id, itemType: warehouseType, productCode: product.productCode, productName: product.productName, unit: product.unit, quantity: Number(line.quantity), unitPrice: Number(line.unitPrice), note: line.note });
+        await addInventoryReceiptItem({ receiptId, productId: product.id, itemType: warehouseType, productCode: product.productCode, productName: product.productName, unit: product.unit.trim(), quantity: Number(line.quantity), unitPrice: Number(line.unitPrice), note: line.note });
         saved++;
         setLines(rows => rows.filter(row => row.key !== line.key));
       }
@@ -84,7 +85,7 @@ export default function ReceiptEntryTable({ receiptId, areaId, warehouseType, di
           </div>}
         </td>
         <td className="w-36 p-2"><input aria-label={`Số lượng dòng ${index + 1}`} disabled={locked} type="number" min="0" step="0.001" value={line.quantity} onChange={event => update(line.key, { quantity: event.target.value })} className={`${inputClass} text-right`}/></td>
-        <td className="p-3">{line.product?.unit || "—"}{line.product?.purchaseToBaseFactor && line.product.purchaseToBaseFactor !== 1 ? <small className="block text-slate-500">1 {line.product.unit} = {line.product.purchaseToBaseFactor} {line.product.baseUnit}</small> : null}</td>
+        <td className="min-w-28 p-2">{warehouseType === "equipment" ? <input aria-label={`Đơn vị dòng ${index + 1}`} disabled={locked || !line.product} value={line.product?.unit || ""} onChange={event => { if (line.product) update(line.key, { product: { ...line.product, unit: event.target.value } }); }} placeholder="Đơn vị" className={inputClass}/> : <span>{line.product?.unit || "—"}</span>}{line.product?.purchaseToBaseFactor && line.product.purchaseToBaseFactor !== 1 ? <small className="block text-slate-500">1 {line.product.unit} = {line.product.purchaseToBaseFactor} {line.product.baseUnit}</small> : null}</td>
         <td className="w-40 p-2"><input aria-label={`Đơn giá dòng ${index + 1}`} disabled={locked} type="number" min="0" step="any" value={line.unitPrice} onChange={event => update(line.key, { unitPrice: event.target.value })} className={`${inputClass} text-right`}/></td>
         <td className="whitespace-nowrap p-3 text-right font-bold">{money((Number(line.quantity) || 0) * (Number(line.unitPrice) || 0))} ₫</td>
         <td className="min-w-40 p-2"><input aria-label={`Ghi chú dòng ${index + 1}`} disabled={locked} value={line.note} onChange={event => update(line.key, { note: event.target.value })} className={inputClass}/></td>
