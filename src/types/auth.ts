@@ -16,6 +16,7 @@ export type AppPermission =
   | "reports.access"
   | "reports.products.view"
   | "reports.revenue.view"
+  | "reports.ingredient_usage.view"
   | "reports.profit.access"
   | "reports.cost.access"
   | "cash_flow.access"

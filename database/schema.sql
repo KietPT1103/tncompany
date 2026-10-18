@@ -736,3 +736,13 @@ CREATE TABLE IF NOT EXISTS internal_invoice_import_operations (
  result_json TEXT NOT NULL,
  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS bill_recipe_snapshots (
+        bill_id VARCHAR(64) NOT NULL,
+        menu_id VARCHAR(100) NOT NULL,
+        unit VARCHAR(50) NULL,
+        recipe_json LONGTEXT NULL,
+        snapshot_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (bill_id, menu_id),
+        CONSTRAINT fk_bill_recipe_snapshot_bill FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

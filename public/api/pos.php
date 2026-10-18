@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/realtime.php';
+require_once __DIR__ . '/_lib/ingredient_usage.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $resource = strtolower(trim((string) ($_GET['resource'] ?? '')));
@@ -608,6 +609,11 @@ if ($resource === 'bills') pos_ensure_bill_order_source_column();
 if ($resource === 'bills') pos_ensure_bill_discount_columns();
 if ($resource === 'bills') pos_ensure_bill_checkout_request_column();
 if ($resource === 'bills') pos_ensure_cup_snapshot_columns();
+if ($resource === 'bills' && in_array($method, ['POST', 'PATCH'], true)) {
+    require_once __DIR__ . '/_lib/products_inventory.php';
+    products_inventory_ensure_schema();
+    ingredient_usage_ensure_schema();
+}
 if ($method === 'POST' && in_array($resource, ['kitchen-jobs', 'bar-jobs'], true)) {
     pos_ensure_category_preparation_print_column();
 }
@@ -754,6 +760,7 @@ if ($method === 'POST' && $resource === 'bills') {
             'checkout_request_id' => $checkoutRequestId !== '' ? $checkoutRequestId : null,
         ]);
         pos_replace_bill_children($id, $posStoreId, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
+        ingredient_usage_capture_bill($posStoreId, $id, ingredient_usage_recipe_resolver());
         db()->commit();
     } catch (Throwable $exception) {
         if (db()->inTransaction()) db()->rollBack();
@@ -795,6 +802,9 @@ if ($method === 'PATCH' && $resource === 'bills') {
         if ($fields !== []) db()->prepare('UPDATE bills SET ' . implode(',', $fields) . ' WHERE id=:id')->execute($params);
         if (array_key_exists('items', $body) || array_key_exists('appliedSurcharges', $body)) {
             pos_replace_bill_children($id, $posStoreId, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
+        }
+        if (array_key_exists('items', $body) || ($body['status'] ?? '') === 'completed') {
+            ingredient_usage_capture_bill($posStoreId, $id, ingredient_usage_recipe_resolver());
         }
         db()->commit();
     } catch (Throwable $exception) { if (db()->inTransaction()) db()->rollBack(); throw $exception; }

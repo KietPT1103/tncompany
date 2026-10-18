@@ -47,6 +47,7 @@ import {
 
 const INVENTORY_ACCOUNT_PERMISSIONS = new Set<AppPermission>([
   "stores.switch",
+  "reports.ingredient_usage.view",
   "products.selling.view",
   "products.components.update",
   "inventory_checks.access",

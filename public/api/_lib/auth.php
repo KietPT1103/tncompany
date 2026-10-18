@@ -186,6 +186,7 @@ function auth_all_permissions(): array
         'reports.access',
         'reports.products.view',
         'reports.revenue.view',
+        'reports.ingredient_usage.view',
         'reports.profit.access',
         'reports.cost.access',
         'cash_flow.access',
@@ -324,6 +325,7 @@ function auth_effective_permissions(array $row): array
         if (in_array('reports.access', $permissions, true)) {
             $permissions[] = 'reports.products.view';
             $permissions[] = 'reports.revenue.view';
+            $permissions[] = 'reports.ingredient_usage.view';
             $permissions[] = 'reports.profit.access';
             $permissions[] = 'reports.cost.access';
         }

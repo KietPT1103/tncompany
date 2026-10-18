@@ -572,22 +572,9 @@ function products_inventory_build_consumption_source_hash(
     );
 }
 
-function products_inventory_resolve_consumption_preview(string $storeId, array $salesItems): array
+function products_inventory_consumption_catalog(string $storeId): array
 {
     products_inventory_ensure_schema();
-
-    $normalizedSalesItems = products_inventory_normalize_sales_items($salesItems);
-
-    if ($normalizedSalesItems === []) {
-        return [
-            'salesItems' => [],
-            'items' => [],
-            'errors' => [],
-            'totalConsumedQuantity' => 0.0,
-            'totalConsumedCost' => 0.0,
-        ];
-    }
-
     $productsStatement = db()->prepare(
         'SELECT id, product_code, product_name, cost, stock_quantity
          FROM products
@@ -659,6 +646,27 @@ function products_inventory_resolve_consumption_preview(string $storeId, array $
                 : 1),
         ];
     }
+
+    return [$productsById, $productsByCode, $componentsByProductId];
+}
+
+function products_inventory_resolve_consumption_preview(string $storeId, array $salesItems, ?array $catalog = null): array
+{
+    products_inventory_ensure_schema();
+
+    $normalizedSalesItems = products_inventory_normalize_sales_items($salesItems);
+
+    if ($normalizedSalesItems === []) {
+        return [
+            'salesItems' => [],
+            'items' => [],
+            'errors' => [],
+            'totalConsumedQuantity' => 0.0,
+            'totalConsumedCost' => 0.0,
+        ];
+    }
+
+    [$productsById, $productsByCode, $componentsByProductId] = $catalog ?? products_inventory_consumption_catalog($storeId);
 
     $aggregated = [];
     $errors = [];

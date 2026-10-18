@@ -1,0 +1,56 @@
+<?php
+declare(strict_types=1);
+$pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+function db(): PDO { global $pdo; return $pdo; }
+function check(bool $value, string $message): void { if (!$value) throw new RuntimeException($message); }
+$file = __DIR__.'/../public/api/_lib/ingredient_usage.php';
+check(is_file($file), 'Ingredient usage snapshot implementation is missing');
+require $file;
+$pdo->exec('CREATE TABLE products(id TEXT,store_id TEXT,product_code TEXT,unit TEXT)');
+$pdo->exec('CREATE TABLE bills(id TEXT PRIMARY KEY,store_id TEXT,status TEXT,created_at TEXT)');
+$pdo->exec('CREATE TABLE bill_items(bill_id TEXT,menu_id TEXT,name TEXT,quantity REAL)');
+$pdo->exec('CREATE TABLE bill_recipe_snapshots(bill_id TEXT,menu_id TEXT,unit TEXT,recipe_json TEXT,snapshot_at TEXT DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(bill_id,menu_id))');
+$pdo->exec("INSERT INTO products VALUES('p','cafe','CF','ly')");
+$pdo->exec("INSERT INTO bills VALUES('b1','cafe','completed','2026-10-17 09:00:00'),('b2','cafe','completed','2026-10-18 10:00:00'),('b3','restaurant','completed','2026-10-18 10:00:00'),('b4','cafe','cancelled','2026-10-18 10:00:00')");
+$pdo->exec("INSERT INTO bill_items VALUES('b1','CF','Cà phê',2),('b1','CF','Cà phê',1),('b2','CF','Cà phê',4),('b2','TEA','Trà',2),('b3','CF','Cà phê',90),('b4','CF','Cà phê',80)");
+$unsynced = ingredient_usage_report('cafe','2026-10-17','2026-10-17');
+check($unsynced['sales'][0]['unit'] === 'ly', 'Unsynced sales still show catalog unit');
+$grams = 20;
+$hasTea = false;
+$resolver = static function(string $store, array $sales) use (&$grams, &$hasTea): array {
+    if ($sales[0]['productCode'] === 'TEA' && !$hasTea) return ['errors'=>['Thiếu công thức trà'], 'items'=>[]];
+    return ['errors'=>[], 'items'=>[['productId'=>'coffee','productCode'=>'NL1','productName'=>'Bột cà phê','unit'=>'g','quantity'=>$grams]]];
+};
+ingredient_usage_capture_bill('cafe','b1',$resolver);
+$grams = 30;
+ingredient_usage_capture_bill('cafe','b1',$resolver);
+ingredient_usage_capture_bill('cafe','b2',$resolver);
+$report = ingredient_usage_report('cafe','2026-10-17','2026-10-18');
+check($report['totalSoldQuantity'] === 9.0, 'Sum sold items, excluding cancelled and other stores');
+check($report['ingredients'][0]['quantity'] === 180.0, 'Old recipe stays 20g; new bill uses 30g: 3*20+4*30');
+check($report['sales'][0]['unit'] === 'ly', 'Product units are preserved');
+check($report['pendingQuantity'] === 2.0, 'Missing recipe remains pending');
+check($report['sales'][0]['quantity'] === 7.0, 'Duplicate bill lines combine without duplicate usage');
+$hasTea = true;
+ingredient_usage_capture_bill('cafe','b2',$resolver);
+ingredient_usage_capture_bill('cafe','b2',$resolver);
+$report = ingredient_usage_report('cafe','2026-10-17','2026-10-18');
+check($report['ingredients'][0]['quantity'] === 240.0, 'Backfill missing recipe once without overwriting existing snapshots');
+check($report['pendingQuantity'] === 0.0, 'Pending clears after backfill');
+check(ingredient_usage_report('cafe','2026-10-18','2026-10-18')['ingredients'][0]['quantity'] === 180.0, 'Inclusive date range');
+$pdo->exec("UPDATE products SET unit='chai'");
+check(ingredient_usage_report('cafe','2026-10-17','2026-10-17')['sales'][0]['unit'] === 'ly', 'Historical unit survives catalog edits');
+$pdo->exec("UPDATE bills SET status='cancelled' WHERE id='b1'");
+check(ingredient_usage_report('cafe','2026-10-17','2026-10-18')['ingredients'][0]['quantity'] === 180.0, 'Cancellation removes usage even after capture');
+check(ingredient_usage_report('restaurant','2026-10-17','2026-10-18')['pendingQuantity'] === 90.0, 'Unsynced historical sales visible as pending');
+check(ingredient_usage_report('cafe','2026-10-19','2026-10-19')['totalSoldQuantity'] === 0.0, 'Empty range');
+check(function_exists('ingredient_usage_pending_bills'), 'Historical backfill batching is missing');
+$batch = ingredient_usage_pending_bills('restaurant','2026-10-17','2026-10-18','',1);
+check($batch['ids'] === ['b3'] && $batch['nextCursor'] === null, 'Pending backfill respects store and excludes saved/cancelled bills');
+$pdo->exec("INSERT INTO bills VALUES('b5','restaurant','completed','2026-10-18 23:59:59')");
+$pdo->exec("INSERT INTO bill_items VALUES('b5','CF','Coffee',2)");
+$batch = ingredient_usage_pending_bills('restaurant','2026-10-18','2026-10-18','',1);
+check($batch['ids'] === ['b3'] && $batch['nextCursor'] === 'b3', 'Backfill paginates instead of dropping old sales');
+$batch = ingredient_usage_pending_bills('restaurant','2026-10-18','2026-10-18','b3',1);
+check($batch['ids'] === ['b5'] && $batch['nextCursor'] === null, 'Cursor advances even if earlier recipes remain missing');
+echo "Ingredient usage tests passed\n";

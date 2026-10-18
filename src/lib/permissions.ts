@@ -123,6 +123,13 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     path: "/reports/revenue",
   },
   {
+    id: "reports.ingredient_usage.view",
+    label: "Món bán và nguyên liệu đã dùng",
+    description: "Xem số món bán, nguyên liệu tiêu hao và đồng bộ công thức còn thiếu.",
+    category: "Báo cáo",
+    path: "/reports/ingredient-usage",
+  },
+  {
     id: "reports.profit.access",
     label: "Báo cáo lợi nhuận",
     description: "Xem, nhập chi phí và lưu báo cáo lợi nhuận.",
@@ -495,6 +502,7 @@ export function getEffectivePermissions(
     if (normalized.includes("reports.access")) {
       inherited.add("reports.products.view");
       inherited.add("reports.revenue.view");
+      inherited.add("reports.ingredient_usage.view");
       inherited.add("reports.profit.access");
       inherited.add("reports.cost.access");
     }
@@ -593,6 +601,7 @@ const DEFAULT_ROUTE_ORDER = [
   "/reports",
   "/reports/products",
   "/reports/revenue",
+  "/reports/ingredient-usage",
   "/reports/profit",
   "/cash-flow",
   "/product/ingredients",
