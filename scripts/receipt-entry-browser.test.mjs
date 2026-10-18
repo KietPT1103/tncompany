@@ -44,9 +44,9 @@ createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries=
  }
  check('multiple editable rows',!!input('Số lượng dòng 2'));
  check('completion blocked until rows saved',button('Lưu & cộng kho').disabled);
- button('Lưu các dòng vào phiếu').click();await wait(600);
+ button('Lưu nháp').click();await wait(600);
  check('partial failure keeps unsaved row only',posts===2&&receipt.items.length===1&&input('Số lượng dòng 1')?.value==='2'&&!input('Số lượng dòng 2'));
- button('Lưu các dòng vào phiếu').click();await wait(600);
+ button('Lưu nháp').click();await wait(600);
  check('retry does not duplicate successful row',posts===3&&receipt.items.length===2&&receipt.totalQuantity===3);
  check('completion enabled after save',!button('Lưu & cộng kho').disabled);
  check('no page horizontal overflow',document.documentElement.scrollWidth<=innerWidth);

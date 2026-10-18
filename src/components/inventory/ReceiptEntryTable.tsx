@@ -92,7 +92,7 @@ export default function ReceiptEntryTable({ receiptId, areaId, warehouseType, di
       </tr>)}</tbody>
       <tfoot className="bg-slate-50 font-bold"><tr><td colSpan={6} className="p-3 text-right">Tạm tính các dòng mới</td><td className="p-3 whitespace-nowrap text-right">{money(lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0))} ₫</td><td colSpan={2}/></tr></tfoot>
     </table></div>
-    <div className="flex flex-wrap items-center justify-between gap-3 p-4"><button disabled={locked} onClick={() => setLines(rows => [...rows, emptyLine()])} className="inline-flex min-h-11 items-center gap-2 rounded-md border px-4 font-semibold"><Plus size={16}/>Thêm dòng</button><button disabled={locked || !filled.length || filled.some(line => !validReceiptLine(line))} onClick={() => void save()} className="min-h-11 rounded-md bg-emerald-700 px-5 font-bold text-white disabled:opacity-50">{saving ? "Đang lưu..." : "Lưu các dòng vào phiếu"}</button></div>
-    {pending && <p className="px-4 pb-3 text-sm text-amber-800">Lưu các dòng vào phiếu trước khi hoàn thành và cộng kho.</p>}
+    <div className="flex flex-wrap items-center justify-between gap-3 p-4"><button disabled={locked} onClick={() => setLines(rows => [...rows, emptyLine()])} className="inline-flex min-h-11 items-center gap-2 rounded-md border px-4 font-semibold"><Plus size={16}/>Thêm dòng</button><button disabled={locked || !filled.length || filled.some(line => !validReceiptLine(line))} onClick={() => void save()} className="min-h-11 rounded-md bg-emerald-700 px-5 font-bold text-white disabled:opacity-50">{saving ? "Đang lưu..." : "Lưu nháp"}</button></div>
+    {pending && <p className="px-4 pb-3 text-sm text-amber-800">Tạm lưu trước khi hoàn thành và cộng kho.</p>}
   </div>;
 }
