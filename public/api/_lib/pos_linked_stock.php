@@ -43,6 +43,12 @@ function pos_linked_stock_balance(array $link,string $date): array {
  return ['posCode'=>$link['pos_code'],'opening'=>round((float)$in['before_day']-(float)$out['before_day']+$adjustment['before_day'],3),'received'=>(float)$in['received'],'sold'=>(float)$out['sold'],'quantity'=>round((float)$in['total']-(float)$out['total']+$adjustment['total'],3),'adjusted'=>$adjustment['total']-$adjustment['before_day'],'linkedAt'=>$link['created_at'],'salesStartAt'=>$link['sales_start_at']??$link['created_at']];
 }
 
+// Match using the same database collation as receipt grouping, not a case-sensitive hash.
+function pos_stock_find_link(string $store, array $item): ?array {
+ $q=db()->prepare('SELECT * FROM inventory_pos_links WHERE store_id=:store AND product_code=:code AND product_name=:name AND unit=:unit LIMIT 1');
+ $q->execute(['store'=>$store,'code'=>$item['product_code'],'name'=>$item['product_name'],'unit'=>$item['unit']]);
+ return $q->fetch() ?: null;
+}
 function pos_stock_key(array $item): string {
  return hash('sha256',json_encode([$item['product_code'],$item['product_name'],$item['unit']]));
 }
@@ -77,8 +83,8 @@ function pos_equipment_edit(array $original,array $next,array $user,string $date
    if (!in_array($id,$originalIds,true)) throw new InvalidArgumentException('Thông tin trùng với hàng khác trong kho.');
   }
  }
- $q=db()->prepare('SELECT * FROM inventory_pos_links WHERE store_id=:store AND stock_key=:key');
- $q->execute(['store'=>$original['store_id'],'key'=>$oldKey]);$link=$q->fetch();
+ $link=pos_stock_find_link($original['store_id'],$original);
+ if ($link) $oldKey=$link['stock_key'];
  $balance=pos_linked_stock_balance($link?:($original+['pos_code'=>'','created_at'=>$date.' 00:00:00']),$date);
  if ($oldKey!==$newKey) {
   $q=db()->prepare('UPDATE inventory_receipt_items SET product_code=:new_code,product_name=:new_name,unit=:new_unit WHERE item_type="equipment" AND product_code=:code AND product_name=:name AND unit=:unit AND receipt_id IN (SELECT id FROM inventory_receipts WHERE store_id=:store)');

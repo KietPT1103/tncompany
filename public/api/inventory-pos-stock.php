@@ -38,7 +38,7 @@ if(in_array($method,['POST','PATCH'],true)) {
    $q=db()->prepare('SELECT 1 FROM products WHERE store_id=:store AND product_code=:pos LIMIT 1');$q->execute(['store'=>$store,'pos'=>$pos]);
    if(!$q->fetchColumn()) throw new InvalidArgumentException('Sản phẩm POS không thuộc cửa hàng.');
    $key=pos_stock_key($original);
-   $q=db()->prepare('SELECT * FROM inventory_pos_links WHERE store_id=:store AND stock_key=:key');$q->execute(['store'=>$store,'key'=>$key]);$old=$q->fetch();
+   $old=pos_stock_find_link($store,$original);
    if($old) {
     db()->prepare('UPDATE inventory_pos_links SET pos_code=:pos,sales_start_at=:start WHERE id=:id AND store_id=:store')->execute(['pos'=>$pos,'start'=>$start.' 00:00:00','id'=>$old['id'],'store'=>$store]);
    } else {

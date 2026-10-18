@@ -11,8 +11,9 @@ pos_linked_stock_ensure();
 $today=(new DateTimeImmutable('now',new DateTimeZone('Asia/Ho_Chi_Minh')))->format('Y-m-d');
 try {$date=pos_stock_date((string)($_GET['date']??$today));} catch(InvalidArgumentException $e){respond_error($e->getMessage(),422);}
 // Completed receipt lines are the source of truth, including later admin corrections.
-$stmt = db()->prepare('SELECT i.product_code productCode,i.product_name productName,i.unit,SUM(i.quantity) quantity,SUM(i.quantity*i.unit_cost) value
+$stmt = db()->prepare('SELECT COALESCE(MAX(l.product_code),i.product_code) productCode,COALESCE(MAX(l.product_name),i.product_name) productName,COALESCE(MAX(l.unit),i.unit) unit,SUM(i.quantity) quantity,SUM(i.quantity*i.unit_cost) value
  FROM inventory_receipt_items i INNER JOIN inventory_receipts r ON r.id=i.receipt_id
+ LEFT JOIN inventory_pos_links l ON l.store_id=r.store_id AND l.product_code=i.product_code AND l.product_name=i.product_name AND l.unit=i.unit
  WHERE r.store_id=:store AND (r.status="completed" OR (r.status="deleted" AND r.previous_status="completed")) AND i.item_type="equipment" AND r.receipt_date<=:date
  GROUP BY i.product_code,i.product_name,i.unit ORDER BY i.product_name');
 $stmt->execute(['store'=>$store,'date'=>$date]);
