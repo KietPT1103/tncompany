@@ -53,4 +53,8 @@ $batch = ingredient_usage_pending_bills('restaurant','2026-10-18','2026-10-18','
 check($batch['ids'] === ['b3'] && $batch['nextCursor'] === 'b3', 'Backfill paginates instead of dropping old sales');
 $batch = ingredient_usage_pending_bills('restaurant','2026-10-18','2026-10-18','b3',1);
 check($batch['ids'] === ['b5'] && $batch['nextCursor'] === null, 'Cursor advances even if earlier recipes remain missing');
+ingredient_usage_delete_bill_snapshots('b1');
+check((int)$pdo->query("SELECT COUNT(*) FROM bill_recipe_snapshots WHERE bill_id='b1'")->fetchColumn() === 0, 'Bill deletion removes its snapshots without relying on a foreign key');
+check((int)$pdo->query("SELECT COUNT(*) FROM bill_recipe_snapshots WHERE bill_id='b2'")->fetchColumn() === 2, 'Bill deletion preserves other snapshots');
+
 echo "Ingredient usage tests passed\n";

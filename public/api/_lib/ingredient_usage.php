@@ -6,7 +6,9 @@ function ingredient_usage_ensure_schema(): void
 {
     // String foreign keys must use the parent column's charset and collation.
     // Existing installations can use a different collation from new tables.
-    $column = db()->query("SELECT COLUMN_TYPE, CHARACTER_SET_NAME, COLLATION_NAME
+    $column = db()->query("SELECT COLUMN_TYPE, CHARACTER_SET_NAME, COLLATION_NAME,
+        (SELECT ENGINE FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bills') AS ENGINE
         FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bills' AND COLUMN_NAME='id'")->fetch(PDO::FETCH_ASSOC);
     if (!$column || !preg_match('/^varchar\([0-9]+\)$/i', $column['COLUMN_TYPE'])
@@ -16,15 +18,26 @@ function ingredient_usage_ensure_schema(): void
     }
     $billIdDefinition = $column['COLUMN_TYPE'] . ' CHARACTER SET ' . $column['CHARACTER_SET_NAME']
         . ' COLLATE ' . $column['COLLATION_NAME'];
+    // Legacy bills tables may be MyISAM, which cannot be referenced by an InnoDB FK.
+    $foreignKey = strcasecmp((string)($column['ENGINE'] ?? ''), 'InnoDB') === 0
+        ? ', CONSTRAINT fk_bill_recipe_snapshot_bill FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE'
+        : '';
     db()->exec('CREATE TABLE IF NOT EXISTS bill_recipe_snapshots (
         bill_id ' . $billIdDefinition . ' NOT NULL,
         menu_id VARCHAR(100) NOT NULL,
         unit VARCHAR(50) NULL,
         recipe_json LONGTEXT NULL,
         snapshot_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (bill_id, menu_id),
-        CONSTRAINT fk_bill_recipe_snapshot_bill FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE
+        PRIMARY KEY (bill_id, menu_id)
+        ' . $foreignKey . '
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+}
+
+// Explicit cleanup also supports legacy bills tables without cascading foreign keys.
+function ingredient_usage_delete_bill_snapshots(string $billId): void
+{
+    db()->prepare('DELETE FROM bill_recipe_snapshots WHERE bill_id=:bill')
+        ->execute(['bill' => $billId]);
 }
 
 function ingredient_usage_recipe_resolver(): callable

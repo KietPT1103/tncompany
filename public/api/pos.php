@@ -614,6 +614,7 @@ if ($resource === 'bills' && in_array($method, ['POST', 'PATCH'], true)) {
     products_inventory_ensure_schema();
     ingredient_usage_ensure_schema();
 }
+if ($resource === 'bills' && $method === 'DELETE') ingredient_usage_ensure_schema();
 if ($method === 'POST' && in_array($resource, ['kitchen-jobs', 'bar-jobs'], true)) {
     pos_ensure_category_preparation_print_column();
 }
@@ -822,6 +823,7 @@ if ($method === 'DELETE' && $resource === 'bills') {
     try {
         db()->prepare('UPDATE kitchen_print_jobs SET bill_id=NULL WHERE bill_id=:id')->execute(['id' => $id]);
         db()->prepare('UPDATE bar_print_jobs SET bill_id=NULL WHERE bill_id=:id')->execute(['id' => $id]);
+        ingredient_usage_delete_bill_snapshots($id);
         db()->prepare('DELETE FROM bills WHERE id=:id')->execute(['id' => $id]);
         db()->commit();
     } catch (Throwable $exception) { if (db()->inTransaction()) db()->rollBack(); throw $exception; }
