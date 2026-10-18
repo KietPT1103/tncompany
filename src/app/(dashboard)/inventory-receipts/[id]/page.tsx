@@ -361,13 +361,13 @@ export default function FieldInventoryReceiptDetailPage() {
         </section>
 
         <div className="mt-4 grid min-w-0 gap-5 2xl:mt-5">
-          <section className="receipt-goods-panel min-w-0 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="receipt-goods-panel grid min-w-0 gap-4">
             <div className="hidden flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 sm:flex sm:px-6 sm:py-4">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950"><PackageOpen className="h-5 w-5 text-emerald-700" />Giải trình hàng hóa</h2>
               <span className="text-sm font-semibold text-slate-500">{receipt.itemCount} dòng hàng</span>
             </div>
 
-            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5">
               <label htmlFor="receipt-warehouse" className="mb-1 block text-sm font-bold text-slate-800">Kho nhập hàng</label>
               <select id="receipt-warehouse" value={warehouseType} disabled={!editableMetadata || busy || pendingLines || receipt.items.length > 0} onChange={event => void changeWarehouse(event.target.value as WarehouseType)} className="min-h-11 w-full rounded-md border border-emerald-200 bg-white px-3 text-sm sm:max-w-xs">
                 <option value="ingredient">Kho nguyên liệu</option>
@@ -375,7 +375,7 @@ export default function FieldInventoryReceiptDetailPage() {
               </select>
               <p className="mt-1 text-xs text-slate-500">{receipt.items.length ? "Xóa các dòng hàng nếu cần đổi kho nhập." : "Gợi ý hàng hóa lấy từ lịch sử nhập của kho đã chọn."}</p>
             </div>
-            {editableMetadata && <details open={!receipt.supplierId || !receipt.orderCreatorName} className="border-b border-slate-200 px-3 py-2 sm:px-5"><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-emerald-950">Thông tin nhập hàng{receipt.supplierId && receipt.orderCreatorName ? " · Đã lưu" : " · Cần điền"}</summary><div className="grid gap-3 pb-2 sm:grid-cols-2">
+            {editableMetadata && <details open={!receipt.supplierId || !receipt.orderCreatorName} className="receipt-supplier-panel rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm sm:px-5"><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-emerald-950">Nhà phân phối & người nhập{receipt.supplierId && receipt.orderCreatorName ? " · Đã lưu" : " · Cần điền"}</summary><div className="grid gap-3 pb-2 sm:grid-cols-2">
               <div className="min-w-0 text-sm font-semibold text-slate-800">
                 <label htmlFor="receipt-supplier-search">Nhà phân phối</label>
                 <input id="receipt-supplier-search" autoComplete="off" value={supplierQuery} disabled={busy} onFocus={() => setSupplierOpen(true)} onChange={event => { setSupplierQuery(event.target.value); setSupplierId(""); setSupplierOpen(true); setSupplierError(""); }} onKeyDown={event => { if (event.key === "Escape") setSupplierOpen(false); if (event.key === "Enter") { event.preventDefault(); if (supplierExact) pickSupplier(supplierExact); else if (supplierMatches.length === 1) pickSupplier(supplierMatches[0]); } }} placeholder="Gõ tên để tìm hoặc tạo mới…" className="mt-1 min-h-11 w-full rounded-md border border-slate-200 bg-white px-3"/>
@@ -390,17 +390,20 @@ export default function FieldInventoryReceiptDetailPage() {
               {loadError && <p role="alert" className="text-sm text-rose-700">{loadError}</p>}
               <Button variant="outline" disabled={busy} onClick={saveMetadata} className="sm:col-span-2">Lưu thông tin</Button>
             </div></details>}
-            {receipt.items.length > 0 && <div className="receipt-saved-scroll overflow-x-auto"><table className="receipt-saved-table w-full min-w-[900px] text-left text-sm">
+            <section aria-labelledby="receipt-saved-heading" className="min-w-0 overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-3"><h3 id="receipt-saved-heading" className="font-bold text-emerald-950">Mặt hàng đã lưu vào phiếu</h3><span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">{receipt.items.length} dòng · Đã lưu</span></div>
+              {receipt.items.length > 0 ? <div className="receipt-saved-scroll overflow-x-auto"><table className="receipt-saved-table w-full min-w-[900px] text-left text-sm">
               <thead className="bg-slate-100 text-slate-700"><tr>{["STT", "Mã hàng", "Tên mặt hàng", "Số lượng", "Đơn vị", "Đơn giá", "Thành tiền", "Ghi chú", "Thao tác"].map(label => <th key={label} className="p-3 whitespace-nowrap">{label}</th>)}</tr></thead>
               <tbody className="divide-y">{receipt.items.map((item, index) => <tr key={item.id}>
                 <td className="p-3">{index + 1}</td><td className="p-3 text-emerald-800">{item.productCode}</td><td className="p-3 font-semibold">{item.productName}</td>
                 <td data-label="Số lượng" className="p-3 text-right">{item.quantity.toLocaleString("vi-VN")}</td><td data-label="Đơn vị" className="p-3">{item.unit}</td><td data-label="Đơn giá" className="p-3 text-right whitespace-nowrap">{item.unitPrice.toLocaleString("vi-VN")} ₫</td><td className="p-3 text-right font-bold whitespace-nowrap">{item.lineTotal.toLocaleString("vi-VN")} ₫</td><td className="p-3">{item.note ? <details><summary className="cursor-pointer text-xs font-semibold text-emerald-700">Ghi chú</summary><p className="mt-1 whitespace-pre-wrap break-words">{item.note}</p></details> : null}</td>
                 <td className="p-2"><div className="flex">{canCorrect && <Button disabled={busy || pendingLines} variant="ghost" size="icon" onClick={() => beginEdit(item)} aria-label={`Sửa ${item.productName}`}><Pencil className="h-4 w-4 text-emerald-700"/></Button>}{editable && <Button disabled={busy || pendingLines} variant="ghost" size="icon" onClick={async () => { if (!confirm("Xóa dòng hàng?")) return; setBusy(true); try { await deleteInventoryReceiptItem(item.id); await reload(); } catch (error) { alert(error instanceof Error ? error.message : "Không thể xóa dòng hàng."); } finally { setBusy(false); } }} aria-label={`Xóa ${item.productName}`}><Trash2 className="h-4 w-4 text-rose-600"/></Button>}</div></td>
               </tr>)}</tbody>
-            </table></div>}
+            </table></div> : <p className="px-4 py-5 text-sm text-slate-500">Chưa có mặt hàng được lưu vào phiếu.</p>}
+            </section>
             {editable && <ReceiptEntryTable key={`${receipt.id}-${warehouseType}`} receiptId={receipt.id} areaId={receipt.areaId} warehouseType={warehouseType} disabled={busy} canCreate={hasPermission(user, "products.create")} onSaved={reload} onPendingChange={setPendingLines} onSavingChange={setBusy}/>}
 
-            <div className="receipt-complete-bar flex flex-col gap-2 rounded-b-xl border-t border-slate-200 bg-slate-950 px-3 py-3 sm:gap-4 sm:px-5 sm:py-5 text-white sm:flex-row sm:items-center sm:justify-between">
+            <div className="receipt-complete-bar flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-950 px-3 py-3 sm:gap-4 sm:px-5 sm:py-5 text-white sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-slate-300">Tổng số lượng {receipt.totalQuantity}</p>
                 <p className="mt-1 text-xl font-bold tabular-nums sm:text-3xl">{receipt.totalAmount.toLocaleString("vi-VN")} ₫</p>
@@ -411,7 +414,7 @@ export default function FieldInventoryReceiptDetailPage() {
                 </Button>
               )}
             </div>
-          </section>
+          </div>
 
           <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 sm:px-6 sm:py-4">

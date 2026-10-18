@@ -498,3 +498,20 @@ button:disabled {
   .receipt-detail .receipt-entry-table tfoot td:last-child {display:none;}
   .receipt-detail .receipt-line-note summary {font-size:11px;}
 }
+
+/* Saved and unsaved receipt lines remain visually distinct at every size. */
+.receipt-detail .receipt-saved-table tbody > tr:nth-child(even) {background:#f0fdf7;}
+.receipt-detail .receipt-entry-table tbody > tr:nth-child(even) {background:#fffbeb;}
+.receipt-detail .receipt-saved-table tbody > tr + tr > td {border-top:2px solid #cce7dc;}
+.receipt-detail .receipt-entry-table tbody > tr + tr > td {border-top:2px solid #f3dfad;}
+.receipt-detail .receipt-saved-table tbody > tr:hover {background:#e6f6ee;}
+.receipt-detail .receipt-entry-table tbody > tr:hover {background:#fff7df;}
+.receipt-detail .receipt-supplier-panel > summary {color:#334155;}
+@media (max-width:639px) {
+  .receipt-detail .receipt-saved-table tbody,
+  .receipt-detail .receipt-entry-table tbody {display:grid;gap:10px;padding:10px;background:#f8fafc;}
+  .receipt-detail .receipt-saved-table tbody > tr {border:1px solid #cce7dc;border-left:3px solid #10a579;border-radius:9px;background:#fff;}
+  .receipt-detail .receipt-entry-table tbody > tr {border:1px solid #f3dfad;border-left:3px solid #e5a82b;border-radius:9px;background:#fff;}
+  .receipt-detail .receipt-saved-table tbody > tr + tr > td,
+  .receipt-detail .receipt-entry-table tbody > tr + tr > td {border-top:0;}
+}

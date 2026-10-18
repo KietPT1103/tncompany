@@ -70,8 +70,8 @@ export default function ReceiptEntryTable({ receiptId, areaId, warehouseType, di
   }
   const locked = disabled || saving;
   const inputClass = "h-11 w-full rounded-md border border-slate-200 bg-white px-3 disabled:opacity-50";
-  return <div className="border-t border-slate-200">
-    <div className="flex flex-wrap items-center justify-between gap-2 bg-emerald-50 px-4 py-3"><h3 className="font-bold text-emerald-950">Nhập mặt hàng</h3><p className="hidden text-sm text-slate-600 sm:block">Chọn hàng, nhập số lượng và đơn giá cho từng dòng</p></div>
+  return <section aria-label="Mặt hàng đang nhập" className="receipt-entry-panel min-w-0 overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3"><h3 className="font-bold text-amber-950">Mặt hàng đang nhập</h3><span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{pending ? `${filled.length} dòng · Chưa lưu` : "Chưa nhập"}</span></div>
     {error && <p role="alert" className="px-4 py-3 text-sm text-rose-700">{error}</p>}
     <div className="receipt-entry-scroll overflow-x-auto"><table className="receipt-entry-table w-full min-w-[1050px] text-left text-sm">
       <thead className="bg-emerald-950 text-white"><tr>{["STT", "Mã hàng", "Tên mặt hàng", "Số lượng nhập", "Đơn vị", "Đơn giá", "Thành tiền", "Ghi chú", ""].map((label, index) => <th key={index} className="p-3 whitespace-nowrap">{label}</th>)}</tr></thead>
@@ -95,5 +95,5 @@ export default function ReceiptEntryTable({ receiptId, areaId, warehouseType, di
     </table></div>
     <div className="flex flex-wrap items-center justify-between gap-3 p-4"><button disabled={locked} onClick={() => setLines(rows => [...rows, emptyLine()])} className="inline-flex min-h-11 items-center gap-2 rounded-md border px-4 font-semibold"><Plus size={16}/>Thêm dòng</button><button disabled={locked || !filled.length || filled.some(line => !validReceiptLine(line))} onClick={() => void save()} className="min-h-11 rounded-md bg-emerald-700 px-5 font-bold text-white disabled:opacity-50">{saving ? "Đang lưu..." : "Lưu nháp"}</button></div>
     {pending && <p className="px-4 pb-3 text-sm text-amber-800">Tạm lưu trước khi hoàn thành và cộng kho.</p>}
-  </div>;
+  </section>;
 }
