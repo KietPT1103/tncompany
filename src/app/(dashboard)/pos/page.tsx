@@ -1,3 +1,4 @@
+import { getDailyPosStock, type DailyPosStock } from "@/services/posDailyStock";
 import { apiRequest as linkedStockRequest } from "@/lib/api";
 ﻿"use client";
 
@@ -408,12 +409,26 @@ export default function CafePosPage() {
     useState<DailyReportPaymentFilter>("all");
   const [dailyReportDate, setDailyReportDate] = useState(() => toLocalDateInput(new Date()));
   const [dailyReportShift, setDailyReportShift] = useState<DailyReportShift>("shift_1");
+  const [dailyStockSnapshot, setDailyStockSnapshot] = useState<{ storeId: string; date: string; items: DailyPosStock; error: string } | null>(null);
+  const dailyStock = dailyStockSnapshot?.storeId === storeId && dailyStockSnapshot.date === dailyReportDate ? dailyStockSnapshot.items : {};
+  const dailyStockError = dailyStockSnapshot?.storeId === storeId && dailyStockSnapshot.date === dailyReportDate ? dailyStockSnapshot.error : "";
   const [updatingDailyReportCategoryId, setUpdatingDailyReportCategoryId] = useState<string | null>(null);
   const [expandedDailyBillHours, setExpandedDailyBillHours] = useState<Set<number>>(
     () => new Set()
   );
   const [expandedDailyReportBillId, setExpandedDailyReportBillId] = useState<string | null>(null);
   const [isLoadingDailyReport, setIsLoadingDailyReport] = useState(false);
+  useEffect(() => {
+    if (!showDailyReport || isLoadingDailyReport) return;
+    let active = true;
+    setDailyStockSnapshot(null);
+    getDailyPosStock(storeId, dailyReportDate).then(items => {
+      if (active) setDailyStockSnapshot({ storeId, date: dailyReportDate, items, error: "" });
+    }).catch(() => {
+      if (active) setDailyStockSnapshot({ storeId, date: dailyReportDate, items: {}, error: "Không tải được số nhập và tồn kho trong ngày. Vui lòng tải lại báo cáo." });
+    });
+    return () => { active = false; };
+  }, [showDailyReport, storeId, dailyReportDate, isLoadingDailyReport]);
   const [showVoucherModal, setShowVoucherModal] = useState<CashVoucherType | null>(
     null
   );
@@ -5341,6 +5356,8 @@ export default function CafePosPage() {
                         <h4 className="font-bold text-slate-900">
                           {group.title} · {getDailyReportShiftLabel(dailyReportShift)}
                         </h4>
+                        <p className="text-xs text-slate-500">Nhập và tồn kho tính cả ngày {dailyReportDate} · Chưa liên kết: —</p>
+                        {dailyStockError && <p role="alert" className="text-xs text-rose-700">{dailyStockError}</p>}
                         <p className="text-sm text-slate-600">
                           {group.rows.length} mặt hàng · {formatCurrency(group.total)} {group.unit}
                         </p>
@@ -5353,7 +5370,7 @@ export default function CafePosPage() {
                         <div className="overflow-x-auto">
                           <table className="w-full min-w-[620px] text-sm">
                             <thead className="border-b bg-white text-left text-xs uppercase text-slate-500">
-                              <tr><th className="w-14 px-4 py-3 text-center">#</th><th className="px-4 py-3">Tên hàng hóa</th><th className="px-4 py-3 text-right">Số lượng bán</th><th className="px-4 py-3 text-right">Số bill</th><th className="px-4 py-3 text-right">Doanh thu</th></tr>
+                              <tr><th className="w-14 px-4 py-3 text-center">#</th><th className="px-4 py-3">Tên hàng hóa</th><th className="px-4 py-3 text-right">Số lượng bán</th><th className="px-4 py-3 text-right">Nhập trong ngày</th><th className="px-4 py-3 text-right">Tồn cuối ngày</th><th className="px-4 py-3 text-right">Doanh thu</th></tr>
                             </thead>
                             <tbody className="divide-y">
                               {group.rows.map((item, index) => (
@@ -5361,7 +5378,8 @@ export default function CafePosPage() {
                                   <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
                                   <td className="px-4 py-3 font-semibold text-slate-900">{item.name}</td>
                                   <td className="px-4 py-3 text-right text-base font-bold text-sky-700">{formatCurrency(item.quantity)}</td>
-                                  <td className="px-4 py-3 text-right">{item.billCount}</td>
+                                  <td className="px-4 py-3 text-right tabular-nums">{dailyStock[item.key] ? formatCurrency(dailyStock[item.key].received) : "—"}</td>
+                                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-700">{dailyStock[item.key] ? formatCurrency(dailyStock[item.key].quantity) : "—"}</td>
                                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(item.revenue)} đ</td>
                                 </tr>
                               ))}
