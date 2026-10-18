@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 const os = require("node:os");
+const crypto = require("node:crypto");
 const net = require("node:net");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -366,6 +367,7 @@ const buildEscPosPayload = async (job, config) => {
     const bitmapPayload = await buildBitmapEscPosPayload(job, config);
     if (bitmapPayload) return bitmapPayload;
   } catch (error) {
+    console.error(formatPrintAudit(job, "bitmap-fallback"));
     console.error("Vietnamese bitmap rendering failed; using ASCII fallback.");
     console.error(error);
   }
@@ -426,6 +428,25 @@ const normalizeJobData = (jobId, rawData) => ({
   items: Array.isArray(rawData.items) ? rawData.items : [],
   createdAt: rawData.createdAt,
 });
+
+// A socket flush confirms transport progress, not physical printing.
+const formatPrintAudit = (job, stage, payload) => {
+  const items = (job.items || []).map((item) => ({
+    menuId: String(item.menuId || ""),
+    name: String(item.name || ""),
+    quantity: Number(item.quantity || 0),
+  }));
+  return JSON.stringify({
+    at: new Date().toISOString(), jobId: job.id,
+    billId: job.sourceBillId || "", table: job.tableNumber || "", stage,
+    itemCount: items.length,
+    totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0), items,
+    ...(Buffer.isBuffer(payload) ? {
+      payloadBytes: payload.length,
+      payloadSha256: crypto.createHash("sha256").update(payload).digest("hex"),
+    } : {}),
+  });
+};
 
 const createConfig = () => {
   const storeId = (process.env.PRINT_AGENT_STORE_ID || DEFAULT_STORE_ID).trim();
@@ -611,6 +632,7 @@ const run = async () => {
       return;
     }
 
+    console.log(formatPrintAudit(job, "received"));
     const lines = buildTicketLines(job, config);
     if (config.dryRun) {
       console.log(`[${jobId}] DRY-RUN print payload:`);
@@ -627,8 +649,11 @@ const run = async () => {
     }
 
     const payload = await buildEscPosPayload(job, config);
+    console.log(formatPrintAudit(job, "payload-ready", payload));
     await sendToPrinter(payload, config);
+    console.log(formatPrintAudit(job, "socket-flushed"));
     await markPrinted(jobId);
+    console.log(formatPrintAudit(job, "api-marked-printed"));
     const totalLatencyMs = Number.isFinite(createdAtSeconds)
       ? Math.max(0, Date.now() - createdAtSeconds * 1000)
       : null;
@@ -731,4 +756,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildRasterEscPosPayload, fetchWithTimeout };
+module.exports = { buildRasterEscPosPayload, fetchWithTimeout, formatPrintAudit };

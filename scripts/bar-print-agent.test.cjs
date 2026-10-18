@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   buildRasterEscPosPayload,
   fetchWithTimeout,
+  formatPrintAudit,
 } = require("./bar-print-agent.cjs");
 
 test("splits a tall raster into bounded GS v 0 commands without losing bytes", () => {
@@ -72,4 +73,31 @@ test("returns a completed API response before the timeout", async () => {
     immediateFetch
   );
   assert.equal(response, expected);
+});
+
+test("audit preserves all bill items and fingerprints the transmitted payload", () => {
+  const job = { id: "job-1", sourceBillId: "CF0016475", tableNumber: "T54", items: [
+    { menuId: "coffee", name: "Coffee", quantity: 3, note: "private note" },
+    { menuId: "rose", name: "Rose tea", quantity: 1 },
+    { menuId: "berry", name: "Berry tea", quantity: 1 },
+  ] };
+  const payload = Buffer.from("exact printer bytes");
+  const audit = JSON.parse(formatPrintAudit(job, "payload-ready", payload));
+  assert.equal(audit.billId, "CF0016475");
+  assert.equal(audit.jobId, "job-1");
+  assert.equal(audit.table, "T54");
+  assert.equal(audit.stage, "payload-ready");
+  assert.equal(audit.itemCount, 3);
+  assert.equal(audit.totalQuantity, 5);
+  assert.deepEqual(audit.items.map(item => [item.menuId, item.quantity]), [["coffee", 3], ["rose", 1], ["berry", 1]]);
+  assert.equal(audit.payloadBytes, payload.length);
+  assert.equal(audit.payloadSha256, require("node:crypto").createHash("sha256").update(payload).digest("hex"));
+  assert.ok(Number.isFinite(Date.parse(audit.at)));
+  assert.equal(JSON.stringify(audit).includes("private note"), false);
+});
+test("audit handles a job before rendering", () => {
+  const audit = JSON.parse(formatPrintAudit({ id: "empty" }, "received"));
+  assert.equal(audit.itemCount, 0);
+  assert.equal(audit.totalQuantity, 0);
+  assert.equal(audit.payloadBytes, undefined);
 });
