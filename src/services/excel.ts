@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 
 export type ImportedInvoiceDraftItem = {
+  categoryName?: string;
   name: string;
   quantity: number;
   unit: string;
@@ -182,6 +183,7 @@ const hasExpectedHeader = (row: unknown[]) => {
 };
 
 type InvoiceImportColumnMap = {
+  category: number;
   name: number;
   invoiceDate: number;
   quantity: number;
@@ -222,6 +224,7 @@ const findInvoiceImportColumnMap = (row: unknown[]): InvoiceImportColumnMap | nu
   }
 
   return {
+    category: findColumnIndex(headers, ["loai hang", "nhom hang", "phan loai"]),
     name: nameIndex,
     invoiceDate: dateIndex,
     quantity: quantityIndex,
@@ -527,7 +530,7 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
 
             const isCategoryRow =
               name &&
-              !invoiceDate &&
+              !rawInvoiceDate &&
               quantity <= 0 &&
               !unit &&
               sourceUnitPrice <= 0 &&
@@ -559,6 +562,7 @@ export function parseInvoiceImportWorkbook(file: File): Promise<ImportedInvoiceW
             const items: ImportedInvoiceDraftItem[] = [
               {
                 name,
+                categoryName: (columnMap.category >= 0 ? trimCell(row[columnMap.category]) : "") || currentCategory,
                 quantity: effectiveQuantity,
                 unit,
                 unitPrice: effectiveUnitPrice,

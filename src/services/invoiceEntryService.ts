@@ -5,6 +5,8 @@ export type InvoiceScope = "internal" | "tax";
 export type InvoiceEntryItem = {
   id?: number;
   name: string;
+  categoryId?: number | null;
+  categoryName?: string;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -46,6 +48,8 @@ export type InvoiceEntryPayload = {
   note?: string;
   items: Array<{
     name: string;
+    categoryId?: number | null;
+    categoryName?: string;
     quantity: number;
     unit: string;
     unitPrice: number;
@@ -100,6 +104,7 @@ function buildInvoiceFormData(
     JSON.stringify(
       payload.items.map((item) => ({
         name: item.name,
+        ...(payload.scope === "internal" ? {categoryId:item.categoryId,categoryName:item.categoryName} : {}),
         quantity: item.quantity,
         unit: item.unit,
         unitPrice: item.unitPrice,
@@ -191,4 +196,27 @@ export async function deleteInvoiceEntry(id: string) {
   );
 
   return deleted;
+}
+
+export type InternalInvoiceCategory = {id:number;name:string};
+export type InternalInvoiceMaterial = {name:string;unit:string;unitPrice:number;categoryId:number|null;categoryName:string|null};
+export type InternalInvoiceStock = Omit<InternalInvoiceMaterial,"unitPrice"> & {totalReceived:number};
+export type InternalInvoiceWarehouseResponse = {items:InternalInvoiceStock[];categories:InternalInvoiceCategory[];pagination:{page:number;pages:number;total:number;limit:number}};
+export function getInternalInvoiceWarehouse(search="", categoryId="", page=1) {
+  return apiRequest<InternalInvoiceWarehouseResponse>(`/internal-invoice-warehouse.php?${new URLSearchParams({search,categoryId,page:String(page)})}`);
+}
+export function searchInternalInvoiceMaterials(search:string) {
+  return apiRequest<{items:InternalInvoiceMaterial[];categories:InternalInvoiceCategory[]}>(`/internal-invoice-warehouse.php?view=suggestions&search=${encodeURIComponent(search)}`);
+}
+export async function createInternalInvoiceCategory(name:string) {
+  return (await apiRequest<{item:InternalInvoiceCategory}>("/internal-invoice-warehouse.php",{method:"POST",body:JSON.stringify({name})})).item;
+}
+
+export type InternalImportIncoming = {invoiceDate:string;note:string;items:InvoiceEntryPayload["items"];sourceSheetName?:string;sourceRowNumber?:number};
+export type InternalImportPreviewRow = {incoming:InternalImportIncoming;status:"new"|"existing"|"category"|"changed"|"ambiguous";candidates:Array<InvoiceEntry & {version:string}>};
+export async function previewInternalInvoiceImport(rows:InternalImportIncoming[]) {
+  return (await apiRequest<{rows:InternalImportPreviewRow[]}>("/internal-invoice-import.php", {method:"POST",body:JSON.stringify({mode:"preview",rows}),timeoutMs:60000})).rows;
+}
+export function applyInternalInvoiceImport(payload:{operationId:string;action:"create"|"category"|"update";incoming:InternalImportIncoming;targetId?:string;expectedVersion?:string;forceNew?:boolean}) {
+  return apiRequest<{id:string;action:string}>("/internal-invoice-import.php",{method:"POST",body:JSON.stringify({mode:"apply",...payload}),timeoutMs:60000});
 }

@@ -1,3 +1,8 @@
+import InternalInvoiceImportPreview from "./InternalInvoiceImportPreview";
+import { previewInternalInvoiceImport, type InternalImportPreviewRow } from "@/services/invoiceEntryService";
+import InternalInvoiceWarehouse from "./InternalInvoiceWarehouse";
+import InternalInvoiceMaterialInput from "./InternalInvoiceMaterialInput";
+import { createInternalInvoiceRows, internalInvoicePayload } from "@/lib/internalInvoiceDraft";
 import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
 import { inventoryPeriodRange } from "@/lib/inventoryPeriods";
 "use client";
@@ -44,6 +49,8 @@ type InvoiceAdminPageProps = {
 };
 
 type EditableItem = {
+  categoryId?: number | null;
+  categoryName?: string;
   localId: string;
   name: string;
   quantity: string;
@@ -235,6 +242,7 @@ const buildImportedInvoiceFingerprint = (entry: {
     quantity: number;
     unit: string;
     unitPrice: number;
+    categoryName?: string;
   }>;
 }) => {
   const itemFingerprint = entry.items
@@ -244,6 +252,7 @@ const buildImportedInvoiceFingerprint = (entry: {
         String(item.quantity),
         item.unit.trim().toLowerCase(),
         String(roundCurrencyLikeBackend(item.unitPrice)),
+        item.categoryName?.trim().toLocaleLowerCase("vi") || "",
       ].join("::")
     )
     .join("||");
@@ -279,6 +288,7 @@ function buildExportRows(entries: InvoiceEntry[], scopeLabel: string) {
       "Đơn vị / người bán": entry.partnerName || "",
       "Tổng hóa đơn": entry.totalAmount,
       "Mặt hàng": item.name,
+      ...(entry.scope === "internal" ? {"Loại hàng":item.categoryName || ""} : {}),
       "Số lượng": item.quantity,
       "Đơn vị": item.unit,
       "Đơn giá": item.unitPrice,
@@ -336,6 +346,7 @@ function buildExportWorkbookData(entries: InvoiceEntry[], scopeLabel: string) {
     "Don vi / nguoi ban",
     "Tong hoa don",
     "Mat hang",
+    ...(entries.some(entry=>entry.scope === "internal") ? ["Loai hang"] : []),
     "So luong",
     "Don vi",
     "Don gia",
@@ -369,6 +380,7 @@ function buildExportWorkbookData(entries: InvoiceEntry[], scopeLabel: string) {
       row["Don vi / nguoi ban"] = entry.partnerName || "";
       row["Tong hoa don"] = entry.totalAmount;
       row["Mat hang"] = item.name;
+      if (entry.scope === "internal") row["Loai hang"] = item.categoryName || "";
       row["So luong"] = item.quantity;
       row["Don vi"] = item.unit;
       row["Don gia"] = item.unitPrice;
@@ -446,6 +458,8 @@ export default function InvoiceAdminPage({
   accentClassName,
 }: InvoiceAdminPageProps) {
   const { storeId, storeName } = useStore();
+  const [internalTab,setInternalTab]=useState<"invoices"|"warehouse">("invoices");
+  const [warehouseRevision,setWarehouseRevision]=useState(0);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const autoApplyInitializedRef = useRef(false);
   const skipNextAutoApplyRef = useRef(false);
@@ -454,6 +468,7 @@ export default function InvoiceAdminPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importPreview,setImportPreview]=useState<{rows:InternalImportPreviewRow[];fileName:string;skipped:number}|null>(null);
   const [exportingMode, setExportingMode] = useState<ExportMode | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
@@ -483,7 +498,7 @@ export default function InvoiceAdminPage({
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [partnerName, setPartnerName] = useState("");
   const [note, setNote] = useState("");
-  const [items, setItems] = useState<EditableItem[]>([createEmptyItem()]);
+  const [items, setItems] = useState<EditableItem[]>(() => scope === "internal" ? createInternalInvoiceRows() : [createEmptyItem()]);
   const [keptEvidenceIds, setKeptEvidenceIds] = useState<number[]>([]);
   const [newEvidenceFiles, setNewEvidenceFiles] = useState<File[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -492,6 +507,7 @@ export default function InvoiceAdminPage({
   const [batchStoreId, setBatchStoreId] = useState<StoreType>(storeId);
 
   const scopeLabel = scope === "internal" ? "Nội bộ" : "Thuế";
+  const NoteSection = scope === "internal" ? "details" : "div";
 
   const loadEntries = async (
     dateQuery: InvoiceDateQuery = appliedDateQuery,
@@ -504,7 +520,7 @@ export default function InvoiceAdminPage({
     try {
       const data = await getInvoiceEntries({
         scope,
-        storeId: targetStoreFilter === "all" ? undefined : targetStoreFilter,
+        storeId: scope === "internal" || targetStoreFilter === "all" ? undefined : targetStoreFilter,
         search: keyword,
         startDate: dateQuery.startDate,
         endDate: dateQuery.endDate,
@@ -512,6 +528,7 @@ export default function InvoiceAdminPage({
         perPage: targetPageSize,
       });
       setEntries(data.items);
+      setWarehouseRevision(value=>value+1);
       setPagination(data.pagination);
       setPage(data.pagination.page);
       setPageJump(String(data.pagination.page));
@@ -652,7 +669,7 @@ export default function InvoiceAdminPage({
     setInvoiceNumber("");
     setPartnerName("");
     setNote("");
-    setItems([createEmptyItem()]);
+    setItems(scope === "internal" ? createInternalInvoiceRows() : [createEmptyItem()]);
     setKeptEvidenceIds([]);
     setNewEvidenceFiles([]);
   };
@@ -673,6 +690,8 @@ export default function InvoiceAdminPage({
       entry.items.map((item) => ({
         localId: createLocalId(),
         name: item.name,
+        categoryId:item.categoryId,
+        categoryName:item.categoryName || "",
         quantity: String(item.quantity),
         unit: item.unit || "",
         unitPrice: String(item.unitPrice),
@@ -709,7 +728,9 @@ export default function InvoiceAdminPage({
   };
 
   const handleSubmit = async () => {
-    const payloadItems = buildItemPayload(items);
+    let payloadItems;
+    try { payloadItems = scope === "internal" ? internalInvoicePayload(items) : buildItemPayload(items); }
+    catch (error) { alert(error instanceof Error ? error.message : "Dòng hàng không hợp lệ."); return; }
 
     if (!invoiceDate) {
       alert("Vui lòng chọn ngày hóa đơn.");
@@ -725,7 +746,7 @@ export default function InvoiceAdminPage({
     try {
       const payload = {
         scope,
-        storeId: invoiceStoreId,
+        storeId: scope === "internal" ? "internal" : invoiceStoreId,
         invoiceDate,
         invoiceNumber,
         partnerName,
@@ -746,7 +767,7 @@ export default function InvoiceAdminPage({
       alert(editingEntry ? "Đã cập nhật hóa đơn." : "Đã lưu hóa đơn.");
     } catch (error) {
       console.error(error);
-      alert("Không thể lưu hóa đơn.");
+      alert(error instanceof Error ? error.message : "Không thể lưu hóa đơn.");
     } finally {
       setSaving(false);
     }
@@ -850,7 +871,7 @@ export default function InvoiceAdminPage({
 
     const firstPage = await getInvoiceEntries({
       scope,
-      storeId: exportStoreFilter === "all" ? undefined : exportStoreFilter,
+      storeId: scope === "internal" || exportStoreFilter === "all" ? undefined : exportStoreFilter,
       search: exportKeyword,
       startDate: exportDateQuery.startDate,
       endDate: exportDateQuery.endDate,
@@ -863,7 +884,7 @@ export default function InvoiceAdminPage({
     for (let nextPage = 2; nextPage <= firstPage.pagination.lastPage; nextPage += 1) {
       const nextPageData = await getInvoiceEntries({
         scope,
-        storeId: exportStoreFilter === "all" ? undefined : exportStoreFilter,
+        storeId: scope === "internal" || exportStoreFilter === "all" ? undefined : exportStoreFilter,
         search: exportKeyword,
         startDate: exportDateQuery.startDate,
         endDate: exportDateQuery.endDate,
@@ -1006,7 +1027,7 @@ export default function InvoiceAdminPage({
       return;
     }
 
-    if (!storeId) {
+    if (scope === "tax" && !storeId) {
       alert("Vui lòng chọn cửa hàng trước khi import hóa đơn.");
       input.value = "";
       return;
@@ -1015,6 +1036,13 @@ export default function InvoiceAdminPage({
     setImporting(true);
     try {
       const parsed = await parseInvoiceImportWorkbook(file);
+      if (scope === "internal") {
+        if (!parsed.entries.length) { alert("Không tìm thấy dòng hàng hợp lệ trong file."); return; }
+        const rows:InternalImportPreviewRow[]=[];
+        for(let offset=0;offset<parsed.entries.length;offset+=100) rows.push(...await previewInternalInvoiceImport(parsed.entries.slice(offset,offset+100)));
+        setImportPreview({rows,fileName:file.name,skipped:parsed.skippedRows});
+        return;
+      }
       const uniqueEntries: typeof parsed.entries = [];
       const seenFingerprints = new Set<string>();
 
@@ -1083,7 +1111,7 @@ export default function InvoiceAdminPage({
       );
     } catch (error) {
       console.error(error);
-      alert("Không thể import file Excel.");
+      alert(error instanceof Error ? error.message : "Không thể import file Excel.");
     } finally {
       setImporting(false);
       input.value = "";
@@ -1163,7 +1191,7 @@ export default function InvoiceAdminPage({
               </p>
               <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
               <p className="text-sm text-slate-500">
-                {description} tại {storeName}.
+                {description}{scope === "internal" ? " Kho nội bộ độc lập." : ` tại ${storeName}.`}
               </p>
             </div>
           </div>
@@ -1215,6 +1243,7 @@ export default function InvoiceAdminPage({
               {selectedTotalAmount > 0 ? ` • ${formatCurrency(selectedTotalAmount)} VND` : ""}
             </div>
             <div className="flex flex-wrap gap-2">
+              {scope === "tax" && <>
               <select
                 value={batchStoreId}
                 onChange={(event) => setBatchStoreId(event.target.value as StoreType)}
@@ -1236,6 +1265,7 @@ export default function InvoiceAdminPage({
               >
                 Chuyển store
               </Button>
+              </>}
               <Button variant="outline" className="gap-2" onClick={handleExportSelected}>
                 <Download className="h-4 w-4" />
                 Xuất đã chọn
@@ -1258,148 +1288,10 @@ export default function InvoiceAdminPage({
           </div>
         ) : null}
 
+        {scope === "internal" && <div className="flex gap-2" role="tablist" aria-label="Hóa đơn và kho nội bộ"><Button role="tab" aria-selected={internalTab==="invoices"} variant={internalTab==="invoices"?"default":"outline"} onClick={()=>setInternalTab("invoices")}>Hóa đơn nội bộ</Button><Button role="tab" aria-selected={internalTab==="warehouse"} variant={internalTab==="warehouse"?"default":"outline"} onClick={()=>setInternalTab("warehouse")}>Kho nội bộ</Button></div>}
+        {scope === "internal" && internalTab === "warehouse" ? <InternalInvoiceWarehouse revision={warehouseRevision}/> : (
         <div className={scope === "tax" ? "space-y-4" : "space-y-6"}>
-          {scope === "tax" ? <Card><CardContent className="p-4"><div className="flex min-w-0 flex-wrap items-end gap-3"><label className="min-w-0 flex-[1_1_260px] space-y-1"><span className="text-sm font-medium text-slate-700">Tìm kiếm</span><span className="relative block"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400"/><Input value={search} onChange={event=>setSearch(event.target.value)} className="w-full pl-9" placeholder="Đơn vị, chi tiết, ghi chú — có dấu hoặc không dấu"/></span></label><label className="w-full space-y-1 sm:w-40"><span className="text-sm font-medium text-slate-700">Cửa hàng</span><select aria-label="Lọc cửa hàng" value={storeFilterId} onChange={event=>setStoreFilterId(event.target.value as InvoiceStoreFilter)} className="h-10 w-full rounded-md border bg-white px-3 text-sm">{STORE_FILTER_OPTIONS.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select></label><InventoryDateFilter from={startDate} to={endDate} onChange={(from,to)=>{setFilterMode("range");setStartDate(from);setEndDate(to)}}/><Button variant="outline" className="h-10 gap-2" onClick={()=>void resetFilters()}><RefreshCcw className="h-4 w-4"/>Đặt lại</Button></div></CardContent></Card> : (          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Bộ lọc</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_220px_220px_minmax(0,1fr)_72px]">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    Tìm kiếm
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      className="pl-9"
-                      placeholder="Số HĐ, đơn vị, chi tiết, ghi chú"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium leading-none text-slate-700">
-                    Store
-                  </label>
-                  <select
-                    value={storeFilterId}
-                    onChange={(event) => setStoreFilterId(event.target.value as InvoiceStoreFilter)}
-                    className="mb-4 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    {STORE_FILTER_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <label className="text-sm font-medium leading-none text-slate-700">
-                    Kiểu lọc
-                  </label>
-                  <select
-                    value={filterMode}
-                    onChange={(event) => setFilterMode(event.target.value as FilterMode)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    <option value="day">Theo ngày</option>
-                    <option value="range">Khoảng ngày</option>
-                    <option value="month">Theo tháng</option>
-                    <option value="quarter">Theo quý</option>
-                    <option value="year">Theo năm</option>
-                  </select>
-                </div>
-                <div className="xl:col-span-2">
-                  {filterMode === "day" ? (
-                    <Input
-                      type="date"
-                      label="Ngày hóa đơn"
-                      value={filterDay}
-                      onChange={(event) => setFilterDay(event.target.value)}
-                    />
-                  ) : null}
-
-                  {filterMode === "range" ? (
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <Input
-                        type="date"
-                        label="Từ ngày"
-                        value={startDate}
-                        onChange={(event) => setStartDate(event.target.value)}
-                      />
-                      <Input
-                        type="date"
-                        label="Đến ngày"
-                        value={endDate}
-                        onChange={(event) => setEndDate(event.target.value)}
-                      />
-                    </div>
-                  ) : null}
-
-                  {filterMode === "month" ? (
-                    <Input
-                      type="month"
-                      label="Tháng"
-                      value={filterMonth}
-                      onChange={(event) => setFilterMonth(event.target.value)}
-                    />
-                  ) : null}
-
-                  {filterMode === "quarter" ? (
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-1">
-                        <label className="text-sm font-medium leading-none text-slate-700">
-                          Quý
-                        </label>
-                        <select
-                          value={filterQuarter}
-                          onChange={(event) => setFilterQuarter(event.target.value)}
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        >
-                          <option value="1">Quý 1</option>
-                          <option value="2">Quý 2</option>
-                          <option value="3">Quý 3</option>
-                          <option value="4">Quý 4</option>
-                        </select>
-                      </div>
-                      <Input
-                        type="number"
-                        label="Năm"
-                        value={filterQuarterYear}
-                        onChange={(event) => setFilterQuarterYear(event.target.value)}
-                        min="2000"
-                        step="1"
-                      />
-                    </div>
-                  ) : null}
-
-                  {filterMode === "year" ? (
-                    <Input
-                      type="number"
-                      label="Năm"
-                      value={filterYear}
-                      onChange={(event) => setFilterYear(event.target.value)}
-                      min="2000"
-                      step="1"
-                    />
-                  ) : null}
-                </div>
-                <div className="flex items-end">
-                  <div className="flex w-full justify-end">
-                    <Button
-                      variant="ghost"
-                      className="h-10 w-10 rounded-full p-0"
-                      onClick={() => void resetFilters()}
-                      title="Xóa lọc"
-                      aria-label="Xóa lọc"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>)}
+          <Card><CardContent className="p-4"><div className="flex min-w-0 flex-wrap items-end gap-3"><label className="min-w-0 flex-[1_1_260px] space-y-1"><span className="text-sm font-medium text-slate-700">Tìm kiếm</span><span className="relative block"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400"/><Input value={search} onChange={event=>setSearch(event.target.value)} className="w-full pl-9" placeholder="Đơn vị, chi tiết, ghi chú — có dấu hoặc không dấu"/></span></label>{scope === "tax" && <label className="w-full space-y-1 sm:w-40"><span className="text-sm font-medium text-slate-700">Cửa hàng</span><select aria-label="Lọc cửa hàng" value={storeFilterId} onChange={event=>setStoreFilterId(event.target.value as InvoiceStoreFilter)} className="h-10 w-full rounded-md border bg-white px-3 text-sm">{STORE_FILTER_OPTIONS.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}<InventoryDateFilter from={startDate} to={endDate} onChange={(from,to)=>{setFilterMode("range");setStartDate(from);setEndDate(to)}}/><Button variant="outline" className="h-10 gap-2" onClick={()=>void resetFilters()}><RefreshCcw className="h-4 w-4"/>Đặt lại</Button></div></CardContent></Card>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Card>
@@ -1490,7 +1382,6 @@ export default function InvoiceAdminPage({
                         />
                       </th>
                       <th className="px-4 py-3 text-left font-medium">Ngày</th>
-                      {scope !== "tax" && <th className="px-4 py-3 text-left font-medium">Số HĐ / Mã</th>}
                       <th className="px-4 py-3 text-left font-medium">Đơn vị</th>
                       <th className="px-4 py-3 text-left font-medium">Chi tiết</th>
                       <th className="px-4 py-3 text-left font-medium">Minh chứng</th>
@@ -1501,13 +1392,13 @@ export default function InvoiceAdminPage({
                   <tbody className="divide-y divide-slate-100">
                     {loading ? (
                       <tr>
-                        <td colSpan={scope === "tax" ? 7 : 8} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                           Đang tải dữ liệu...
                         </td>
                       </tr>
                     ) : entries.length === 0 ? (
                       <tr>
-                        <td colSpan={scope === "tax" ? 7 : 8} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                           Chưa có hóa đơn trong khoảng lọc hiện tại.
                         </td>
                       </tr>
@@ -1530,12 +1421,6 @@ export default function InvoiceAdminPage({
                             />
                           </td>
                           <td className="px-4 py-3 text-slate-700">{entry.invoiceDate}</td>
-                          {scope !== "tax" && <td className="px-4 py-3">
-                            <p className="font-semibold text-slate-900">
-                              {entry.invoiceNumber || "Chưa nhập số hóa đơn"}
-                            </p>
-                            <p className="font-mono text-xs text-slate-500">{entry.id}</p>
-                          </td>}
                           <td className="px-4 py-3 text-slate-700">
                             <p>{entry.partnerName || "Chưa khai báo"}</p>
                             {entry.note ? (
@@ -1550,6 +1435,7 @@ export default function InvoiceAdminPage({
                                   className="rounded-lg bg-slate-50 px-3 py-2"
                                 >
                                   <p className="font-medium text-slate-900">{item.name}</p>
+                                  {scope === "internal" && item.categoryName && <p className="text-xs text-emerald-700">{item.categoryName}</p>}
                                   <p className="text-xs text-slate-500">
                                     {item.quantity} {item.unit || ""} x{" "}
                                     {formatCurrency(item.unitPrice)} ={" "}
@@ -1653,7 +1539,10 @@ export default function InvoiceAdminPage({
             </CardContent>
           </Card>
         </div>
+        )}
       </div>
+
+      {importPreview && <InternalInvoiceImportPreview {...importPreview} onClose={()=>setImportPreview(null)} onSaved={async()=>{await loadEntries()}}/>}
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1671,7 +1560,8 @@ export default function InvoiceAdminPage({
             </div>
 
             <div className="max-h-[calc(90vh-144px)] overflow-auto px-6 py-5">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <div className={`grid gap-3 md:grid-cols-2 ${scope === "internal" ? "xl:grid-cols-3" : "xl:grid-cols-5"}`}>
+                {scope === "tax" && (
                 <div className="space-y-1">
                   <label className="text-sm font-medium leading-none text-slate-700">
                     Store
@@ -1688,18 +1578,13 @@ export default function InvoiceAdminPage({
                     ))}
                   </select>
                 </div>
+                )}
                 <Input
                   type="date"
                   label="Ngày hóa đơn *"
                   value={invoiceDate}
                   onChange={(event) => setInvoiceDate(event.target.value)}
                 />
-                {scope !== "tax" && <Input
-                  label="Số hóa đơn"
-                  value={invoiceNumber}
-                  onChange={(event) => setInvoiceNumber(event.target.value)}
-                  placeholder="Ví dụ: 000123"
-                />}
                 <Input
                   label="Đơn vị / người bán"
                   value={partnerName}
@@ -1716,7 +1601,8 @@ export default function InvoiceAdminPage({
                 </div>
               </div>
 
-              <div className="mt-4">
+              <NoteSection className="mt-3">
+                {scope === "internal" && <summary className="cursor-pointer py-2 text-sm font-semibold text-slate-600">Ghi chú (không bắt buộc){note ? " • Đã có ghi chú" : ""}</summary>}
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Ghi chú
                 </label>
@@ -1727,7 +1613,7 @@ export default function InvoiceAdminPage({
                   placeholder="Ghi chú thêm về hóa đơn, nội dung chi, mục đích..."
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
-              </div>
+              </NoteSection>
 
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between">
@@ -1744,10 +1630,11 @@ export default function InvoiceAdminPage({
                 </div>
 
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="min-w-full text-sm">
+                  <table className={`min-w-full text-sm ${scope === "internal" ? "[&_td]:px-2 [&_td]:py-1 [&_th]:py-2 [&_input]:h-8 [&_input]:px-2" : ""}`}>
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
-                        <th className="px-3 py-3 text-left font-medium">Tên mục *</th>
+                        <th className="px-3 py-3 text-left font-medium">{scope === "internal" ? "Tên vật tư *" : "Tên mục *"}</th>
+                        {scope === "internal" && <th className="px-3 py-3 text-left font-medium">Loại hàng</th>}
                         <th className="px-3 py-3 text-right font-medium">Số lượng *</th>
                         <th className="px-3 py-3 text-left font-medium">Đơn vị</th>
                         <th className="px-3 py-3 text-right font-medium">Đơn giá *</th>
@@ -1764,14 +1651,16 @@ export default function InvoiceAdminPage({
                         return (
                           <tr key={item.localId}>
                             <td className="px-3 py-3">
+                              {scope === "internal" ? <InternalInvoiceMaterialInput row={item} kind="material" onChange={patch=>setItems(current=>current.map(row=>row.localId===item.localId?{...row,...patch}:row))}/> : (
                               <Input
                                 value={item.name}
                                 onChange={(event) =>
                                   updateItem(item.localId, "name", event.target.value)
                                 }
                                 placeholder="Ví dụ: Vật tư, thầy thợ..."
-                              />
+                              />)}
                             </td>
+                            {scope === "internal" && <td className="px-2 py-1"><InternalInvoiceMaterialInput row={item} kind="category" onChange={patch=>setItems(current=>current.map(row=>row.localId===item.localId?{...row,...patch}:row))}/></td>}
                             <td className="px-3 py-3">
                               <Input
                                 type="number"

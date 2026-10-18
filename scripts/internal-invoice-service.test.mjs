@@ -1,0 +1,27 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+let last;
+globalThis.invoiceRequest=async(url,options)=>{last={url,options};return {item:{id:'saved'}}};
+const source=fs.readFileSync('src/services/invoiceEntryService.ts','utf8').replace('import { apiRequest } from "@/lib/api";','const apiRequest=(...args)=>globalThis.invoiceRequest(...args);');
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText;
+const service=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const payload={scope:'internal',storeId:'internal',invoiceDate:'2026-10-18',items:[{name:'Wood',quantity:1,unit:'kg',unitPrice:5,categoryId:1,categoryName:'Wood'}]};
+await service.createInvoiceEntry(payload);
+assert.equal(JSON.parse(last.options.body.get('items'))[0].categoryId,1);
+await service.createInvoiceEntry({...payload,scope:'tax'});
+assert.equal(JSON.parse(last.options.body.get('items'))[0].categoryId,undefined);
+await service.getInternalInvoiceWarehouse('wood','uncategorized',2);
+assert.ok(last.url.includes('/internal-invoice-warehouse.php?'));
+assert.ok(last.url.includes('page=2'));
+await service.searchInternalInvoiceMaterials('wood');assert.ok(last.url.includes('view=suggestions'));
+await service.createInternalInvoiceCategory('Wood');assert.equal(last.options.method,'POST');
+console.log('PASS category serialization, tax isolation and warehouse service routes');
+
+globalThis.invoiceRequest=async(url,options)=>{last={url,options};return JSON.parse(options.body).mode==='preview'?{rows:[]}:{id:'saved',action:'create'}};
+assert.deepEqual(await service.previewInternalInvoiceImport([]),[]);
+assert.equal(JSON.parse(last.options.body).mode,'preview');
+await service.applyInternalInvoiceImport({operationId:'a'.repeat(32),action:'create',incoming:{invoiceDate:'2026-10-18',note:'',items:[]}});
+assert.equal(last.url,'/internal-invoice-import.php');
+assert.equal(JSON.parse(last.options.body).mode,'apply');
+console.log('PASS import preview and apply service payloads');

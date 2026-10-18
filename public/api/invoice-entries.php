@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/invoice_search.php';
 require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/internal_invoice_warehouse.php';
 
 const INVOICE_UPLOAD_RELATIVE_ROOT = 'uploads/invoices';
 const INVOICE_MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -136,7 +137,7 @@ function invoice_trim_nullable($value, int $maxLength): ?string
     return substr($text, 0, $maxLength);
 }
 
-function invoice_parse_items($value): array
+function invoice_parse_items($value, bool $internal = false): array
 {
     if (is_string($value)) {
         $decoded = json_decode($value, true);
@@ -148,7 +149,7 @@ function invoice_parse_items($value): array
     }
 
     $items = [];
-    foreach ($value as $item) {
+    foreach ($value as $index => $item) {
         if (!is_array($item)) {
             continue;
         }
@@ -158,10 +159,13 @@ function invoice_parse_items($value): array
             continue;
         }
 
-        $quantity = invoice_normalize_decimal($item['quantity'] ?? 0);
+        $quantity = $internal ? round((float)($item['quantity'] ?? 0), 3) : invoice_normalize_decimal($item['quantity'] ?? 0);
         $unitPrice = invoice_normalize_decimal($item['unitPrice'] ?? $item['unit_price'] ?? 0);
         $lineTotal = round($quantity * $unitPrice, 2);
-        if ($quantity <= 0 || $unitPrice < 0 || $lineTotal <= 0) {
+        if ($internal && ($quantity <= 0 || $unitPrice <= 0)) {
+            respond_error('Dòng ' . ($index + 1) . ': số lượng hoặc đơn giá nhỏ hơn độ chính xác cho phép.', 422);
+        }
+        if (!$internal && ($quantity <= 0 || $unitPrice < 0 || $lineTotal <= 0)) {
             continue;
         }
 
@@ -170,6 +174,8 @@ function invoice_parse_items($value): array
             'quantity' => $quantity,
             'unit' => invoice_trim_nullable($item['unit'] ?? '', 50),
             'unitPrice' => $unitPrice,
+            'categoryId' => $item['categoryId'] ?? null,
+            'categoryName' => trim((string)($item['categoryName'] ?? '')),
             'lineTotal' => $lineTotal,
         ];
     }
@@ -391,10 +397,10 @@ function invoice_fetch_items_grouped(array $invoiceIds): array
 
     $placeholders = implode(', ', array_fill(0, count($invoiceIds), '?'));
     $statement = db()->prepare(
-        'SELECT id, invoice_id, item_name, quantity, unit, unit_price, line_total
-         FROM invoice_entry_items
-         WHERE invoice_id IN (' . $placeholders . ')
-         ORDER BY id ASC'
+        'SELECT i.id, i.invoice_id, i.item_name, i.quantity, i.unit, i.unit_price, i.line_total, i.internal_category_id, c.name category_name
+         FROM invoice_entry_items i LEFT JOIN internal_invoice_categories c ON c.id=i.internal_category_id
+         WHERE i.invoice_id IN (' . $placeholders . ')
+         ORDER BY i.id ASC'
     );
     $statement->execute($invoiceIds);
 
@@ -408,6 +414,8 @@ function invoice_fetch_items_grouped(array $invoiceIds): array
         $grouped[$invoiceId][] = [
             'id' => (int) $row['id'],
             'name' => (string) $row['item_name'],
+            'categoryId' => $row['internal_category_id'] !== null ? (int)$row['internal_category_id'] : null,
+            'categoryName' => $row['category_name'] ?? '',
             'quantity' => (float) $row['quantity'],
             'unit' => $row['unit'] ?: '',
             'unitPrice' => (float) $row['unit_price'],
@@ -510,6 +518,7 @@ function invoice_build_items_fingerprint(array $items): string
             strtolower(trim((string) ($item['unit'] ?? ''))),
             number_format((float) ($item['unitPrice'] ?? 0), 2, '.', ''),
             number_format((float) ($item['lineTotal'] ?? 0), 2, '.', ''),
+            internal_invoice_category_key((string)($item['categoryName'] ?? '')),
         ]);
     }
 
@@ -531,7 +540,7 @@ function invoice_find_existing_import_duplicate_id(
     $statement = db()->prepare(
         'SELECT id
          FROM invoice_entries
-         WHERE store_id = :store_id
+         WHERE (:all_internal = 1 OR store_id = :store_id)
            AND invoice_scope = :invoice_scope
            AND invoice_date = :invoice_date
            AND note = :note
@@ -541,6 +550,7 @@ function invoice_find_existing_import_duplicate_id(
     );
     $statement->execute([
         'store_id' => $storeId,
+        'all_internal' => $scope === 'internal' ? 1 : 0,
         'invoice_scope' => $scope,
         'invoice_date' => $invoiceDate,
         'note' => $note,
@@ -605,7 +615,7 @@ function invoice_with_alias(string $whereSql, string $alias): string
     return str_replace('entries.', $alias . '.', $whereSql);
 }
 
-function invoice_save_entry(array $user): array
+function invoice_save_entry(array $user, bool $manageTransaction = true): array
 {
     $action = trim((string) ($_POST['action'] ?? 'create'));
     $isUpdate = $action === 'update';
@@ -622,7 +632,16 @@ function invoice_save_entry(array $user): array
     $invoiceNumber = invoice_trim_nullable($_POST['invoiceNumber'] ?? '', 100);
     $partnerName = invoice_trim_nullable($_POST['partnerName'] ?? '', 255);
     $note = invoice_trim_nullable($_POST['note'] ?? '', 5000);
-    $items = invoice_parse_items($_POST['items'] ?? '[]');
+    $rawItems = $_POST['items'] ?? '[]';
+    if ($scope === 'internal') {
+        $decoded = is_string($rawItems) ? json_decode($rawItems, true) : $rawItems;
+        if (!is_array($decoded)) respond_error('Dòng hàng không hợp lệ.', 422);
+        try { $rawItems = internal_invoice_validate_rows($decoded); }
+        catch (InvalidArgumentException $e) { respond_error($e->getMessage(), 422); }
+        $storeId = 'internal';
+        $invoiceNumber = internal_invoice_number();
+    }
+    $items = invoice_parse_items($rawItems, $scope === 'internal');
     $keptEvidenceIds = invoice_parse_evidence_ids($_POST['keptEvidenceIds'] ?? '[]');
     $uploadedFiles = invoice_collect_uploaded_files();
     invoice_validate_uploaded_files($uploadedFiles);
@@ -645,18 +664,22 @@ function invoice_save_entry(array $user): array
         $existingScope = (string) ($existingRow['invoice_scope'] ?? '');
         invoice_require_scope_access($user, $existingScope);
 
+        if ($scope === 'internal') {
+            $storeId = (string)$existingRow['store_id'];
+            $invoiceNumber = $existingRow['invoice_number'] ?: internal_invoice_number();
+        }
         if ($existingScope !== $scope) {
             respond_error('Invoice not found', 404);
         }
     } else {
-        $existingImportDuplicateId = invoice_find_existing_import_duplicate_id(
+        $existingImportDuplicateId = $manageTransaction ? invoice_find_existing_import_duplicate_id(
             $storeId,
             $scope,
             $invoiceDate,
             $note,
             $totalAmount,
             $items
-        );
+        ) : null;
         if ($existingImportDuplicateId !== null) {
             $existingEntry = invoice_get_entry_or_null($existingImportDuplicateId);
             if ($existingEntry !== null) {
@@ -665,7 +688,7 @@ function invoice_save_entry(array $user): array
         }
     }
 
-    db()->beginTransaction();
+    if ($manageTransaction) db()->beginTransaction();
 
     try {
         if ($isUpdate) {
@@ -676,7 +699,8 @@ function invoice_save_entry(array $user): array
                      partner_name = :partner_name,
                      invoice_date = :invoice_date,
                      note = :note,
-                     total_amount = :total_amount
+                     total_amount = :total_amount,
+                     updated_at = CURRENT_TIMESTAMP
                  WHERE id = :id'
             );
             $updateStatement->execute([
@@ -751,9 +775,9 @@ function invoice_save_entry(array $user): array
 
         $itemStatement = db()->prepare(
             'INSERT INTO invoice_entry_items (
-                invoice_id, item_name, quantity, unit, unit_price, line_total
+                invoice_id, item_name, quantity, unit, unit_price, line_total, internal_category_id
              ) VALUES (
-                :invoice_id, :item_name, :quantity, :unit, :unit_price, :line_total
+                :invoice_id, :item_name, :quantity, :unit, :unit_price, :line_total, :internal_category_id
              )'
         );
 
@@ -765,6 +789,7 @@ function invoice_save_entry(array $user): array
                 'unit' => $item['unit'],
                 'unit_price' => $item['unitPrice'],
                 'line_total' => $item['lineTotal'],
+                'internal_category_id' => $scope === 'internal' ? internal_invoice_resolve_category($item) : null,
             ]);
         }
 
@@ -791,7 +816,7 @@ function invoice_save_entry(array $user): array
             }
         }
 
-        db()->commit();
+        if ($manageTransaction) db()->commit();
 
         foreach ($filesToDeleteAfterCommit as $filePath) {
             invoice_delete_file($filePath);
@@ -804,7 +829,7 @@ function invoice_save_entry(array $user): array
 
         return $entry;
     } catch (Throwable $exception) {
-        if (db()->inTransaction()) {
+        if ($manageTransaction && db()->inTransaction()) {
             db()->rollBack();
         }
 
@@ -816,8 +841,11 @@ function invoice_save_entry(array $user): array
     }
 }
 
+if (defined('INVOICE_FUNCTIONS_ONLY')) return;
+
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $user = auth_require();
+internal_invoice_ensure_schema();
 
 if ($method === 'GET') {
     $id = trim((string) ($_GET['id'] ?? ''));
@@ -837,6 +865,7 @@ if ($method === 'GET') {
     $storeId = invoice_optional_store_id($_GET['storeId'] ?? '');
     $scope = invoice_normalize_scope($_GET['scope'] ?? '');
     invoice_require_scope_access($user, $scope);
+    if ($scope === 'internal') $storeId = null;
     $search = trim((string) ($_GET['search'] ?? ''));
     $startDate = trim((string) ($_GET['startDate'] ?? ''));
     $endDate = trim((string) ($_GET['endDate'] ?? ''));

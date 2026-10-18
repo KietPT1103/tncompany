@@ -408,10 +408,18 @@ CREATE TABLE IF NOT EXISTS invoice_entries (
   KEY idx_invoice_entries_scope_date (store_id, invoice_scope, invoice_date)
 );
 
+CREATE TABLE IF NOT EXISTS internal_invoice_categories (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ name VARCHAR(150) NOT NULL,
+ normalized_name VARCHAR(150) NOT NULL,
+ UNIQUE KEY uq_internal_invoice_category (normalized_name)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS invoice_entry_items (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   invoice_id VARCHAR(64) NOT NULL,
   item_name VARCHAR(255) NOT NULL,
+  internal_category_id BIGINT UNSIGNED NULL,
   quantity DECIMAL(15,3) NOT NULL DEFAULT 0,
   unit VARCHAR(50) NULL,
   unit_price DECIMAL(15,2) NOT NULL DEFAULT 0,
@@ -721,3 +729,10 @@ INSERT IGNORE INTO stores (id, name) VALUES
   ('restaurant', 'Mo hinh Bep'),
   ('bakery', 'Mo hinh Tiem banh'),
   ('farm', 'Mo hinh Farm');
+
+CREATE TABLE IF NOT EXISTS internal_invoice_import_operations (
+ operation_id VARCHAR(64) PRIMARY KEY,
+ payload_hash CHAR(64) NOT NULL,
+ result_json TEXT NOT NULL,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
