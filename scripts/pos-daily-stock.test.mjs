@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 const source=readFileSync('src/services/posDailyStock.ts','utf8').replace('import { apiRequest } from "@/lib/api";', 'const apiRequest = (...args) => globalThis.dailyStockRequest(...args);');
@@ -9,11 +9,11 @@ globalThis.dailyStockRequest=async path=>{
  assert.equal(url.pathname,'/inventory-pos-stock.php');
  assert.equal(url.searchParams.get('date'),'2026-10-18');
  assert.equal(url.searchParams.get('storeId'),'cafe');
- return {items:[{posCode:'SP1',received:18,quantity:0},{posCode:'SP2',received:0,quantity:-2}]};
+ return {items:[{posCode:'SP1',opening:5,received:18,quantity:0},{posCode:'SP2',opening:0,received:0,quantity:-2}]};
 };
 const result=await getDailyPosStock('cafe','2026-10-18');
-assert.deepEqual(result.SP1,{received:18,quantity:0});
-assert.deepEqual(result.SP2,{received:0,quantity:-2});
+assert.deepEqual(result.SP1,{opening:5,received:18,quantity:0});
+assert.deepEqual(result.SP2,{opening:0,received:0,quantity:-2});
 assert.equal(result.UNLINKED,undefined);
 delete globalThis.dailyStockRequest;
 console.log('PASS daily POS stock: selected day/store, linked products, zero, deficit and unlinked');

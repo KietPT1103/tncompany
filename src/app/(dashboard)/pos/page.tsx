@@ -5356,8 +5356,8 @@ export default function CafePosPage() {
                         <h4 className="font-bold text-slate-900">
                           {group.title} · {getDailyReportShiftLabel(dailyReportShift)}
                         </h4>
-                        <p className="text-xs text-slate-500">Nhập và tồn kho tính cả ngày {dailyReportDate} · Chưa liên kết: —</p>
-                        {dailyStockError && <p role="alert" className="text-xs text-rose-700">{dailyStockError}</p>}
+                        {group.key !== "drink" && <p className="text-xs text-slate-500">Nhập và tồn kho tính cả ngày {dailyReportDate} · Chưa liên kết: —</p>}
+                        {group.key !== "drink" && dailyStockError && <p role="alert" className="text-xs text-rose-700">{dailyStockError}</p>}
                         <p className="text-sm text-slate-600">
                           {group.rows.length} mặt hàng · {formatCurrency(group.total)} {group.unit}
                         </p>
@@ -5370,7 +5370,7 @@ export default function CafePosPage() {
                         <div className="overflow-x-auto">
                           <table className="w-full min-w-[620px] text-sm">
                             <thead className="border-b bg-white text-left text-xs uppercase text-slate-500">
-                              <tr><th className="w-14 px-4 py-3 text-center">#</th><th className="px-4 py-3">Tên hàng hóa</th><th className="px-4 py-3 text-right">Số lượng bán</th><th className="px-4 py-3 text-right">Nhập trong ngày</th><th className="px-4 py-3 text-right">Tồn cuối ngày</th><th className="px-4 py-3 text-right">Doanh thu</th></tr>
+                              <tr><th className="w-14 px-4 py-3 text-center">#</th><th className="px-4 py-3">Tên hàng hóa</th><th className="px-4 py-3 text-right">Số lượng bán</th>{group.key === "drink" ? <th className="px-4 py-3 text-right">Số bill</th> : <><th className="px-4 py-3 text-right">Tồn đầu ngày</th><th className="px-4 py-3 text-right">Nhập trong ngày</th><th className="px-4 py-3 text-right">Tồn cuối ngày</th></>}<th className="px-4 py-3 text-right">Doanh thu</th></tr>
                             </thead>
                             <tbody className="divide-y">
                               {group.rows.map((item, index) => (
@@ -5378,8 +5378,9 @@ export default function CafePosPage() {
                                   <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
                                   <td className="px-4 py-3 font-semibold text-slate-900">{item.name}</td>
                                   <td className="px-4 py-3 text-right text-base font-bold text-sky-700">{formatCurrency(item.quantity)}</td>
+                                  {group.key === "drink" ? <td className="px-4 py-3 text-right">{item.billCount}</td> : <><td className="px-4 py-3 text-right tabular-nums">{dailyStock[item.key] ? formatCurrency(dailyStock[item.key].opening) : "—"}</td>
                                   <td className="px-4 py-3 text-right tabular-nums">{dailyStock[item.key] ? formatCurrency(dailyStock[item.key].received) : "—"}</td>
-                                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-700">{dailyStock[item.key] ? formatCurrency(dailyStock[item.key].quantity) : "—"}</td>
+                                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-700">{dailyStock[item.key] ? formatCurrency(dailyStock[item.key].quantity) : "—"}</td></>}
                                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(item.revenue)} đ</td>
                                 </tr>
                               ))}

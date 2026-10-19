@@ -793,6 +793,24 @@ if ($method === 'PATCH' && $resource === 'bills') {
             respond_error('Phương thức thanh toán không hợp lệ', 422);
         }
     }
+    if (array_key_exists('shiftId', $body)) {
+        if ($userRole !== 'admin') {
+            respond_error('Chỉ quản trị viên được gán ca cho hóa đơn', 403);
+        }
+        $assignmentBill = db()->prepare('SELECT store_id FROM bills WHERE id=:id LIMIT 1');
+        $assignmentBill->execute(['id' => $id]);
+        $billStoreId = $assignmentBill->fetchColumn();
+        if ($billStoreId === false) respond_error('Không tìm thấy hóa đơn', 404);
+        $body['shiftId'] = trim((string) ($body['shiftId'] ?? ''));
+        if ($body['shiftId'] !== '') {
+            $assignmentShift = db()->prepare('SELECT id, store_id FROM cashier_shifts WHERE id=:id LIMIT 1');
+            $assignmentShift->execute(['id' => $body['shiftId']]);
+            $selectedShift = $assignmentShift->fetch();
+            if (!$selectedShift || (string) $selectedShift['store_id'] !== (string) $billStoreId) {
+                respond_error('Ca không tồn tại hoặc không thuộc chi nhánh của hóa đơn', 422);
+            }
+        }
+    }
     $fields = []; $params = ['id' => $id];
     $map = ['tableNumber'=>'table_number','note'=>'note','total'=>'total','subtotalBeforeSurcharge'=>'subtotal_before_surcharge','surchargeTotal'=>'surcharge_total','discountType'=>'discount_type','discountValue'=>'discount_value','discountAmount'=>'discount_amount','status'=>'status','paymentMethod'=>'payment_method','cashReceived'=>'cash_received','changeAmount'=>'change_amount','shiftId'=>'shift_id','cashierId'=>'cashier_id','cashierName'=>'cashier_name'];
     foreach ($map as $key => $column) if (array_key_exists($key, $body)) { $fields[] = "$column=:$key"; $params[$key] = $body[$key] === '' ? null : $body[$key]; }
