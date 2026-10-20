@@ -144,6 +144,20 @@ export default function InventoryIssuesPage() {
       setError(`Mỗi dòng phải chọn ${stockItemLabel} và có số lượng xuất lớn hơn 0.`);
       return;
     }
+    if (status === "completed") {
+      const totals = new Map<string, number>();
+      for (const item of items) totals.set(item.ingredientCode, (totals.get(item.ingredientCode) || 0) + item.quantity);
+      for (const [code, requested] of totals) {
+        const ingredient = ingredientByCode.get(code);
+        const original = form.originalItems?.find(item => item.ingredientCode === code);
+        if (!ingredient || isInventoryIssueQuantityInsufficient(requested, ingredient.purchaseToBaseFactor || 1, availableIssueStock(ingredient.stockQuantity, form.status, original))) {
+          const message = `Kh\u00f4ng \u0111\u1ee7 t\u1ed3n kho cho ${ingredient?.ingredientName || code}. Vui l\u00f2ng nh\u1eadp kho tr\u01b0\u1edbc khi xu\u1ea5t.`;
+          setError(message);
+          if (confirmed) setDialogError(message);
+          return;
+        }
+      }
+    }
     if (status === "completed" && !confirmed) {
       setDialogError("");
       setConfirmation(form.status === "completed" ? "edit" : "complete");
@@ -240,14 +254,14 @@ export default function InventoryIssuesPage() {
               const original = form.originalItems?.find((old) => old.ingredientCode === item.ingredientCode);
               const availableStock = availableIssueStock(ingredient?.stockQuantity ?? 0, form.status, original);
               const factor = ingredient?.purchaseToBaseFactor || 1;
-              const insufficient = Boolean(ingredient && ingredient.itemKind !== "fresh" && isInventoryIssueQuantityInsufficient(requested, factor, availableStock));
+              const insufficient = Boolean(ingredient && isInventoryIssueQuantityInsufficient(requested, factor, availableStock));
               return <tr key={item.key} className={insufficient ? "bg-rose-50" : "hover:bg-blue-50/40"}>
                 <td data-label="STT" className="px-4 py-2 text-center font-semibold">{index + 1}</td>
                 <td data-label="Mã NL" className="px-4 py-2 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>
                 <td data-label="Nguyên vật liệu" className="px-4 py-2"><select value={item.ingredientCode} onChange={(e) => updateLine(index, { ingredientCode: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="">Chọn {stockItemLabel}...</option>{ingredients.filter((option) => option.isActive || form.originalItems?.some((old) => old.ingredientCode === option.ingredientCode)).map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
                 <td data-label="Số lượng xuất" className="px-4 py-2"><input inputMode="decimal" value={item.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} className={`h-10 w-full rounded-md border px-3 text-right font-bold ${insufficient ? "border-rose-500 text-rose-700" : "border-slate-300"}`} /></td>
                 <td data-label="Đơn vị" className="px-4 py-2">{ingredient?.purchaseUnit || ingredient?.unit || "—"}</td>
-                <td data-label="Tồn kho" className="px-4 py-2 text-right font-semibold">{ingredient ? ingredient.itemKind === "fresh" ? <span className="text-sky-700">Không tồn kho</span> : <>{quantity(availableStock / factor)} {ingredient.purchaseUnit || ingredient.unit}<small className="block font-normal text-slate-500">{quantity(availableStock)} {ingredient.baseUnit || ingredient.unit}</small></> : "—"}</td>
+                <td data-label="Tồn kho" className="px-4 py-2 text-right font-semibold">{ingredient ? <>{quantity(availableStock / factor)} {ingredient.purchaseUnit || ingredient.unit}<small className="block font-normal text-slate-500">{quantity(availableStock)} {ingredient.baseUnit || ingredient.unit}</small></> : "—"}</td>
                 <td data-label="Giá trị quy đổi" className="px-4 py-2 text-right font-bold">{ingredient?.cost==null?"—":`${Math.round(requested*factor*ingredient.cost).toLocaleString("vi-VN")} đ`}</td><td data-label="Ghi chú" className="px-4 py-2"><input value={item.note} onChange={(e) => updateLine(index, { note: e.target.value })} placeholder="Người/bộ phận nhận" className="h-10 w-full rounded-md border border-slate-300 px-3" /></td>
                 <td data-label="Trạng thái" className="px-4 py-2"><span className={`warehouse-badge ${insufficient?"status-deleted":requested<=0||!ingredient?"status-pending_explanation":""}`}>{insufficient?"Không đủ tồn":requested<=0||!ingredient?"Chưa xuất":"Hợp lệ"}</span></td><td data-label="Thao tác" className="px-2 py-2"><button aria-label="Xóa dòng" disabled={form.items.length === 1} onClick={() => setForm((current) => ({ ...current, items: current.items.filter((_, i) => i !== index) }))} className="rounded-md p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button></td>
               </tr>;

@@ -132,6 +132,9 @@ if (($argv[1] ?? '') === '--list-only') {
     exit;
 }
 try {
+    $blocked = ['storeId'=>'cafe','issueDate'=>'2026-10-05','destination'=>'Bar','issuedBy'=>'Admin','status'=>'completed','items'=>[['ingredientCode'=>'F','quantity'=>5]]];
+    expect(call_endpoint('POST',$blocked)['status']===422 && stock('f')===0.0, 'zero stock blocks completion for every ingredient kind');
+    $pdo->exec("UPDATE ingredients SET stock_quantity=10 WHERE id='f'");
     $body=['storeId'=>'cafe','issueDate'=>'2026-10-05','destination'=>'Bar','issuedBy'=>'Admin','status'=>'completed','items'=>[['ingredientCode'=>'A','quantity'=>0.03],['ingredientCode'=>'F','quantity'=>2]]];
     $create=call_endpoint('POST',$body);
     expect($create['status']===201 && stock('a')===70.0,'create completed issue deducts converted stock');

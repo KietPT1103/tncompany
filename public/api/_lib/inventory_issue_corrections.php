@@ -41,7 +41,7 @@ function inventory_issue_apply_corrected_stock(PDO $pdo, string $storeId, array 
         if (!$ingredient) throw new RuntimeException('Không tìm thấy nguyên liệu của phiếu.');
         $line = $newById[$id] ?? null;
         $base = $line ? inventory_issue_base_quantity((float) $line['quantity'], max(0.000001, (float) ($ingredient['purchase_to_base_factor'] ?? 1))) : 0.0;
-        $stocked = $line && ($ingredient['item_kind'] ?? 'ingredient') !== 'fresh';
+        $stocked = $line !== null;
         $before = round((float) $ingredient['stock_quantity'] + ($restores[$id] ?? 0), 3);
         $after = round($before - ($stocked ? $base : 0), 3);
         if ($after < 0) throw new RuntimeException('Không đủ tồn kho cho nguyên liệu ' . $ingredient['ingredient_code'] . '.');
