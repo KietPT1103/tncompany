@@ -239,7 +239,7 @@ const navGroups: NavGroup[] = [
         href: "/inventory",
         label: "Nhập · Xuất · Tồn kho",
         icon: Boxes,
-        permissions: ["inventory_receipts.view", "inventory_issues.access", "inventory_stock.view", "inventory_history.access", "preparation_receipts.access", "inventory_raw_closings.access", "inventory_prepared_closings.access", "preparation_inventory.access"],
+        permissions: ["inventory_checks.access", "inventory_receipts.view", "inventory_issues.access", "inventory_stock.view", "inventory_history.access", "preparation_receipts.access", "inventory_raw_closings.access", "inventory_prepared_closings.access", "preparation_inventory.access"],
       },
       {
         href: "/categories",

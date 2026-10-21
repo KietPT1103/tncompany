@@ -11,3 +11,25 @@ function inventory_check_validate_count(array $item, bool $complete): void {
     if ($complete && abs((float)$raw - (float)($item['systemQuantity'] ?? 0)) >= 0.0005 && trim((string)($item['note'] ?? '')) === '')
         throw new InvalidArgumentException('Vui lòng giải trình từng mặt hàng chênh lệch.');
 }
+
+function inventory_checks_required_actions(string $id, string $status): array {
+    if ($status === 'completed') return $id === '' ? ['inventory_checks.create','inventory_checks.complete'] : ['inventory_checks.complete'];
+    return [$id === '' ? 'inventory_checks.create' : 'inventory_checks.update'];
+}
+/** Approving without edit permission must never mutate the saved count or explanation. */
+function inventory_checks_same_draft(array $saved, array $payload): bool {
+    $canonical = static function(array $check): array {
+        $items = [];
+        foreach (($check['items'] ?? []) as $item) {
+            $raw = $item['actualQuantity'] ?? null;
+            $items[] = [(string)($item['productCode'] ?? ''), $raw === null || $raw === '' ? null : round((float)$raw, 3), trim((string)($item['note'] ?? ''))];
+        }
+        usort($items, static fn(array $a,array $b):int => strcmp($a[0],$b[0]));
+        return [(string)($check['checkDate'] ?? ''), trim((string)($check['note'] ?? '')), $items];
+    };
+    return $canonical($saved) === $canonical($payload);
+}
+
+function inventory_checks_require_draft(string $status): void {
+    if ($status !== 'draft') throw new InvalidArgumentException('Chỉ có thể sửa hoặc chốt đợt kiểm kho đang là bản nháp.');
+}

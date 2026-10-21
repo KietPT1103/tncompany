@@ -194,10 +194,42 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   },
   {
     id: "inventory_checks.access",
-    label: "Kiểm kho",
-    description: "Lập và quản lý phiếu kiểm kho.",
-    category: "Hàng hóa",
+    label: "Xem kiểm kho",
+    description: "Xem danh sách và chi tiết các đợt kiểm kho.",
+    category: "Kho và nguyên liệu",
     path: "/product/checks",
+  },
+  {
+    id: "inventory_checks.create",
+    label: "Tạo đợt kiểm kho",
+    description: "Tạo đợt, nhập số đếm và lưu nháp lần đầu.",
+    category: "Kho và nguyên liệu",
+    path: "/product/checks",
+    routePermission: false,
+  },
+  {
+    id: "inventory_checks.update",
+    label: "Sửa nháp / giải trình kiểm kho",
+    description: "Sửa số đếm và giải trình chênh lệch của bản nháp.",
+    category: "Kho và nguyên liệu",
+    path: "/product/checks",
+    routePermission: false,
+  },
+  {
+    id: "inventory_checks.complete",
+    label: "Chốt kiểm kho",
+    description: "Xác nhận chốt và cập nhật tồn thực vào kho.",
+    category: "Kho và nguyên liệu",
+    path: "/product/checks",
+    routePermission: false,
+  },
+  {
+    id: "inventory_checks.delete",
+    label: "Xoá bản nháp kiểm kho",
+    description: "Xoá đợt kiểm kho đang ở trạng thái nháp.",
+    category: "Kho và nguyên liệu",
+    path: "/product/checks",
+    routePermission: false,
   },
   {
     id: "inventory_closings.edit_past",
@@ -499,6 +531,7 @@ export function getEffectivePermissions(
   if (Array.isArray(source.permissions)) {
     const normalized = normalizePermissionList(source.permissions);
     const inherited = new Set<AppPermission>();
+    if (normalized.some(permission => ["inventory_checks.create","inventory_checks.update","inventory_checks.complete","inventory_checks.delete"].includes(permission))) inherited.add("inventory_checks.access");
     if (normalized.includes("reports.access")) {
       inherited.add("reports.products.view");
       inherited.add("reports.revenue.view");
@@ -583,6 +616,7 @@ export function canAccessPath(
     | undefined,
   pathname: string
 ) {
+  if (pathname.split(/[?#]/, 1)[0] === "/inventory" && hasPermission(source, "inventory_checks.access")) return true;
   if (pathname.split(/[?#]/, 1)[0] === "/pos") return hasAnyPermission(source, ["bills.access", "bar.checkout"]);
   const permission = getPermissionForPath(pathname);
   if (!permission) {
@@ -634,7 +668,7 @@ export function getDefaultRouteForUser(user: AppUser | null | undefined) {
     return "/admin/overview";
   }
 
-  if (!hasPermission(user, "bills.access") && hasAnyPermission(user, ["inventory_receipts.view", "inventory_issues.access", "inventory_stock.view", "inventory_history.access"])) return "/inventory";
+  if (!hasPermission(user, "bills.access") && hasAnyPermission(user, ["inventory_checks.access", "inventory_receipts.view", "inventory_issues.access", "inventory_stock.view", "inventory_history.access"])) return "/inventory";
   const matchedPath = DEFAULT_ROUTE_ORDER.find((path) => canAccessPath(user, path));
   if (matchedPath) {
     return matchedPath;

@@ -365,6 +365,10 @@ if ($method === 'POST') {
     $note = trim((string) ($body['note'] ?? ''));
     $actor = inventory_checks_actor_name($user);
     $checkId = trim((string) ($body['id'] ?? ''));
+    foreach (inventory_checks_required_actions($checkId, $status) as $permission) {
+        if (!auth_has_permission($user, $permission)) respond_error('Bạn không có quyền thực hiện thao tác kiểm kho này.', 403);
+    }
+
 
     db()->beginTransaction();
 
@@ -394,9 +398,13 @@ if ($method === 'POST') {
                 respond_error('Khong tim thay phieu kiem kho.', 404);
             }
 
-            if ((string) $existingCheck['status'] === 'completed') {
-                respond_error('Phieu da hoan thanh khong the chinh sua.', 422);
+            if ($status === 'completed' && !auth_has_permission($user, 'inventory_checks.update')) {
+                $savedDraft = inventory_checks_load_one($checkId);
+                if (!$savedDraft || !inventory_checks_same_draft($savedDraft, $body)) respond_error('Bạn chỉ có quyền chốt bản nháp đã lưu, không được thay đổi số đếm hoặc giải trình.', 403);
             }
+
+            try { inventory_checks_require_draft((string)$existingCheck['status']); }
+            catch (InvalidArgumentException $e) { respond_error($e->getMessage(), 422); }
 
             $updateCheck = db()->prepare(
                 'UPDATE inventory_checks
@@ -485,7 +493,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'DELETE') {
-    $user = auth_require_permission('inventory_checks.access');
+    $user = auth_require_permission('inventory_checks.delete');
     $body = read_json_body();
     $checkId = trim((string) ($body['id'] ?? ''));
 

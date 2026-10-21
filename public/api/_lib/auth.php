@@ -196,6 +196,10 @@ function auth_all_permissions(): array
         'ingredients.access',
         'suppliers.access',
         'inventory_checks.access',
+        'inventory_checks.create',
+        'inventory_checks.update',
+        'inventory_checks.complete',
+        'inventory_checks.delete',
         'inventory_stock.view',
         'inventory_history.access',
         'preparation_receipts.access',
@@ -304,6 +308,7 @@ function auth_effective_permissions(array $row): array
 
     if (array_key_exists('permissions_json', $row) && $row['permissions_json'] !== null && $row['permissions_json'] !== '') {
         $permissions = auth_normalize_permissions($row['permissions_json']);
+        if (array_intersect($permissions, ['inventory_checks.create','inventory_checks.update','inventory_checks.complete','inventory_checks.delete']) !== []) $permissions[] = 'inventory_checks.access';
         if (in_array('inventory_receipts.access', $permissions, true)) {
             $permissions = array_merge($permissions, [
                 'inventory_receipts.view', 'inventory_receipts.create', 'inventory_receipts.update',
