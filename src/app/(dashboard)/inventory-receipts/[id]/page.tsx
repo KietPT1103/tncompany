@@ -221,9 +221,11 @@ export default function FieldInventoryReceiptDetailPage() {
     finally { setBusy(false); }
   }
   async function deleteReceipt() {
-    if (!confirm("Xóa phiếu này khỏi danh sách? Phiếu vẫn được lưu và chỉ admin xem được.")) return;
+    const reason = window.prompt("Lý do xoá phiếu nhập (phiếu đã nhập sẽ trừ lại tồn kho):");
+    if (!reason?.trim()) return;
+    if (!confirm("Xác nhận xoá phiếu và hoàn tác số lượng đã nhập?")) return;
     setBusy(true);
-    try { await deleteInventoryReceipt(receipt.id); navigate(listReturnTo, { replace: true }); }
+    try { await deleteInventoryReceipt(receipt.id, reason.trim()); navigate(listReturnTo, { replace: true }); }
     catch (error) { alert(error instanceof Error ? error.message : "Không thể xóa phiếu."); }
     finally { setBusy(false); }
   }

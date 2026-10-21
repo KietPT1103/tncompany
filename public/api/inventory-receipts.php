@@ -8,7 +8,9 @@ require_once __DIR__ . '/_lib/field_inventory.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 require_once __DIR__ . '/_lib/ingredients.php';
 require_once __DIR__ . '/_lib/inventory_receipt_completion.php';
+require_once __DIR__ . '/_lib/inventory_receipt_reversal.php';
 
+products_inventory_ensure_schema();
 ingredients_ensure_schema();
 
 auth_ensure_column('inventory_receipt_items', 'item_type', "ENUM('ingredient','equipment') NOT NULL DEFAULT 'ingredient' AFTER ingredient_id");
@@ -417,9 +419,22 @@ if ($method === 'DELETE') {
     $user = field_inventory_require_permission('inventory_receipts.cancel');
     $id = trim((string) ($_GET['id'] ?? $body['id'] ?? ''));
     $receipt = field_inventory_require_receipt($user, $id);
-    if (($receipt['status'] ?? '') === 'deleted') respond_ok(['deleted' => true, 'softDeleted' => true, 'idempotent' => true]);
-    $delete = db()->prepare('UPDATE inventory_receipts SET previous_status=status,status="deleted",deleted_at=NOW(),deleted_by=:actor,updated_at=NOW() WHERE id=:id');
-    $delete->execute(['id' => $id, 'actor' => $user['id']]);
+    $reason = trim((string)($body['reason'] ?? ''));
+    if ($reason === '') respond_error('Vui lòng nhập lý do xoá phiếu.', 422);
+    products_inventory_ensure_schema();
+    db()->beginTransaction();
+    try {
+        $receipt = field_inventory_load_receipt($id, true);
+        if (!$receipt) throw new RuntimeException('Không tìm thấy phiếu nhập.');
+        if ($receipt['status'] !== 'deleted') {
+            if ($receipt['status'] === 'completed') {
+                inventory_reverse_receipt_stock(db(), $id, $receipt, $user, $reason);
+            }
+            $delete = db()->prepare('UPDATE inventory_receipts SET previous_status=status,status="deleted",deleted_at=NOW(),deleted_by=:actor,note=CONCAT(COALESCE(note,""),:reason),updated_at=NOW() WHERE id=:id');
+            $delete->execute(['id'=>$id,'actor'=>$user['id'],'reason'=>"\nXoá phiếu: ".$reason]);
+        }
+        db()->commit();
+    } catch (Throwable $e) {if(db()->inTransaction())db()->rollBack();throw $e;}
     respond_ok(['deleted' => true, 'softDeleted' => true]);
 }
 respond_error('Method not allowed', 405);

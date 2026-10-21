@@ -35,12 +35,12 @@ $dateFrom = trim((string) ($_GET['dateFrom'] ?? ''));
 $dateTo = trim((string) ($_GET['dateTo'] ?? ''));
 $limit = max(1, min(300, (int) ($_GET['limit'] ?? 120)));
 
-if (!in_array($type, ['all', 'receipt', 'issue'], true)) {
+if (!in_array($type, ['all', 'receipt', 'issue', 'check'], true)) {
     respond_error('Loại lịch sử không hợp lệ.', 422);
 }
 
 $rows = [];
-if ($type !== 'issue') {
+if (in_array($type, ['all','receipt'], true)) {
     $sql = 'SELECT "receipt" AS movement_type,r.id,r.receipt_code AS code,r.receipt_date AS movement_date,r.status,r.created_at,
                 COALESCE(NULLIF(r.order_creator_name,""),NULLIF(r.created_by,""),"—") AS actor_name,
                 COALESCE(NULLIF(s.supplier_name,""),"Chưa gán") AS counterpart,r.note,r.total_amount,
@@ -56,7 +56,7 @@ if ($type !== 'issue') {
     $statement = db()->prepare($sql); $statement->execute($params);
     $rows = array_merge($rows, $statement->fetchAll());
 }
-if ($type !== 'receipt') {
+if (in_array($type, ['all','issue'], true)) {
     $sql = 'SELECT "issue" AS movement_type,i.id,i.issue_code AS code,i.issue_date AS movement_date,i.status,i.created_at,
                 COALESCE(NULLIF(i.issued_by,""),NULLIF(i.created_by,""),"—") AS actor_name,
                 COALESCE(NULLIF(i.destination,""),"Quầy pha chế") AS counterpart,i.note,0 AS total_amount,
@@ -70,6 +70,21 @@ if ($type !== 'receipt') {
     if ($dateTo !== '') {$sql .= ' AND i.issue_date<=:date_to'; $params['date_to'] = $dateTo;}
     $statement = db()->prepare($sql); $statement->execute($params);
     $rows = array_merge($rows, $statement->fetchAll());
+}
+
+if (in_array($type, ['all','check'], true)) {
+    $sql = 'SELECT "check" movement_type,c.id,c.check_code code,DATE(c.completed_at) movement_date,c.status,c.completed_at created_at,
+        c.completed_by actor_name,"Kiểm kho / điều chỉnh tồn" counterpart,c.note,0 total_amount,
+        ci.id item_id,ci.product_code ingredient_code,ci.product_name ingredient_name,
+        COALESCE(p.base_unit,p.unit,"") unit,ci.variance_quantity quantity,ci.unit_cost,ci.variance_value line_total,
+        ci.note item_note,ci.system_quantity stock_before,ci.actual_quantity stock_after
+        FROM inventory_checks c JOIN inventory_check_items ci ON ci.check_id=c.id
+        LEFT JOIN ingredients p ON p.id=ci.ingredient_id
+        WHERE c.store_id=:store AND c.status="completed"';
+    $params = ['store'=>$storeId];
+    if ($dateFrom !== '') {$sql.=' AND DATE(c.completed_at)>=:date_from';$params['date_from']=$dateFrom;}
+    if ($dateTo !== '') {$sql.=' AND DATE(c.completed_at)<=:date_to';$params['date_to']=$dateTo;}
+    $q=db()->prepare($sql);$q->execute($params);$rows=array_merge($rows,$q->fetchAll());
 }
 
 $grouped = [];
@@ -90,6 +105,7 @@ foreach ($rows as $row) {
     $grouped[$key]['items'][] = [
         'id'=>(int)$row['item_id'],'ingredientCode'=>(string)$row['ingredient_code'],
         'ingredientName'=>(string)$row['ingredient_name'],'quantity'=>$quantity,
+        'stockBefore'=>isset($row['stock_before'])?(float)$row['stock_before']:null,'stockAfter'=>isset($row['stock_after'])?(float)$row['stock_after']:null,
         'unit'=>(string)($row['unit']??''),'unitCost'=>(float)($row['unit_cost']??0),
         'lineTotal'=>(float)($row['line_total']??0),'note'=>(string)($row['item_note']??''),
     ];

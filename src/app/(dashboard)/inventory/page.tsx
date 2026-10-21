@@ -10,6 +10,7 @@ import InventoryStockTab from './stock';
 import {PreparationInventoryStockTab} from './stock';
 import InventoryHistoryTab from './history';
 import PreparationReceiptsTab from './preparation-receipts';
+import InventoryChecksPage from '../product/checks/page';
 import PreparedStockTab from './prepared-stock';
 
 const tabs=[
@@ -21,6 +22,7 @@ const tabs=[
  {id:'preparation',label:'Tồn nguyên liệu',icon:FlaskConical},
  {id:'prepared-stock',label:'Tồn bán thành phẩm',icon:CookingPot},
  {id:'evidence',label:'Kho minh chứng',icon:ClipboardList},
+ {id:'checks',label:'Kiểm kho',icon:ClipboardList},
  {id:'history',label:'Lịch sử kho',icon:ClipboardList},
 ] as const;
 type TabId=(typeof tabs)[number]['id'];
@@ -38,6 +40,7 @@ export default function InventoryWorkspacePage(){
   if(tab.id==='stock')return hasPermission(user,'inventory_stock.view');
   if(tab.id==='preparation')return !isConstructionWarehouse&&hasPermission(user,'inventory_raw_closings.access');
   if(tab.id==='prepared-stock')return !isConstructionWarehouse&&hasPermission(user,'inventory_prepared_closings.access');
+  if(tab.id==='checks')return hasPermission(user,'inventory_checks.access');
   if(tab.id==='history')return hasPermission(user,'inventory_history.access');
   return false;
  }),[isConstructionWarehouse,user]);
@@ -46,7 +49,7 @@ export default function InventoryWorkspacePage(){
  useEffect(()=>{if(safeActive&&safeActive!==active)setActive(safeActive);},[active,safeActive]);
  function select(id:TabId){setActive(id);const next=new URLSearchParams(params);next.set('tab',id);setParams(next,{replace:true});}
  useEffect(()=>{const id=params.get('tab');if(visibleTabs.some(tab=>tab.id===id))setActive(id as TabId);},[params,visibleTabs]);
- const body=safeActive==='receipts'?h(InventoryReceiptsPage,{warehouseType:'ingredient'}):safeActive==='equipment'?h(InventoryReceiptsPage,{warehouseType:'equipment'}):safeActive==='issues'?h(InventoryIssuesPage):safeActive==='preparation-receipts'?h(PreparationReceiptsTab):safeActive==='stock'?h(InventoryStockTab):safeActive==='preparation'?h(PreparationInventoryStockTab):safeActive==='prepared-stock'?h(PreparedStockTab):safeActive==='evidence'?h(InventoryReceiptsPage,{evidence:true}):safeActive==='history'?h(InventoryHistoryTab):h('div',{className:'p-10 text-center text-slate-500'},'Tài khoản chưa được cấp quyền kho.');
+ const body=safeActive==='receipts'?h(InventoryReceiptsPage,{warehouseType:'ingredient'}):safeActive==='equipment'?h(InventoryReceiptsPage,{warehouseType:'equipment'}):safeActive==='issues'?h(InventoryIssuesPage):safeActive==='preparation-receipts'?h(PreparationReceiptsTab):safeActive==='stock'?h(InventoryStockTab):safeActive==='preparation'?h(PreparationInventoryStockTab):safeActive==='prepared-stock'?h(PreparedStockTab):safeActive==='evidence'?h(InventoryReceiptsPage,{evidence:true}):safeActive==='checks'?h(InventoryChecksPage):safeActive==='history'?h(InventoryHistoryTab):h('div',{className:'p-10 text-center text-slate-500'},'Tài khoản chưa được cấp quyền kho.');
  return h('div',{className:'warehouse-ui min-h-screen bg-slate-50 font-sans'},h(InventoryWorkspaceHeader,{active:safeActive??active,select,isConstructionWarehouse,visibleTabs}),body);
 }
 function InventoryWorkspaceHeader({active,select,isConstructionWarehouse,visibleTabs}:{active:TabId;select:(id:TabId)=>void;isConstructionWarehouse:boolean;visibleTabs:ReadonlyArray<(typeof tabs)[number]>}){

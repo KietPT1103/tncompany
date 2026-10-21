@@ -12,7 +12,7 @@ const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1)
 const number = (value: number) => value.toLocaleString("vi-VN", { maximumFractionDigits: 3 });
 const money = (value: number) => `${Math.round(value).toLocaleString("vi-VN")} ₫`;
 const statusText: Record<InventoryHistoryEntry["status"], string> = {
-  pending_explanation: "Chờ giải trình", draft: "Nháp", completed: "Hoàn thành", cancelled: "Đã hủy",
+  pending_explanation: "Chờ giải trình", draft: "Nháp", completed: "Hoàn thành", cancelled: "Đã hủy", deleted: "Đã xóa",
 };
 
 export default function InventoryHistoryTab() {
@@ -20,7 +20,7 @@ export default function InventoryHistoryTab() {
   const today = new Date();
   const [dateFrom, setDateFrom] = useState(inventoryToday);
   const [dateTo, setDateTo] = useState(inventoryToday);
-  const [type, setType] = useState<"all" | "receipt" | "issue">("all");
+  const [type, setType] = useState<"all" | "receipt" | "issue" | "check">("all");
   const [page,setPage] = useState(1); const [pageSize,setPageSize] = useState(20);
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<InventoryHistoryEntry[]>([]);
@@ -45,7 +45,7 @@ export default function InventoryHistoryTab() {
   const rows = useMemo(() => {
     const keyword = adminSearchText(query.trim());
     return entries.flatMap((entry) => entry.items.map((item) => ({ entry, item }))).filter(({ entry, item }) =>
-      !keyword || adminSearchText(`${entry.code} ${entry.actorName} ${entry.counterpart} ${item.ingredientCode} ${item.ingredientName}`).includes(keyword)
+      !keyword || adminSearchText(`${entry.code} ${entry.actorName} ${entry.counterpart} ${item.ingredientCode} ${item.ingredientName} ${item.note} ${entry.note}`).includes(keyword)
     );
   }, [entries, query]);
   useEffect(()=>{setPage(1)},[storeId,type,dateFrom,dateTo,query,pageSize]);
@@ -56,9 +56,9 @@ export default function InventoryHistoryTab() {
   return <div className="mx-auto max-w-[1680px] space-y-5 p-4 sm:p-6">
     <section className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div><h2 className="text-2xl font-black text-emerald-950">Lịch sử nhập · xuất kho</h2><p className="text-sm text-slate-500">Đối chiếu chi tiết từng nguyên liệu, số lượng, giá nhập và người thực hiện.</p></div>
+        <div><h2 className="text-2xl font-black text-emerald-950">Lịch sử thay đổi tồn kho</h2><p className="text-sm text-slate-500">Đối chiếu chi tiết từng nguyên liệu, số lượng, giá nhập và người thực hiện.</p></div>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs font-bold text-slate-600">Loại<select value={type} onChange={(event) => setType(event.target.value as typeof type)} className="mt-1 block h-10 rounded-lg border px-3 text-sm"><option value="all">Tất cả</option><option value="receipt">Nhập kho</option><option value="issue">Xuất kho</option></select></label>
+          <label className="text-xs font-bold text-slate-600">Loại<select value={type} onChange={(event) => setType(event.target.value as typeof type)} className="mt-1 block h-10 rounded-lg border px-3 text-sm"><option value="all">Tất cả</option><option value="receipt">Nhập kho</option><option value="issue">Xuất kho</option><option value="check">Kiểm kho / sửa tồn</option></select></label>
           <InventoryDateFilter disabled={loading} from={dateFrom} to={dateTo} onChange={(from,to)=>{setDateFrom(from);setDateTo(to)}}/><button onClick={() => void load()} disabled={loading} className="flex h-10 items-center gap-2 rounded-lg border border-emerald-700 px-4 font-bold text-emerald-800 disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Xem</button>
         </div>
       </div>
@@ -73,16 +73,16 @@ export default function InventoryHistoryTab() {
       <div className="relative border-b p-4"><Search className="absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã phiếu, nguyên liệu, người nhập/xuất..." className="h-11 w-full max-w-xl rounded-lg border bg-slate-50 pl-10 pr-4" /></div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1350px] text-sm">
-          <thead className="bg-emerald-950 text-left text-white"><tr>{["Ngày","Loại","Mã phiếu","Mã NL","Tên nguyên liệu","Số lượng","Đơn vị","Đơn giá","Thành tiền","Người nhập/xuất","NCC/Nơi nhận","Trạng thái","Ghi chú"].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}</tr></thead>
+          <thead className="bg-emerald-950 text-left text-white"><tr>{["Ngày","Loại","Mã phiếu","Mã NL","Tên nguyên liệu","Số lượng","Tồn trước → sau","Đơn vị","Đơn giá","Thành tiền","Người nhập/xuất","NCC/Nơi nhận","Trạng thái","Ghi chú"].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}</tr></thead>
           <tbody className="divide-y">
             {!loading && paged.items.map(({ entry, item }) => <tr key={entry.type + entry.id + item.id} className="hover:bg-emerald-50/50">
-              <td className="whitespace-nowrap px-3 py-3">{new Date(entry.date + "T00:00:00").toLocaleDateString("vi-VN")}</td>
-              <td className="px-3 py-3"><span className={entry.type === "receipt" ? "inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 font-bold text-emerald-800" : "inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-800"}>{entry.type === "receipt" ? <ArrowDownToLine className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}{entry.type === "receipt" ? "Nhập" : "Xuất"}</span></td>
+              <td className="whitespace-nowrap px-3 py-3">{new Date(entry.date + "T00:00:00").toLocaleDateString("vi-VN")}<span className="block text-xs text-slate-500">{entry.createdAt?.slice(11,19)}</span></td>
+              <td className="px-3 py-3"><span className={entry.type === "receipt" ? "inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 font-bold text-emerald-800" : "inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-800"}>{entry.type === "receipt" ? <ArrowDownToLine className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}{entry.type === "check" ? "Kiểm / sửa tồn" : entry.type === "receipt" ? "Nhập" : "Xuất"}</span></td>
               <td className="px-3 py-3 font-bold text-emerald-800">{entry.code}</td>
               <td className="px-3 py-3 font-mono">{item.ingredientCode}</td>
               <td className="px-3 py-3 font-semibold">{item.ingredientName}</td>
               <td className="px-3 py-3 text-right font-bold">{number(item.quantity)}</td>
-              <td className="px-3 py-3">{item.unit || "—"}</td>
+              <td className="px-3 py-3">{item.stockBefore!=null&&item.stockAfter!=null?`${number(item.stockBefore)} → ${number(item.stockAfter)}`:"?"}</td><td className="px-3 py-3">{item.unit || "—"}</td>
               <td className="px-3 py-3 text-right">{entry.type === "receipt" ? money(item.unitCost) : "—"}</td>
               <td className="px-3 py-3 text-right font-semibold">{entry.type === "receipt" ? money(item.lineTotal) : "—"}</td>
               <td className="px-3 py-3">{entry.actorName}</td><td className="px-3 py-3">{entry.counterpart}</td>

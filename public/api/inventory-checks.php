@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/_lib/search.php';
+require_once __DIR__ . '/_lib/inventory_check_validation.php';
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
@@ -49,6 +50,14 @@ function inventory_checks_normalize_items(string $storeId, array $items, bool $r
             respond_error(sprintf('Khong tim thay nguyen lieu %s.', $productCode), 422);
         }
 
+        $lock = db()->prepare('SELECT stock_quantity FROM ingredients WHERE id=:id FOR UPDATE');
+        $lock->execute(['id'=>$product['id']]);
+        $product['stock_quantity'] = (float)$lock->fetchColumn();
+        if (isset($item['systemQuantity']) && abs((float)$item['systemQuantity'] - $product['stock_quantity']) >= 0.0005 && $requireCounted) {
+            respond_error('Tồn kho đã thay đổi. Lưu nháp và mở lại để đối chiếu trước khi chốt.', 409);
+        }
+        try { inventory_check_validate_count(array_merge($item, ['systemQuantity'=>$product['stock_quantity']]), $requireCounted); }
+        catch (InvalidArgumentException $e) { respond_error($e->getMessage(), 422); }
         $actualExists = array_key_exists('actualQuantity', $item) || array_key_exists('actual_quantity', $item);
         $actualRaw = $item['actualQuantity'] ?? $item['actual_quantity'] ?? null;
         $isCounted = $actualExists && trim((string) $actualRaw) !== '';
@@ -231,12 +240,14 @@ if ($method === 'GET') {
     $storeId = field_inventory_require_store($user, trim((string) ($_GET['storeId'] ?? '')));
     $status = strtolower(trim((string) ($_GET['status'] ?? '')));
     $search = trim((string) ($_GET['search'] ?? ''));
+    $page = max(1, (int)($_GET['page'] ?? 1));
     $limit = max(1, min(200, (int) ($_GET['limit'] ?? 50)));
 
     $where = ['c.store_id = :store_id'];
     $params = [
         'store_id' => $storeId,
         'limit' => $limit,
+        'offset' => ($page-1)*$limit,
     ];
 
     if (in_array($status, ['draft', 'completed', 'cancelled'], true)) {
@@ -259,13 +270,13 @@ if ($method === 'GET') {
             'SELECT c.*
              FROM inventory_checks c
              WHERE %s
-             ORDER BY c.check_date DESC, c.created_at DESC
-             LIMIT :limit',
+             ORDER BY c.check_date DESC, c.created_at DESC, c.id DESC
+             LIMIT :limit OFFSET :offset',
             implode(' AND ', $where)
         )
     );
     foreach ($params as $key => $value) {
-        $statement->bindValue(':' . $key, $value, $key === 'limit' ? PDO::PARAM_INT : PDO::PARAM_STR);
+        $statement->bindValue(':' . $key, $value, in_array($key, ['limit','offset'], true) ? PDO::PARAM_INT : PDO::PARAM_STR);
     }
     $statement->execute();
 
@@ -352,18 +363,18 @@ if ($method === 'POST') {
     $status = inventory_checks_normalize_status((string) ($body['status'] ?? 'draft'));
     $checkDate = inventory_checks_normalize_date((string) ($body['checkDate'] ?? ''));
     $note = trim((string) ($body['note'] ?? ''));
-    $items = inventory_checks_normalize_items(
-        $storeId,
-        is_array($body['items'] ?? null) ? $body['items'] : [],
-        $status === 'completed'
-    );
-    $totals = inventory_checks_build_totals($items);
     $actor = inventory_checks_actor_name($user);
     $checkId = trim((string) ($body['id'] ?? ''));
 
     db()->beginTransaction();
 
     try {
+        $items = inventory_checks_normalize_items(
+            $storeId,
+            is_array($body['items'] ?? null) ? $body['items'] : [],
+            $status === 'completed'
+        );
+        $totals = inventory_checks_build_totals($items);
         if ($checkId !== '') {
             $findStatement = db()->prepare(
                 'SELECT id, status
@@ -470,7 +481,7 @@ if ($method === 'POST') {
     }
 
     $item = inventory_checks_load_one($checkId);
-    respond_ok(['item' => $item], $body['id'] ? 200 : 201);
+    respond_ok(['item' => $item], !empty($body['id']) ? 200 : 201);
 }
 
 if ($method === 'DELETE') {

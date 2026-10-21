@@ -43,6 +43,7 @@ export type InventoryCheckPayload = {
   note?: string;
   items: Array<{
     productCode: string;
+    systemQuantity?: number;
     actualQuantity: number | null;
     note?: string;
   }>;
@@ -53,10 +54,12 @@ export async function getInventoryChecks(params: {
   status?: "draft" | "completed" | "cancelled";
   search?: string;
   limit?: number;
+  page?: number;
 }) {
   const query = new URLSearchParams({
     storeId: params.storeId,
     limit: String(params.limit || 50),
+    page: String(params.page || 1),
   });
 
   if (params.status) {
@@ -93,4 +96,13 @@ export async function deleteInventoryCheck(id: string) {
   });
 
   return deleted;
+}
+
+export async function getAllInventoryChecks(storeId: string) {
+  const checks: InventoryCheck[] = [];
+  for (let page=1; ; page++) {
+    const batch = await getInventoryChecks({storeId,limit:200,page});
+    checks.push(...batch);
+    if(batch.length<200)return checks;
+  }
 }

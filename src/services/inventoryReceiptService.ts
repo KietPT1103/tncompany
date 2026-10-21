@@ -115,8 +115,8 @@ export async function saveInventoryReceipt(payload: InventoryReceiptPayload) {
   if (!payload.id) throw new Error("Hãy tạo phiếu kèm ảnh từ ứng dụng mobile trước.");
   return updateInventoryReceipt(payload.id, { note: payload.note, status: "draft" });
 }
-export const deleteInventoryReceipt = (id: string) =>
-  apiRequest<{ deleted: boolean }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+export const deleteInventoryReceipt = (id: string, reason: string) =>
+  apiRequest<{ deleted: boolean }>(`/inventory-receipts.php?id=${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({reason}) });
 
 export async function createManualInventoryReceipt(payload: {
   storeId: string;
