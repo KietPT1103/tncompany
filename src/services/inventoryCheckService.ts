@@ -11,6 +11,7 @@ export type InventoryCheckItem = {
   varianceQuantity: number | null;
   unitCost: number;
   varianceValue: number | null;
+  resolutionType?: "adjustment" | "missing_receipt" | "missing_issue";
   note?: string;
 };
 
@@ -45,6 +46,7 @@ export type InventoryCheckPayload = {
     productCode: string;
     systemQuantity?: number;
     actualQuantity: number | null;
+    resolutionType?: "adjustment" | "missing_receipt" | "missing_issue";
     note?: string;
   }>;
 };

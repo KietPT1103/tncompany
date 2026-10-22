@@ -98,6 +98,7 @@ function inventory_checks_normalize_items(string $storeId, array $items, bool $r
             'unitCost' => round($unitCost, 2),
             'varianceValue' => $isCounted ? $varianceValue : 0.0,
             'note' => $note,
+            'resolutionType' => (string)($item['resolutionType'] ?? 'adjustment'),
         ];
     }
 
@@ -143,10 +144,10 @@ function inventory_checks_insert_items(string $checkId, array $items): void
     $statement = db()->prepare(
         'INSERT INTO inventory_check_items (
             check_id, product_id, ingredient_id, product_code, product_name, system_quantity, is_counted,
-            actual_quantity, variance_quantity, unit_cost, variance_value, note
+            actual_quantity, variance_quantity, unit_cost, variance_value, note, resolution_type
          ) VALUES (
             :check_id, NULL, :ingredient_id, :product_code, :product_name, :system_quantity, :is_counted,
-            :actual_quantity, :variance_quantity, :unit_cost, :variance_value, :note
+            :actual_quantity, :variance_quantity, :unit_cost, :variance_value, :note, :resolution_type
          )'
     );
 
@@ -163,6 +164,7 @@ function inventory_checks_insert_items(string $checkId, array $items): void
             'unit_cost' => $item['unitCost'],
             'variance_value' => $item['varianceValue'],
             'note' => $item['note'],
+            'resolution_type' => $item['resolutionType'],
         ]);
     }
 }
@@ -184,7 +186,7 @@ function inventory_checks_load_one(string $checkId): ?array
 
     $itemsStatement = db()->prepare(
         'SELECT id, product_id, ingredient_id, product_code, product_name, system_quantity, is_counted,
-                actual_quantity, variance_quantity, unit_cost, variance_value, note
+                actual_quantity, variance_quantity, unit_cost, variance_value, note, resolution_type
          FROM inventory_check_items
          WHERE check_id = :check_id
          ORDER BY id ASC'
@@ -204,6 +206,7 @@ function inventory_checks_load_one(string $checkId): ?array
                 'unitCost' => (float) $row['unit_cost'],
                 'varianceValue' => (bool) $row['is_counted'] ? (float) $row['variance_value'] : null,
                 'note' => $row['note'] !== null ? (string) $row['note'] : '',
+                'resolutionType' => (string) $row['resolution_type'],
             ];
         },
         $itemsStatement->fetchAll()
@@ -296,7 +299,7 @@ if ($method === 'GET') {
         $itemsStatement = db()->prepare(
             sprintf(
                 'SELECT id, check_id, product_id, ingredient_id, product_code, product_name, system_quantity, is_counted,
-                        actual_quantity, variance_quantity, unit_cost, variance_value, note
+                        actual_quantity, variance_quantity, unit_cost, variance_value, note, resolution_type
                  FROM inventory_check_items
                  WHERE check_id IN (%s)
                  ORDER BY id ASC',
@@ -321,6 +324,7 @@ if ($method === 'GET') {
                 'unitCost' => (float) $row['unit_cost'],
                 'varianceValue' => $isCounted ? (float) $row['variance_value'] : null,
                 'note' => $row['note'] !== null ? (string) $row['note'] : '',
+                'resolutionType' => (string) $row['resolution_type'],
             ];
         }
     }

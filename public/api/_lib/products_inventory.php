@@ -167,6 +167,7 @@ function products_inventory_ensure_schema(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
 
+    auth_ensure_column('inventory_check_items', 'resolution_type', "VARCHAR(32) NOT NULL DEFAULT 'adjustment'");
     auth_ensure_column('inventory_check_items', 'is_counted', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER system_quantity');
     ingredients_ensure_schema();
 

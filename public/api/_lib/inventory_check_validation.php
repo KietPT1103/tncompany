@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 function inventory_check_validate_count(array $item, bool $complete): void {
+    $resolution = (string)($item['resolutionType'] ?? 'adjustment');
+    if (!in_array($resolution, ['adjustment', 'missing_receipt', 'missing_issue'], true))
+        throw new InvalidArgumentException('Loại xử lý chênh lệch không hợp lệ.');
+    if ($complete && $resolution !== 'adjustment')
+        throw new InvalidArgumentException('Cần bổ sung phiếu nhập/xuất, cập nhật tồn máy và xác nhận đã đối chiếu trước khi chốt.');
     $raw = $item['actualQuantity'] ?? null;
     if ($raw === null || trim((string)$raw) === '') {
         if ($complete) throw new InvalidArgumentException('Vui lòng nhập đủ số tồn thực.');
@@ -22,7 +27,7 @@ function inventory_checks_same_draft(array $saved, array $payload): bool {
         $items = [];
         foreach (($check['items'] ?? []) as $item) {
             $raw = $item['actualQuantity'] ?? null;
-            $items[] = [(string)($item['productCode'] ?? ''), $raw === null || $raw === '' ? null : round((float)$raw, 3), trim((string)($item['note'] ?? ''))];
+            $items[] = [(string)($item['productCode'] ?? ''), $raw === null || $raw === '' ? null : round((float)$raw, 3), trim((string)($item['note'] ?? '')), (string)($item['resolutionType'] ?? 'adjustment')];
         }
         usort($items, static fn(array $a,array $b):int => strcmp($a[0],$b[0]));
         return [(string)($check['checkDate'] ?? ''), trim((string)($check['note'] ?? '')), $items];
