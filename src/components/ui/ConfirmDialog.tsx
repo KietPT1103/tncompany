@@ -15,6 +15,7 @@ export type ConfirmDialogProps = {
   variant?: "default" | "destructive";
   icon?: LucideIcon | null;
   isLoading?: boolean;
+  size?: "default" | "wide";
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -28,6 +29,7 @@ export function ConfirmDialog({
   variant = "default",
   icon: Icon = CircleAlert,
   isLoading = false,
+  size = "default",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -124,7 +126,8 @@ export function ConfirmDialog({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         className={cn(
-          "w-full max-w-sm rounded-lg bg-white p-5 shadow-[0_4px_8px_rgba(15,23,42,0.2)] transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none",
+          "w-full rounded-lg bg-white p-5 shadow-[0_4px_8px_rgba(15,23,42,0.2)] transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none",
+          size === "wide" ? "max-h-[94dvh] max-w-4xl overflow-y-auto" : "max-w-sm",
           visible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
         )}
       >
