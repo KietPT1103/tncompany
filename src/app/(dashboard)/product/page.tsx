@@ -13,7 +13,10 @@ import {
   setProductSellingStatus,
   updateProductCost,
   upsertSellingProductsFromExcel,
+  syncBasicCatalog,
+  type BasicCatalogSyncPreview,
 } from "@/services/products";
+import { parseKiotVietBasicCatalog, type BasicCatalogItem } from "@/lib/kiotVietBasicCatalog";
 import {
   addCategory,
   Category,
@@ -75,6 +78,7 @@ type ProductAction =
   | "check"
   | "receipt"
   | "import"
+  | "sync-basic"
   | "export"
   | "categories"
   | "normalize"
@@ -108,6 +112,11 @@ const productActionOptions: readonly SelectBoxOption<
     value: "import",
     label: "Import món bán",
     icon: Upload,
+  },
+  {
+    value: "sync-basic",
+    label: "Import mã, tên, giá",
+    icon: RefreshCcw,
   },
   {
     value: "export",
@@ -831,7 +840,7 @@ const getCategoryBadgeClass = (categoryName: string) =>
 export default function ProductsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { storeId } = useStore();
+  const { storeId, storeName } = useStore();
   const hasLimitedProductAccess = user?.role !== "admin" && (
     hasPermission(user, "products.selling.view")
     || hasPermission(user, "products.components.update")
@@ -841,6 +850,21 @@ export default function ProductsPage() {
   );
   const canEditComponents = canManageProducts || hasPermission(user, "products.components.update");
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const syncInputRef = useRef<HTMLInputElement | null>(null);
+  const syncRequest = useRef(0);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncError, setSyncError] = useState("");
+  const [catalogSync, setCatalogSync] = useState<{
+    fileName: string; storeId: string; storeName: string; items: BasicCatalogItem[]; preview: BasicCatalogSyncPreview;
+  } | null>(null);
+
+  useEffect(() => {
+    syncRequest.current++;
+    setCatalogSync(null);
+    setSyncError("");
+    setSyncBusy(false);
+    return () => { syncRequest.current++; };
+  }, [storeId]);
 
   const [selectedAction, setSelectedAction] = useState<ProductAction>("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -961,6 +985,9 @@ export default function ProductsPage() {
         case "import":
           importInputRef.current?.click();
           break;
+        case "sync-basic":
+          if (user?.role === "admin" && !syncBusy) syncInputRef.current?.click();
+          break;
 
         case "export":
           exportProductsToExcel(products, storeId);
@@ -989,7 +1016,7 @@ export default function ProductsPage() {
 
   const resolvedProductActionOptions = useMemo(
     () =>
-      productActionOptions.filter((option) => option.value !== "reset-stock" || canResetKitchenStock).map((option) =>
+      productActionOptions.filter((option) => (option.value !== "reset-stock" || canResetKitchenStock) && (option.value !== "sync-basic" || user?.role === "admin")).map((option) =>
         option.value === "import"
           ? {
               ...option,
@@ -1006,9 +1033,11 @@ export default function ProductsPage() {
               }
             : option.value === "reset-stock"
               ? { ...option, disabled: loading || saving || importing || deleting || resettingStock }
+            : option.value === "sync-basic"
+              ? { ...option, disabled: importing || loading || saving || syncBusy }
               : option,
       ),
-    [importing, isNormalizingCategoryRefs, canResetKitchenStock, loading, saving, deleting, resettingStock],
+    [importing, isNormalizingCategoryRefs, canResetKitchenStock, loading, saving, deleting, resettingStock, user?.role, syncBusy],
   );
 
   async function loadProducts() {
@@ -1140,6 +1169,62 @@ export default function ProductsPage() {
     setNewCategoryName("");
     setComponentQuery("");
   };
+
+  async function prepareBasicSync(file: File) {
+    if (user?.role !== "admin" || syncBusy) return;
+    const request = ++syncRequest.current;
+    setSyncBusy(true);
+    setSyncError("");
+    try {
+      if (file.size > 20 * 1024 * 1024) throw new Error("File Excel vượt quá 20 MB.");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!sheet) throw new Error("File không có trang tính.");
+      const items = parseKiotVietBasicCatalog(XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" }));
+      const preview = await syncBasicCatalog(items, storeId);
+      if (request !== syncRequest.current) return;
+      setCatalogSync({ fileName: file.name, storeId, storeName, items, preview });
+    } catch (error) {
+      if (request === syncRequest.current) showToast("Không thể chuẩn bị đồng bộ", "error", error instanceof Error ? error.message : "Không đọc được file Excel.");
+    } finally {
+      if (request === syncRequest.current) setSyncBusy(false);
+    }
+  }
+
+  async function refreshBasicSyncPreview() {
+    if (!catalogSync || syncBusy || user?.role !== "admin") return;
+    const request = ++syncRequest.current;
+    setSyncBusy(true);
+    setSyncError("");
+    try {
+      const preview = await syncBasicCatalog(catalogSync.items, catalogSync.storeId);
+      if (request === syncRequest.current) setCatalogSync({ ...catalogSync, preview });
+    } catch (error) {
+      if (request === syncRequest.current) setSyncError(error instanceof Error ? error.message : "Không cập nhật được bản xem trước.");
+    } finally {
+      if (request === syncRequest.current) setSyncBusy(false);
+    }
+  }
+
+  async function applyBasicSync() {
+    if (!catalogSync || syncBusy || user?.role !== "admin" || catalogSync.storeId !== storeId) return;
+    const request = ++syncRequest.current;
+    setSyncBusy(true);
+    setSyncError("");
+    try {
+      const result = await syncBasicCatalog(catalogSync.items, catalogSync.storeId, true, catalogSync.preview.previewToken);
+      if (request !== syncRequest.current) return;
+      setCatalogSync(null);
+      showToast("Đã đồng bộ danh mục", "success", `${catalogSync.storeName}: thêm ${result.createdCount}, cập nhật ${result.updatedCount}, giữ nguyên ${result.unchangedCount}, bỏ qua ${result.skippedCount} mã nguyên liệu.`);
+      try { await loadProducts(); } catch {
+        showToast("Đã đồng bộ, chưa tải lại được danh sách", "warning", "Tải lại trang để xem dữ liệu mới.");
+      }
+    } catch (error) {
+      if (request === syncRequest.current) setSyncError(error instanceof Error ? error.message : "Không đồng bộ được danh mục.");
+    } finally {
+      if (request === syncRequest.current) setSyncBusy(false);
+    }
+  }
 
   async function handleImport(file: File) {
     setImporting(true);
@@ -1499,14 +1584,26 @@ export default function ProductsPage() {
                 value={selectedAction}
                 placeholder="Thao tác"
                 options={resolvedProductActionOptions}
+                disabled={syncBusy}
                 onValueChange={(nextAction) => {
                   if (!nextAction) return;
                   void handleProductAction(nextAction);
                 }}
-                className="w-[180px]"
+                className="w-[280px] max-w-full"
                 triggerClassName="h-10 rounded-[2px] border-2 border-slate-900 bg-white px-3 font-semibold text-slate-900 shadow-[4px_4px_0_#0f172a] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-[6px_6px_0_#0f172a] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#0f172a]"
               />
 
+              <input
+                ref={syncInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void prepareBasicSync(file);
+                }}
+              />
               <input
                 ref={importInputRef}
                 type="file"
@@ -1771,6 +1868,35 @@ export default function ProductsPage() {
         </div>
       </main>
 
+      <ConfirmDialog
+        open={!!catalogSync && user?.role === "admin" && catalogSync.storeId === storeId}
+        size="wide"
+        icon={null}
+        title="Import mã, tên, giá"
+        description={catalogSync ? (
+          <div className="space-y-3">
+            <p className="break-words"><strong>{catalogSync.storeName}</strong> · {catalogSync.fileName}</p>
+            <p className="text-sm font-semibold text-slate-900">{catalogSync.preview.totalCount} dòng: thêm mới {catalogSync.preview.createdCount} · cập nhật {catalogSync.preview.updatedCount} · không đổi {catalogSync.preview.unchangedCount} · bỏ qua {catalogSync.preview.skippedCount}</p>
+            {catalogSync.preview.skippedCount > 0 ? <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">Có {catalogSync.preview.skippedCount} mã đang thuộc nguyên liệu trong khu vực này. Các dòng được đánh dấu “Bỏ qua — nguyên liệu” sẽ không được thêm hoặc cập nhật; các món còn lại vẫn được đồng bộ.</p> : null}
+            <p className="text-xs leading-5">Dò theo mã món trong khu vực này. Món đã có chỉ cập nhật tên và giá bán; giữ nguyên tồn kho, giá vốn, danh mục, trạng thái bán và thành phần. Các món ngoài file được giữ nguyên.</p>
+            {catalogSync.preview.createdCount > 0 ? <p className="rounded-md bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">Món mới giữ mã KiotViet, mặc định đang bán, tồn kho 0, chưa có danh mục, giá vốn và công thức. Combo được thêm như một dòng hàng hóa; cấu hình combo chưa được nhập.</p> : null}
+            {syncError ? <div role="alert" className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700"><p>{syncError}</p><button type="button" disabled={syncBusy} onClick={() => void refreshBasicSyncPreview()} className="mt-1 font-semibold underline underline-offset-4 disabled:opacity-50">Cập nhật xem trước</button></div> : null}
+            <div className="max-h-[42dvh] overflow-auto rounded-md border border-slate-200">
+              <table className="w-full min-w-[680px] text-left text-xs" aria-label="Xem trước thay đổi danh mục">
+                <thead className="sticky top-0 bg-slate-100 text-slate-700"><tr><th className="p-2">Mã món</th><th className="p-2">Tên hiện tại</th><th className="p-2">Tên trong file</th><th className="p-2 text-right">Giá hiện tại</th><th className="p-2 text-right">Giá trong file</th><th className="p-2">Thay đổi</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {catalogSync.preview.rows.map((row) => <tr key={row.code} className={row.status === "skipped" ? "bg-amber-50 text-amber-900" : row.status === "unchanged" ? "text-slate-500" : "bg-white text-slate-900"}><td className="p-2 font-medium">{row.code}</td><td className="max-w-48 break-words p-2">{row.oldName ?? "—"}</td><td className="max-w-48 break-words p-2">{row.name}</td><td className="whitespace-nowrap p-2 text-right">{row.oldPrice === null ? "—" : `${formatCurrency(row.oldPrice)}đ`}</td><td className="whitespace-nowrap p-2 text-right font-medium">{formatCurrency(row.price)}đ</td><td className="whitespace-nowrap p-2">{row.status === "skipped" ? "Bỏ qua — nguyên liệu" : row.status === "new" ? "Thêm mới" : row.status === "updated" ? "Cập nhật" : "Không đổi"}</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+        confirmLabel="Xác nhận đồng bộ"
+        cancelLabel="Hủy"
+        isLoading={syncBusy}
+        onConfirm={() => void applyBasicSync()}
+        onCancel={() => { if (!syncBusy) { setCatalogSync(null); setSyncError(""); } }}
+      />
       <ConfirmDialog
         open={resetStockOpen && canResetKitchenStock}
         title="Reset tồn kho hàng hóa bên Bếp?"

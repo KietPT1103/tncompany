@@ -243,6 +243,18 @@ if ($method === 'POST') {
     $storeId = trim((string) ($body['areaId'] ?? $body['storeId'] ?? 'cafe'));
     $itemType = products_normalize_item_type((string) ($body['itemType'] ?? 'product'));
 
+    if ($action === 'sync-catalog-basic') {
+        require_once __DIR__ . '/_lib/catalog_basic_sync.php';
+        if (!is_array($body['items'] ?? null) || !is_bool($body['apply'] ?? null)) {
+            respond_error('Dữ liệu đồng bộ không hợp lệ.', 422);
+        }
+        try {
+            respond_ok(catalog_basic_sync(db(), $user, $storeId, $body['items'], $body['apply'], is_string($body['previewToken'] ?? null) ? $body['previewToken'] : null, 'uuidv4'));
+        } catch (DomainException $exception) {
+            respond_error($exception->getMessage(), $exception->getCode());
+        }
+    }
+
     if ($action === 'reset-kitchen-stock') {
         require_once __DIR__ . '/_lib/reset_kitchen_product_stock.php';
         try {

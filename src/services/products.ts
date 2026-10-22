@@ -1,5 +1,25 @@
 
 import { apiRequest } from "@/lib/api";
+import type { BasicCatalogItem } from "@/lib/kiotVietBasicCatalog";
+
+export type BasicCatalogSyncPreview = {
+  applied: boolean;
+  storeId: string;
+  totalCount: number;
+  createdCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  skippedCount: number;
+  previewToken: string;
+  rows: Array<{ code: string; name: string; price: number; oldName: string | null; oldPrice: number | null; status: "new" | "updated" | "unchanged" | "skipped" }>;
+};
+
+export function syncBasicCatalog(items: BasicCatalogItem[], storeId: string, apply = false, previewToken?: string) {
+  return apiRequest<BasicCatalogSyncPreview>("/products.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "sync-catalog-basic", items, storeId, apply, previewToken }),
+  });
+}
 
 export type Product = {
   product_code: string;
