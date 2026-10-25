@@ -83,7 +83,7 @@ export default function RevenuePage() {
         <div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-slate-400">TN COMPANY</p><h1 className="mt-1 text-xl font-extrabold tracking-tight">Doanh thu</h1></div>
         <button type="button" aria-label="Tải lại" title="Tải lại" onClick={() => setReload(value => value + 1)} disabled={busy || !valid} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 ${focus}`}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin motion-reduce:animate-none' : ''}`} /></button>
       </header>
-      <div className="sticky top-0 z-10 -mx-1 mb-4 space-y-3 bg-[#f4f6f5]/95 px-1 pb-3 pt-1 backdrop-blur">
+      <div className="mb-3 space-y-3">
         <div className="flex gap-1 rounded-2xl border border-slate-200 bg-slate-200/60 p-1" role="group" aria-label="Hệ thống">
           {revenueSources.map(item => <button key={item.id} type="button" aria-pressed={source.id === item.id} onClick={() => update({ source: item.id })} className={`min-h-11 flex-1 rounded-xl px-3 text-sm font-bold transition ${focus} ${source.id === item.id ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>{item.label}</button>)}
         </div>
@@ -94,6 +94,9 @@ export default function RevenuePage() {
             return <button key={id} type="button" aria-pressed={active} onClick={() => update({ from: range[0], to: range[1] })} className={`min-h-10 whitespace-nowrap rounded-full border px-2 text-[11px] font-semibold ${focus} ${active ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}>{label}</button>;
           })}
         </div>
+        {source.id === 'tnservice' && <label className="relative block"><span className="sr-only">Quầy</span><select aria-label="Quầy" value={store} onChange={event => update({ store: event.target.value })} className={`min-h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-semibold ${focus}`}><option value="all">Tất cả quầy</option>{(visible?.stores || [{ id: 'cafe', name: 'Cà phê' }, { id: 'restaurant', name: 'Bếp' }, { id: 'bakery', name: 'Bánh' }, { id: 'farm', name: 'Farm' }, { id: 'warehouse', name: 'Kho' }]).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" /></label>}
+      </div>
+      <div className="sticky top-0 z-10 -mx-1 mb-4 bg-[#f4f6f5]/95 px-1 py-2 backdrop-blur" data-revenue-date-bar>
         <DateRangePicker
           label="Khoảng ngày"
           hideLabel
@@ -104,7 +107,6 @@ export default function RevenuePage() {
           onChange={(start, end) => update({ from: start, to: end })}
           triggerClassName="min-h-11 rounded-2xl border-slate-200 bg-white text-sm"
         />
-        {source.id === 'tnservice' && <label className="relative block"><span className="sr-only">Quầy</span><select aria-label="Quầy" value={store} onChange={event => update({ store: event.target.value })} className={`min-h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-semibold ${focus}`}><option value="all">Tất cả quầy</option>{(visible?.stores || [{ id: 'cafe', name: 'Cà phê' }, { id: 'restaurant', name: 'Bếp' }, { id: 'bakery', name: 'Bánh' }, { id: 'farm', name: 'Farm' }, { id: 'warehouse', name: 'Kho' }]).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" /></label>}
       </div>
       {!valid ? <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Chọn khoảng ngày hợp lệ, tối đa 93 ngày.</p>
         : error && loadedKey === requestKey ? <div role="alert" className="rounded-2xl border border-rose-200 bg-white p-5"><p className="text-sm text-rose-800">{error}</p><button type="button" onClick={() => setReload(value => value + 1)} className={`mt-3 min-h-11 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 ${focus}`}>Thử lại</button></div>
