@@ -7,7 +7,7 @@ function outside_expenses_ensure_schema(PDO $p): void
         "CREATE TABLE IF NOT EXISTS outside_expense_sources (month_key VARCHAR(7) NOT NULL, store_id VARCHAR(64) NOT NULL, url TEXT NOT NULL, spreadsheet_id VARCHAR(160) NOT NULL, tab_key VARCHAR(220) NOT NULL, sheet_name VARCHAR(180) NOT NULL, gid VARCHAR(30) NULL, last_synced_at VARCHAR(30) NULL, last_attempt_at VARCHAR(30) NULL, error TEXT NULL, lock_token VARCHAR(40) NULL, lock_until BIGINT NOT NULL DEFAULT 0, PRIMARY KEY(month_key,store_id), UNIQUE(month_key,spreadsheet_id))",
     );
     $p->exec(
-        "CREATE TABLE IF NOT EXISTS outside_expense_items (month_key VARCHAR(7) NOT NULL,store_id VARCHAR(64) NOT NULL,row_number INTEGER NOT NULL,expense_date VARCHAR(10) NOT NULL,amount DECIMAL(18,2) NOT NULL,name TEXT NOT NULL,PRIMARY KEY(month_key,store_id,row_number))",
+        "CREATE TABLE IF NOT EXISTS outside_expense_items (month_key VARCHAR(7) NOT NULL,store_id VARCHAR(64) NOT NULL,`row_number` INTEGER NOT NULL,expense_date VARCHAR(10) NOT NULL,amount DECIMAL(18,2) NOT NULL,name TEXT NOT NULL,PRIMARY KEY(month_key,store_id,`row_number`))",
     );
 }
 function outside_expenses_month(string $month): void
@@ -273,7 +273,7 @@ function outside_expenses_save(
                 "DELETE FROM outside_expense_items WHERE month_key=? AND store_id=?",
             )->execute([$month, $store]);
             $s = $p->prepare(
-                "INSERT INTO outside_expense_items (month_key,store_id,row_number,expense_date,amount,name) VALUES (?,?,?,?,?,?)",
+                "INSERT INTO outside_expense_items (month_key,store_id,`row_number`,expense_date,amount,name) VALUES (?,?,?,?,?,?)",
             );
             foreach ($items as $r) {
                 $s->execute([
@@ -352,7 +352,7 @@ function outside_expenses_sync(
             "DELETE FROM outside_expense_items WHERE month_key=? AND store_id=?",
         )->execute([$month, $store]);
         $s = $p->prepare(
-            "INSERT INTO outside_expense_items (month_key,store_id,row_number,expense_date,amount,name) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO outside_expense_items (month_key,store_id,`row_number`,expense_date,amount,name) VALUES (?,?,?,?,?,?)",
         );
         foreach ($items as $r) {
             $s->execute([
@@ -408,7 +408,7 @@ function outside_expenses_report(
     if ($ids) {
         $slots = implode(",", array_fill(0, count($ids), "?"));
         $statement = $p->prepare(
-            "SELECT c.*,i.expense_date,i.name AS item_name,i.amount AS item_amount,i.row_number FROM outside_expense_sources c LEFT JOIN outside_expense_items i ON i.month_key=c.month_key AND i.store_id=c.store_id AND i.expense_date>=? AND i.expense_date<=? WHERE c.month_key>=? AND c.month_key<=? AND c.store_id IN ($slots) ORDER BY c.store_id,c.month_key,i.row_number",
+            "SELECT c.*,i.expense_date,i.name AS item_name,i.amount AS item_amount,i.`row_number` FROM outside_expense_sources c LEFT JOIN outside_expense_items i ON i.month_key=c.month_key AND i.store_id=c.store_id AND i.expense_date>=? AND i.expense_date<=? WHERE c.month_key>=? AND c.month_key<=? AND c.store_id IN ($slots) ORDER BY c.store_id,c.month_key,i.`row_number`",
         );
         $statement->execute(
             array_merge(
