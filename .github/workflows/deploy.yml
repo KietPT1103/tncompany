@@ -43,11 +43,27 @@ jobs:
         run: npm ci
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        shell: powershell
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}\dotnet
-        with:
-          dotnet-version: '8.0.x'
+        run: |
+          $ErrorActionPreference = "Stop"
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $sdkVersion = "8.0.427"
+          $installScript = Join-Path $env:RUNNER_TEMP "dotnet-install.ps1"
+          $feed = "https://builds.dotnet.microsoft.com/dotnet"
+
+          # Pin the SDK and feed: aka.ms currently redirects to a private origin (HTTP 409).
+          # Installing the SDK also installs its runtime; no separate latest-LTS runtime is needed.
+          Invoke-WebRequest -UseBasicParsing -Uri "$feed/scripts/v1/dotnet-install.ps1" -OutFile $installScript
+          & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $installScript -Version $sdkVersion -Architecture x64 -InstallDir $env:DOTNET_INSTALL_DIR -AzureFeed $feed -NoPath
+          if ($LASTEXITCODE -ne 0) { throw ".NET SDK installation failed with exit code $LASTEXITCODE." }
+          if (-not (Test-Path -LiteralPath (Join-Path $env:DOTNET_INSTALL_DIR "dotnet.exe"))) {
+            throw "The installer did not create dotnet.exe."
+          }
+
+          "DOTNET_ROOT=$env:DOTNET_INSTALL_DIR" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $env:DOTNET_INSTALL_DIR | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify .NET 8
         shell: powershell
