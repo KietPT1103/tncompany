@@ -81,7 +81,7 @@ export default function OutsideExpensesPage() {
           Liên kết sheet chi
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Chi ngoài POS · tự đồng bộ mỗi giờ
+          Chi ngoài POS · tự kiểm tra mỗi 30 phút
         </p>
       </header>
       <div className="grid grid-cols-2 gap-3">

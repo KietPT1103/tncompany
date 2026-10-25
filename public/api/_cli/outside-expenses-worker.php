@@ -20,7 +20,7 @@ foreach (
 ) {
     if (
         $c["last_attempt_at"] &&
-        strtotime($c["last_attempt_at"]) > time() - 3600
+        strtotime($c["last_attempt_at"]) > time() - 1800
     ) {
         continue;
     }

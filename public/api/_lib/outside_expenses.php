@@ -348,21 +348,36 @@ function outside_expenses_sync(
         if (!$s->rowCount()) {
             throw new RuntimeException("Khóa đồng bộ hết hạn.");
         }
-        $p->prepare(
-            "DELETE FROM outside_expense_items WHERE month_key=? AND store_id=?",
-        )->execute([$month, $store]);
-        $s = $p->prepare(
-            "INSERT INTO outside_expense_items (month_key,store_id,`row_number`,expense_date,amount,name) VALUES (?,?,?,?,?,?)",
+        $existingQuery = $p->prepare(
+            "SELECT `row_number` AS source_row,expense_date,amount,name FROM outside_expense_items WHERE month_key=? AND store_id=? ORDER BY `row_number`",
         );
-        foreach ($items as $r) {
-            $s->execute([
-                $month,
-                $store,
-                $r["row"],
-                $r["date"],
-                $r["amount"],
-                $r["name"],
-            ]);
+        $existingQuery->execute([$month, $store]);
+        $existing = array_map(static fn(array $row): array => [
+            'row' => (int)$row['source_row'], 'date' => $row['expense_date'],
+            'amount' => (float)$row['amount'], 'name' => $row['name'],
+        ], $existingQuery->fetchAll(PDO::FETCH_ASSOC));
+        $incoming = array_map(static fn(array $row): array => [
+            'row' => (int)$row['row'], 'date' => $row['date'],
+            'amount' => (float)$row['amount'], 'name' => $row['name'],
+        ], $items);
+        // Refresh checked-at metadata but do not rewrite unchanged expense rows.
+        if ($existing !== $incoming) {
+            $p->prepare(
+                "DELETE FROM outside_expense_items WHERE month_key=? AND store_id=?",
+            )->execute([$month, $store]);
+            $s = $p->prepare(
+                "INSERT INTO outside_expense_items (month_key,store_id,`row_number`,expense_date,amount,name) VALUES (?,?,?,?,?,?)",
+            );
+            foreach ($items as $r) {
+                $s->execute([
+                    $month,
+                    $store,
+                    $r["row"],
+                    $r["date"],
+                    $r["amount"],
+                    $r["name"],
+                ]);
+            }
         }
         $p->commit();
     } catch (Throwable $e) {

@@ -11,10 +11,10 @@ Hai bảng được tạo idempotent trong API/worker (`outside_expense_sources`
 Cài cron một lần trên server, chỉnh đường dẫn theo triển khai:
 
 ```cron
-*/10 * * * * /usr/bin/php /var/www/tnservice.vn/public/api/_cli/outside-expenses-worker.php >> /var/www/tnservice.vn/.deploy/outside-expenses.log 2>&1
+*/30 * * * * /usr/bin/php /var/www/tnservice.vn/public/api/_cli/outside-expenses-worker.php >> /var/www/tnservice.vn/.deploy/outside-expenses.log 2>&1
 ```
 
-Worker chạy mỗi 10 phút nhưng bỏ qua cấu hình đã thử trong 60 phút. Mọi tháng đã cấu hình tiếp tục được làm mới; thêm tháng không cần đổi cron. Không chạy worker bằng HTTP. Cấu hình và snapshot độc lập theo tháng/quầy. Chạy fixtures không dùng DB thật: `php scripts/outside-expenses-test.php`.
+Worker chạy mỗi 30 phút và bỏ qua cấu hình đã thử trong 30 phút. Nội dung các khoản chi không đổi thì chỉ cập nhật thời điểm kiểm tra, không xóa/ghi lại các khoản chi. Mọi tháng đã cấu hình tiếp tục được làm mới; thêm tháng không cần đổi cron. Không chạy worker bằng HTTP. Cấu hình và snapshot độc lập theo tháng/quầy. Chạy fixtures không dùng DB thật: `php scripts/outside-expenses-test.php`.
 
 Lưu cấu hình: CSV được đọc/kiểm tra trước, rồi cấu hình nguồn và toàn bộ snapshot được công bố cùng một giao dịch. Nếu chèn snapshot lỗi, giao dịch hoàn tác cả nguồn và dữ liệu cũ; bản cũ được đánh dấu cần đồng bộ. Báo cáo dùng một SELECT JOIN lấy cấu hình và mọi khoản chi, tránh trộn hai thế hệ đồng bộ; không mở/đóng giao dịch của bên gọi.
 
