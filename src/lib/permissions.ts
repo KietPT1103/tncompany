@@ -15,9 +15,9 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   {
     id: "revenue_hub.view",
     label: "Xem doanh thu liên hệ thống",
-    description: "Quyền cấp riêng để truy cập URL /revenue.",
+    description: "Quyền cấp riêng để truy cập URL /doanh-thu.",
     category: "Hệ thống",
-    path: "/revenue",
+    path: "/doanh-thu",
   },
   {
     id: "stores.switch",
@@ -461,7 +461,7 @@ export const MANAGED_PERMISSION_GROUPS = PERMISSION_DEFINITIONS.filter(
 }, []);
 
 const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
-  admin: ALL_APP_PERMISSIONS.filter((id) => id !== "revenue_hub.view"),
+  admin: [...ALL_APP_PERMISSIONS],
   manager: ["payroll_estimate.access"],
   user: ["bills.access", "inventory_receipts.access", "inventory_issues.access"],
   server: ["bills.access"],
@@ -532,7 +532,7 @@ export function getEffectivePermissions(
   }
 
   if (String(source.role).trim().toLowerCase() === "admin") {
-    return ALL_APP_PERMISSIONS.filter((id) => id !== "revenue_hub.view" || source.permissions?.includes(id));
+    return [...ALL_APP_PERMISSIONS];
   }
 
   if (Array.isArray(source.permissions)) {

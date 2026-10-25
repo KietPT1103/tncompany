@@ -1,5 +1,7 @@
 # Revenue Hub Implementation Plan
 
+> Cập nhật theo yêu cầu mới: admin tự động có quyền truy cập doanh thu; các vai trò khác vẫn cần được cấp revenue_hub.view. Quy tắc này thay thế yêu cầu cũ về việc admin phải được cấp riêng.
+
 > Execute inline using superpowers:executing-plans. User approved implementation on 2026-10-26.
 
 Goal: /revenue with explicit TN permission and pluggable server-side reporting sources.

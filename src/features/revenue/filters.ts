@@ -16,5 +16,5 @@ export function validRange(from: string, to: string): boolean {
 }
 
 export function loginRevenueTarget(value: string | null): string | null {
-  return value && /^\/revenue(?:\?[^\\\r\n]*)?$/.test(value) ? value : null;
+  return value && /^\/(?:doanh-thu|revenue)(?:\?[^\\\r\n]*)?$/.test(value) ? value.replace(/^\/revenue(?=\?|$)/, '/doanh-thu') : null;
 }

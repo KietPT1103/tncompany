@@ -27,7 +27,7 @@ test("account permission groups expose effective role permissions", () => {
   assert.equal(getAccountPermissionCount(user), 1);
 });
 
-test("admin accounts get standard permissions but require an explicit hub grant", () => {
+test("admin accounts automatically have all managed permissions", () => {
   const user = {
     role: "admin" as const,
     permissions: [],
@@ -39,10 +39,10 @@ test("admin accounts get standard permissions but require an explicit hub grant"
   assert.ok(effective.includes("accounts.access"));
   assert.equal(
     getAccountPermissionCount(user),
-    groups.reduce((total, group) => total + group.items.length, 0) - 1,
+    groups.reduce((total, group) => total + group.items.length, 0),
   );
-  assert.equal(effective.includes("revenue_hub.view"), false);
-  assert.ok(groups.every((group) => group.items.every((item) => item.enabled || item.id === "revenue_hub.view")));
+  assert.equal(effective.includes("revenue_hub.view"), true);
+  assert.ok(groups.every((group) => group.items.every((item) => item.enabled)));
 });
 
 test("warehouse employees can be granted separate import and export permissions", () => {

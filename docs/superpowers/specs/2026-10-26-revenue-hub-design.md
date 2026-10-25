@@ -1,5 +1,7 @@
 # Thiết kế trang doanh thu liên hệ thống
 
+> Cập nhật theo yêu cầu mới: admin tự động có quyền truy cập doanh thu; các vai trò khác vẫn cần được cấp revenue_hub.view. Quy tắc này thay thế yêu cầu cũ về việc admin phải được cấp riêng.
+
 ## Mục tiêu và phạm vi
 Tạo /revenue trong TN Company, ngoài layout admin/user, dùng đăng nhập hiện tại. Hai phần TN Service và MoHomestay hiển thị dữ liệu thực qua API, ưu tiên điện thoại. Không thêm menu, nút truy cập hoặc văn bản giới thiệu dài. Không triển khai production trong phạm vi này.
 

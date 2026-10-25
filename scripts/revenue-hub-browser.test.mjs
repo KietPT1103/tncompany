@@ -21,7 +21,7 @@ window.fetch=async(url,options)=>{
 };
 const root=createRoot(document.getElementById('root'));
 function Login(){return <pre id='login-target'>{useLocation().search}</pre>}
-const render=()=>root.render(<MemoryRouter initialEntries={['/revenue?source=tnservice&from=2026-10-25&to=2026-10-25']}><Routes><Route path='/revenue' element={<RevenuePage/>}/><Route path='/login' element={<Login/>}/></Routes></MemoryRouter>);
+const render=()=>root.render(<MemoryRouter initialEntries={['/doanh-thu?source=tnservice&from=2026-10-25&to=2026-10-25']}><Routes><Route path='/doanh-thu' element={<RevenuePage/>}/><Route path='/login' element={<Login/>}/></Routes></MemoryRouter>);
 render();
 const checks=[];const check=(n,v)=>checks.push([n,!!v,...(v?[]:[document.getElementById('root').textContent.slice(0,500),requests.at(-1)?.toString()])]);
 const wait=(ms=120)=>new Promise(r=>setTimeout(r,ms));
@@ -37,10 +37,11 @@ const btn=t=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim
  fail=true;btn('MoHomestay').click();await wait(250);check('source error visible',document.querySelector('[role="alert"]')?.textContent.includes('Nguồn tạm ngưng'));fail=false;btn('Thử lại').click();await wait(250);check('retry restores Mo report',document.getElementById('root').textContent.includes('4.321.000'));check('Mo has distinct native fields',document.getElementById('root').textContent.includes('Tiền phòng')&&!document.getElementById('root').textContent.includes('Ly nước'));
  check('mobile Mo no overflow',document.documentElement.scrollWidth<=innerWidth);
  delay=30000;document.querySelector('button[aria-label="Tải lại"]').click();await wait(14300);check('slow source times out with retry',document.querySelector('[role="alert"]')?.textContent.includes('Tải dữ liệu quá lâu'));delay=20;btn('TN Service').click();await wait(250);check('other source remains usable after timeout',document.getElementById('root').textContent.includes('1.234.567'));
- window.testAuth={user:{id:'u',role:'admin',permissions:[]},loading:false};render();await wait();check('ungranted admin denied',document.getElementById('root').textContent.includes('Chưa được cấp quyền'));
- window.testAuth={user:null,loading:false};render();await wait();check('TN login preserves hub URL',document.querySelector('#login-target')?.textContent.includes('returnTo=%2Frevenue'));
+ window.testAuth={user:{id:'u',role:'admin',permissions:[]},loading:false};render();await wait(250);check('admin automatically accesses hub',document.getElementById('root').textContent.includes('Doanh thu')&&!document.getElementById('root').textContent.includes('Chưa được cấp quyền'));
+ window.testAuth={user:{id:'u',role:'user',permissions:[]},loading:false};render();await wait();check('ungranted user denied',document.getElementById('root').textContent.includes('Chưa được cấp quyền'));
+ window.testAuth={user:null,loading:false};render();await wait();check('TN login preserves hub URL',document.querySelector('#login-target')?.textContent.includes('returnTo=%2Fdoanh-thu'));
  root.unmount();const root2=createRoot(document.getElementById('root'));window.testAuth={user:{id:'u',role:'user',permissions:['revenue_hub.view']},loading:false};
- root2.render(<MemoryRouter initialEntries={['/revenue?source=mohomestay&from=2026-10-25&to=2026-10-25']}><RevenuePage/></MemoryRouter>);await wait(250);
+ root2.render(<MemoryRouter initialEntries={['/doanh-thu?source=mohomestay&from=2026-10-25&to=2026-10-25']}><RevenuePage/></MemoryRouter>);await wait(250);
  const pre=document.createElement('pre');pre.id='test-result';pre.textContent=JSON.stringify(checks);document.body.append(pre);
 })().catch(e=>{const p=document.createElement('pre');p.id='test-result';p.textContent=JSON.stringify([['exception '+e.stack,false]]);document.body.append(p)});
 `;

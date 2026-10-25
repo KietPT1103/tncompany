@@ -3,10 +3,12 @@ $authSource = file_get_contents(__DIR__ . '/../public/api/_lib/auth.php');
 eval(str_replace('<?php', '', str_replace('auth_ensure_tables();', '', str_replace('__DIR__', var_export(realpath(__DIR__ . '/../public/api/_lib'), true), $authSource))));
 require __DIR__ . '/../public/api/_lib/revenue_hub.php';
 function check($value, $message) { if (!$value) throw new RuntimeException($message); }
-check(!auth_has_permission(['role'=>'admin','permissions'=>[]], 'revenue_hub.view'), 'Admin must explicitly opt in');
+check(auth_has_permission(['role'=>'admin','permissions'=>[]], 'revenue_hub.view'), 'Admin automatically has hub access');
 check(auth_has_permission(['role'=>'admin','permissions'=>['revenue_hub.view']], 'revenue_hub.view'), 'Explicit admin grant');
-check(!in_array('revenue_hub.view', auth_default_permissions_for_role('admin')), 'No default grant');
-check(!in_array('revenue_hub.view', auth_effective_permissions(['role'=>'admin','permissions_json'=>null])), 'Stored admin defaults');
+check(in_array('revenue_hub.view', auth_default_permissions_for_role('admin')), 'Admin default grants hub');
+check(in_array('revenue_hub.view', auth_effective_permissions(['role'=>'admin','permissions_json'=>null])), 'Existing admin automatically has hub');
+check(!auth_has_permission(['role'=>'user','permissions'=>[]], 'revenue_hub.view'), 'Other roles still denied without grant');
+check(auth_has_permission(['role'=>'user','permissions'=>['revenue_hub.view']], 'revenue_hub.view'), 'Other roles can receive grant');
 foreach ([['2026-02-30','2026-03-01'],['2026-10-02','2026-10-01'],['2026-01-01','2026-04-04']] as [$a,$b]) {
     try { revenue_dates($a,$b); throw new RuntimeException('Accepted invalid range'); } catch (InvalidArgumentException $e) {}
 }

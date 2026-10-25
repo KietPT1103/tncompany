@@ -1,6 +1,6 @@
 import React from "react";
 import RevenuePage from "./features/revenue/RevenuePage";
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { pages } from "./data/siteData";
 import LandingApp from "./LandingApp";
 import DashboardLayout from "./app/(dashboard)/layout";
@@ -57,6 +57,11 @@ import ArticleDetailPage from "./app/tin-tuc/ArticleDetailPage";
 import { useAuth } from "./context/AuthContext";
 import { getDefaultRouteForUser } from "./lib/permissions";
 import { normalizeAdminHref } from "./router/pathUtils";
+
+function LegacyRevenueRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/doanh-thu${search}`} replace />;
+}
 
 function ProtectedLayout({ allowedRoles, permission, inferPermission = true }) {
   return (
@@ -116,7 +121,8 @@ export function App() {
         <Route path="/" element={<LandingApp />} />
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/revenue" element={<RevenuePage />} />
+        <Route path="/doanh-thu" element={<RevenuePage />} />
+        <Route path="/revenue" element={<LegacyRevenueRedirect />} />
         <Route path="/bills" element={<Navigate to="/admin/bills" replace />} />
         <Route
           element={

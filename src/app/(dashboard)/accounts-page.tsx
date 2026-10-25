@@ -242,7 +242,7 @@ export default function AccountManagementPage() {
   }
 
   function handlePermissionToggle(permission: AppPermission) {
-    if (form.role === "admin" && permission !== "revenue_hub.view") return;
+    if (form.role === "admin") return;
     setForm((current) => {
       const exists = current.permissions.includes(permission);
       let permissions = exists

@@ -1,9 +1,9 @@
 # Revenue hub
 
-URL: `/revenue`. Uses the existing TN login. There is deliberately no navigation link.
+URL: `/doanh-thu` (legacy `/revenue` redirects here, preserving filters). Uses the existing TN login. There is deliberately no navigation link.
 
 ## Access
-In TN account management, edit permissions and tick **Xem doanh thu liên hệ thống** (`revenue_hub.view`). Admin accounts also need this explicit grant. Role defaults and the reports permission do not grant it. Revoke the checkbox to deny the next API request. No separate Mo login is required.
+In TN account management, edit permissions and tick **Xem doanh thu liên hệ thống** (`revenue_hub.view`). Admin accounts automatically have access. Other roles need an explicit grant; their role defaults and the reports permission do not grant it. Revoke the checkbox to deny the next API request. No separate Mo login is required.
 
 This permission allows reading reports across all counters and all connected sources. It does not grant POS, booking mutation or account management rights.
 
