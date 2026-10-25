@@ -64,6 +64,12 @@ const isNavItemActive = (pathname: string, item: NavItem) =>
 
 const standaloneNavItems: NavItem[] = [
   {
+    href: "/outside-expenses",
+    label: "Liên kết sheet chi",
+    icon: FileSpreadsheet,
+    roles: ["admin"],
+  },
+  {
     href: "/overview",
     label: "Tổng quan",
     icon: Gauge,

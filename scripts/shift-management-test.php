@@ -58,3 +58,23 @@ shift_validate_close_preview($source,['cashSales'=>0,'transferSales'=>300,'total
 rejects(fn()=>shift_validate_close_preview($source,['totalSales'=>500],$source['opened_at']),409);
 rejects(fn()=>shift_validate_close_preview($source,[],'2026-10-21 17:43:26'),409);
 echo "PASS: correction, authorization, review conflicts, rollback, audit, summaries, stale-day acknowledgement\n";
+
+// Transfer-linked shifts cannot be corrected into another business day or reverse order.
+require_once __DIR__.'/../public/api/_lib/cash_transfers.php';
+cash_transfers_ensure_schema($pdo);
+$pdo->exec("INSERT INTO cashier_shifts (id,store_id,cashier_uid,shift_type,status,opened_at,closed_at,opening_cash,closing_cash) VALUES ('transfer-source','cafe','a','shift_1','closed','2026-10-20 10:00:00','2026-10-20 16:00:00',100,1100),('transfer-receiver','cafe','b','shift_2','closed','2026-10-20 17:00:00','2026-10-20 23:00:00',100,2100)");
+$pdo->exec("INSERT INTO cash_vouchers (id,store_id,shift_id,amount,voucher_type,include_in_cash_flow,happened_at,source_shift_id,transfer_request_id) VALUES ('linked','cafe','transfer-receiver',1000,'income',1,'2026-10-20 18:00:00','transfer-source','linked-request')");
+$correction = static function(string $id,string $openedAt) use ($pdo): array {
+    return ['id'=>$id,'openedAt'=>$openedAt,'closedAt'=>$id==='transfer-source'?'2026-10-20 16:00:00':'2026-10-20 23:00:00','reason'=>'Test transfer time correction','reviewed'=>true,'reviewToken'=>shift_management_review($pdo,'cafe',$id)['reviewToken'],'transfers'=>[]];
+};
+rejects(fn()=>shift_management_correct($pdo,'cafe',$admin,$correction('transfer-source','2026-10-19 10:00:00')),422);
+check($pdo->query("SELECT opened_at FROM cashier_shifts WHERE id='transfer-source'")->fetchColumn()==='2026-10-20 10:00:00','Cross-day source correction must roll back');
+rejects(fn()=>shift_management_correct($pdo,'cafe',$admin,array_replace($correction('transfer-source','2026-10-20 18:00:00'),['closedAt'=>'2026-10-20 22:00:00'])),422);
+rejects(fn()=>shift_management_correct($pdo,'cafe',$admin,$correction('transfer-receiver','2026-10-20 09:00:00')),422);
+rejects(fn()=>shift_management_correct($pdo,'cafe',$admin,$correction('transfer-receiver','2026-10-19 17:00:00')),422);
+check($pdo->query("SELECT opened_at FROM cashier_shifts WHERE id='transfer-receiver'")->fetchColumn()==='2026-10-20 17:00:00','Reversed receiver correction must roll back');
+shift_management_correct($pdo,'cafe',$admin,$correction('transfer-source','2026-10-20 09:30:00'));
+$pdo->exec("UPDATE cash_vouchers SET cancelled_at='2026-10-20 19:00:00' WHERE id='linked'");
+shift_management_correct($pdo,'cafe',$admin,$correction('transfer-source','2026-10-19 10:00:00'));
+check($pdo->query("SELECT opened_at FROM cashier_shifts WHERE id='transfer-source'")->fetchColumn()==='2026-10-19 10:00:00','Cancelled transfer should not constrain corrections');
+echo "PASS: active transfer day/order correction guards, rollback, same-day correction and cancelled exclusion\n";

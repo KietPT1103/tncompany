@@ -116,7 +116,13 @@ function revenue_tn(PDO $pdo, string $from, string $to, string $store): array
 function revenue_providers(): array
 {
     return [
-        'tnservice' => static fn(PDO $pdo, string $from, string $to, string $store): array => revenue_tn($pdo, $from, $to, $store),
+        'tnservice' => static function(PDO $pdo, string $from, string $to, string $store): array {
+            $report = revenue_tn($pdo, $from, $to, $store);
+            require_once __DIR__ . '/revenue_cashflow.php';
+            $storeIds = $store === 'all' ? array_column($report['stores'], 'id') : [$store];
+            $report['cashflow'] = revenue_cashflow($pdo, $from, $to, $storeIds);
+            return $report;
+        },
         'mohomestay' => static fn(PDO $pdo, string $from, string $to, string $store): array => revenue_mo($from, $to),
     ];
 }

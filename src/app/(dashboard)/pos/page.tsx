@@ -55,6 +55,9 @@ import {
   CashVoucherType,
   VoucherEvidenceOption,
   createCashVoucher,
+  getTransferSourceShifts,
+  transferVoucherNote,
+  transferOutForShifts,
   getCashVoucherCategories,
   getCashVouchers,
   getAllCashVouchers,
@@ -75,6 +78,7 @@ import {
   getOpenShiftByCashier,
   getShiftReopenWarning,
   getShiftHandoverAmount,
+  getDailyAdjustedHandover,
   getShiftsForReport,
   openShift,
   ShiftSummary,
@@ -445,6 +449,12 @@ export default function CafePosPage() {
     null
   );
   const [voucherAmountInput, setVoucherAmountInput] = useState("");
+  const [voucherFromShift, setVoucherFromShift] = useState(false);
+  const [voucherSourceShiftId, setVoucherSourceShiftId] = useState("");
+  const [voucherSourceOptions, setVoucherSourceOptions] = useState<{id:string;label:string}[]>([]);
+  const [voucherSourceError, setVoucherSourceError] = useState("");
+  const [voucherTransferRequestId, setVoucherTransferRequestId] = useState("");
+  const voucherSaveLock = useRef(false);
   const [voucherCategory, setVoucherCategory] = useState("");
   const [voucherCategories, setVoucherCategories] = useState<CashVoucherCategory[]>([]);
   const [voucherPersonName, setVoucherPersonName] = useState("");
@@ -504,6 +514,10 @@ export default function CafePosPage() {
   const resetVoucherForm = (type: CashVoucherType) => {
     setShowVoucherModal(type);
     setVoucherAmountInput("");
+    setVoucherFromShift(false);
+    setVoucherSourceShiftId("");
+    setVoucherSourceError("");
+    setVoucherTransferRequestId(crypto.randomUUID());
     setVoucherCategory("");
     setVoucherPersonName("");
     setVoucherNote("");
@@ -539,6 +553,20 @@ export default function CafePosPage() {
       active = false;
     };
   }, [showVoucherModal, storeId]);
+
+  useEffect(() => {
+    if (!showVoucherModal || !voucherFromShift) return;
+    let active = true;
+    setVoucherSourceOptions([]);
+    setVoucherSourceError("");
+    getTransferSourceShifts(storeId).then(data => {
+      if (!active) return;
+      if (data.receiverId !== activeShift?.id) { setVoucherSourceError("Ca hiện tại đã thay đổi. Vui lòng tải lại POS."); return; }
+      setVoucherSourceOptions(data.items);
+      if (!data.items.length) setVoucherSourceError("Chưa có ca nguồn cùng quầy và ngày kinh doanh.");
+    }).catch(error => { if (active) setVoucherSourceError(error instanceof Error ? error.message : "Không tải được ca nguồn."); });
+    return () => { active = false; };
+  }, [showVoucherModal, voucherFromShift, storeId, activeShift?.id]);
 
   const selectVoucherEvidence = (receiptId: string) => {
     const selected = voucherEvidenceOptions.find((item) => item.receiptId === receiptId);
@@ -2379,6 +2407,7 @@ export default function CafePosPage() {
       const handoverAmount = getShiftHandoverAmount(closeShiftSummary);
       const reconciledClosingCash = (activeShift.openingCash || 0) + handoverAmount;
       let endOfDayHandover: EndOfDayHandover | null = null;
+      let endOfDayTransferNotes: string[] = [];
       if (activeShift.shiftType === "shift_3") {
         const shiftDate = activeShift.openedAt?.seconds
           ? new Date(activeShift.openedAt.seconds * 1000)
@@ -2399,7 +2428,7 @@ export default function CafePosPage() {
         const [dayBills, dayVouchers] = shiftIds.length
           ? await Promise.all([
               getBills({ storeId, shiftIds, includeCancelled: true, limitCount: 5000 }),
-              getCashVouchers({ storeId, shiftIds, limitCount: 5000 }),
+              getAllCashVouchers({ storeId, shiftIds, includeSourceTransfers: true }),
             ])
           : [[], []];
         const handoverByShift = shiftTypes.reduce(
@@ -2412,7 +2441,7 @@ export default function CafePosPage() {
               0,
               dayVouchers.filter((voucher) => ids.has(voucher.shiftId || ""))
             );
-            totals[shiftType] = getShiftHandoverAmount(summary);
+            totals[shiftType] = getShiftHandoverAmount(summary) - transferOutForShifts(dayVouchers, Array.from(ids));
             return totals;
           },
           { shift_1: 0, shift_2: 0, shift_3: 0 } as Record<
@@ -2430,7 +2459,7 @@ export default function CafePosPage() {
               shift.id === activeShift.id ? closingCash : shift.closingCash;
             if (shiftClosingCash === null || shiftClosingCash === undefined) return totals;
             totals[shift.shiftType as Exclude<ShiftType, "single">] +=
-              shiftClosingCash - Number(shift.openingCash || 0);
+              shiftClosingCash - Number(shift.openingCash || 0) - transferOutForShifts(dayVouchers, [shift.id]);
             return totals;
           },
           { shift_1: 0, shift_2: 0, shift_3: 0 } as Record<
@@ -2442,6 +2471,7 @@ export default function CafePosPage() {
           (total, amount) => total + amount,
           0
         );
+        endOfDayTransferNotes = dayVouchers.filter(v => !v.isCancelled && v.sourceShiftId).map(transferVoucherNote);
         const daySummary = summarizeBillsForShift(dayBills, 0, dayVouchers);
         endOfDayHandover = {
           shifts: actualHandoverByShift,
@@ -2496,6 +2526,7 @@ export default function CafePosPage() {
               <tr><td>Ca 3</td><td class="right">${formatCurrency(endOfDayHandover.shifts.shift_3)} đ</td></tr>
               <tr class="total"><td>Tổng thực tế cả ngày</td><td class="right">${formatCurrency(endOfDayHandover.total)} đ</td></tr>
             </table>
+            ${endOfDayTransferNotes.map(note => `<p style="font-size:10px">${escapeHtml(note)}</p>`).join("")}
           </div>`
         : "";
 
@@ -2637,10 +2668,15 @@ export default function CafePosPage() {
           getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_1" }),
           getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_2" }),
           getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "shift_3" }),
+          getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType: "single" }),
         ]);
         bills = loadedBills;
         vouchers = loadedVouchers;
         reportShifts = shiftsByType.flat();
+        if (reportShifts.length) {
+          const related = await getAllCashVouchers({ storeId, shiftIds: reportShifts.map(shift => shift.id), includeSourceTransfers: true });
+          vouchers = Array.from(new Map([...vouchers, ...related].map(v => [v.id, v])).values());
+        }
       } else {
         const shifts = await getShiftsForReport({ storeId, startDate: start, endDate: end, shiftType });
         reportShifts = shifts;
@@ -2648,11 +2684,12 @@ export default function CafePosPage() {
         if (shiftIds.length > 0) {
           [bills, vouchers] = await Promise.all([
             getBills({ storeId, shiftIds, includeCancelled: true, limitCount: 2000 }),
-            getAllCashVouchers({ storeId, shiftIds, limitCount: 2000 }),
+            getAllCashVouchers({ storeId, shiftIds, limitCount: 2000, includeSourceTransfers: true }),
           ]);
         }
       }
-      const summary = summarizeBillsForShift(bills, 0, vouchers);
+      const reportShiftIds = new Set(reportShifts.map(shift => shift.id));
+      const summary = summarizeBillsForShift(bills, 0, vouchers.filter(v => shiftType === "all" || !v.shiftId || reportShiftIds.has(v.shiftId)));
       setDailyReportBills(bills);
       setDailyReportVouchers(vouchers);
       setDailyReportShifts(reportShifts);
@@ -2761,7 +2798,7 @@ export default function CafePosPage() {
               dailyCashSurplus
             )} đ</td></tr>
             <tr><td>Tiền bàn giao</td><td class="right"><strong>${formatCurrency(
-              getShiftHandoverAmount(dailyReport)
+              dailyAdjustedHandover
             )} đ</strong></td></tr>
             <tr><td>Chuyển khoản</td><td class="right">${formatCurrency(
               dailyReport.transferSales
@@ -2773,6 +2810,7 @@ export default function CafePosPage() {
               dailyReport.cancelledAmount
             )} đ</td></tr>
           </table>
+          ${dailyReportVouchers.filter(v => !v.isCancelled && v.sourceShiftId).map(v => `<p style="font-size:10px">${escapeHtml(transferVoucherNote(v))}</p>`).join("")}
           ${productGroupSections}
           <div class="line"></div>
           <p style="text-align:center">Kết thúc báo cáo</p>
@@ -2799,7 +2837,7 @@ export default function CafePosPage() {
   };
 
   const handleSaveVoucher = async () => {
-    if (!showVoucherModal) return;
+    if (!showVoucherModal || voucherSaveLock.current) return;
     const amount = parseMoney(voucherAmountInput);
     if (amount <= 0) {
       alert("Giá trị phiếu phải lớn hơn 0.");
@@ -2809,6 +2847,11 @@ export default function CafePosPage() {
       alert("Vui lòng nhập loại thu/chi.");
       return;
     }
+    if (voucherFromShift && (!activeShift || !voucherSourceShiftId || voucherSourceError || !voucherIncludeInCashFlow)) {
+      alert("Vui lòng chọn ca nguồn hợp lệ và giữ hạch toán dòng tiền. Ca nhận tự động là ca hiện tại.");
+      return;
+    }
+    voucherSaveLock.current = true;
     setIsSavingVoucher(true);
     try {
       await createCashVoucher({
@@ -2816,6 +2859,8 @@ export default function CafePosPage() {
         type: showVoucherModal,
         amount,
         category: voucherCategory,
+        sourceShiftId: voucherFromShift ? voucherSourceShiftId : null,
+        transferRequestId: voucherFromShift ? voucherTransferRequestId : null,
         personName: voucherPersonName,
         note: voucherNote,
         includeInCashFlow: voucherIncludeInCashFlow,
@@ -2838,9 +2883,10 @@ export default function CafePosPage() {
       }
     } catch (error) {
       console.error(error);
-      alert("Không thể lưu phiếu. Vui lòng thử lại.");
+      alert(error instanceof Error ? error.message : "Không thể lưu phiếu. Vui lòng thử lại.");
     } finally {
       setIsSavingVoucher(false);
+      voucherSaveLock.current = false;
     }
   };
 
@@ -3242,6 +3288,7 @@ export default function CafePosPage() {
       }, 0),
     [dailyReportBills, dailyReportShifts, dailyReportVouchers]
   );
+  const dailyAdjustedHandover = getDailyAdjustedHandover(dailyReportShifts, dailyReportBills, dailyReportVouchers, dailyReportShift === "all");
   const dailyTillRevenue = dailyReport
     ? dailyOpeningCash + getShiftHandoverAmount(dailyReport)
     : dailyOpeningCash;
@@ -5189,9 +5236,10 @@ export default function CafePosPage() {
                         <div className="border-t pt-2 flex justify-between"><span>Tiền đầu ca</span><strong>{formatCurrency(dailyOpeningCash)} đ</strong></div>
                         <div className="flex justify-between"><span>Doanh thu két</span><strong>{formatCurrency(dailyTillRevenue)} đ</strong></div>
                         <div className="flex justify-between"><span>Tiền dư</span><strong className="text-emerald-700">+{formatCurrency(dailyCashSurplus)} đ</strong></div>
-                        <div className="flex justify-between border-t pt-2"><span>Tiền bàn giao</span><strong className="text-sky-700">{formatCurrency(getShiftHandoverAmount(dailyReport))} đ</strong></div>
+                        <div className="flex justify-between border-t pt-2"><span>Tiền bàn giao{dailyReportShifts.some(shift => shift.status === "open") ? " (tạm tính)" : ""}</span><strong className="text-sky-700">{formatCurrency(dailyAdjustedHandover)} đ</strong></div>
                         <div className="border-t pt-2 flex justify-between"><span>Phiếu thu ({dailyReportVouchers.filter((voucher) => !voucher.isCancelled && voucher.type === "income").length})</span><strong className="text-emerald-700">+{formatCurrency(dailyReport.incomeVouchers)} đ</strong></div>
                         <div className="flex justify-between"><span>Phiếu chi ({dailyReportVouchers.filter((voucher) => !voucher.isCancelled && voucher.type === "expense").length})</span><strong className="text-rose-700">-{formatCurrency(dailyReport.expenseVouchers)} đ</strong></div>
+                        {dailyReportVouchers.filter(v => !v.isCancelled && v.sourceShiftId).map(v => <p key={v.id} className="text-xs text-slate-500">{transferVoucherNote(v)}</p>)}
                       </div>
                     </div>
                     <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -5773,11 +5821,21 @@ export default function CafePosPage() {
                   )}
                 </div>
               )}
+              {showVoucherModal === "income" && <div className="space-y-2 rounded-lg border p-3">
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={voucherFromShift} disabled={!activeShift} onChange={e => { setVoucherFromShift(e.target.checked); setVoucherSourceShiftId(""); if (e.target.checked) setVoucherIncludeInCashFlow(true); }} />Thu từ ca trước</label>
+                {voucherFromShift && <>
+                  <label className="block text-sm font-medium">Ca lấy tiền *<select aria-label="Ca lấy tiền" className="mt-1 w-full rounded-md border p-2" value={voucherSourceShiftId} onChange={e => setVoucherSourceShiftId(e.target.value)}><option value="">Chọn ca nguồn</option>{voucherSourceOptions.map(shift => <option key={shift.id} value={shift.id}>{shift.label}</option>)}</select></label>
+                  <p className="text-xs text-slate-500">Ca nhận: ca hiện tại đang mở của bạn.</p>
+                  {voucherSourceError && <p role="alert" className="text-xs text-rose-600">{voucherSourceError}</p>}
+                </>}
+                {!activeShift && <p className="text-xs text-slate-500">Mở ca hiện tại để thu từ ca trước.</p>}
+              </div>}
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
                   checked={voucherIncludeInCashFlow}
+                  disabled={voucherFromShift}
                   onChange={(e) => setVoucherIncludeInCashFlow(e.target.checked)}
                 />
                 Hạch toán vào dòng tiền trong ngày

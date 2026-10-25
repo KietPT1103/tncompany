@@ -21,6 +21,7 @@ import {
   getCashVouchers,
   getVoucherEvidenceOptions,
   updateCashVoucherBasic,
+  transferVoucherNote,
 } from "@/services/cashVoucherService";
 import { getOpenShiftByCashier } from "@/services/shiftService";
 import { Button } from "@/components/ui/Button";
@@ -763,14 +764,14 @@ export default function BillsPage() {
 
   const handleSaveEditVoucher = async () => {
     if (!editingVoucher) return;
-    const amount = canEditVoucherAmount ? parseMoney(voucherEditForm.amount) : editingVoucher.amount;
+    const amount = canEditVoucherAmount && !editingVoucher.sourceShiftId ? parseMoney(voucherEditForm.amount) : editingVoucher.amount;
     const category = voucherEditForm.category.trim();
 
     if (!category) {
       alert("Vui lòng nhập tên phiếu.");
       return;
     }
-    if (canEditVoucherAmount && amount <= 0) {
+    if (canEditVoucherAmount && !editingVoucher.sourceShiftId && amount <= 0) {
       alert("Giá trị phiếu phải lớn hơn 0.");
       return;
     }
@@ -779,7 +780,7 @@ export default function BillsPage() {
     try {
       await updateCashVoucherBasic(editingVoucher.id, {
         category,
-        ...(canEditVoucherAmount ? { amount } : {}),
+        ...(canEditVoucherAmount && !editingVoucher.sourceShiftId ? { amount } : {}),
         ...(editingVoucher.type === "expense" ? {
           inventoryReceiptId: voucherEditForm.inventoryReceiptId || null,
         } : {}),
@@ -1468,6 +1469,7 @@ export default function BillsPage() {
                                   {voucher.note ? (
                                     <p className="text-xs text-slate-500">{voucher.note}</p>
                                   ) : null}
+                                  {voucher.sourceShiftId && <span className="mt-1 block text-xs font-normal text-slate-500">{transferVoucherNote(voucher)}</span>}
                                   {voucher.evidence ? <button type="button" onClick={() => setPreviewingVoucher(voucher)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900"><Images className="h-3.5 w-3.5" /> Minh chứng {voucher.evidence.receiptCode} · {voucher.evidence.images.length} ảnh</button> : null}
                                 </td>
                                 <td className="px-4 py-3 text-slate-700">
@@ -1562,6 +1564,7 @@ export default function BillsPage() {
                                       {voucher.note}
                                     </span>
                                   ) : null}
+                                  {voucher.sourceShiftId && <span className="mt-1 block text-xs font-normal text-slate-500">{transferVoucherNote(voucher)}</span>}
                                   {voucher.evidence ? <button type="button" onClick={() => setPreviewingVoucher(voucher)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-700"><Images className="h-3.5 w-3.5" /> Minh chứng {voucher.evidence.receiptCode}</button> : null}
                                 </dd>
                               </div>
@@ -1949,7 +1952,7 @@ export default function BillsPage() {
                   }
                   placeholder="Nhập tên phiếu"
                 />
-                {canEditVoucherAmount ? <Input
+                {canEditVoucherAmount && !editingVoucher.sourceShiftId ? <Input
                   label="Giá trị (VND)"
                   value={formatMoneyInput(voucherEditForm.amount)}
                   onChange={(e) =>
@@ -1960,7 +1963,7 @@ export default function BillsPage() {
                   }
                   placeholder="Nhập giá trị"
                 /> : <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  Giá trị phiếu được khóa đối với thu ngân: <strong>{formatCurrency(editingVoucher.amount)} VND</strong>
+                  {editingVoucher.sourceShiftId ? "Chuyển ca: hủy phiếu và lập lại để đổi số tiền." : "Giá trị phiếu được khóa đối với thu ngân:"} <strong>{formatCurrency(editingVoucher.amount)} VND</strong>
                 </div>}
                 {editingVoucher.type === "expense" && (
                   <div className="space-y-2">

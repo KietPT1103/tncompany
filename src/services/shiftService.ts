@@ -1,6 +1,6 @@
 import { ApiTimestamp, posRequest } from "@/services/posApi";
 import { Bill } from "./billService";
-import { CashVoucher } from "./cashVoucherService";
+import { CashVoucher, transferOutForShifts } from "./cashVoucherService";
 export type ShiftType = "shift_1" | "shift_2" | "shift_3" | "single";
 export type ShiftStatus = "open" | "closed";
 export type CashierShift = { id: string; storeId: string; cashierUid: string; cashierName: string; shiftType: ShiftType; status: ShiftStatus; isPreviousDay?: boolean; openedAt?: ApiTimestamp; openingCash: number; openNote?: string; openedByDeviceId?: string; openedByDeviceName?: string; closedAt?: ApiTimestamp; closingCash?: number | null; closeNote?: string; expectedClosingCash?: number | null; cashSales?: number; transferSales?: number; totalSales?: number; completedBills?: number; cancelledBills?: number; cancelledAmount?: number };
@@ -11,7 +11,7 @@ export function getShiftHandoverAmount(summary: ShiftSummary): number {
   return summary.cashSales + summary.incomeVouchers - summary.expenseVouchers;
 }
 export async function getOpenShiftByCashier(storeId: string, cashierUid: string) { return (await posRequest<{ item: CashierShift | null }>("shifts", {}, { storeId, cashierUid })).item; }
-export async function getShiftsForReport(options: { storeId: string; startDate: Date; endDate: Date; shiftType: Exclude<ShiftType, "single"> }) { return (await posRequest<{ items: CashierShift[] }>("shifts", {}, options)).items; }
+export async function getShiftsForReport(options: { storeId: string; startDate: Date; endDate: Date; shiftType: ShiftType }) { return (await posRequest<{ items: CashierShift[] }>("shifts", {}, options)).items; }
 export async function openShift(input: ShiftOpenInput) { return posRequest<{item:CashierShift;alreadyOpen:boolean}>("shifts",{method:"POST",body:JSON.stringify(input)}); }
 export async function closeShift(id: string, payload: { closingCash: number; closeNote?: string; expectedOpenedAt?: Date; summary: ShiftSummary }) { await posRequest("shifts",{method:"PATCH",body:JSON.stringify({id,...payload})}); }
 
@@ -30,4 +30,20 @@ export async function getShiftReview(storeId: string, id: string) {
 }
 export async function correctShift(storeId: string, input: { id: string; openedAt: string; closedAt: string | null; reason: string; reviewed: boolean; reviewToken: string; transfers: { billId: string; targetShiftId: string }[] }) {
   return posRequest<{ updated: boolean; movedBills: number }>('shift-review', { method: 'PATCH', body: JSON.stringify({ storeId, ...input }) });
+}
+
+/** Raw closed cash already includes incoming vouchers. Only source withdrawals are derived. */
+export function getAdjustedShiftHandover(shift: CashierShift, bills: Bill[], vouchers: CashVoucher[]): number {
+  const base = shift.status === "closed" && shift.closingCash !== null && shift.closingCash !== undefined
+    ? Number(shift.closingCash) - Number(shift.openingCash || 0)
+    : getShiftHandoverAmount(summarizeBillsForShift(bills.filter(b => b.shiftId === shift.id), 0, vouchers.filter(v => v.shiftId === shift.id)));
+  return base - transferOutForShifts(vouchers, [shift.id]);
+}
+
+/** Include single shifts and legacy unassigned entries without counting related receiver income twice. */
+export function getDailyAdjustedHandover(shifts: CashierShift[], bills: Bill[], vouchers: CashVoucher[], includeUnlisted = false): number {
+  const ids = new Set(shifts.map(shift => shift.id));
+  const unassigned = (shiftId?: string) => !shiftId || (includeUnlisted && !ids.has(shiftId));
+  const remainder = summarizeBillsForShift(bills.filter(bill => unassigned(bill.shiftId)), 0, vouchers.filter(voucher => unassigned(voucher.shiftId)));
+  return shifts.reduce((sum, shift) => sum + getAdjustedShiftHandover(shift, bills, vouchers), 0) + getShiftHandoverAmount(remainder);
 }

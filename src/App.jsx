@@ -1,5 +1,6 @@
 import React from "react";
 import RevenuePage from "./features/revenue/RevenuePage";
+import OutsideExpensesPage from "./features/outside-expenses/OutsideExpensesPage";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { pages } from "./data/siteData";
 import LandingApp from "./LandingApp";
@@ -235,6 +236,7 @@ export function App() {
               </Route>
               <Route element={<ProtectedLayout allowedRoles={["admin"]} inferPermission={false} />}>
                 <Route path="employees" element={<EmployeesPage />} />
+                <Route path="outside-expenses" element={<OutsideExpensesPage />} />
               </Route>
               <Route path="bills" element={<BillsPage />} />
               <Route path="payroll-estimate" element={<SalaryEstimatePage />} />

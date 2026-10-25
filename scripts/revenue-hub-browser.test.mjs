@@ -18,6 +18,7 @@ let requests=[],fail=false,delay=30;
 window.fetch=async(url,options)=>{
  const q=new URL(String(url),'http://test').searchParams;requests.push(q);const source=q.get('source');const from=q.get('from'),to=q.get('to');
  const data={version:1,source,from,to,updatedAt:'2026-10-25T10:30:00Z',totals:source==='tnservice'?metrics:mo,stores:[{id:'cafe',name:'Cà phê'}],days:[{date:from,totals:source==='tnservice'?metrics:mo,shifts:{shift_1:metrics,shift_2:{...metrics,revenue:0},shift_3:{...metrics,revenue:0}},transactions:[{type:'room',code:'MO-1',room:'Phòng Mơ',amount:4000000,time:'2026-10-25T03:00:00Z',payment:'transfer'}]}]};
+ if(source==='tnservice') data.cashflow={complete:true,provisional:false,grossHandover:30000000,outsideExpense:15000000,netHandover:15000000,days:[{date:from,grossHandover:30000000,outsideExpense:15000000,netHandover:15000000,complete:true,provisional:false,syncStatus:'ready',lastSyncedAt:'2026-10-25T10:30:00Z',expenses:[{name:'Chi quảng cáo',amount:15000000,storeId:'cafe'}],shifts:[{id:'s1',storeId:'cafe',label:'Ca 1',baseHandover:10000000,transferIn:0,transferOut:10000000,handover:0,outsideExpense:0,netHandover:0,status:'closed'},{id:'s2',storeId:'cafe',label:'Ca 2',baseHandover:10000000,transferIn:0,transferOut:0,handover:10000000,outsideExpense:0,netHandover:10000000,status:'closed'},{id:'s3',storeId:'cafe',label:'Ca 3',baseHandover:20000000,transferIn:10000000,transferOut:0,handover:20000000,outsideExpense:15000000,netHandover:5000000,status:'closed'}]}]};
  const bad=fail;await new Promise(r=>setTimeout(r,delay));return new Response(JSON.stringify({ok:!bad,data,error:bad?'Nguồn tạm ngưng':undefined}),{status:bad?502:200});
 };
 const root=createRoot(document.getElementById('root'));
@@ -30,6 +31,11 @@ const fill=(element,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.pr
 const btn=t=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===t);
 (async()=>{
  await wait(450);check('TN report loads',document.getElementById('root').textContent.includes('1.234.567'));check('all three shifts visible',document.getElementById('root').textContent.includes('Ca 3'));
+ const cf=document.querySelector('section[aria-label="Dòng tiền thực tế"]');const costs=cf?.querySelector('details[data-expense-list]');
+ check('vertical cash subtraction shows correct total',cf?.textContent.includes('30.000.000')&&cf?.textContent.includes('15.000.000')&&cf?.textContent.includes('Bàn giao sau chi'));
+ check('outside expense list starts collapsed',costs&&!costs.open&&!costs.querySelector('li').checkVisibility());
+ check('formula is above outside expense list',Boolean(cf.querySelector('dl').compareDocumentPosition(costs)&Node.DOCUMENT_POSITION_FOLLOWING));
+ costs.querySelector('summary').click();await wait();check('expanded expense shows name and amount',costs.open&&costs.textContent.includes('Chi quảng cáo')&&costs.textContent.includes('15.000.000'));costs.querySelector('summary').click();await wait();
  check('no mobile overflow',document.documentElement.scrollWidth<=innerWidth);
  check('default counter is cafe',requests[0].get('store')==='cafe'&&document.querySelector('select[aria-label="Quầy"]').value==='cafe');
  check('one day hides chart',!document.querySelector('[aria-label="Doanh thu theo ngày"]'));
@@ -53,7 +59,7 @@ const btn=t=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim
  const adminRoot=createRoot(document.getElementById('root'));let adminChanges=0;
  adminRoot.render(<DateRangePicker label="Khoảng ngày admin" startDate="2026-10-25" endDate="2026-10-25" onChange={()=>adminChanges++}/>);await wait();document.querySelector('button[aria-haspopup="dialog"]').click();await wait();day(25).click();await wait();day(26).click();await wait();check('admin picker still waits for apply',adminChanges===0&&!!document.querySelector('[role="dialog"]'));btn('Áp dụng').click();await wait();check('admin apply still works',adminChanges===1&&!document.querySelector('[role="dialog"]'));adminRoot.unmount();
  const root2=createRoot(document.getElementById('root'));window.testAuth={user:{id:'u',role:'user',permissions:['revenue_hub.view']},loading:false};
- root2.render(<MemoryRouter initialEntries={['/doanh-thu?source=mohomestay&from=2026-10-25&to=2026-10-25']}><RevenuePage/></MemoryRouter>);await wait(250);
+ root2.render(<MemoryRouter initialEntries={['/doanh-thu?source=tnservice&from=2026-10-25&to=2026-10-25']}><RevenuePage/></MemoryRouter>);await wait(250);
  const pre=document.createElement('pre');pre.id='test-result';pre.textContent=JSON.stringify(checks);document.body.append(pre);
 })().catch(e=>{const p=document.createElement('pre');p.id='test-result';p.textContent=JSON.stringify([['exception '+e.stack,false]]);document.body.append(p)});
 `;

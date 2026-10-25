@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CashVoucher } from '@/services/cashVoucherService';
+import { transferVoucherNote, type CashVoucher } from '@/services/cashVoucherService';
 import type { CashierShift } from '@/services/shiftService';
 import { cashVoucherReport, type VoucherFilter } from './cashVoucherReport';
 const money = (value: number) => value.toLocaleString('vi-VN') + ' đ';
@@ -13,6 +13,6 @@ return <div className="space-y-4">
 const shift = shifts.find(item => item.id === voucher.shiftId);
 const seconds = voucher.happenedAt?.seconds || voucher.createdAt?.seconds;
 const shiftLabel = shift ? (shift.shiftType === 'single' ? 'Ca đơn' : 'Ca ' + shift.shiftType.replace('shift_', '')) : 'Chưa gắn ca';
-return <tr key={voucher.id} className="align-top"><td className="whitespace-nowrap px-4 py-3">{seconds ? new Date(seconds * 1000).toLocaleString('vi-VN') : '—'}</td><td className="px-4 py-3 font-mono text-xs">{voucher.code}</td><td className="whitespace-nowrap px-4 py-3">{shiftLabel}</td><td className="px-4 py-3">{voucher.type === 'income' ? 'Thu' : 'Chi'}</td><td className="px-4 py-3">{voucher.category || '—'}</td><td className="px-4 py-3">{voucher.personName || '—'}</td><td className="max-w-xs break-words px-4 py-3">{voucher.note || '—'}</td><td className={'whitespace-nowrap px-4 py-3 text-right font-bold ' + (voucher.type === 'income' ? 'text-emerald-700' : 'text-rose-700')}>{money(voucher.amount)}</td></tr>;
+return <tr key={voucher.id} className="align-top"><td className="whitespace-nowrap px-4 py-3">{seconds ? new Date(seconds * 1000).toLocaleString('vi-VN') : '—'}</td><td className="px-4 py-3 font-mono text-xs">{voucher.code}</td><td className="whitespace-nowrap px-4 py-3">{shiftLabel}</td><td className="px-4 py-3">{voucher.type === 'income' ? 'Thu' : 'Chi'}</td><td className="px-4 py-3">{voucher.category || '—'}</td><td className="px-4 py-3">{voucher.personName || '—'}</td><td className="max-w-xs break-words px-4 py-3">{voucher.note || '—'}{voucher.sourceShiftId && <p className="mt-1 text-xs text-slate-500">{transferVoucherNote(voucher)}</p>}</td><td className={'whitespace-nowrap px-4 py-3 text-right font-bold ' + (voucher.type === 'income' ? 'text-emerald-700' : 'text-rose-700')}>{money(voucher.amount)}</td></tr>;
 })}</tbody></table></div></div>;
 }

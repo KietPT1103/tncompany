@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . "/cash_transfers.php";
+
 final class ShiftManagementError extends RuntimeException
 {
     public function __construct(string $message, public int $status = 422) { parent::__construct($message); }
@@ -105,6 +107,31 @@ function shift_management_recalculate(PDO $pdo, array $shift): void
     $pdo->prepare('UPDATE cashier_shifts SET ' . implode(',', $fields) . ' WHERE id=:id')->execute($summary);
 }
 
+/** Keep existing active transfer relations valid when an administrator corrects shift times. */
+function shift_validate_cash_transfer_times(PDO $pdo, string $storeId, string $id, string $openedAt): void
+{
+    // The edited shift is already locked. A concurrent POS transfer waits on that lock,
+    // then validates the corrected times; current reads include transfers committed first.
+    $statement = $pdo->prepare("SELECT voucher.source_shift_id,voucher.shift_id,
+        source.store_id AS source_store,source.opened_at AS source_opened,
+        receiver.store_id AS receiver_store,receiver.opened_at AS receiver_opened
+        FROM cash_vouchers voucher
+        JOIN cashier_shifts source ON source.id=voucher.source_shift_id
+        JOIN cashier_shifts receiver ON receiver.id=voucher.shift_id
+        WHERE voucher.store_id=? AND (voucher.source_shift_id=? OR voucher.shift_id=?)
+          AND voucher.voucher_type='income' AND voucher.include_in_cash_flow=1 AND voucher.cancelled_at IS NULL"
+        . shift_lock_suffix($pdo));
+    $statement->execute([$storeId, $id, $id]);
+    foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $transfer) {
+        $sourceOpened = $transfer['source_shift_id'] === $id ? $openedAt : $transfer['source_opened'];
+        $receiverOpened = $transfer['shift_id'] === $id ? $openedAt : $transfer['receiver_opened'];
+        if ($transfer['source_store'] !== $storeId || $transfer['receiver_store'] !== $storeId
+            || substr($sourceOpened, 0, 10) !== substr($receiverOpened, 0, 10) || $sourceOpened >= $receiverOpened) {
+            throw new ShiftManagementError('Giờ mở ca mới làm sai ngày hoặc thứ tự ca của phiếu thu từ ca trước. Hủy phiếu chuyển ca trước khi điều chỉnh.');
+        }
+    }
+}
+
 function shift_management_correct(PDO $pdo, string $storeId, array $user, array $input): array
 {
     shift_require_admin($user);
@@ -128,6 +155,7 @@ function shift_management_correct(PDO $pdo, string $storeId, array $user, array 
         $targets[(string)$move['billId']] = (string)$move['targetShiftId'];
     }
     shift_management_find($pdo, $storeId, $id);
+    cash_transfers_ensure_schema($pdo);
     $pdo->beginTransaction();
     try {
         // Lock all involved shifts in a stable order to serialize corrections and POS writes.
@@ -155,6 +183,7 @@ function shift_management_correct(PDO $pdo, string $storeId, array $user, array 
                 throw new ShiftManagementError('Hóa đơn ' . $billId . ' nằm ngoài thời gian ca đích.');
             }
         }
+        shift_validate_cash_transfer_times($pdo, $storeId, $id, $openedAt);
         $before = $shifts;
         $pdo->prepare('UPDATE cashier_shifts SET opened_at=?,closed_at=? WHERE id=? AND store_id=?')->execute([$openedAt,$closedAt,$id,$storeId]);
         foreach ($targets as $billId => $targetId) {

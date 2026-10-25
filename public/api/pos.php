@@ -7,6 +7,7 @@ require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/realtime.php';
 require_once __DIR__ . '/_lib/ingredient_usage.php';
 require_once __DIR__ . '/_lib/shift_management.php';
+require_once __DIR__ . '/_lib/cash_transfers.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $resource = strtolower(trim((string) ($_GET['resource'] ?? '')));
@@ -602,6 +603,7 @@ pos_ensure_bill_sequences_table();
 pos_ensure_voucher_categories_table();
 pos_ensure_voucher_cancellation_columns();
 pos_ensure_voucher_inventory_receipt_column();
+cash_transfers_ensure_schema(db());
 pos_ensure_shift_device_columns();
 $requestedStoreId = trim((string) ($_GET['storeId'] ?? ($body['storeId'] ?? '')));
 $posStoreId = pos_resolve_store_id($user, $requestedStoreId);
@@ -938,6 +940,15 @@ if ($method === 'GET' && $resource === 'voucher-evidences') {
     ], $rows));
 }
 
+if ($method === 'GET' && $resource === 'transfer-sources') {
+    $s=db()->prepare("SELECT * FROM cashier_shifts WHERE store_id=? AND cashier_uid=? AND status='open' ORDER BY opened_at DESC,id DESC LIMIT 1");
+    $s->execute([$posStoreId,(string)$user['id']]);$receiver=$s->fetch();
+    if (!$receiver) respond_error('Vui lòng mở ca hiện tại của bạn trước.',409);
+    $s=db()->prepare('SELECT * FROM cashier_shifts WHERE store_id=? AND opened_at>=? AND opened_at<? ORDER BY opened_at,id');
+    $s->execute([$posStoreId,substr($receiver['opened_at'],0,10).' 00:00:00',$receiver['opened_at']]);
+    respond_ok(['receiverId'=>$receiver['id'],'items'=>array_map(static fn(array $row):array=>['id'=>$row['id'],'label'=>cash_transfers_label($row)],$s->fetchAll())]);
+}
+
 if ($method === 'GET' && $resource === 'vouchers') {
     $where = ['voucher.store_id=:store_id']; $params = ['store_id' => trim((string) ($_GET['storeId'] ?? 'cafe'))];
     $voucherStatus = strtolower(trim((string) ($_GET['status'] ?? 'active')));
@@ -955,7 +966,11 @@ if ($method === 'GET' && $resource === 'vouchers') {
         if ($shiftIds !== []) {
             $placeholders = [];
             foreach ($shiftIds as $index => $shiftId) { $key = 'shift_id_' . $index; $placeholders[] = ':' . $key; $params[$key] = $shiftId; }
-            $where[] = 'voucher.shift_id IN (' . implode(',', $placeholders) . ')';
+            if (($_GET['includeSourceTransfers'] ?? '') === '1') {
+                $sourcePlaceholders=[];
+                foreach ($shiftIds as $index=>$shiftId) { $key='source_id_'.$index; $sourcePlaceholders[]=':'.$key; $params[$key]=$shiftId; }
+                $where[]='(voucher.shift_id IN ('.implode(',',$placeholders).') OR voucher.source_shift_id IN ('.implode(',',$sourcePlaceholders).'))';
+            } else $where[] = 'voucher.shift_id IN (' . implode(',', $placeholders) . ')';
         }
     }
     if (!empty($_GET['startDate'])) { $where[] = 'voucher.happened_at>=:start_date'; $params['start_date'] = pos_mysql_datetime($_GET['startDate']); }
@@ -963,8 +978,10 @@ if ($method === 'GET' && $resource === 'vouchers') {
     $limit = pos_limit($_GET['limit'] ?? 500, 500);
     $statement = db()->prepare(
         'SELECT voucher.*,receipt.receipt_code,receipt.receipt_date,receipt.total_amount AS receipt_total_amount,
-                supplier.supplier_name
+                supplier.supplier_name,source_shift.shift_type AS source_type,source_shift.opened_at AS source_opened,receiver_shift.shift_type AS receiver_type,receiver_shift.opened_at AS receiver_opened
          FROM cash_vouchers voucher
+         LEFT JOIN cashier_shifts source_shift ON source_shift.id=voucher.source_shift_id AND source_shift.store_id=voucher.store_id
+         LEFT JOIN cashier_shifts receiver_shift ON receiver_shift.id=voucher.shift_id AND receiver_shift.store_id=voucher.store_id
          LEFT JOIN inventory_receipts receipt
            ON receipt.id COLLATE utf8mb4_unicode_ci=voucher.inventory_receipt_id COLLATE utf8mb4_unicode_ci
          LEFT JOIN suppliers supplier
@@ -982,6 +999,9 @@ if ($method === 'GET' && $resource === 'vouchers') {
         'cancelledAt'=>pos_timestamp($row['cancelled_at']??null),'cancelledBy'=>$row['cancelled_by']?:'',
         'cancellationReason'=>$row['cancellation_reason']?:'','isCancelled'=>!empty($row['cancelled_at']),
         'inventoryReceiptId'=>$row['inventory_receipt_id']?:null,
+        'sourceShiftId'=>$row['source_shift_id']?:null,'transferRequestId'=>$row['transfer_request_id']?:null,
+        'sourceShiftLabel'=>$row['source_shift_id']?cash_transfers_label(['shift_type'=>$row['source_type'],'opened_at'=>$row['source_opened']]):null,
+        'receiverShiftLabel'=>$row['source_shift_id']?cash_transfers_label(['shift_type'=>$row['receiver_type'],'opened_at'=>$row['receiver_opened']]):null,
         'evidence'=>$row['inventory_receipt_id'] ? [
             'receiptId'=>(string)$row['inventory_receipt_id'],'receiptCode'=>(string)($row['receipt_code']??''),
             'receiptDate'=>(string)($row['receipt_date']??''),'totalAmount'=>(float)($row['receipt_total_amount']??0),
@@ -997,7 +1017,12 @@ if ($method === 'POST' && $resource === 'vouchers') {
     $receiptId = $type === 'expense' ? (trim((string)($body['inventoryReceiptId']??'')) ?: null) : null;
     db()->beginTransaction();
     try {
+    $transfer=cash_transfers_prepare(db(),$body,$user,$posStoreId);
+    if (isset($transfer['existingId'])) { db()->commit(); respond_ok(['id'=>$transfer['existingId']],200); }
     pos_validate_shift_for_write($body, $user, $posStoreId);
+    if (!empty($transfer['sourceShiftId'])) {
+        $body['shiftId']=$transfer['shiftId'];$body['cashierId']=(string)$user['id'];$body['cashierName']=(string)($user['name']??$user['display_name']??'');
+    }
     if ($receiptId !== null) {
         $receipt = db()->prepare(
             'SELECT id FROM inventory_receipts
@@ -1012,15 +1037,18 @@ if ($method === 'POST' && $resource === 'vouchers') {
         if ($used->fetchColumn()) respond_error('Bộ ảnh nhập hàng này đã được gắn với một phiếu chi đang hiệu lực.', 409);
     }
     pos_remember_voucher_category($posStoreId, $type, trim((string)($body['category']??'')));
-    db()->prepare('INSERT INTO cash_vouchers (id,code,store_id,voucher_type,amount,category,note,person_name,include_in_cash_flow,happened_at,shift_id,cashier_id,cashier_name,inventory_receipt_id) VALUES (:id,:code,:store_id,:type,:amount,:category,:note,:person_name,:included,:happened_at,:shift_id,:cashier_id,:cashier_name,:receipt_id)')->execute([
+    db()->prepare('INSERT INTO cash_vouchers (id,code,store_id,voucher_type,amount,category,note,person_name,include_in_cash_flow,happened_at,shift_id,cashier_id,cashier_name,inventory_receipt_id,source_shift_id,transfer_request_id) VALUES (:id,:code,:store_id,:type,:amount,:category,:note,:person_name,:included,:happened_at,:shift_id,:cashier_id,:cashier_name,:receipt_id,:source_shift_id,:transfer_request_id)')->execute([
         'id'=>$id,'code'=>$code,'store_id'=>trim((string)($body['storeId']??'cafe')),'type'=>$type,'amount'=>(float)($body['amount']??0),
         'category'=>trim((string)($body['category']??'')),'note'=>trim((string)($body['note']??'')),
         'person_name'=>trim((string)($body['personName']??'')),'included'=>pos_bool($body['includeInCashFlow']??true,true)?1:0,
         'happened_at'=>pos_mysql_datetime($body['happenedAt']??'now'),'shift_id'=>trim((string)($body['shiftId']??''))?:null,
         'cashier_id'=>trim((string)($body['cashierId']??''))?:null,'cashier_name'=>trim((string)($body['cashierName']??''))?:null,
-        'receipt_id'=>$receiptId,
+        'receipt_id'=>$receiptId,'source_shift_id'=>$transfer['sourceShiftId'],'transfer_request_id'=>$transfer['transferRequestId'],
     ]);
     db()->commit();
+    } catch (CashTransferError $error) {
+        if (db()->inTransaction()) db()->rollBack();
+        respond_error($error->getMessage(),$error->status);
     } catch (Throwable $exception) {
         if (db()->inTransaction()) db()->rollBack();
         throw $exception;
@@ -1031,7 +1059,7 @@ if ($method === 'POST' && $resource === 'vouchers') {
 if ($method === 'PATCH' && $resource === 'vouchers') {
     $id = trim((string)($body['id']??''));
     pos_assert_record_store('cash_vouchers', $id, $user, $posStoreId);
-    $voucherStatement = db()->prepare('SELECT voucher_type,cancelled_at FROM cash_vouchers WHERE id=:id AND store_id=:store_id LIMIT 1');
+    $voucherStatement = db()->prepare('SELECT voucher_type,cancelled_at,source_shift_id FROM cash_vouchers WHERE id=:id AND store_id=:store_id LIMIT 1');
     $voucherStatement->execute(['id'=>$id,'store_id'=>$posStoreId]);
     $voucher = $voucherStatement->fetch();
     if (!$voucher) respond_error('Không tìm thấy phiếu thu/chi', 404);
@@ -1064,6 +1092,7 @@ if ($method === 'PATCH' && $resource === 'vouchers') {
         $params['category'] = $category;
     }
     if (array_key_exists('amount', $body)) {
+        if (!empty($voucher['source_shift_id'])) respond_error('Hủy phiếu và lập lại để đổi số tiền chuyển ca.',422);
         if (($user['role'] ?? '') === 'user') {
             respond_error('Thu ngân không được phép sửa giá trị phiếu thu/chi', 403);
         }
@@ -1109,7 +1138,7 @@ if ($method === 'GET' && $resource === 'shifts') {
         respond_ok(['item'=>$row ? pos_shift_payload($row) : null]);
     }
 
-    if (!empty($_GET['startDate']) && !empty($_GET['endDate']) && in_array($_GET['shiftType'] ?? '', ['shift_1','shift_2','shift_3'], true)) {
+    if (!empty($_GET['startDate']) && !empty($_GET['endDate']) && in_array($_GET['shiftType'] ?? '', ['shift_1','shift_2','shift_3','single'], true)) {
         $statement = db()->prepare(
             'SELECT * FROM cashier_shifts
              WHERE store_id=:store_id AND shift_type=:shift_type

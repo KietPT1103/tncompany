@@ -1,3 +1,4 @@
+import CashflowPanel from './CashflowPanel';
 import { Banknote, ArrowDownLeft, ArrowUpRight, Coffee, CakeSlice, Receipt, BedDouble, ShoppingBag } from 'lucide-react';
 import type { RevenueReport, Metrics } from './types';
 
@@ -50,6 +51,7 @@ export function TnReport({ data }: { data: RevenueReport }) {
       <Stat label="Tổng chi" value={t.expense} icon={ArrowUpRight} color="text-rose-700" />
       <Stat label="Thu khác" value={t.income} icon={Receipt} />
     </div>
+    {data.cashflow && <CashflowPanel data={data.cashflow} />}
     <h2 className="pt-2 text-base font-bold text-slate-900">Theo ngày & ca</h2>
     {data.days.map(day => <details key={day.date} open={data.days.length === 1 || undefined} className="group rounded-2xl border border-slate-200 bg-white">
       <summary className={`flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-4 hover:bg-slate-50 ${focus}`}>

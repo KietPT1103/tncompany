@@ -5,6 +5,7 @@ const ADMIN_PATHS = [
   "/overview",
   "/reports",
   "/cash-flow",
+  "/outside-expenses",
   "/bills",
   "/virtual-bills",
   "/sample-bills",
