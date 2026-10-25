@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
-import { RefreshCw, CalendarDays, ChevronDown, ShieldX } from 'lucide-react';
+import { RefreshCw, ChevronDown, ShieldX } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/permissions';
 import { apiRequest } from '@/lib/api';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import { formatDisplayDate } from '@/components/ui/dateRangePickerUtils';
 import { quickRange, validRange } from './filters';
 import { getRevenueSource, revenueSources } from './sources';
 import type { RevenueReport } from './types';
@@ -17,7 +19,7 @@ export default function RevenuePage() {
   const today = quickRange('today');
   const source = getRevenueSource(params.get('source'));
   const from = params.get('from') || today[0], to = params.get('to') || today[1];
-  const store = params.get('store') || 'all';
+  const store = params.get('store') || 'cafe';
   const allowed = hasPermission(user, 'revenue_hub.view');
   const [data, setData] = useState<RevenueReport | null>(null);
   const [busy, setBusy] = useState(false);
@@ -92,10 +94,17 @@ export default function RevenuePage() {
             return <button key={id} type="button" aria-pressed={active} onClick={() => update({ from: range[0], to: range[1] })} className={`min-h-10 whitespace-nowrap rounded-full border px-2 text-[11px] font-semibold ${focus} ${active ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}>{label}</button>;
           })}
         </div>
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-3">
-          {([['from', 'Từ ngày', from], ['to', 'Đến ngày', to]] as const).map(([key, label, value]) => <label key={key} className="min-w-0"><span className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-500"><CalendarDays className="h-3 w-3" />{label}</span><input type="date" aria-label={label} value={value} onChange={event => update({ [key]: event.target.value })} className={`block min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-semibold ${focus}`} /></label>)}
-        </div>
-        {source.id === 'tnservice' && <label className="relative block"><span className="sr-only">Quầy</span><select aria-label="Quầy" value={store} onChange={event => update({ store: event.target.value })} className={`min-h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-semibold ${focus}`}><option value="all">Tất cả quầy</option>{(visible?.stores || [{ id: 'cafe', name: 'Nước' }, { id: 'restaurant', name: 'Bếp' }, { id: 'bakery', name: 'Bánh' }, { id: 'farm', name: 'Farm' }, { id: 'warehouse', name: 'Kho' }]).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" /></label>}
+        <DateRangePicker
+          label="Khoảng ngày"
+          hideLabel
+          startDate={from}
+          endDate={to}
+          autoApply
+          summary={from === to ? formatDisplayDate(from) : `${formatDisplayDate(from)} – ${formatDisplayDate(to)}`}
+          onChange={(start, end) => update({ from: start, to: end })}
+          triggerClassName="min-h-11 rounded-2xl border-slate-200 bg-white text-sm"
+        />
+        {source.id === 'tnservice' && <label className="relative block"><span className="sr-only">Quầy</span><select aria-label="Quầy" value={store} onChange={event => update({ store: event.target.value })} className={`min-h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-semibold ${focus}`}><option value="all">Tất cả quầy</option>{(visible?.stores || [{ id: 'cafe', name: 'Cà phê' }, { id: 'restaurant', name: 'Bếp' }, { id: 'bakery', name: 'Bánh' }, { id: 'farm', name: 'Farm' }, { id: 'warehouse', name: 'Kho' }]).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" /></label>}
       </div>
       {!valid ? <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Chọn khoảng ngày hợp lệ, tối đa 93 ngày.</p>
         : error && loadedKey === requestKey ? <div role="alert" className="rounded-2xl border border-rose-200 bg-white p-5"><p className="text-sm text-rose-800">{error}</p><button type="button" onClick={() => setReload(value => value + 1)} className={`mt-3 min-h-11 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 ${focus}`}>Thử lại</button></div>

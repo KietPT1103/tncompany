@@ -36,8 +36,10 @@ export function TnReport({ data }: { data: RevenueReport }) {
     <section className="overflow-hidden rounded-3xl bg-emerald-950 p-5 text-white sm:p-7">
       <div className="flex items-center justify-between text-sm text-emerald-200"><span>Doanh thu</span><span>{number(t.bills)} hóa đơn</span></div>
       <div className="my-3 break-words text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">{money(t.revenue)}</div>
-      <Trend data={data} field="revenue" color="bg-emerald-400" />
-      <div className="mt-2 flex justify-between text-[11px] text-emerald-200"><span>{data.from.split('-').reverse().join('/')}</span><span>{data.to.split('-').reverse().join('/')}</span></div>
+      {data.from !== data.to && <>
+        <Trend data={data} field="revenue" color="bg-emerald-400" />
+        <div className="mt-2 flex justify-between text-[11px] text-emerald-200"><span>{data.from.split('-').reverse().join('/')}</span><span>{data.to.split('-').reverse().join('/')}</span></div>
+      </>}
     </section>
     <div className="grid grid-cols-2 gap-3">
       <Stat label="Ly nước" value={t.cups} icon={Coffee} count color="text-amber-700" />

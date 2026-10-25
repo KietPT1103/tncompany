@@ -10,13 +10,14 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {MemoryRouter,Routes,Route,useLocation} from 'react-router-dom';
 import RevenuePage from './src/features/revenue/RevenuePage.tsx';
+import {DateRangePicker} from './src/components/ui/DateRangePicker.tsx';
 const metrics={revenue:1234567,cash:1000000,transfer:234567,cups:150,bakery:42,expense:50000,income:10000,bills:65};
 const mo={room:4000000,retail:200000,surcharge:121000,collected:4321000,cash:1000000,transfer:3321000,expense:200000,other:0,bookings:8};
 window.testAuth={user:{id:'u',role:'admin',permissions:['revenue_hub.view']},loading:false};
 let requests=[],fail=false,delay=30;
 window.fetch=async(url,options)=>{
  const q=new URL(String(url),'http://test').searchParams;requests.push(q);const source=q.get('source');const from=q.get('from'),to=q.get('to');
- const data={version:1,source,from,to,updatedAt:'2026-10-25T10:30:00Z',totals:source==='tnservice'?metrics:mo,stores:[{id:'cafe',name:'Nước'}],days:[{date:from,totals:source==='tnservice'?metrics:mo,shifts:{shift_1:metrics,shift_2:{...metrics,revenue:0},shift_3:{...metrics,revenue:0}},transactions:[{type:'room',code:'MO-1',room:'Phòng Mơ',amount:4000000,time:'2026-10-25T03:00:00Z',payment:'transfer'}]}]};
+ const data={version:1,source,from,to,updatedAt:'2026-10-25T10:30:00Z',totals:source==='tnservice'?metrics:mo,stores:[{id:'cafe',name:'Cà phê'}],days:[{date:from,totals:source==='tnservice'?metrics:mo,shifts:{shift_1:metrics,shift_2:{...metrics,revenue:0},shift_3:{...metrics,revenue:0}},transactions:[{type:'room',code:'MO-1',room:'Phòng Mơ',amount:4000000,time:'2026-10-25T03:00:00Z',payment:'transfer'}]}]};
  const bad=fail;await new Promise(r=>setTimeout(r,delay));return new Response(JSON.stringify({ok:!bad,data,error:bad?'Nguồn tạm ngưng':undefined}),{status:bad?502:200});
 };
 const root=createRoot(document.getElementById('root'));
@@ -30,9 +31,17 @@ const btn=t=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim
 (async()=>{
  await wait(450);check('TN report loads',document.getElementById('root').textContent.includes('1.234.567'));check('all three shifts visible',document.getElementById('root').textContent.includes('Ca 3'));
  check('no mobile overflow',document.documentElement.scrollWidth<=innerWidth);
+ check('default counter is cafe',requests[0].get('store')==='cafe'&&document.querySelector('select[aria-label="Quầy"]').value==='cafe');
+ check('one day hides chart',!document.querySelector('[aria-label="Doanh thu theo ngày"]'));
  const n=requests.length;document.querySelector('button[aria-label="Tải lại"]').click();await wait(250);check('reload fetches again',requests.length===n+1);
- btn('7 ngày').click();await wait(250);check('quick range applies',requests.at(-1).get('from')!==requests.at(-1).get('to'));
- const beforeInvalid=requests.length;fill(document.querySelector('input[aria-label="Từ ngày"]'),'2099-01-01');await wait();check('invalid range blocks request',requests.length===beforeInvalid&&!!document.querySelector('[role="alert"]'));fill(document.querySelector('input[aria-label="Từ ngày"]'),'2026-10-25');await wait(250);check('native date change applies',requests.at(-1).get('from')==='2026-10-25');
+ btn('7 ngày').click();await wait(250);check('quick range applies',requests.at(-1).get('from')!==requests.at(-1).get('to'));check('multiple days show chart',!!document.querySelector('[aria-label="Doanh thu theo ngày"]'));
+ const picker=document.querySelector('button[aria-haspopup="dialog"]');check('one date range field',!!picker&&!document.querySelector('input[type="date"]'));picker.click();await wait();
+ check('calendar opens without mobile overflow',!!document.querySelector('[role="dialog"]')&&document.documentElement.scrollWidth<=innerWidth);
+ const day=value=>[...document.querySelectorAll('[role="dialog"] button')].find(b=>b.textContent.trim()===String(value));
+ const beforePick=requests.length;day(25).click();await wait();check('first date waits for second click',requests.length===beforePick);day(26).click();await wait(250);
+ check('two date clicks apply automatically',!document.querySelector('[role="dialog"]')&&requests.at(-1).get('from')==='2026-10-25'&&requests.at(-1).get('to')==='2026-10-26');
+ document.querySelector('button[aria-haspopup="dialog"]').click();await wait();day(25).click();await wait();day(25).click();await wait(250);check('same date twice hides chart',requests.at(-1).get('from')===requests.at(-1).get('to')&&!document.querySelector('[aria-label="Doanh thu theo ngày"]'));
+
  delay=500;btn('MoHomestay').click();await wait(30);check('old source cleared while loading',!document.getElementById('root').textContent.includes('1.234.567'));btn('TN Service').click();delay=20;await wait(650);check('stale Mo response ignored',!document.getElementById('root').textContent.includes('4.321.000')&&document.getElementById('root').textContent.includes('1.234.567'));
  fail=true;btn('MoHomestay').click();await wait(250);check('source error visible',document.querySelector('[role="alert"]')?.textContent.includes('Nguồn tạm ngưng'));fail=false;btn('Thử lại').click();await wait(250);check('retry restores Mo report',document.getElementById('root').textContent.includes('4.321.000'));check('Mo has distinct native fields',document.getElementById('root').textContent.includes('Tiền phòng')&&!document.getElementById('root').textContent.includes('Ly nước'));
  check('mobile Mo no overflow',document.documentElement.scrollWidth<=innerWidth);
@@ -40,7 +49,10 @@ const btn=t=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim
  window.testAuth={user:{id:'u',role:'admin',permissions:[]},loading:false};render();await wait(250);check('admin automatically accesses hub',document.getElementById('root').textContent.includes('Doanh thu')&&!document.getElementById('root').textContent.includes('Chưa được cấp quyền'));
  window.testAuth={user:{id:'u',role:'user',permissions:[]},loading:false};render();await wait();check('ungranted user denied',document.getElementById('root').textContent.includes('Chưa được cấp quyền'));
  window.testAuth={user:null,loading:false};render();await wait();check('TN login preserves hub URL',document.querySelector('#login-target')?.textContent.includes('returnTo=%2Fdoanh-thu'));
- root.unmount();const root2=createRoot(document.getElementById('root'));window.testAuth={user:{id:'u',role:'user',permissions:['revenue_hub.view']},loading:false};
+ root.unmount();
+ const adminRoot=createRoot(document.getElementById('root'));let adminChanges=0;
+ adminRoot.render(<DateRangePicker label="Khoảng ngày admin" startDate="2026-10-25" endDate="2026-10-25" onChange={()=>adminChanges++}/>);await wait();document.querySelector('button[aria-haspopup="dialog"]').click();await wait();day(25).click();await wait();day(26).click();await wait();check('admin picker still waits for apply',adminChanges===0&&!!document.querySelector('[role="dialog"]'));btn('Áp dụng').click();await wait();check('admin apply still works',adminChanges===1&&!document.querySelector('[role="dialog"]'));adminRoot.unmount();
+ const root2=createRoot(document.getElementById('root'));window.testAuth={user:{id:'u',role:'user',permissions:['revenue_hub.view']},loading:false};
  root2.render(<MemoryRouter initialEntries={['/doanh-thu?source=mohomestay&from=2026-10-25&to=2026-10-25']}><RevenuePage/></MemoryRouter>);await wait(250);
  const pre=document.createElement('pre');pre.id='test-result';pre.textContent=JSON.stringify(checks);document.body.append(pre);
 })().catch(e=>{const p=document.createElement('pre');p.id='test-result';p.textContent=JSON.stringify([['exception '+e.stack,false]]);document.body.append(p)});

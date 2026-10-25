@@ -31,6 +31,7 @@ type DateRangePickerProps = {
   endDate: string;
   onChange: (startDate: string, endDate: string) => void;
   disabled?: boolean;
+  autoApply?: boolean;
   className?: string;
   triggerClassName?: string;
   hideLabel?: boolean;
@@ -52,6 +53,7 @@ export function DateRangePicker({
   endDate,
   onChange,
   disabled = false,
+  autoApply = false,
   className,
   triggerClassName,
   hideLabel = false,
@@ -182,13 +184,16 @@ export function DateRangePicker({
       return;
     }
 
-    if (date < currentStart) {
-      setDraftStart(value);
-      setDraftEnd(formatDateValue(currentStart));
-    } else {
-      setDraftEnd(value);
-    }
+    const nextStart = date < currentStart ? value : draftStart;
+    const nextEnd = date < currentStart ? formatDateValue(currentStart) : value;
+    setDraftStart(nextStart);
+    setDraftEnd(nextEnd);
     setSelectingEnd(false);
+    if (autoApply) {
+      onChange(nextStart, nextEnd);
+      setOpen(false);
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    }
   };
 
   const openPicker = () => {
@@ -223,6 +228,11 @@ export function DateRangePicker({
     setDraftEnd(value);
     setSelectingEnd(false);
     setViewMonth(getMonthStart(today));
+    if (autoApply) {
+      onChange(value, value);
+      setOpen(false);
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    }
   };
 
   const popover = open ? (
@@ -284,14 +294,14 @@ export function DateRangePicker({
           >
             Bỏ qua
           </button>
-          <button
+          {!autoApply && <button
             type="button"
             onClick={applyRange}
             disabled={!draftStart || !draftEnd}
             className="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-[0_2px_5px_rgba(6,78,59,0.22)] transition-[background-color,box-shadow,transform] duration-150 hover:bg-emerald-800 hover:shadow-[0_3px_8px_rgba(6,78,59,0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none motion-reduce:transition-none"
           >
             Áp dụng
-          </button>
+          </button>}
         </div>
       </div>
     </div>
