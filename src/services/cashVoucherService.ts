@@ -3,7 +3,7 @@ export type CashVoucherType = "income" | "expense";
 export type VoucherEvidenceImage = { id: string; url: string; thumbnailUrl: string; capturedAt: string; locationAddress?: string | null };
 export type VoucherEvidence = { receiptId: string; receiptCode: string; receiptDate: string; totalAmount: number; supplierName: string; images: VoucherEvidenceImage[] };
 export type VoucherEvidenceOption = VoucherEvidence & { storeId?: string; storeName?: string; status: string; createdAt: string; imageCount: number };
-export type NewCashVoucher = { storeId: string; type: CashVoucherType; amount: number; category: string; note?: string; personName?: string; includeInCashFlow?: boolean; happenedAt?: Date; shiftId?: string; cashierId?: string; cashierName?: string; inventoryReceiptId?: string | null };
+export type NewCashVoucher = { storeId: string; type: CashVoucherType; amount: number; category: string; note?: string; personName?: string; includeInCashFlow?: boolean; happenedAt?: Date; shiftId?: string; cashierId?: string; cashierName?: string; inventoryReceiptId?: string | null; previousDayConfirmedFor?: string };
 export type CashVoucher = NewCashVoucher & { id: string; code: string; createdAt?: ApiTimestamp; happenedAt?: ApiTimestamp; isCancelled?: boolean; cancelledAt?: ApiTimestamp; cancelledBy?: string; cancellationReason?: string; evidence?: VoucherEvidence | null };
 export type CashVoucherCategory = { id: string; storeId: string; type: CashVoucherType; name: string };
 export async function createCashVoucher(data: NewCashVoucher) { return (await posRequest<{ id: string }>("vouchers", { method: "POST", body: JSON.stringify(data) })).id; }

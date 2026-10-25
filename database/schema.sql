@@ -746,3 +746,15 @@ CREATE TABLE IF NOT EXISTS bill_recipe_snapshots (
         PRIMARY KEY (bill_id, menu_id),
         CONSTRAINT fk_bill_recipe_snapshot_bill FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE
     );
+
+
+CREATE TABLE IF NOT EXISTS cashier_shift_corrections (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        store_id VARCHAR(32) NOT NULL, shift_id VARCHAR(64) NOT NULL,
+        actor_id VARCHAR(64) NOT NULL, actor_name VARCHAR(255) NOT NULL,
+        reason VARCHAR(1000) NOT NULL, before_json LONGTEXT NOT NULL,
+        after_json LONGTEXT NOT NULL, transfers_json LONGTEXT NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_shift_corrections_shift (shift_id, created_at),
+        KEY idx_shift_corrections_store (store_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

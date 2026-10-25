@@ -1,5 +1,6 @@
 export type UserRole = "admin" | "manager" | "user" | "server" | "bartender";
 export type AppPermission =
+  | "revenue_hub.view"
   | "stores.switch"
   | "dashboard.access"
   | "bills.access"

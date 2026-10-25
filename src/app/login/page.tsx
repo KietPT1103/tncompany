@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { loginRevenueTarget } from "@/features/revenue/filters";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -180,7 +181,8 @@ export default function LoginPage() {
           ? user.storeId
           : selectedStore
       );
-      const nextPath = getRedirectAfterLogin(user);
+      const returnTo = loginRevenueTarget(new URLSearchParams(window.location.search).get("returnTo"));
+      const nextPath = returnTo || getRedirectAfterLogin(user);
       router.replace(nextPath);
     } catch (err: unknown) {
       console.error(err);

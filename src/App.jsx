@@ -1,4 +1,5 @@
 import React from "react";
+import RevenuePage from "./features/revenue/RevenuePage";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { pages } from "./data/siteData";
 import LandingApp from "./LandingApp";
@@ -115,6 +116,7 @@ export function App() {
         <Route path="/" element={<LandingApp />} />
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/revenue" element={<RevenuePage />} />
         <Route path="/bills" element={<Navigate to="/admin/bills" replace />} />
         <Route
           element={

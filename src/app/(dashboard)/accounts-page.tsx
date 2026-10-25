@@ -242,7 +242,7 @@ export default function AccountManagementPage() {
   }
 
   function handlePermissionToggle(permission: AppPermission) {
-    if (form.role === "admin") return;
+    if (form.role === "admin" && permission !== "revenue_hub.view") return;
     setForm((current) => {
       const exists = current.permissions.includes(permission);
       let permissions = exists
@@ -272,7 +272,7 @@ export default function AccountManagementPage() {
     setForm((current) => ({
       ...current,
       permissions: normalizePermissionList(MANAGED_PERMISSION_GROUPS.flatMap((group) => group.items.filter((item) => !item.adminOnly).map((item) => item.id)))
-        .filter((permission) => permission !== "products.selling.view" && permission !== "products.components.update"),
+        .filter((permission) => permission !== "revenue_hub.view" && permission !== "products.selling.view" && permission !== "products.components.update"),
       storeIds: current.storeIds.length ? current.storeIds : INVENTORY_AREA_OPTIONS.map((option) => option.value),
     }));
   }

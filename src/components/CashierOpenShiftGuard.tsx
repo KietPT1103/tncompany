@@ -6,6 +6,8 @@ import { hasPermission } from "@/lib/permissions";
 import { useAuth } from "@/context/AuthContext";
 import { getOpenShiftByCashier } from "@/services/shiftService";
 
+import { isPreviousDayShift, hasShiftAcknowledgement } from "@/lib/shiftDay";
+
 const SHIFT_ENABLED_STORES = new Set(["cafe", "restaurant", "bakery"]);
 const SHIFT_EXEMPT_ADMIN_PATHS = [
   "/admin/product/checks",
@@ -44,7 +46,7 @@ export default function CashierOpenShiftGuard() {
 
     try {
       const shift = await getOpenShiftByCashier(user.storeId, user.uid);
-      setHasOpenShift(!!shift);
+      setHasOpenShift(!!shift && (!isPreviousDayShift(shift) || hasShiftAcknowledgement(shift)));
       setError("");
     } catch (caughtError) {
       console.error("Không thể kiểm tra trạng thái ca", caughtError);

@@ -22,7 +22,7 @@ import {
   getVoucherEvidenceOptions,
   updateCashVoucherBasic,
 } from "@/services/cashVoucherService";
-import { getOpenShiftByCashier, getShiftsForReport, type CashierShift } from "@/services/shiftService";
+import { getOpenShiftByCashier } from "@/services/shiftService";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -50,6 +50,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
+import ShiftManagement from "@/components/ShiftManagement";
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
@@ -311,11 +312,7 @@ export default function BillsPage() {
     paymentMethod: "cash",
     shiftId: "",
   });
-  const [editShifts, setEditShifts] = useState<CashierShift[]>([]);
-  const [editShiftsLoading, setEditShiftsLoading] = useState(false);
-  const [editShiftsError, setEditShiftsError] = useState("");
-  const [editShiftsDate, setEditShiftsDate] = useState("");
-  const [shiftReload, setShiftReload] = useState(0);
+
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [vouchers, setVouchers] = useState<CashVoucher[]>([]);
@@ -602,32 +599,6 @@ export default function BillsPage() {
     }
   };
 
-  useEffect(() => {
-    if (!editing || !canEditBillDetails || !editForm.date) return;
-    let cancelled = false;
-    setEditShiftsLoading(true);
-    setEditShiftsError("");
-    setEditShifts([]);
-    setEditShiftsDate("");
-    const options = {
-      storeId: editing.storeId || storeId,
-      startDate: new Date(`${editForm.date}T00:00:00+07:00`),
-      endDate: new Date(`${editForm.date}T23:59:59.999+07:00`),
-    };
-    void Promise.all((["shift_1", "shift_2", "shift_3"] as const).map(
-      (shiftType) => getShiftsForReport({ ...options, shiftType }),
-    )).then((groups) => {
-      if (cancelled) return;
-      setEditShifts(groups.flat());
-      setEditShiftsDate(editForm.date);
-    }).catch(() => {
-      if (!cancelled) setEditShiftsError("Không thể tải danh sách ca. Vui lòng thử lại.");
-    }).finally(() => {
-      if (!cancelled) setEditShiftsLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [editing, canEditBillDetails, editForm.date, storeId, shiftReload]);
-
   const openEdit = (bill: Bill) => {
     if (!canEditBill) return;
     const created = getTimestampDate(bill) || new Date();
@@ -665,15 +636,6 @@ export default function BillsPage() {
       return;
     }
 
-    const shiftChanged = editForm.shiftId !== (editing.shiftId || "");
-    if (shiftChanged && editForm.shiftId && (
-      editShiftsLoading || editShiftsDate !== editForm.date ||
-      !editShifts.some((shift) => shift.id === editForm.shiftId)
-    )) {
-      alert("Vui lòng chọn ca hợp lệ theo ngày tạo hóa đơn.");
-      return;
-    }
-
     const parsedTotal = Number(editForm.total);
     if (Number.isNaN(parsedTotal) || parsedTotal < 0) {
       alert("Tổng tiền không hợp lệ.");
@@ -699,7 +661,6 @@ export default function BillsPage() {
         total: parsedTotal,
         createdAt: payloadDate,
         paymentMethod: editForm.paymentMethod,
-        ...(shiftChanged ? { shiftId: editForm.shiftId } : {}),
       });
       await loadData();
       setEditing(null);
@@ -880,6 +841,7 @@ export default function BillsPage() {
               </div>
             </div>
             <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[auto_auto] xl:flex xl:items-center">
+              {role === "admin" && <ShiftManagement storeId={storeId} onChanged={() => void loadData()} />}
               {role === "admin" && (
                 <Button variant="outline" size="sm" onClick={handleExportCombined} disabled={loading || exporting !== null || (filteredBills.length === 0 && filteredVouchers.length === 0)} className="h-10 gap-1.5 border-emerald-700 bg-white px-3 font-semibold text-emerald-900 hover:bg-emerald-50 sm:h-9" title="Xuất toàn bộ thu chi theo bộ lọc hiện tại">
                   {exporting === "combined" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -1761,41 +1723,8 @@ export default function BillsPage() {
                 )}
 
                 {canEditBillDetails && (
-                  <div className="space-y-2">
-                    <label htmlFor="bill-revenue-shift" className="block text-sm font-medium text-slate-900">
-                      Ca ghi nhận doanh thu
-                    </label>
-                    <select
-                      id="bill-revenue-shift"
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm disabled:opacity-60"
-                      value={editForm.shiftId}
-                      disabled={saving || editShiftsLoading || Boolean(editShiftsError) || editShiftsDate !== editForm.date}
-                      onChange={(event) => setEditForm((prev) => ({ ...prev, shiftId: event.target.value }))}
-                    >
-                      <option value="">Chưa gán ca</option>
-                      {editing.shiftId && !editShifts.some((shift) => shift.id === editing.shiftId) && (
-                        <option value={editing.shiftId}>Ca hiện tại của bill (giữ nguyên)</option>
-                      )}
-                      {editShifts.map((shift) => (
-                        <option key={shift.id} value={shift.id}>
-                          {shift.shiftType === "shift_1" ? "Ca 1" : shift.shiftType === "shift_2" ? "Ca 2" : "Ca 3"}
-                          {` — ${shift.cashierName} — ${shift.status === "closed" ? "Đã đóng" : "Đang mở"}`}
-                          {shift.openedAt?.seconds ? ` — ${new Date(shift.openedAt.seconds * 1000).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" })}` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    {editShiftsLoading && <p role="status" className="text-xs text-slate-500">Đang tải ca theo ngày tạo bill...</p>}
-                    {editShiftsError && (
-                      <p role="alert" className="text-xs text-rose-600">
-                        {editShiftsError} <button type="button" className="underline" onClick={() => setShiftReload((value) => value + 1)}>Thử lại</button>
-                      </p>
-                    )}
-                    {!editShiftsLoading && !editShiftsError && editShiftsDate === editForm.date && editShifts.length === 0 && (
-                      <p className="text-xs text-slate-500">Không có ca trong ngày đã chọn.</p>
-                    )}
-                    <p className="text-xs text-amber-700">
-                      Gán bill vào ca đã đóng sẽ thay đổi doanh thu sau chốt; bill tiền mặt ảnh hưởng đối soát tiền bàn giao.
-                    </p>
+                  <div className="rounded-md bg-sky-50 p-3 text-sm text-sky-900">
+                    Để chuyển ca ghi nhận doanh thu, đóng cửa sổ này và chọn <strong>Quản lý ca</strong> ở đầu trang. Mỗi lần chuyển sẽ được kiểm tra và lưu lý do điều chỉnh.
                   </div>
                 )}
 

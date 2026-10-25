@@ -215,7 +215,7 @@ export function getSeoForPath(pathname) {
     return null;
   }
 
-  if (pathname === "/login" || pathname.startsWith("/admin") || pathname.startsWith("/api")) {
+  if (pathname === "/revenue" || pathname === "/login" || pathname.startsWith("/admin") || pathname.startsWith("/api")) {
     return {
       title: `${company.shortName} | Trang n\u1ed9i b\u1ed9`,
       description: "Khu v\u1ef1c qu\u1ea3n tr\u1ecb n\u1ed9i b\u1ed9 c\u1ee7a T&N Company.",

@@ -67,11 +67,13 @@ import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import { normalizeSearchText } from "@/lib/utils";
+import { businessDate, isPreviousDayShift, hasShiftAcknowledgement, acknowledgePreviousDayShift, shiftAcknowledgementKey } from "@/lib/shiftDay";
 import { getOrCreatePosDevice, PosDeviceIdentity } from "@/lib/posDevice";
 import {
   CashierShift,
   closeShift,
   getOpenShiftByCashier,
+  getShiftReopenWarning,
   getShiftHandoverAmount,
   getShiftsForReport,
   openShift,
@@ -378,6 +380,16 @@ export default function CafePosPage() {
   const [discountInput, setDiscountInput] = useState("");
 
   const [activeShift, setActiveShift] = useState<CashierShift | null>(null);
+  const [overnightAcknowledgedKey, setOvernightAcknowledgedKey] = useState("");
+  const [shiftClock, setShiftClock] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setShiftClock(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const needsOvernightReview = !!activeShift && isPreviousDayShift(activeShift, shiftClock)
+    && overnightAcknowledgedKey !== shiftAcknowledgementKey(activeShift, shiftClock)
+    && !hasShiftAcknowledgement(activeShift);
+
   const [deviceIdentity, setDeviceIdentity] = useState<PosDeviceIdentity | null>(null);
   const [shiftSyncNotice, setShiftSyncNotice] = useState("");
   const [isLoadingShift, setIsLoadingShift] = useState(false);
@@ -1925,6 +1937,10 @@ export default function CafePosPage() {
       alert("Chưa có món nào trong giỏ.");
       return;
     }
+    if (isShiftEnabledForUser && needsOvernightReview) {
+      alert("Ca còn mở từ ngày trước. Vui lòng kiểm tra ca trước khi tiếp tục.");
+      return;
+    }
     if (isShiftEnabledForUser && !activeShift) {
       setShowOpenShiftModal(true);
       alert("Vui lòng mở ca làm việc trước khi thanh toán.");
@@ -2031,6 +2047,7 @@ export default function CafePosPage() {
         cashReceived: paymentMethod === "cash" ? currentCashReceived : undefined,
         changeAmount: paymentMethod === "cash" ? currentChangeAmount : undefined,
         shiftId: activeShift?.id,
+        previousDayConfirmedFor: activeShift && (hasShiftAcknowledgement(activeShift) || overnightAcknowledgedKey === shiftAcknowledgementKey(activeShift)) ? businessDate() : undefined,
         cashierId: user?.uid,
         cashierName,
         checkoutRequestId,
@@ -2271,6 +2288,8 @@ export default function CafePosPage() {
 
     setIsOpeningShift(true);
     try {
+      const previous = await getShiftReopenWarning(storeId, user.uid, shiftType);
+      if (previous && !window.confirm(`${getShiftLabel(shiftType)} của bạn đã được mở và đóng trong hôm nay. Bạn có chắc muốn mở thêm ca?`)) return;
       const result = await openShift({
         storeId,
         cashierUid: user.uid,
@@ -2280,6 +2299,7 @@ export default function CafePosPage() {
         openNote: openingNote,
         deviceId: deviceIdentity.id,
         deviceName: deviceIdentity.name,
+        confirmReopen: !!previous,
       });
       setActiveShift(result.item);
       setShowOpenShiftModal(false);
@@ -2294,7 +2314,7 @@ export default function CafePosPage() {
       }
     } catch (error) {
       console.error(error);
-      alert("Không thể mở ca. Vui lòng thử lại.");
+      alert(error instanceof Error ? error.message : "Không thể mở ca. Vui lòng thử lại.");
     } finally {
       setIsOpeningShift(false);
     }
@@ -2442,6 +2462,7 @@ export default function CafePosPage() {
       const finalClosingNote = [closingNote.trim(), surplusNote].filter(Boolean).join(". ");
       await closeShift(activeShift.id, {
         closingCash,
+        expectedOpenedAt: activeShift.openedAt ? new Date(activeShift.openedAt.seconds * 1000) : undefined,
         closeNote: finalClosingNote,
         summary: {
           ...closeShiftSummary,
@@ -2589,7 +2610,7 @@ export default function CafePosPage() {
       setShowOpenShiftModal(true);
     } catch (error) {
       console.error(error);
-      alert("Không thể đóng ca.");
+      alert(error instanceof Error ? error.message : "Không thể đóng ca.");
     } finally {
       setIsClosingShift(false);
     }
@@ -2763,6 +2784,10 @@ export default function CafePosPage() {
   };
 
   const handleOpenVoucherModal = (type: CashVoucherType) => {
+    if (isShiftEnabledForUser && needsOvernightReview) {
+      alert("Ca còn mở từ ngày trước. Vui lòng kiểm tra ca trước khi tiếp tục.");
+      return;
+    }
     if (isShiftEnabledForUser && !activeShift) {
       setShowActionMenu(false);
       setShowOpenShiftModal(true);
@@ -2796,6 +2821,7 @@ export default function CafePosPage() {
         includeInCashFlow: voucherIncludeInCashFlow,
         happenedAt: voucherDateTime ? new Date(voucherDateTime) : new Date(),
         shiftId: activeShift?.id,
+        previousDayConfirmedFor: activeShift && (hasShiftAcknowledgement(activeShift) || overnightAcknowledgedKey === shiftAcknowledgementKey(activeShift)) ? businessDate() : undefined,
         cashierId: user?.uid,
         cashierName,
         inventoryReceiptId:
@@ -4757,6 +4783,22 @@ export default function CafePosPage() {
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {isShiftEnabledForUser && needsOvernightReview && activeShift && !showCloseShiftModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="overnight-shift-title">
+          <div className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl">
+            <h3 id="overnight-shift-title" className="text-xl font-bold text-amber-800">Ca còn mở từ ngày trước</h3>
+            <p className="text-sm text-slate-700">{getShiftLabel(activeShift.shiftType)} · {activeShift.cashierName}, mở lúc {activeShift.openedAt ? new Date(activeShift.openedAt.seconds * 1000).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "không rõ"}.</p>
+            <p className="text-sm text-slate-600">Nếu quên đóng ca, hãy đối soát và đóng ca cũ trước khi mở ca hôm nay. Nếu mở nhầm ngày, nhờ quản trị viên chỉnh tại Hóa đơn → Quản lý ca.</p>
+            <Button className="w-full" onClick={() => void handlePrepareCloseShift()} isLoading={isPreparingCloseShift}>Đối soát và đóng ca cũ</Button>
+            <Button variant="outline" className="w-full" onClick={() => {
+              if (!window.confirm("Chỉ tiếp tục nếu bạn đang bán qua đêm trong cùng ca. Doanh thu mới vẫn thuộc ca cũ. Xác nhận tiếp tục?")) return;
+              acknowledgePreviousDayShift(activeShift);
+              setOvernightAcknowledgedKey(shiftAcknowledgementKey(activeShift));
+            }}>Xác nhận tiếp tục ca qua đêm</Button>
           </div>
         </div>
       )}

@@ -226,6 +226,7 @@ function auth_all_permissions(): array
         'seo_articles.access',
         'activity_logs.access',
         'accounts.access',
+        'revenue_hub.view',
         'stores.switch',
     ];
 }
@@ -235,7 +236,7 @@ function auth_default_permissions_for_role(?string $role): array
     $normalizedRole = $role !== null ? strtolower(trim($role)) : '';
 
     if ($normalizedRole === 'admin') {
-        return auth_all_permissions();
+        return array_values(array_filter(auth_all_permissions(), static fn(string $id): bool => $id !== 'revenue_hub.view'));
     }
 
     if ($normalizedRole === 'manager') {
@@ -303,7 +304,9 @@ function auth_effective_permissions(array $row): array
 {
     $role = auth_normalize_role($row);
     if ($role === 'admin') {
-        return auth_all_permissions();
+        $granted = auth_normalize_permissions($row['permissions_json'] ?? []);
+        return array_values(array_filter(auth_all_permissions(), static fn(string $id): bool =>
+            $id !== 'revenue_hub.view' || in_array($id, $granted, true)));
     }
 
     if (array_key_exists('permissions_json', $row) && $row['permissions_json'] !== null && $row['permissions_json'] !== '') {
@@ -417,6 +420,9 @@ function auth_require(array $roles = []): array
 
 function auth_has_permission(array $user, string $permission): bool
 {
+    if ($permission === 'revenue_hub.view') {
+        return in_array($permission, $user['permissions'] ?? [], true);
+    }
     if (strtolower(trim((string) ($user['role'] ?? ''))) === 'admin') {
         return in_array($permission, auth_all_permissions(), true);
     }

@@ -36,9 +36,9 @@ function runCase($role,$selectedShift,$expected) {
   if(str_contains($updates[0][0],'cashier_id=')) throw new Exception('Creator overwritten');
  }
 }
-runCase('admin',['id'=>'shift-3','store_id'=>'cafe','status'=>'closed'],200);
+runCase('admin',['id'=>'shift-3','store_id'=>'cafe','status'=>'closed'],422);
 runCase('admin',['id'=>'shift-3','store_id'=>'restaurant'],422);
 runCase('admin',false,422);
 runCase('user',['store_id'=>'cafe'],403);
 runCase('manager',['store_id'=>'cafe'],403);
-echo "PASS: closed shift assignment, missing/cross-store shifts, admin-only access, creator preserved\n";
+echo "PASS: legacy shift reassignment blocked; transfers require audited correction workflow\n";

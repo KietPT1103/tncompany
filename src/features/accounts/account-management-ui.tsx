@@ -458,7 +458,7 @@ export function PermissionEditorModal({
           {role === "admin" ? (
             <div className="mt-4 flex gap-3 border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               <ShieldCheck className="h-5 w-5 shrink-0" />
-              Tài khoản quản trị viên luôn có toàn quyền hệ thống.
+              Admin có toàn quyền thông thường; doanh thu liên hệ thống cần cấp riêng.
             </div>
           ) : null}
 
@@ -477,7 +477,7 @@ export function PermissionEditorModal({
                     {group.items.map((item) => {
                       const checked = effective.has(item.id);
                       const inherited = role !== "admin" && getEffectivePermissions({ role, permissions: permissions.filter((permission) => permission !== item.id) }).includes(item.id);
-                      const locked = role === "admin" || !!item.adminOnly || inherited;
+                      const locked = (role === "admin" && item.id !== "revenue_hub.view") || !!item.adminOnly || inherited;
                       return (
                         <label key={item.id} className={`flex items-start gap-3 rounded-sm border px-3 py-3 ${checked ? "border-blue-200 bg-blue-50/70" : "border-slate-200"} ${locked ? "cursor-not-allowed" : "cursor-pointer hover:border-blue-300 hover:bg-blue-50/50"}`}>
                           <input type="checkbox" checked={checked} disabled={!canManageAccess || locked} onChange={() => onToggle(item.id)} className="mt-0.5 h-4 w-4 accent-blue-700" />
