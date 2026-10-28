@@ -49,6 +49,7 @@ type NavItem = {
   roles?: UserRole[];
   exact?: boolean;
   hidden?: boolean;
+  restaurantOnly?: boolean;
 };
 
 type NavGroup = {
@@ -129,6 +130,14 @@ const navGroups: NavGroup[] = [
         label: "Nguyên liệu đã dùng",
         icon: PackageSearch,
         permission: "reports.ingredient_usage.view",
+      },
+      {
+        href: "/reports/kitchen-reconciliation",
+        label: "Đối soát nguyên liệu Lẩu",
+        icon: FileSpreadsheet,
+        roles: ["admin"],
+        permission: "reports.ingredient_usage.view",
+        restaurantOnly: true,
       },
       {
         href: "/reports/profit",
@@ -408,6 +417,7 @@ export default function AdminSidebar({
   }, [showStoreMenu]);
 
   const canViewItem = (item: NavItem) => {
+    if (item.restaurantOnly && storeId !== "restaurant") return false;
     if (item.hidden) return false;
     if (userRole === "bartender" && (item.href === "/bar" || item.href === "/inventory")) {
       return true;

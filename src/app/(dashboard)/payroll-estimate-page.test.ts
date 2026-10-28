@@ -29,7 +29,7 @@ test("shows every scheduled employee and keeps cells in each shift row equally t
   assert.doesNotMatch(source, /MAX_VISIBLE_EMPLOYEES/);
   assert.match(source, /const maxEmployeesInRow = Math\.max/);
   assert.match(source, /getScheduleCellHeight\(maxEmployeesInRow\)/);
-  assert.match(source, /style=\{\{ height: synchronizedCellHeight \}\}/);
+  assert.match(source, /md:min-h-\[var\(--schedule-cell-height\)\]/);
 });
 
 test("downloads the complete schedule section as a PNG", () => {
@@ -39,7 +39,10 @@ test("downloads the complete schedule section as a PNG", () => {
   assert.match(source, /data-schedule-scroll="true"/);
   assert.match(source, /data-employee-name="true"/);
   assert.match(source, /data-today-badge="true"/);
-  assert.match(source, /height: captureHeight \+ 4/);
+  assert.match(source, /windowHeight: captureHeight \+ 4/);
+  assert.doesNotMatch(source, /^\s*height: captureHeight/m);
+  assert.match(source, /element.style.whiteSpace = "normal"/);
+  assert.match(source, /element.style.height = "auto"/);
   assert.match(source, /Math\.max\(\s*section\.scrollWidth,\s*scheduleScroller\?\.scrollWidth/);
   assert.match(source, /link\.download = `lich-phan-ca-/);
   assert.match(source, /canvas\.toDataURL\("image\/png"\)/);

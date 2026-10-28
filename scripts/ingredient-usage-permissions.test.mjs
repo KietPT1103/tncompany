@@ -12,3 +12,13 @@ test('all-report permission inherits usage report and editor exposes it', () => 
   assert.equal(canAccessPath({ role: 'manager', permissions: ['reports.access'] }, '/reports/ingredient-usage'), true);
   assert.ok(MANAGED_PERMISSION_GROUPS.flatMap(group => group.items).some(item => item.id === 'reports.ingredient_usage.view'));
 });
+test('kitchen reconciliation is admin-only even with report permissions', () => {
+  for (const role of ['manager', 'user', 'server', 'bartender']) {
+    for (const permissions of [[], ['reports.ingredient_usage.view'], ['reports.access']]) {
+      assert.equal(canAccessPath({role, permissions}, '/reports/kitchen-reconciliation'), false);
+      assert.equal(canAccessPath({role, permissions}, '/reports/kitchen-reconciliation?tab=history'), false);
+    }
+  }
+  assert.equal(canAccessPath(null, '/reports/kitchen-reconciliation'), false);
+  assert.equal(canAccessPath({role:'admin',permissions:[]},'/reports/kitchen-reconciliation'),true);
+});

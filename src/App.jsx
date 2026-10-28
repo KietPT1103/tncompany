@@ -33,6 +33,7 @@ import ReportsPage from "./app/(dashboard)/reports/page";
 import ProductSalesReportPage from "./app/(dashboard)/reports/products/page";
 import DailyRevenueReportPage from "./app/(dashboard)/reports/revenue/page";
 import IngredientUsagePage from "./app/(dashboard)/reports/ingredient-usage/page";
+import KitchenReconciliationPage from "./features/kitchen-reconciliation/KitchenReconciliationPage";
 import DailyProfitPage from "./app/(dashboard)/reports/profit/page";
 import SocialListeningPage from "./app/(dashboard)/social-listening/page";
 import GestureStudioPage from "./app/(dashboard)/gesture-studio/page";
@@ -244,6 +245,7 @@ export function App() {
               <Route path="reports/products" element={<ProductSalesReportPage />} />
               <Route path="reports/revenue" element={<DailyRevenueReportPage />} />
               <Route path="reports/ingredient-usage" element={<IngredientUsagePage />} />
+              <Route path="reports/kitchen-reconciliation" element={<RoleGuard allowedRoles={["admin"]} inferPermission={false}><KitchenReconciliationPage /></RoleGuard>} />
               <Route path="reports/profit" element={<DailyProfitPage />} />
               <Route path="reports/:id" element={<ReportDetailPage />} />
               <Route path="cash-flow" element={<CashFlowPage />} />

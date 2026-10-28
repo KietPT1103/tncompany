@@ -498,7 +498,6 @@ function RoleScheduleTable({
         scale: Math.min(window.devicePixelRatio || 1, 2),
         useCORS: true,
         width: captureWidth + 4,
-        height: captureHeight + 4,
         windowWidth: captureWidth + 4,
         windowHeight: captureHeight + 4,
         onclone: (clonedDocument) => {
@@ -525,9 +524,10 @@ function RoleScheduleTable({
             (element) => {
               element.style.overflow = "visible";
               element.style.textOverflow = "clip";
-              element.style.whiteSpace = "nowrap";
+              element.style.whiteSpace = "normal";
+              element.style.overflowWrap = "anywhere";
               element.style.lineHeight = "20px";
-              element.style.height = "20px";
+              element.style.height = "auto";
             },
           );
           clonedSection.querySelectorAll<HTMLElement>('[data-today-badge="true"]').forEach(
@@ -759,7 +759,7 @@ function RoleScheduleTable({
                       data-schedule-day={day.date}
                       style={{ "--schedule-cell-height": `${synchronizedCellHeight}px` } as CSSProperties}
                       className={cn(
-                        "h-full border-b border-slate-200 px-2 py-3 align-top",
+                        "h-px border-b border-slate-200 px-2 py-3 align-top",
                         day.date !== selectedMobileDate && "hidden md:table-cell",
                         !day.inRange && "bg-slate-50",
                       )}
@@ -775,12 +775,11 @@ function RoleScheduleTable({
                           }
                         }}
                         className={cn(
-                          "!h-auto min-h-24 rounded-lg border bg-white p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 md:!h-[var(--schedule-cell-height)] md:p-2 2xl:p-2.5",
+                          "h-full min-h-24 rounded-lg border bg-white p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 md:min-h-[var(--schedule-cell-height)] md:p-2 2xl:p-2.5",
                           isActive
                             ? "border-slate-900 bg-slate-50"
                             : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50",
                         )}
-                        style={{ height: synchronizedCellHeight }}
                       >
                         <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
                           <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
@@ -809,7 +808,7 @@ function RoleScheduleTable({
                                 >
                                   <span
                                     data-employee-name="true"
-                                    className="min-w-0 flex-1 break-words text-sm font-semibold leading-5 md:truncate md:text-xs"
+                                    className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere] text-sm font-semibold leading-5 md:text-xs"
                                   >
                                     {employee.name}
                                   </span>
@@ -874,7 +873,22 @@ export default function SalaryEstimatePage() {
   const [openSavedRevision, setOpenSavedRevision] = useState(0);
   const [confirmNewSchedule, setConfirmNewSchedule] = useState(false);
   const savedDraft = useRef("");
+  const saveInFlight = useRef(false);
+  const saveGeneration = useRef(0);
+  const activeStore = useRef(storeId);
+  if (activeStore.current !== storeId) {
+    activeStore.current = storeId;
+    saveGeneration.current += 1;
+  }
+  const editingIdRef = useRef("");
+  const loadedScheduleKey = useRef("");
+  const failedDraft = useRef("");
+  const [autosaveError, setAutosaveError] = useState("");
+  const [saveTick, setSaveTick] = useState(0);
+  const saveLatest = useRef<() => Promise<boolean>>(async () => false);
   const [managedEstimateRoles, setManagedEstimateRoles] = useState<string[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  useEffect(() => () => { saveGeneration.current += 1; }, []);
 
   useEffect(() => {
     if (!storeId || loading || !user) return;
@@ -963,18 +977,25 @@ export default function SalaryEstimatePage() {
 
   useEffect(() => {
     let ignore = false;
+    setRolesLoading(true);
     setManagedEstimateRoles([]);
     getEmployeeRoles(storeId)
       .then((items) => {
         if (!ignore) setManagedEstimateRoles(items.map((item) => item.name));
       })
-      .catch((error) => console.error(error));
+      .catch((error) => console.error(error))
+      .finally(() => { if (!ignore) setRolesLoading(false); });
     return () => {
       ignore = true;
     };
   }, [storeId]);
 
   useEffect(() => {
+    saveGeneration.current += 1;
+    editingIdRef.current = "";
+    loadedScheduleKey.current = "";
+    failedDraft.current = "";
+    setAutosaveError("");
     setSelectedRole(estimateRoles[0] || "");
     setActiveCell(null);
     setSchedule({});
@@ -1062,8 +1083,11 @@ export default function SalaryEstimatePage() {
 
   useEffect(() => {
     if (!queryPayrollId || supportedEmployees.length === 0) return;
+    const loadKey = `${storeId}:${queryPayrollId}:${openSavedRevision}`;
+    if (loadedScheduleKey.current === loadKey) return;
 
     let ignore = false;
+    saveGeneration.current += 1;
     setLoadingSavedEstimate(true);
     setSubmitError("");
 
@@ -1075,16 +1099,16 @@ export default function SalaryEstimatePage() {
           supportedEmployees,
           estimateRoles,
         );
+        const startDate = savedSchedule.startDate || normalizedRange.startDate;
+        const endDate = savedSchedule.endDate || normalizedRange.endDate;
+        const restoredRange = startDate <= endDate ? { startDate, endDate } : { startDate: endDate, endDate: startDate };
         setSchedule(restored.schedule);
-        savedDraft.current = JSON.stringify({ schedule: restored.schedule, range: {
-          startDate: savedSchedule.startDate, endDate: savedSchedule.endDate,
-        } });
-        if (savedSchedule.startDate && savedSchedule.endDate) {
-          setRange({
-            startDate: savedSchedule.startDate,
-            endDate: savedSchedule.endDate,
-          });
-        }
+        loadedScheduleKey.current = loadKey;
+        editingIdRef.current = queryPayrollId;
+        failedDraft.current = "";
+        setAutosaveError("");
+        savedDraft.current = JSON.stringify({ schedule: restored.schedule, range: restoredRange });
+        setRange(restoredRange);
         if (restored.selectedRole) {
           setSelectedRole(restored.selectedRole);
         }
@@ -1249,7 +1273,7 @@ export default function SalaryEstimatePage() {
     cell: ActiveCell,
     updater: (current: string[]) => string[],
   ) {
-    if (saving || loadingSavedEstimate) return;
+    if (loadingSavedEstimate) return;
     const cellKey = makeCellKey(cell.date, cell.role, cell.shiftId);
 
     setSchedule((current) => {
@@ -1320,7 +1344,7 @@ export default function SalaryEstimatePage() {
   }
 
   function handleSelectScheduleCell(cell: ActiveCell) {
-    if (saving || loadingSavedEstimate) return;
+    if (loadingSavedEstimate || rolesLoading) return;
     setRange((current) => {
       const orderedRange =
         current.startDate <= current.endDate
@@ -1348,6 +1372,11 @@ export default function SalaryEstimatePage() {
   }
 
   function createNewSchedule() {
+    saveGeneration.current += 1;
+    editingIdRef.current = "";
+    loadedScheduleKey.current = "";
+    failedDraft.current = "";
+    setAutosaveError("");
     setSchedule({});
     setEditingPayrollId("");
     savedDraft.current = "";
@@ -1380,15 +1409,23 @@ export default function SalaryEstimatePage() {
     setPendingDeleteRole(null);
   }
 
-  async function handleSaveEstimate() {
-    if (!storeId || saving || loadingSavedEstimate || employeesLoading || loadError) return false;
+  async function handleSaveEstimate(automatic = false) {
+    if (!storeId || saveInFlight.current || loadingSavedEstimate || employeesLoading || rolesLoading || loadError) return false;
+    if (queryPayrollId && loadedScheduleKey.current !== `${storeId}:${queryPayrollId}:${openSavedRevision}`) return false;
+    const generation = saveGeneration.current;
+    const isCurrent = () => generation === saveGeneration.current && activeStore.current === storeId;
+    const requestPayrollId = editingIdRef.current;
+    const draft = JSON.stringify({ schedule, range: normalizedRange });
 
-    if (estimateSummaries.length === 0 && !editingPayrollId) {
+    if (estimateSummaries.length === 0 && !requestPayrollId) {
       setSubmitError("Chưa có lịch phân ca để ước lượng.");
       setSaveMessage("");
       return false;
     }
 
+    saveInFlight.current = true;
+    failedDraft.current = "";
+    setAutosaveError("");
     setSaving(true);
     setSubmitError("");
     setSaveMessage("");
@@ -1405,8 +1442,9 @@ export default function SalaryEstimatePage() {
         ),
       );
 
-      if (editingPayrollId) {
-        const currentEntries = await getPayrollEntries(editingPayrollId);
+      if (requestPayrollId) {
+        const currentEntries = await getPayrollEntries(requestPayrollId);
+        if (!isCurrent()) return false;
         const currentEntryMap = new Map(
           currentEntries.map((entry) => [
             getEstimateEntryMatchKey(entry),
@@ -1419,25 +1457,29 @@ export default function SalaryEstimatePage() {
           const existingEntry = currentEntryMap.get(matchKey);
           if (existingEntry?.id) {
             await updatePayrollEntry(existingEntry.id, entry);
+            if (!isCurrent()) return false;
             currentEntryMap.delete(matchKey);
           } else {
-            await addPayrollEntry(editingPayrollId, entry);
+            await addPayrollEntry(requestPayrollId, entry);
+            if (!isCurrent()) return false;
           }
         }
 
         for (const entry of currentEntryMap.values()) {
           if (entry.id) {
             await deletePayrollEntry(entry.id);
+            if (!isCurrent()) return false;
           }
         }
 
-        await updatePayroll(editingPayrollId, {
+        await updatePayroll(requestPayrollId, {
           name: payrollName,
           startDate: normalizedRange.startDate,
           endDate: normalizedRange.endDate,
         });
+        if (!isCurrent()) return false;
 
-        setSaveMessage("Đã cập nhật bản ước tính hiện tại.");
+        if (!automatic) setSaveMessage("Đã cập nhật bản ước tính hiện tại.");
       } else {
         const payrollId = await saveImportedPayroll({
           source: "payroll_estimate",
@@ -1448,26 +1490,56 @@ export default function SalaryEstimatePage() {
           entries: nextEntries,
         });
 
+        if (!isCurrent()) return false;
+        editingIdRef.current = payrollId;
+        loadedScheduleKey.current = `${storeId}:${payrollId}:${openSavedRevision}`;
         setEditingPayrollId(payrollId);
         router.replace(
           `/payroll-estimate?payrollId=${encodeURIComponent(payrollId)}`,
         );
-        setSaveMessage("Đã lưu bản ước tính và có thể mở lại để sửa tiếp.");
+        if (!automatic) setSaveMessage("Đã lưu bản ước tính và có thể mở lại để sửa tiếp.");
       }
 
       setSavedSchedulesRevision(value => value + 1);
-      savedDraft.current = JSON.stringify({ schedule, range: normalizedRange });
+      savedDraft.current = draft;
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       console.error(error);
-      setSubmitError(
-        error instanceof Error ? error.message : "Không thể lưu bản ước tính.",
-      );
+      // Entry mutations can succeed before a later request fails. Force the
+      // next edit/retry to reconcile even when it restores the previous draft.
+      if (requestPayrollId) savedDraft.current = "";
+      const message = error instanceof Error ? error.message : "Không thể lưu bản ước tính.";
+      failedDraft.current = draft;
+      setAutosaveError(message);
+      if (!automatic) setSubmitError(message);
       return false;
     } finally {
+      saveInFlight.current = false;
       setSaving(false);
+      setSaveTick(value => value + 1);
     }
   }
+
+  const currentDraft = JSON.stringify({ schedule, range: normalizedRange });
+  const hasSchedule = Boolean(editingPayrollId) || estimateSummaries.length > 0;
+  const hasUnsavedChanges = hasSchedule && currentDraft !== savedDraft.current;
+  saveLatest.current = () => handleSaveEstimate(true);
+  useEffect(() => {
+    const requestedKey = `${storeId}:${queryPayrollId}:${openSavedRevision}`;
+    if (loading || !user || !storeId || saving || loadingSavedEstimate || employeesLoading || rolesLoading || loadError ||
+      (queryPayrollId && loadedScheduleKey.current !== requestedKey) || !hasUnsavedChanges || failedDraft.current === currentDraft) return;
+    setAutosaveError("");
+    const timer = window.setTimeout(() => void saveLatest.current(), 1000);
+    return () => window.clearTimeout(timer);
+  }, [currentDraft, hasUnsavedChanges, saving, loading, user?.id, storeId, loadingSavedEstimate, employeesLoading, rolesLoading, loadError, queryPayrollId, openSavedRevision, saveTick]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges && !saving) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [hasUnsavedChanges, saving]);
 
   if (loading || !user || !storeId) {
     return (
@@ -1703,6 +1775,13 @@ export default function SalaryEstimatePage() {
               </button>
             </nav>
 
+            <div className="flex flex-wrap items-center gap-2 text-sm" role="status" aria-live="polite" data-autosave-status>
+              <span className={autosaveError ? "text-red-700" : "text-slate-500"}>
+                {saving ? "Đang lưu lịch…" : autosaveError ? `Chưa lưu được: ${autosaveError}` : hasUnsavedChanges ? "Có thay đổi · Sẽ tự động lưu…" : hasSchedule ? "Đã lưu lịch" : "Lịch sẽ tự động lưu khi bạn phân ca."}
+              </span>
+              {autosaveError && <Button variant="outline" size="sm" disabled={saving || loadingSavedEstimate} onClick={() => void handleSaveEstimate()}>Thử lưu lại</Button>}
+            </div>
+
             {workspaceView === "saved" && <SavedEstimateSchedules
               key={storeId}
               storeId={storeId}
@@ -1713,6 +1792,12 @@ export default function SalaryEstimatePage() {
               opening={loadingSavedEstimate || saving}
               onDeleted={(id) => {
                 if (id !== editingPayrollId && id !== queryPayrollId) return;
+                saveGeneration.current += 1;
+                editingIdRef.current = "";
+                loadedScheduleKey.current = "";
+                failedDraft.current = "";
+                savedDraft.current = "";
+                setAutosaveError("");
                 setEditingPayrollId("");
                 setSchedule({});
                 setScheduleBoardRoles(selectedRole ? [selectedRole] : []);
@@ -2221,7 +2306,7 @@ export default function SalaryEstimatePage() {
         <ConfirmDialog
           open={pendingDeleteRole !== null}
           title={`Xoá lịch phân ca ${pendingDeleteRole ?? ""}?`}
-          description="Tất cả phân ca của vai trò này trong bản đang chỉnh sẽ bị bỏ. Các vai trò khác được giữ nguyên. Bấm Lưu ước tính để cập nhật bản đã lưu."
+          description="Tất cả phân ca của vai trò này trong bản đang chỉnh sẽ bị bỏ. Các vai trò khác được giữ nguyên. Thay đổi sẽ được tự động lưu."
           confirmLabel="Xoá lịch"
           cancelLabel="Huỷ"
           variant="destructive"

@@ -603,6 +603,7 @@ export function getPermissionDefinition(permission: AppPermission) {
 
 export function getPermissionForPath(pathname: string): AppPermission | null {
   const normalizedPath = pathname.split(/[?#]/, 1)[0] || "/";
+  if (normalizedPath === "/reports/kitchen-reconciliation") return "reports.ingredient_usage.view";
 
   const matchedRule = PATH_PERMISSION_RULES.find(({ path }) => {
     if (path === "/") {
@@ -623,6 +624,9 @@ export function canAccessPath(
     | undefined,
   pathname: string
 ) {
+  if (pathname.split(/[?#]/, 1)[0] === "/reports/kitchen-reconciliation") {
+    return (typeof source === "string" ? source : source?.role) === "admin";
+  }
   if (pathname.split(/[?#]/, 1)[0] === "/inventory" && hasPermission(source, "inventory_checks.access")) return true;
   if (pathname.split(/[?#]/, 1)[0] === "/pos") return hasAnyPermission(source, ["bills.access", "bar.checkout"]);
   const permission = getPermissionForPath(pathname);

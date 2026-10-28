@@ -27,7 +27,7 @@ export function SavedEstimateSchedules({ storeId, revision, onOpen, onDeleted, o
   storeId: string; revision: number; onOpen: (id: string) => void; onDeleted: (id: string) => void;
   onCreate: () => void; onRefresh: () => void; initialRange: EstimatePeriod; opening: boolean;
 }) {
-  const [preset, setPreset] = useState<PeriodPreset>('custom');
+  const [preset, setPreset] = useState<PeriodPreset>('all');
   const [period, setPeriod] = useState(initialRange);
   const [anchorDate, setAnchorDate] = useState(initialRange.startDate);
   const [page, setPage] = useState(1);
@@ -95,7 +95,7 @@ export function SavedEstimateSchedules({ storeId, revision, onOpen, onDeleted, o
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-4 sm:p-5">
       <div className="min-w-0">
         <h2 className="font-bold text-slate-900">Lịch phân ca đã lưu</h2>
-        <p className="mt-1 text-sm text-slate-500">Mở lại lịch để xem hoặc tiếp tục chỉnh sửa. Lưu lại sẽ cập nhật lịch đó.</p>
+        <p className="mt-1 text-sm text-slate-500">Mở lại lịch để xem hoặc tiếp tục chỉnh sửa. Thay đổi sẽ tự động cập nhật vào lịch đó.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" className={`gap-2 text-emerald-900 ${outline}`} disabled={opening || deleting} onClick={onCreate}>
@@ -154,7 +154,7 @@ export function SavedEstimateSchedules({ storeId, revision, onOpen, onDeleted, o
         {!data.items.length ? <div className="flex flex-col items-center px-5 py-12 text-center">
           <CalendarRange className="h-8 w-8 text-emerald-800" aria-hidden="true" />
           <h3 className="mt-3 font-semibold text-slate-800">{preset === 'all' ? 'Chưa có lịch phân ca đã lưu' : 'Chưa có lịch đúng khoảng ngày này'}</h3>
-          <p className="mt-1 max-w-md text-sm text-slate-500">Chọn khoảng ngày khác hoặc tạo lịch mới và bấm Lưu ước tính.</p>
+          <p className="mt-1 max-w-md text-sm text-slate-500">Chọn Tất cả lịch để xem các kỳ khác, hoặc tạo lịch mới. Lịch sẽ tự động lưu khi bạn phân ca.</p>
         </div> : <>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/60 px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-center gap-4">

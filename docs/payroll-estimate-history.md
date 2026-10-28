@@ -2,14 +2,19 @@
 
 Trang Ước lượng lương có ba tab: Lịch phân ca, Tổng hợp nhân viên và Lịch phân ca đã lưu.
 
+- Lịch tự động lưu lên máy chủ sau khoảng 1 giây ngừng chỉnh sửa phân ca hoặc khoảng ngày. Lịch mới chỉ được tạo khi có phân ca; chỉnh sửa tiếp cập nhật cùng bản. Xoá hết phân ca của bản đã lưu vẫn cập nhật bản đó thành rỗng.
+- Trạng thái dưới các tab hiển thị đang chờ lưu, đang lưu, đã lưu hoặc lỗi cùng nút thử lại. Vẫn có thể chỉnh phân ca trong lúc đang lưu; thay đổi mới được gửi tiếp sau lần lưu hiện tại. Lỗi không tự lặp lại liên tục; chỉnh tiếp hoặc bấm thử lại để gửi lại.
+- Khi cập nhật nhiều phân ca bị lỗi giữa chừng, lần chỉnh tiếp hoặc thử lại sẽ đồng bộ lại toàn bộ lịch, kể cả khi bạn đưa lịch về nội dung trước lần lưu lỗi.
+- Nút **Lưu ước tính** vẫn lưu ngay. Trình duyệt cảnh báo khi đóng/tải lại trang trong lúc còn thay đổi chưa lưu. Cần chờ trạng thái **Đã lưu lịch** trước khi rời trang.
+
 - Nút **Lưu ước tính** nằm cạnh **Chụp lịch**. Nút lưu tất cả vai trò và các tuần trong khoảng ngày đã chọn, không chỉ bảng tuần đang hiển thị.
 - Lưu lần đầu tạo một bản ước tính. Mở lại lịch và lưu tiếp cập nhật bản đó.
 - **Thêm lịch phân ca** thêm bảng cho vai trò khác ngay trong trang, giữ nguyên các bảng đã nhập. Tất cả bảng dùng chung khoảng ngày; **Lưu ước tính** lưu cả nhóm vai trò trong một bản. Mỗi ca lưu kèm vai trò để mở lại đúng bảng, kể cả nhân viên làm nhiều vai trò.
 - Phần tổng hiển thị Tổng toàn khoảng và một ô riêng cho từng vai trò có bảng, gồm lương, số nhân viên và tổng giờ. Thêm/xoá bảng cập nhật các ô tương ứng; giao diện tự xuống hàng khi có nhiều vai trò hoặc màn hình nhỏ.
 - Dùng một ô **Vai trò** để xem tổng lương riêng và chọn vai trò cần thêm; nút **Thêm lịch phân ca** nằm ngay cạnh. Vai trò đã có bảng sẽ không được thêm trùng.
-- Mỗi bảng có **Xoá lịch** và popup xác nhận. Xoá bỏ tất cả phân ca của vai trò đó trong bản đang chỉnh, giữ nguyên các vai trò khác và tính lại tổng lương. Bấm **Lưu ước tính** để cập nhật bản đã lưu. Có thể xoá bảng cuối cùng rồi lưu bản rỗng hoặc chọn vai trò để thêm lại.
+- Mỗi bảng có **Xoá lịch** và popup xác nhận. Xoá bỏ tất cả phân ca của vai trò đó trong bản đang chỉnh, giữ nguyên các vai trò khác và tính lại tổng lương. Thay đổi được tự động lưu. Có thể xoá bảng cuối cùng để lưu bản rỗng hoặc chọn vai trò để thêm lại.
 - **Tạo lịch mới** bắt đầu một bản ước tính riêng và giữ khoảng ngày đang chọn. Nếu có thay đổi chưa lưu, trang yêu cầu xác nhận trước khi bỏ chúng.
-- Tab lịch đã lưu hiển thị khoảng ngày, lần cập nhật, số nhân viên, tổng giờ và tổng lương ước tính; mỗi trang có 10 lịch.
+- Tab lịch đã lưu mặc định chọn **Tất cả lịch**, hiển thị khoảng ngày, lần cập nhật, số nhân viên, tổng giờ và tổng lương ước tính; mỗi trang có 10 lịch.
 - Badge trên tab hiển thị tổng số lịch đã lưu của cửa hàng, cập nhật khi lưu, xoá hoặc làm mới. Badge dùng cùng giao diện với Tổng hợp nhân viên.
 - Cột **Loại lịch** liệt kê các vai trò có phân ca. Lịch cũ dùng vai trò trên dòng nhân viên nếu chưa có vai trò riêng từng ca.
 - Có thể chọn tuần, tháng hoặc khoảng ngày để xem tổng lương. Chỉ cộng các bản có **ngày bắt đầu và ngày kết thúc trùng hoàn toàn** với kỳ đã chọn, kể cả trùng vai trò; tổng lấy tất cả trang. Không phân bổ các lịch tuần vào kỳ tháng hay cộng các lịch chỉ giao nhau. Số nhân viên tính không trùng; giờ và lương cộng tất cả bản. Chọn **Tất cả lịch** để xem các kỳ khác nhau, không hiển thị tổng gộp khác kỳ.
@@ -25,5 +30,6 @@ API đọc lịch dùng `payrolls.php?resource=estimates&storeId=...&page=...` v
 Danh sách nhận thêm `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` (cả hai bắt buộc khi lọc) và trả `summary` cho toàn bộ kết quả cùng kỳ. Khi không lọc, `summary` là `null`.
 
 Kiểm tra dữ liệu độc lập: `php scripts/payroll-estimate-history-test.php` (SQLite trong bộ nhớ).
+Kiểm tra tự lưu trong Chrome: `node scripts/payroll-estimate-autosave.test.mjs` (dùng dữ liệu/API giả lập, không gửi dữ liệu lên máy chủ thật).
 Kiểm tra kỳ tuần/tháng: `node --experimental-strip-types --test scripts/estimate-periods.test.mjs`.
 Kiểm tra xoá bảng vai trò: `node --experimental-strip-types --test scripts/estimate-schedule.test.mjs`.
