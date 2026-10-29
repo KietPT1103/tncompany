@@ -673,6 +673,7 @@ function ProductModal({
                         <th className="w-14 px-4 py-3 text-center">STT</th>
                         <th className="px-4 py-3 text-left">Mã hàng hóa</th>
                         <th className="px-4 py-3 text-left">Tên thành phần</th>
+                        <th className="px-4 py-3 text-left">ĐVT</th>
                         <th className="px-4 py-3 text-right">Số lượng</th>
                         <th className="px-4 py-3 text-right">Giá vốn</th>
                         <th className="px-4 py-3 text-right">Thành tiền</th>
@@ -683,7 +684,7 @@ function ProductModal({
                     <tbody className="divide-y divide-slate-100">
                       {componentRows.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-14 text-center">
+                          <td colSpan={8} className="px-4 py-14 text-center">
                             <PackagePlus className="mx-auto h-7 w-7 text-slate-300" />
                             <p className="mt-2 font-medium text-slate-700">
                               Chưa có thành phần
@@ -716,6 +717,10 @@ function ProductModal({
                                 {formatQuantity(component.stockQuantity)}
                                 {component.unit ? ` ${component.unit}` : ""}
                               </p>
+                            </td>
+
+                            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                              {component.unit || "—"}
                             </td>
 
                             <td className="px-4 py-3 text-right">
