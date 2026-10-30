@@ -13,14 +13,16 @@ const stamp = text => ({seconds:Date.parse(text)/1000});
 const source={id:'wrong',storeId:'cafe',cashierUid:'cashier2',cashierName:'Thungan2',shiftType:'shift_2',status:'closed',openingCash:100,openedAt:stamp('2026-10-21T10:43:26Z'),closedAt:stamp('2026-10-22T09:48:21Z')};
 const target={...source,id:'correct',cashierName:'Thungan3',shiftType:'shift_3',openedAt:stamp('2026-10-21T10:04:00Z'),closedAt:stamp('2026-10-21T16:00:00Z')};
 const bills=[{id:'CF-yesterday',table_number:'T01',total:200,status:'completed',payment_method:'cash',created_at:'2026-10-21 20:00:00'},{id:'CF-today',table_number:'T02',total:300,status:'completed',payment_method:'transfer',created_at:'2026-10-22 14:00:00'}];
-let submitted=null,conflict=false,changed=0;
+let submitted=null,conflict=false,changed=0,assignment=null;let unassigned=[{id:'CF-late',table_number:'T01',total:309000,status:'completed',payment_method:'cash',created_at:'2026-10-29 22:30:44'}];
 window.confirm=()=>true;
 window.fetch=async(url,options={})=>{
  const query=new URL(String(url),'https://test.local').searchParams;
  let data={},ok=true;
  if(query.get('resource')==='shift-management') data={items:[source,target]};
  if(query.get('resource')==='shift-review'&&!options.body) data={shift:source,bills,reviewToken:'version1',vouchers:[{id:'v1',amount:20,voucher_type:'income',happened_at:'2026-10-22 14:00:00',cancelled_at:null,include_in_cash_flow:1}],history:[]};
- if(options.body){
+ if(query.get('resource')==='unassigned-bills'&&!options.body) data={items:unassigned};
+ if(query.get('resource')==='unassigned-bills'&&options.body){assignment=JSON.parse(options.body);unassigned=[];data={updated:true,movedBills:1};}
+ else if(options.body){
   submitted=JSON.parse(options.body);
   if(conflict)ok=false;
   else {source.openedAt=stamp('2026-10-22T05:55:00Z');bills.splice(0,1);data={updated:true,movedBills:1};}
@@ -41,14 +43,22 @@ const fill=(element,value)=>{const proto=element.tagName==='TEXTAREA'?HTMLTextAr
  fill(document.querySelector('input[type="datetime-local"]'),'2026-10-22T12:55:00');await wait();
  check('flags invoice outside corrected interval',document.querySelector('dialog').textContent.includes('Có 1 hóa đơn và 0 phiếu'));
  const select=document.querySelector('select[aria-label="Ca đích cho CF-yesterday"]');select.value='correct';select.dispatchEvent(new Event('change',{bubbles:true}));await wait();
- fill(document.querySelector('textarea'),'Sửa ca mở nhầm hôm qua');await wait();
+ fill(document.querySelector('textarea[placeholder]'),'Sửa ca mở nhầm hôm qua');await wait();
  check('cannot save without review acknowledgement',button('Lưu điều chỉnh').disabled);
- document.querySelector('input[type="checkbox"]').click();await wait();button('Lưu điều chỉnh').click();await wait(500);
+ document.querySelector('input[type="checkbox"]:not([aria-label])').click();await wait();button('Lưu điều chỉnh').click();await wait(500);
  check('sends corrected Vietnam time and chosen invoice only',submitted?.openedAt==='2026-10-22 12:55:00'&&submitted?.closedAt==='2026-10-22 16:48:21'&&submitted.transfers.length===1&&submitted.transfers[0].billId==='CF-yesterday'&&submitted.transfers[0].targetShiftId==='correct');
  check('sends reason, review token and acknowledgement',submitted?.reason==='Sửa ca mở nhầm hôm qua'&&submitted?.reviewToken==='version1'&&submitted?.reviewed===true);
  check('refreshes after successful save',changed===1&&!!document.querySelector('[role="status"]')&&document.querySelectorAll('select[aria-label^="Ca đích"]').length===1);
- conflict=true;fill(document.querySelector('textarea'),'Kiểm tra xung đột');await wait();document.querySelector('input[type="checkbox"]').click();await wait();button('Lưu điều chỉnh').click();await wait(300);
+ conflict=true;fill(document.querySelector('textarea[placeholder]'),'Kiểm tra xung đột');await wait();document.querySelector('input[type="checkbox"]:not([aria-label])').click();await wait();button('Lưu điều chỉnh').click();await wait(300);
  check('server conflict is visible without false success',document.querySelector('[role="alert"]')?.textContent.includes('Dữ liệu đã thay đổi')&&changed===1&&!document.querySelector('[role="status"]'));
+ conflict=false;
+ check('loads unassigned invoice outside shift hours',!!document.querySelector('input[aria-label="Gán bill CF-late"]'));
+ document.querySelector('input[aria-label="Gán bill CF-late"]').click();await wait();
+ fill(document.querySelector('textarea[aria-label="Lý do gán bill"]'),'Khách đến sau kết ca');await wait();
+ check('assignment requires acknowledgement',button('Gán 1 bill').disabled);
+ document.querySelector('input[aria-label="Xác nhận gán bill"]').click();await wait();button('Gán 1 bill').click();await wait(500);
+ check('assigns selected unassigned invoice to chosen closed shift',assignment?.id==='wrong'&&assignment.billIds.length===1&&assignment.billIds[0]==='CF-late'&&assignment.reviewed===true&&assignment.reason==='Khách đến sau kết ca');
+ check('refresh removes assigned invoice and updates parent',!document.querySelector('input[aria-label="Gán bill CF-late"]')&&changed===2);
  check('page has no horizontal overflow',document.documentElement.scrollWidth<=innerWidth);
  const result=document.createElement('pre');result.id='test-result';result.textContent=JSON.stringify(checks);document.body.append(result);
 })().catch(error=>{const result=document.createElement('pre');result.id='test-result';result.textContent=JSON.stringify([['exception '+error.message,false]]);document.body.append(result)});

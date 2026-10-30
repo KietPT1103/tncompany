@@ -218,3 +218,53 @@ function shift_validate_close_preview(array $current, array $preview, ?string $e
         }
     }
 }
+
+
+function shift_management_unassigned(PDO $pdo, string $storeId, string $day): array
+{
+    $start = shift_management_datetime($day . ' 00:00:00');
+    $end = (new DateTimeImmutable($start))->modify('+1 day')->format('Y-m-d H:i:s');
+    $s = $pdo->prepare("SELECT id,table_number,total,status,payment_method,created_at FROM bills WHERE store_id=? AND (shift_id IS NULL OR shift_id='') AND created_at>=? AND created_at<? ORDER BY created_at,id");
+    $s->execute([$storeId,$start,$end]);
+    return $s->fetchAll();
+}
+
+function shift_management_assign(PDO $pdo, string $storeId, array $user, array $input): array
+{
+    shift_require_admin($user);
+    $id = trim((string)($input['id'] ?? ''));
+    $reason = trim((string)($input['reason'] ?? ''));
+    if ($reason === '' || mb_strlen($reason) > 1000) throw new ShiftManagementError('Nhập lý do gán hóa đơn, tối đa 1000 ký tự.');
+    if (($input['reviewed'] ?? false) !== true) throw new ShiftManagementError('Cần xác nhận đã kiểm tra hóa đơn và ca nhận.');
+    $billIds = $input['billIds'] ?? null;
+    if (!is_array($billIds) || count($billIds) === 0 || count($billIds) > 5000) throw new ShiftManagementError('Chọn hóa đơn chưa có ca để gán.');
+    foreach ($billIds as $billId) if (!is_string($billId) || trim($billId) === '') throw new ShiftManagementError('Mã hóa đơn không hợp lệ.');
+    if (count(array_unique($billIds)) !== count($billIds)) throw new ShiftManagementError('Hóa đơn bị trùng.');
+    sort($billIds, SORT_STRING);
+    $pdo->beginTransaction();
+    try {
+        $before = shift_management_find($pdo,$storeId,$id,true);
+        $read = $pdo->prepare('SELECT * FROM bills WHERE id=? AND store_id=?' . shift_lock_suffix($pdo));
+        $update = $pdo->prepare("UPDATE bills SET shift_id=? WHERE id=? AND store_id=? AND (shift_id IS NULL OR shift_id='')");
+        $moves = [];
+        foreach ($billIds as $billId) {
+            $read->execute([$billId,$storeId]);
+            $bill = $read->fetch();
+            if (!$bill || !in_array($bill['shift_id'],[null,''],true)) throw new ShiftManagementError('Hóa đơn ' . $billId . ' không còn là bill chưa có ca. Tải lại danh sách.',409);
+            $update->execute([$id,$billId,$storeId]);
+            if ($update->rowCount() !== 1) throw new ShiftManagementError('Hóa đơn đã thay đổi. Tải lại danh sách.',409);
+            $moves[] = ['billId'=>$billId,'sourceShiftId'=>null,'targetShiftId'=>$id];
+        }
+        shift_management_recalculate($pdo,$before);
+        $after = shift_management_find($pdo,$storeId,$id);
+        $json = static fn($value) => json_encode($value,JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $pdo->prepare('INSERT INTO cashier_shift_corrections (store_id,shift_id,actor_id,actor_name,reason,before_json,after_json,transfers_json) VALUES (?,?,?,?,?,?,?,?)')->execute([
+            $storeId,$id,(string)$user['id'],(string)($user['display_name'] ?? $user['displayName'] ?? $user['email'] ?? $user['id']),$reason,$json([$id=>$before]),$json([$id=>$after]),$json($moves),
+        ]);
+        $pdo->commit();
+        return ['updated'=>true,'movedBills'=>count($moves)];
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $error;
+    }
+}

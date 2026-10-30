@@ -3,6 +3,15 @@
 try {
     shift_require_admin($user);
     shift_management_ensure_schema(db());
+    if ($resource === 'unassigned-bills' && $method === 'GET') {
+        respond_ok(['items'=>shift_management_unassigned(db(),$posStoreId,(string)($_GET['date'] ?? date('Y-m-d')))]);
+    }
+    if ($resource === 'unassigned-bills' && $method === 'PATCH') {
+        $result = shift_management_assign(db(),$posStoreId,$user,$body);
+        realtime_publish($posStoreId,'shifts-updated',['id'=>(string)$body['id'],'action'=>'assigned']);
+        realtime_publish($posStoreId,'bill-updated',['action'=>'shift-assigned']);
+        respond_ok($result);
+    }
     if ($resource === 'shift-management' && $method === 'GET') {
         $day = (string)($_GET['date'] ?? date('Y-m-d'));
         shift_management_datetime($day . ' 00:00:00');

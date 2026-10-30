@@ -47,3 +47,10 @@ export function getDailyAdjustedHandover(shifts: CashierShift[], bills: Bill[], 
   const remainder = summarizeBillsForShift(bills.filter(bill => unassigned(bill.shiftId)), 0, vouchers.filter(voucher => unassigned(voucher.shiftId)));
   return shifts.reduce((sum, shift) => sum + getAdjustedShiftHandover(shift, bills, vouchers), 0) + getShiftHandoverAmount(remainder);
 }
+
+export async function getUnassignedBills(storeId: string, date: string) {
+  return (await posRequest<{ items: ShiftReviewBill[] }>('unassigned-bills', {}, { storeId, date })).items;
+}
+export async function assignUnassignedBills(storeId: string, input: { id: string; billIds: string[]; reason: string; reviewed: boolean }) {
+  return posRequest<{ updated: boolean; movedBills: number }>('unassigned-bills', { method: 'PATCH', body: JSON.stringify({ storeId, ...input }) });
+}

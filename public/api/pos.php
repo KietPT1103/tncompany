@@ -623,7 +623,7 @@ if ($method === 'POST' && in_array($resource, ['kitchen-jobs', 'bar-jobs'], true
     pos_ensure_category_preparation_print_column();
 }
 
-if (in_array($resource, ['shift-management', 'shift-review'], true)) {
+if (in_array($resource, ['shift-management', 'shift-review', 'unassigned-bills'], true)) {
     require __DIR__ . '/_lib/shift_management_routes.php';
 }
 

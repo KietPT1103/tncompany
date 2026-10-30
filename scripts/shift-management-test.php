@@ -78,3 +78,31 @@ $pdo->exec("UPDATE cash_vouchers SET cancelled_at='2026-10-20 19:00:00' WHERE id
 shift_management_correct($pdo,'cafe',$admin,$correction('transfer-source','2026-10-19 10:00:00'));
 check($pdo->query("SELECT opened_at FROM cashier_shifts WHERE id='transfer-source'")->fetchColumn()==='2026-10-19 10:00:00','Cancelled transfer should not constrain corrections');
 echo "PASS: active transfer day/order correction guards, rollback, same-day correction and cancelled exclusion\n";
+
+// Unassigned invoices may be explicitly assigned outside a closed shift's hours.
+$pdo->exec("INSERT INTO bills VALUES ('late','cafe',NULL,'original','T01',309000,'completed','cash','2026-10-29 22:30:44'),('empty','cafe','','original','T02',100,'completed','transfer','2026-10-29 22:31:00'),('foreign','restaurant',NULL,'original','T03',50,'completed','cash','2026-10-29 22:32:00')");
+$unassigned=shift_management_unassigned($pdo,'cafe','2026-10-29');
+check(array_column($unassigned,'id')===['late','empty'],'Unassigned lookup must include NULL/empty and exclude other stores');
+$assign=['id'=>'correct','billIds'=>['late','empty'],'reason'=>'Late customers after close','reviewed'=>true];
+rejects(fn()=>shift_management_assign($pdo,'cafe',['role'=>'user'],$assign),403);
+rejects(fn()=>shift_management_assign($pdo,'cafe',$admin,array_replace($assign,['reason'=>' '])),422);
+rejects(fn()=>shift_management_assign($pdo,'cafe',$admin,array_replace($assign,['reviewed'=>false])),422);
+rejects(fn()=>shift_management_assign($pdo,'cafe',$admin,array_replace($assign,['id'=>'other'])),404);
+rejects(fn()=>shift_management_assign($pdo,'cafe',$admin,array_replace($assign,['billIds'=>['late','foreign']])),409);
+check($pdo->query("SELECT shift_id FROM bills WHERE id='late'")->fetchColumn()===null,'Partial assignment must roll back');
+$pdo->exec("CREATE TRIGGER fail_assignment_audit BEFORE INSERT ON cashier_shift_corrections BEGIN SELECT RAISE(ABORT,'audit unavailable'); END");
+try { shift_management_assign($pdo,'cafe',$admin,$assign); throw new RuntimeException('Audit failure accepted'); } catch(PDOException $e) {}
+check($pdo->query("SELECT shift_id FROM bills WHERE id='late'")->fetchColumn()===null,'Assignment audit rollback failed');
+$pdo->exec('DROP TRIGGER fail_assignment_audit');
+$before=shift_management_find($pdo,'cafe','correct');
+$result=shift_management_assign($pdo,'cafe',$admin,$assign);
+$after=shift_management_find($pdo,'cafe','correct');
+check($result['movedBills']===2 && (float)$after['total_sales']===309300.0,'Assignment totals incorrect');
+check($before['closed_at']===$after['closed_at'] && $before['closing_cash']===$after['closing_cash'],'Assignment changed actual close');
+$bill=$pdo->query("SELECT * FROM bills WHERE id='late'")->fetch();
+check($bill['shift_id']==='correct' && $bill['cashier_id']==='original' && $bill['created_at']==='2026-10-29 22:30:44','Assignment changed invoice provenance');
+$audit=$pdo->query('SELECT * FROM cashier_shift_corrections ORDER BY id DESC LIMIT 1')->fetch();
+check($audit['reason']===$assign['reason'] && count(json_decode($audit['transfers_json'],true))===2,'Assignment audit missing');
+rejects(fn()=>shift_management_assign($pdo,'cafe',$admin,$assign),409);
+rejects(fn()=>shift_management_unassigned($pdo,'cafe','2026-02-30'),422);
+echo "PASS: unassigned lookup, arbitrary closed target, authorization, conflicts, rollback, totals and audit\n";

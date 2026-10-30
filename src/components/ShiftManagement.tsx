@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { businessDate } from "@/lib/shiftDay";
-import { correctShift, getManagedShifts, getShiftReview, type CashierShift, type ShiftReview } from "@/services/shiftService";
+import { assignUnassignedBills, getUnassignedBills, type ShiftReviewBill, correctShift, getManagedShifts, getShiftReview, type CashierShift, type ShiftReview } from "@/services/shiftService";
 
 const shiftLabel = (shift: CashierShift) => `${shift.shiftType === "single" ? "Ca chung" : `Ca ${shift.shiftType.slice(-1)}`} · ${shift.cashierName}`;
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Không thể tải dữ liệu ca.";
@@ -37,6 +37,13 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
   const [error, setError] = useState("");
   const [targetError, setTargetError] = useState("");
   const [notice, setNotice] = useState("");
+  const [unassignedDate, setUnassignedDate] = useState(businessDate);
+  const [unassigned, setUnassigned] = useState<ShiftReviewBill[]>([]);
+  const [assignmentIds, setAssignmentIds] = useState<string[]>([]);
+  const [assignmentReason, setAssignmentReason] = useState("");
+  const [assignmentReviewed, setAssignmentReviewed] = useState(false);
+  const [assignmentError, setAssignmentError] = useState("");
+  const [loadingUnassigned, setLoadingUnassigned] = useState(false);
   const [revision, setRevision] = useState(0);
 
   useEffect(() => {
@@ -56,7 +63,7 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
     setLoadingReview(true); setError("");
     getShiftReview(storeId, selectedId).then(data => {
       if (!active) return;
-      setReview(data); setOpenedAt(timestampInput(data.shift.openedAt?.seconds));
+      setUnassignedDate(date); setReview(data); setOpenedAt(timestampInput(data.shift.openedAt?.seconds));
       setClosedAt(timestampInput(data.shift.closedAt?.seconds));
       setTargetDate(data.bills[0]?.created_at.slice(0, 10) || date);
     }).catch(error => { if (active) setError(errorText(error)); })
@@ -72,6 +79,30 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
       .catch(error => { if (active) setTargetError(errorText(error)); });
     return () => { active = false; };
   }, [open, storeId, review, targetDate]);
+
+  useEffect(() => {
+    setAssignmentIds([]); setAssignmentReviewed(false); setAssignmentReason("");
+    setUnassigned([]); setAssignmentError("");
+    if (!open || !selectedId || !unassignedDate) return;
+    let active = true;
+    setLoadingUnassigned(true);
+    getUnassignedBills(storeId, unassignedDate).then(rows => { if (active) setUnassigned(rows); })
+      .catch(error => { if (active) setAssignmentError(errorText(error)); })
+      .finally(() => { if (active) setLoadingUnassigned(false); });
+    return () => { active = false; };
+  }, [open, storeId, selectedId, unassignedDate, revision]);
+
+  const assign = async () => {
+    if (!review || !assignmentIds.length || !assignmentReason.trim() || !assignmentReviewed) return;
+    if (!window.confirm(`Gán ${assignmentIds.length} bill chưa có ca vào ${shiftLabel(review.shift)}? Doanh thu ca sẽ được tính lại, kể cả bill ngoài giờ ca.`)) return;
+    setSaving(true); setAssignmentError(""); setNotice("");
+    try {
+      const result = await assignUnassignedBills(storeId, { id: review.shift.id, billIds: assignmentIds, reason: assignmentReason.trim(), reviewed: assignmentReviewed });
+      setNotice(`Đã gán ${result.movedBills} bill vào ${shiftLabel(review.shift)}.`);
+      setRevision(value => value + 1); onChanged();
+    } catch (error) { setAssignmentError(errorText(error)); }
+    finally { setSaving(false); }
+  };
 
   const outside = (value: string) => value < mysqlTime(openedAt) || (!!closedAt && value > mysqlTime(closedAt));
   const outsideBills = review?.bills.filter(bill => outside(bill.created_at)) || [];
@@ -112,7 +143,7 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
           <div className="max-h-96 space-y-2 overflow-auto lg:max-h-[65vh]" aria-label="Danh sách ca">
             {loading && <p className="text-sm">Đang tải ca...</p>}
             {!loading && items.length === 0 && <p className="text-sm text-slate-500">Không có ca trong ngày này.</p>}
-            {items.map(shift => <button key={shift.id} disabled={saving} onClick={() => { setSelectedId(shift.id); setNotice(""); }} className={`w-full rounded-lg border p-3 text-left text-sm ${selectedId === shift.id ? "border-sky-500 bg-sky-50" : "border-slate-200 hover:bg-slate-50"}`}>
+            {items.map(shift => <button key={shift.id} disabled={saving || loadingReview} onClick={() => { setSelectedId(shift.id); setNotice(""); }} className={`w-full rounded-lg border p-3 text-left text-sm ${selectedId === shift.id ? "border-sky-500 bg-sky-50" : "border-slate-200 hover:bg-slate-50"}`}>
               <strong className="block">{shiftLabel(shift)}</strong>
               <span className="block text-xs">Mở: {shiftTime(shift)}</span>
               <span className="block text-xs">Đóng: {displayTime(mysqlTime(timestampInput(shift.closedAt?.seconds)))}</span>
@@ -124,6 +155,23 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
             {!review && !loadingReview && <p className="py-6 text-sm text-slate-500">Chọn ca cần điều chỉnh.</p>}
             {review && <fieldset disabled={saving} className="min-w-0 space-y-4">
               <h3 className="font-semibold">{shiftLabel(review.shift)} · {review.shift.status === "open" ? "Đang mở" : "Đã đóng"}</h3>
+              <section className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-3" aria-label="Gán bill chưa có ca">
+                <h4 className="font-semibold">Bill chưa có ca</h4>
+                <p className="text-sm">Ca nhận: <strong>{shiftLabel(review.shift)} · {shiftTime(review.shift)}</strong>. Cho phép gán cả bill ngoài giờ ca và ca đã đóng. Doanh thu ca được tính lại; giờ tạo bill và tiền bàn giao thực tế giữ nguyên.</p>
+                <label className="block text-sm">Ngày tạo bill chưa có ca<input type="date" className={fieldClass} value={unassignedDate} onChange={event => { if (event.target.value) setUnassignedDate(event.target.value); }} /></label>
+                {loadingUnassigned && <p className="text-sm">Đang tìm bill chưa có ca...</p>}
+                {assignmentError && <p role="alert" className="text-sm text-rose-700">{assignmentError}</p>}
+                <div className="max-h-64 space-y-2 overflow-auto">
+                  {unassigned.map(bill => <label key={bill.id} className="flex items-start gap-2 rounded border bg-white p-2 text-sm">
+                    <input type="checkbox" aria-label={`Gán bill ${bill.id}`} checked={assignmentIds.includes(bill.id)} onChange={event => { setAssignmentIds(current => event.target.checked ? [...current, bill.id] : current.filter(id => id !== bill.id)); setAssignmentReviewed(false); }} />
+                    <span><strong>{bill.id}</strong> · {money(bill.total)} · Bàn {bill.table_number}<span className="block text-xs">{displayTime(bill.created_at)} · {bill.payment_method === "transfer" ? "Chuyển khoản" : "Tiền mặt"}{bill.status === "cancelled" ? " · Đã hủy" : ""}</span></span>
+                  </label>)}
+                  {!loadingUnassigned && !assignmentError && unassigned.length === 0 && <p className="text-sm">Không có bill chưa gắn ca trong ngày này.</p>}
+                </div>
+                <label className="block text-sm">Lý do gán bill *<textarea aria-label="Lý do gán bill" maxLength={1000} rows={2} className={fieldClass} value={assignmentReason} onChange={event => setAssignmentReason(event.target.value)} /></label>
+                <label className="flex items-start gap-2 text-sm"><input type="checkbox" aria-label="Xác nhận gán bill" checked={assignmentReviewed} onChange={event => setAssignmentReviewed(event.target.checked)} /><span>Tôi đã kiểm tra bill và ca nhận, kể cả các bill ngoài giờ ca.</span></label>
+                <Button disabled={loadingUnassigned || !assignmentIds.length || !assignmentReason.trim() || !assignmentReviewed} isLoading={saving} onClick={() => void assign()}>Gán {assignmentIds.length} bill vào ca này</Button>
+              </section>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm">Giờ mở ca<input type="datetime-local" step="1" value={openedAt} className={fieldClass} onChange={event => { setOpenedAt(event.target.value); setReviewed(false); }} /></label>
                 <label className="text-sm">Giờ đóng ca<input type="datetime-local" step="1" value={closedAt} disabled={review.shift.status === "open"} className={fieldClass} onChange={event => { setClosedAt(event.target.value); setReviewed(false); }} />{review.shift.status === "open" && <span className="text-xs text-slate-500">Đóng ca qua quy trình bàn giao tại POS.</span>}</label>
