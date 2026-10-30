@@ -30,6 +30,7 @@ API đọc lịch dùng `payrolls.php?resource=estimates&storeId=...&page=...` v
 Danh sách nhận thêm `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` (cả hai bắt buộc khi lọc) và trả `summary` cho toàn bộ kết quả cùng kỳ. Khi không lọc, `summary` là `null`.
 
 Kiểm tra dữ liệu độc lập: `php scripts/payroll-estimate-history-test.php` (SQLite trong bộ nhớ).
+Quyền cửa hàng: admin và manager được truy cập lịch đã lưu tại mọi cửa hàng, thống nhất với bộ chọn cửa hàng. Các vai trò khác chỉ được truy cập cửa hàng chính hoặc cửa hàng được cấp trong `user_store_access`; vẫn phải có quyền truy cập chức năng. Kiểm tra bằng `php scripts/payroll-estimate-permissions-test.php`.
 Kiểm tra tự lưu trong Chrome: `node scripts/payroll-estimate-autosave.test.mjs` (dùng dữ liệu/API giả lập, không gửi dữ liệu lên máy chủ thật).
 Kiểm tra kỳ tuần/tháng: `node --experimental-strip-types --test scripts/estimate-periods.test.mjs`.
 Kiểm tra xoá bảng vai trò: `node --experimental-strip-types --test scripts/estimate-schedule.test.mjs`.
