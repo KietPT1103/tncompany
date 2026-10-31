@@ -23,7 +23,7 @@ Object.defineProperty(navigator,'clipboard',{value:{write:async items=>{
  if(fail)throw new Error('Permission denied');
  copies.push(await items[0].data['image/png']);
 }}});
-const shifts=Array.from({length:16},(_,i)=>({id:String(i),date:'2026/10/'+String(i+1).padStart(2,'0'),inTime:'2026-10-'+String(i+1).padStart(2,'0')+' 08:00:00',outTime:'2026-10-'+String(i+1).padStart(2,'0')+' 16:00:00',hours:8,isValid:true,isWeekend:false}));
+const shifts=Array.from({length:54},(_,i)=>{const day=String(i%27+1).padStart(2,'0');return {id:String(i),date:'2026/10/'+day,inTime:'2026-10-'+day+' 08:00:00',outTime:'2026-10-'+day+' 16:00:00',hours:8,isValid:true,isWeekend:false}});
 createRoot(document.getElementById('root')).render(<ShiftDetailModal isOpen onClose={()=>{}} onSave={()=>saves++} employeeName="Nguyễn Thị An" employeeId="75" initialShifts={shifts}/>);
 const capture=()=>document.querySelector('button[aria-label="Sao chép ảnh chấm công"]');
 (async()=>{try{
@@ -41,7 +41,7 @@ const capture=()=>document.querySelector('button[aria-label="Sao chép ảnh ch�
  const pngBytes=new Uint8Array(await copies[0].arrayBuffer());
  const png=new DataView(pngBytes.buffer);
  const image=document.createElement('pre');image.id='png';image.textContent=btoa(Array.from(pngBytes,b=>String.fromCharCode(b)).join(''));document.body.append(image);
- check('PNG contains full scrollable content',png.getUint32(20)>=fullHeight*2);
+ check('PNG contains all 54 shifts',png.getUint32(20)>=fullHeight);
  const preview=new Image();const previewUrl=URL.createObjectURL(copies[0]);preview.src=previewUrl;
  for(let i=0;i<100&&!preview.complete;i++)await wait(50);
  check('PNG can be decoded',preview.naturalWidth>0);
@@ -83,11 +83,30 @@ const bundle = await build({
   bundle: true, write: false, format: 'iife', jsx: 'automatic',
   alias: { '@': resolve('src') },
   define: { 'process.env.NODE_ENV': '"production"', 'import.meta.env': '{}' },
+  plugins: [{ name: 'capture-layout-regression', setup(build) {
+    build.onResolve({ filter: /^html2canvas$/ }, () => ({ path: 'capture', namespace: 'regression' }));
+    build.onResolve({ filter: /^html2canvas-real$/, namespace: 'regression' }, () => ({
+      path: resolve('node_modules/html2canvas/dist/html2canvas.esm.js'), namespace: 'file',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'regression' }, () => ({
+      loader: 'js',
+      contents: `import capture from 'html2canvas-real';
+        export default (element, options) => capture(element, { ...options, onclone(doc) {
+          const style = doc.createElement('style');
+          style.textContent = '[data-shift-scroll] > div { display: none; }';
+          doc.head.append(style);
+          return options.onclone(doc);
+        } });`,
+    }));
+  } }],
   logLevel: 'silent',
 });
-for (const width of [390, 1440]) {
+for (const width of [390, 1280, 1440]) {
   const html = join(dir, `test-${width}.html`);
-  writeFileSync(html, `<!doctype html><meta charset="utf-8"><style>${readFileSync(join(dir, 'style.css'), 'utf8')}</style><div id="root"></div><script>${bundle.outputFiles[0].text.replaceAll('</script', '<\\/script')}</script>`);
+  const stylesheet = process.env.SHIFT_CAPTURE_CSS_PATH
+    ? `<link rel="stylesheet" href="${new URL('file:///' + resolve(process.env.SHIFT_CAPTURE_CSS_PATH).replaceAll('\\', '/')).href}">`
+    : `<style>${readFileSync(join(dir, 'style.css'), 'utf8')}</style>`;
+  writeFileSync(html, `<!doctype html><meta charset="utf-8">${stylesheet}<div id="root"></div><script>${bundle.outputFiles[0].text.replaceAll('</script', '<\\/script')}</script>`);
   const run = spawnSync('C:/Program Files/Google/Chrome/Application/chrome.exe', [
     '--headless', '--disable-gpu', '--no-sandbox', '--force-device-scale-factor=1',
     `--user-data-dir=${join(dir, 'profile-'+width)}`, `--window-size=${width},800`,

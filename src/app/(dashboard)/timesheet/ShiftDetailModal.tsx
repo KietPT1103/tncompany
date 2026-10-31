@@ -627,6 +627,16 @@ export default function ShiftDetailModal({
       const imagePromise = (async () => {
         const { default: html2canvas } = await import("html2canvas");
         await document.fonts.ready;
+        const sourceLayout = Array.from(
+          section.querySelectorAll<HTMLElement>("[data-shift-layout]"),
+        ).find((layout) => getComputedStyle(layout).display !== "none");
+        const sourceScroller = section.querySelector<HTMLElement>("[data-shift-scroll]");
+        if (!sourceLayout || !sourceScroller) {
+          throw new Error("Không tìm thấy danh sách ca để chụp.");
+        }
+        const layoutName = sourceLayout.dataset.shiftLayout;
+        const contentHeight = sourceScroller.scrollHeight;
+        const captureScale = Math.min(2, 30000 / (contentHeight + section.offsetHeight));
         // Tailwind's block images break html2canvas's inline font-metrics probe.
         const fontMetricsStyle = document.createElement("style");
         fontMetricsStyle.textContent =
@@ -634,13 +644,20 @@ export default function ShiftDetailModal({
         document.head.append(fontMetricsStyle);
         const canvas = await html2canvas(section, {
           backgroundColor: "#ffffff",
-          scale: 2,
+          scale: captureScale,
+          windowWidth: window.innerWidth,
+          windowHeight: window.innerHeight,
           scrollX: 0,
           scrollY: 0,
           onclone: (doc) => {
             const panel = doc.querySelector<HTMLElement>("[data-shift-capture]");
             const scroller = panel?.querySelector<HTMLElement>("[data-shift-scroll]");
-            if (!panel || !scroller) return;
+            if (!panel || !scroller) throw new Error("Không thể dựng danh sách ca.");
+
+            // Preserve the visible layout even if the cloned viewport changes breakpoints.
+            panel.querySelectorAll<HTMLElement>("[data-shift-layout]").forEach((layout) => {
+              layout.style.display = layout.dataset.shiftLayout === layoutName ? "block" : "none";
+            });
 
             Object.assign(panel.style, {
               height: "auto",
@@ -650,12 +667,18 @@ export default function ShiftDetailModal({
               flexShrink: "0",
             });
             Object.assign(scroller.style, {
-              height: "auto",
+              height: `${contentHeight}px`,
               maxHeight: "none",
               overflow: "visible",
               flex: "none",
             });
             scroller.scrollTop = 0;
+            const capturedLayout = panel.querySelector<HTMLElement>(
+              `[data-shift-layout="${layoutName}"]`,
+            );
+            if (shifts.length > 0 && (!capturedLayout || capturedLayout.offsetHeight === 0)) {
+              throw new Error("Danh sách ca bị ẩn trong ảnh chụp.");
+            }
             const header = panel.querySelector("thead");
             if (header) header.style.position = "static";
           },
@@ -827,7 +850,7 @@ export default function ShiftDetailModal({
         </div>
 
         <div data-shift-scroll className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="hidden xl:block">
+          <div data-shift-layout="desktop" className="hidden xl:block">
             <table className="w-full table-fixed border-collapse text-left text-sm">
               <colgroup>
                 <col className="w-10" />
@@ -1009,7 +1032,7 @@ export default function ShiftDetailModal({
               </tbody>
             </table>
           </div>
-          <div className="bg-slate-50 px-3 pb-3 sm:px-4 xl:hidden">
+          <div data-shift-layout="mobile" className="bg-slate-50 px-3 pb-3 sm:px-4 xl:hidden">
             {shifts.length > 0 ? renderMobileInsertShift(0) : null}
             {shifts.map((shift, index) => {
               const hours = calculateHours(shift.inTime, shift.outTime);
