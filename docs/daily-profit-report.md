@@ -42,6 +42,12 @@ không lẫn dữ liệu; tổng chi tại quầy tự cập nhật theo phiếu
 
 ## Kỳ báo cáo và lịch sử
 
+**Chi phí khác trong ngày** nhập theo từng khoản bằng nút **Thêm khoản chi**, gồm tên và số tiền; có thể xoá từng dòng. Tổng tự cộng vào chi phí và lợi nhuận, không nhập tổng riêng. Tên không được trống (tối đa 200 ký tự), tiền không âm; cần nhập đủ trước khi lưu, tối đa 100 khoản/ngày. Chi tiết được lưu trong `inputs_json` và snapshot lịch sử, hiển thị bên dưới tổng chi phí khác trong bảng tính và lịch sử. Không cần thay đổi cấu trúc cơ sở dữ liệu. Dữ liệu cũ chỉ có tổng `other` tiếp tục giữ số tiền và hiện thành dòng **Chi phí khác đã nhập trước đây** để sửa.
+
+Kiểm thử thao tác nhập, xoá, cộng tổng, lưu/tải lại và chi tiết lịch sử trong Chrome: `node scripts/profit-other-expenses.test.mjs`.
+
+Lương nhân viên một ngày lấy từ lịch ước lượng đã lưu: nhân viên theo giờ tính theo giờ phân ca, nhân viên lương tháng tính lương tháng ÷ 30. Một nhân viên lương tháng chỉ tính một lần/ngày dù có nhiều ca hoặc nhiều dòng vai trò. Dùng lương tháng (hoặc `fixed_salary` của bản cũ) trong lịch đã lưu, không cần lưu lại lịch cũ chỉ để cập nhật cách tính. Cả báo cáo ngày và kỳ đều dùng công thức này; bản lịch mới nhất áp dụng cho ngày đó vẫn được ưu tiên.
+
 Hai tab Tính lợi nhuận và Lịch sử nằm ngay tại `/admin/reports/profit`, dùng cùng kiểu tab như trang ước lượng lương.
 Chọn một ngày, tuần (thứ Hai đến Chủ nhật), tháng lịch hoặc khoảng ngày tùy chọn, tối đa 366 ngày.
 Ngày đại diện chọn tuần/tháng; chi phí đã lưu từng ngày tự dùng lại. Đổi kỳ hoặc tab không mất bản nhập

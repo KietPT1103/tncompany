@@ -5,6 +5,15 @@ import { calculateDailyProfit, emptyProfitInputs, parseMoneyInput, formatProfitM
 const data = { revenue: 1000000, billCount: 10, sales: [{ key: "coffee", code: "coffee", name: "Cà phê", quantity: 10, unitCost: 10000 }], vouchers: [{ id: "v1", code: "PC1", category: "Chi tại quầy", amount: 50000 }] };
 const complete = () => ({ ...emptyProfitInputs(), salary: 200000, electricity: 0, water: 0, other: 100000 });
 
+test('itemized other expenses determine the total and incomplete items block saving', () => {
+  const inputs = {...complete(), other:999999, otherExpenses:[{id:'snow',name:'Dung dịch tuyết',amount:50000},{id:'bubbles',name:'Dung dịch bong bóng',amount:75000}]};
+  assert.equal(calculateDailyProfit(data,inputs).enteredCosts,325000);
+  assert.equal(calculateDailyProfit(data,{...inputs,otherExpenses:[]}).enteredCosts,200000);
+  for (const item of [{id:'a',name:'',amount:5000},{id:'a',name:'Tuyết',amount:null},{id:'a',name:'Tuyết',amount:-1}]) {
+    assert.equal(calculateDailyProfit(data,{...inputs,otherExpenses:[item]}).complete,false);
+  }
+});
+
 test("money inputs display Vietnamese grouping without changing the saved amount", () => {
   for (const [raw, display] of [['', ''], ['0', '0'], ['1000', '1.000'], ['1000000', '1.000.000'], ['1000.25', '1.000,25'], ['1000000000000', '1.000.000.000.000']]) {
     assert.equal(formatProfitMoneyInput(raw), display);

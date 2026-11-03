@@ -6,6 +6,7 @@ export type ProfitInputs = {
   thienExpense: number | null; ingredientInventory: number | null; debt: number | null;
   legacyUtilities?: number | null;
   costOverrides: Record<string, number | null>;
+  otherExpenses?: { id: string; name: string; amount: number | null }[];
 };
 export const PROFIT_FIELDS = [
   { key: "salary", label: "Lương nhân viên (1 ngày)" },
@@ -20,8 +21,15 @@ export const PROFIT_FIELDS = [
 export const OPTIONAL_PROFIT_FIELDS = ['thienExpense', 'ingredientInventory', 'debt'] as const;
 export const emptyProfitInputs = (): ProfitInputs => ({ salary: null, electricity: 0, water: 0, other: 0, marketing: 0, thienExpense: 0, ingredientInventory: 0, debt: 0, costOverrides: {} });
 export const validProfitAmount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1e12;
+export function profitOtherExpenses(inputs: ProfitInputs) {
+  return inputs.otherExpenses ?? (inputs.other !== 0 ? [{id:'legacy-other', name:'Chi phí khác đã nhập trước đây', amount:inputs.other}] : []);
+}
 export function profitInputsForSource(data: ProfitData, inputs: ProfitInputs): ProfitInputs {
   inputs = { ...inputs };
+  if (inputs.otherExpenses) {
+    inputs.other = inputs.otherExpenses.every(item => validProfitAmount(item.amount))
+      ? inputs.otherExpenses.reduce((sum, item) => sum + item.amount!, 0) : null;
+  }
   for (const key of OPTIONAL_PROFIT_FIELDS) if (inputs[key] === undefined) inputs[key] = 0;
   return Object.prototype.hasOwnProperty.call(data, 'salaryEstimate')
     ? { ...inputs, salary: data.salaryEstimate?.amount ?? null }
@@ -44,6 +52,9 @@ export function normalizeProfitMoneyInput(display: string): string {
 export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
   inputs = profitInputsForSource(data, inputs);
   const missingFields: string[] = [];
+  if (inputs.otherExpenses?.some(item => !item.name.trim() || item.name.trim().length > 200 || !validProfitAmount(item.amount)) || (inputs.otherExpenses?.length ?? 0) > 100) {
+    missingFields.push('Tên và số tiền của từng chi phí khác');
+  }
   let enteredCosts = 0;
   for (const { key, label } of PROFIT_FIELDS) {
     if (!validProfitAmount(inputs[key])) missingFields.push(label);

@@ -4,6 +4,10 @@ require __DIR__ . '/../public/api/_lib/daily_profit.php';
 function check(bool $condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
 function rejected(callable $action): void { try { $action(); } catch (InvalidArgumentException $e) { return; } throw new RuntimeException('Expected invalid input to be rejected'); }
 $inputs = ['salary'=>200000,'electricity'=>0,'water'=>0,'other'=>100000,'marketing'=>0,'costOverrides'=>[]];
+$itemized = [...$inputs,'other'=>999999,'otherExpenses'=>[['id'=>'snow','name'=>'Dung dịch tuyết','amount'=>50000],['id'=>'bubbles','name'=>'Dung dịch bong bóng','amount'=>75000]]];
+check(daily_profit_validate_inputs($itemized)['other'] === 125000.0, 'Itemized costs override client total');
+check(daily_profit_validate_inputs([...$itemized,'otherExpenses'=>[]])['other'] === 0.0, 'Empty item list means zero cost');
+foreach ([['id'=>'a','name'=>'','amount'=>1],['id'=>'a','name'=>'Tuyết','amount'=>-1],['id'=>'a','name'=>'Tuyết','amount'=>null]] as $item) rejected(fn()=>daily_profit_validate_inputs([...$itemized,'otherExpenses'=>[$item]]));
 check(daily_profit_validate_inputs($inputs)['marketing'] === 0.0, 'Explicit zero is accepted');
 foreach (['thienExpense','ingredientInventory','debt'] as $field) {
   check(daily_profit_validate_inputs($inputs)[$field] === 0.0, 'New amount defaults to zero for older clients');
@@ -38,9 +42,9 @@ $pdo->exec('CREATE TABLE bills (id TEXT, store_id TEXT, status TEXT, created_at 
 $pdo->exec('CREATE TABLE bill_items (bill_id TEXT, menu_id TEXT, name TEXT, quantity REAL)');
 $pdo->exec('CREATE TABLE products (id TEXT, store_id TEXT, product_code TEXT, cost REAL, has_cost INTEGER)');
 $pdo->exec('CREATE TABLE payrolls (id TEXT,store_id TEXT,name TEXT,source TEXT,period_start TEXT,period_end TEXT,created_at TEXT,updated_at TEXT)');
-$pdo->exec('CREATE TABLE payroll_entries (payroll_id TEXT,hourly_rate REAL,salary_type TEXT,shifts_json TEXT)');
+$pdo->exec('CREATE TABLE payroll_entries (payroll_id TEXT,hourly_rate REAL,salary_type TEXT,shifts_json TEXT,employee_id TEXT,monthly_salary REAL DEFAULT 0,fixed_salary REAL DEFAULT 0)');
 $pdo->exec("INSERT INTO payrolls VALUES ('estimate','cafe','Ước tính lương 07-10 - 08-10','timesheet_import','2026-10-07','2026-10-08','2026-10-08',NULL)");
-$stmt = $pdo->prepare('INSERT INTO payroll_entries VALUES (?,?,?,?)');
+$stmt = $pdo->prepare('INSERT INTO payroll_entries (payroll_id,hourly_rate,salary_type,shifts_json) VALUES (?,?,?,?)');
 $stmt->execute(['estimate',4,'hourly',json_encode([['date'=>'2026-10-07','hours'=>5]])]);
 $pdo->exec('CREATE TABLE cash_vouchers (id TEXT, code TEXT, store_id TEXT, voucher_type TEXT, amount REAL, category TEXT, note TEXT, cancelled_at TEXT, include_in_cash_flow INTEGER, happened_at TEXT)');
 $pdo->exec("INSERT INTO bills VALUES ('b1','cafe','completed','2026-10-07 00:00:00',100), ('b2','cafe','completed','2026-10-07 23:59:59',200), ('cancel','cafe','cancelled','2026-10-07 15:00:00',999), ('next','cafe','completed','2026-10-08 00:00:00',888), ('other','restaurant','completed','2026-10-07 12:00:00',777)");
@@ -103,8 +107,14 @@ check(profit_period_snapshot(profit_period_sources($pdo,'cafe','2026-10-07','202
 rejected(fn()=>profit_period_snapshot(profit_period_sources($pdo,'cafe','2026-10-09','2026-10-09'),['2026-10-09'=>$zero]));
 $pdo->exec("INSERT INTO payrolls VALUES ('latest','cafe','New estimate','payroll_estimate','2026-10-07','2026-10-07','2026-10-09',NULL),('other-estimate','restaurant','Other','payroll_estimate','2026-10-07','2026-10-08','2026-10-10',NULL),('actual','cafe','Actual payroll','timesheet_import','2026-10-07','2026-10-08','2026-10-11',NULL)");
 $stmt->execute(['latest',7,'hourly',json_encode([['date'=>'2026/10/07','hours'=>5],['date'=>'2026-10-06','hours'=>10]])]);
-$stmt->execute(['latest',1000,'monthly',json_encode([['date'=>'2026-10-07','hours'=>5]])]);
-check(profit_source_salary($pdo,'cafe',['2026-10-07','2026-10-08'])['2026-10-07']['amount'] === 35.0, 'Latest overlapping estimate replaces earlier version; monthly matches estimate UI and other dates/stores/actual payroll excluded');
+$stmt->execute(['latest',1000,'monthly',json_encode([['date'=>'2026-10-07','hours'=>5],['date'=>'2026-10-07','hours'=>6]])]);
+$pdo->exec("UPDATE payroll_entries SET employee_id='fulltime-a',monthly_salary=9000000 WHERE payroll_id='latest' AND salary_type='monthly'");
+$stmt->execute(['latest',1000,'fixed',json_encode([['date'=>'2026-10-07','hours'=>5]])]);
+$pdo->exec("UPDATE payroll_entries SET employee_id='fulltime-b',fixed_salary=6000000 WHERE payroll_id='latest' AND salary_type='fixed'");
+check(profit_source_salary($pdo,'cafe',['2026-10-07','2026-10-08'])['2026-10-07']['amount'] === 500035.0, 'Latest estimate includes each monthly employee once per day, including legacy fixed salary');
+$pdo->exec("INSERT INTO payroll_entries SELECT payroll_id,hourly_rate,salary_type,shifts_json,employee_id,monthly_salary,fixed_salary FROM payroll_entries WHERE employee_id='fulltime-a'");
+check(profit_source_salary($pdo,'cafe',['2026-10-07'])['2026-10-07']['amount'] === 500035.0, 'Monthly employee repeated across role entries still costs one daily salary');
+check(profit_period_sources($pdo,'cafe','2026-10-07','2026-10-08')['2026-10-07']['salaryEstimate']['amount'] === 500035.0, 'Period report receives fulltime costs');
 $pdo->exec('CREATE TABLE ingredients (id TEXT,store_id TEXT,cost REAL,conversion_source_ingredient_id TEXT,conversion_input_quantity REAL,conversion_output_quantity REAL)');
 $pdo->exec('CREATE TABLE product_ingredients (store_id TEXT,product_id TEXT,ingredient_id TEXT,quantity REAL)');
 $pdo->exec('CREATE TABLE ingredient_components (parent_ingredient_id TEXT,component_ingredient_id TEXT,input_quantity REAL)');
@@ -117,3 +127,10 @@ check($costs['recipe-code']['unitCost'] === 12.0 && $costs['recipe-code']['costS
 check($costs['incomplete']['unitCost'] === null && $costs['cyclic']['unitCost'] === null && $costs['isolated']['unitCost'] === null, 'Unknown costs, recipe cycles and foreign-store ingredients cannot silently become zero');
 check($costs['explicit-zero']['unitCost'] === 0.0 && $costs['coffee']['costSource'] === 'catalog', 'Explicit zero and existing catalog costs remain valid');
 echo "PASS automatic sources: daily salary estimates and recipe costs\n";
+$itemReport = profit_period_save($pdo,'cafe','2026-10-07','2026-10-07',['2026-10-07'=>[...$itemized,'costOverrides'=>['missing'=>0]]],'test');
+$itemDetail = profit_history($pdo,'cafe',1,$itemReport['id']);
+check($itemDetail['snapshot']['days'][0]['inputs']['otherExpenses'][1]['name'] === 'Dung dịch bong bóng', 'History preserves item names');
+check($itemDetail['snapshot']['days'][0]['result']['other'] === 125000, 'History total uses itemized sum');
+check(daily_profit_load($pdo,'cafe','2026-10-07')['inputs']['otherExpenses'][0]['amount'] === 50000, 'Reload preserves item amounts');
+rejected(fn()=>daily_profit_validate_inputs([...$itemized,'otherExpenses'=>[$itemized['otherExpenses'][0],$itemized['otherExpenses'][0]]]));
+echo "PASS itemized other costs: validated sums, daily persistence and history detail\n";

@@ -23,6 +23,7 @@ import {
   type ProfitPreset,
 } from "./profitPeriod";
 import { AmountInput } from "./AmountInput";
+import { OtherExpensesEditor, OtherExpensesDetails } from "./OtherExpenses";
 
 export const profitMoney = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) + " đ";
@@ -412,10 +413,10 @@ export function ProfitCalculation({
                           <a className="font-semibold text-emerald-800 underline" href={`/admin/payroll-estimate${selected.source.salaryEstimate ? `?payrollId=${encodeURIComponent(selected.source.salaryEstimate.payrollId)}` : ""}`}>Xem ước lượng lương</a>
                         </p>
                       </div>
-                      {PROFIT_FIELDS.filter((field) => field.key !== "salary").map((field) => (
+                      {PROFIT_FIELDS.filter((field) => field.key !== "salary" && field.key !== "other" && field.key !== "debt").map((field) => (
                         <div
                           key={field.key}
-                          className={field.key === "debt" ? "min-w-0 sm:col-span-2" : "min-w-0"}
+                          className="min-w-0"
                         >
                           <label
                             htmlFor={`profit-${selected.date}-${field.key}`}
@@ -441,7 +442,12 @@ export function ProfitCalculation({
                           />
                         </div>
                       ))}
+                    <div className="min-w-0">
+                      <label htmlFor={`profit-${selected.date}-debt`} className="mb-1.5 block text-sm font-semibold">Công nợ</label>
+                      <AmountInput key={`${selected.date}:debt`} id={`profit-${selected.date}-debt`} label={`Công nợ ngày ${profitDate(selected.date)}`} value={selected.inputs.debt} required={false} onChange={value => edit(selected.date,{...selected.inputs,debt:value})}/>
                     </div>
+                    </div>
+                    <OtherExpensesEditor key={selected.date} date={selected.date} inputs={selected.inputs} onChange={value => edit(selected.date,value)}/>
                     {selected.inputs.legacyUtilities != null && (
                       <p className="mt-4 rounded-sm bg-amber-50 p-3 text-xs text-amber-900">
                         Ngày này trước đây lưu điện/nước gộp:{" "}
@@ -520,7 +526,7 @@ export function ProfitCalculation({
                       ).map((key) => (
                         <div
                           key={key}
-                          className="flex min-w-0 justify-between gap-3 py-2.5"
+                          className="flex min-w-0 flex-wrap justify-between gap-3 py-2.5"
                         >
                           <dt>
                             −{" "}
@@ -534,6 +540,7 @@ export function ProfitCalculation({
                               ? "Chưa nhập"
                               : profitMoney(selected.inputs[key]!)}
                           </dd>
+                          {key === "other" && <dd className="w-full"><OtherExpensesDetails inputs={selected.inputs}/></dd>}
                         </div>
                       ))}
                       <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">

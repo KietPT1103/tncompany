@@ -1,0 +1,57 @@
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+const dir=mkdtempSync(join(process.env.PROFIT_EXPENSE_OUTPUT_DIR || tmpdir(),'profit-other-expenses-'));
+writeFileSync(join(dir,'input.css'),'@tailwind base; @tailwind utilities;');
+const css=spawnSync(process.execPath,['node_modules/tailwindcss/lib/cli.js','-i',join(dir,'input.css'),'-o',join(dir,'style.css')],{encoding:'utf8'});
+assert.equal(css.status,0,css.stderr);
+const fixture=`
+import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
+import {ProfitCalculation} from './src/app/(dashboard)/reports/profit/ProfitCalculation.tsx';
+import {ProfitHistory} from './src/app/(dashboard)/reports/profit/ProfitHistory.tsx';
+function App(){const [revision,setRevision]=useState(0);return <><ProfitCalculation storeId="cafe" onSaved={()=>setRevision(v=>v+1)}/><ProfitHistory storeId="cafe" active={true} revision={revision}/></>}
+createRoot(document.getElementById('root')).render(<App/>);
+const wait=ms=>new Promise(r=>setTimeout(r,ms));const checks=[];const check=(name,ok)=>checks.push([name,!!ok]);
+const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===text);
+const change=async(el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));await wait(60)};
+(async()=>{try{
+await wait(400);
+check('legacy aggregate cost remains editable',document.querySelector('input[id^="other-name-"]')?.value==='Chi phí khác đã nhập trước đây');
+document.querySelector('[aria-label="Xóa khoản chi 1"]').click();await wait(60);
+button('Thêm khoản chi').click();await wait(60);
+check('incomplete item disables save',button('Lưu báo cáo').disabled);
+await change(document.querySelector('input[id^="other-name-"]'),'Dung dịch tuyết');
+await change(document.querySelector('input[id^="other-amount-"]'),'50.000');
+button('Thêm khoản chi').click();await wait(60);
+await change(document.querySelectorAll('input[id^="other-name-"]')[1],'Dung dịch bong bóng');
+await change(document.querySelectorAll('input[id^="other-amount-"]')[1],'75.000');
+check('two valid items enable saving',!button('Lưu báo cáo').disabled);
+const details=document.querySelector('[aria-label="Chi tiết chi phí khác"]');
+check('calculation lists both item names and amounts',details?.textContent.includes('Dung dịch tuyết')&&details?.textContent.includes('75.000 đ'));
+check('sum is shown',document.querySelector('[aria-label="Chi phí khác trong ngày"]').textContent.includes('125.000 đ'));
+button('Lưu báo cáo').click();await wait(300);
+check('saves named items',api.saved.otherExpenses.length===2&&api.saved.otherExpenses[1].amount===75000);
+button('Làm mới').click();await wait(250);
+check('reload restores both named costs',document.querySelectorAll('input[id^="other-name-"]')[1]?.value==='Dung dịch bong bóng');
+button('Xem chi tiết').click();await wait(200);
+check('history shows itemized costs',document.querySelectorAll('[aria-label="Chi tiết chi phí khác"]').length>=2);
+document.querySelector('[aria-label="Xóa khoản chi 2"]').click();await wait(80);
+check('removing item recalculates total',document.querySelector('[aria-label="Chi phí khác trong ngày"]').textContent.includes('50.000 đ'));
+}catch(e){check(e.stack,false)}const pre=document.createElement('pre');pre.id='result';pre.textContent=JSON.stringify(checks);document.body.append(pre)})();
+`;
+const mock=`import {emptyProfitInputs,profitInputsForSource,calculateDailyProfit} from '@/app/(dashboard)/reports/profit/dailyProfit';
+const source={revenue:1000000,billCount:1,sales:[],vouchers:[],salaryEstimate:{amount:0,payrollId:'p',name:'Lịch'}};
+const api=window.api={saved:{...emptyProfitInputs(),other:10000},report:null,detail:null};
+const day=date=>({date,source,saved:{inputs:api.saved,updatedAt:'2026-11-03'}});
+export const getProfitPeriod=async(s,start)=>({days:[day(start)],report:null});
+export const saveProfitPeriod=async(s,start,end,inputs)=>{api.saved=profitInputsForSource(source,inputs[start]);const calc=calculateDailyProfit(source,api.saved);const totals={...api.saved,revenue:source.revenue,totalCosts:calc.totalCosts,profit:calc.profit};api.report={id:'r',startDate:start,endDate:end,savedAt:'2026-11-03T12:00:00+07:00',totals};api.detail={...api.report,snapshot:{totals,days:[{date:start,inputs:api.saved,result:totals}]}};return {days:[day(start)],report:api.report}};
+export const getProfitHistory=async()=>({rows:api.report?[api.report]:[],total:api.report?1:0});export const getProfitHistoryDetail=async()=>api.detail;`;
+const bundled=await build({stdin:{contents:fixture,resolveDir:process.cwd(),loader:'jsx'},bundle:true,write:false,jsx:'automatic',format:'iife',alias:{'@':resolve('src')},define:{'process.env.NODE_ENV':'"production"','import.meta.env':'{}'},plugins:[{name:'mock-profit',setup(b){b.onResolve({filter:/^@\/services\/dailyProfitService$/},()=>({path:'service',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:mock,loader:'js',resolveDir:process.cwd()}));}}],logLevel:'silent'});
+const html=join(dir,'test.html');writeFileSync(html,`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${readFileSync(join(dir,'style.css'),'utf8')}</style><div id="root"></div><script>${bundled.outputFiles[0].text.replaceAll('</script','<\\/script')}</script>`);
+const run=spawnSync('C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless','--disable-gpu','--no-sandbox',`--user-data-dir=${join(dir,'profile')}`,'--window-size=1280,1400',`--screenshot=${join(dir,'screen.png')}`,'--virtual-time-budget=6000','--dump-dom',new URL('file:///'+html.replaceAll('\\','/')).href],{encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
+assert.equal(run.status,0,run.stderr);const result=run.stdout.match(/<pre id="result">([^<]+)<\/pre>/);assert.ok(result,'Browser must finish: '+run.stdout.slice(-1500));const checks=JSON.parse(result[1].replaceAll('&amp;','&').replaceAll('&gt;','>').replaceAll('&lt;','<'));console.log(checks);assert.ok(checks.every(([,ok])=>ok));
+console.log('Screenshot: '+join(dir,'screen.png'));

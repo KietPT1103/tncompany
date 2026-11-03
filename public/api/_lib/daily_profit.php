@@ -18,6 +18,20 @@ function daily_profit_money($value, string $label): float
 function daily_profit_validate_inputs(array $body): array
 {
     $result = [];
+    if (array_key_exists('otherExpenses', $body)) {
+        if (!is_array($body['otherExpenses']) || !array_is_list($body['otherExpenses']) || count($body['otherExpenses']) > 100) throw new InvalidArgumentException('Danh sách chi phí khác không hợp lệ (tối đa 100 khoản).');
+        $result['otherExpenses'] = []; $ids = []; $total = 0;
+        foreach ($body['otherExpenses'] as $expense) {
+            if (!is_array($expense) || !is_string($expense['id'] ?? null) || !is_string($expense['name'] ?? null)) throw new InvalidArgumentException('Chi phí khác cần tên và số tiền.');
+            $id = trim($expense['id']); $name = trim($expense['name']);
+            if ($id === '' || strlen($id) > 100 || isset($ids[$id]) || $name === '' || mb_strlen($name) > 200) throw new InvalidArgumentException('Tên chi phí khác không được trống hoặc dài quá 200 ký tự; mã khoản chi không được trùng.');
+            $ids[$id] = true;
+            $amount = daily_profit_money($expense['amount'] ?? null, $name);
+            $result['otherExpenses'][] = ['id'=>$id,'name'=>$name,'amount'=>$amount];
+            $total += $amount;
+        }
+        $body['other'] = $total;
+    }
     foreach (['salary'=>'lương một ngày', 'electricity'=>'tiền điện', 'water'=>'tiền nước', 'other'=>'chi phí khác trong ngày'] as $key=>$label) {
         $result[$key] = daily_profit_money($body[$key] ?? null, $label);
     }

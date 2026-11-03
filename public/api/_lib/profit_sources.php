@@ -11,7 +11,7 @@ function profit_source_table_exists(PDO $pdo, string $table): bool
     return (bool)$stmt->fetchColumn();
 }
 
-// The estimate page prices scheduled hours at the saved hourly rate; monthly staff contribute 0 there.
+// Match the estimate page: hourly shifts plus one monthly salary / 30 per employee/day.
 function profit_source_salary(PDO $pdo, string $store, array $dates): array
 {
     $result = array_fill_keys($dates, null);
@@ -24,21 +24,29 @@ function profit_source_salary(PDO $pdo, string $store, array $dates): array
     $reports = $stmt->fetchAll();
     if (!$reports) return $result;
     $ids = array_column($reports, 'id');
-    $entries = $pdo->prepare('SELECT payroll_id,hourly_rate,salary_type,shifts_json FROM payroll_entries WHERE payroll_id IN ('.implode(',', array_fill(0,count($ids),'?')).')');
+    $entries = $pdo->prepare('SELECT payroll_id,employee_id,hourly_rate,salary_type,monthly_salary,fixed_salary,shifts_json FROM payroll_entries WHERE payroll_id IN ('.implode(',', array_fill(0,count($ids),'?')).')');
     $entries->execute($ids);
-    $amounts = []; $invalid = [];
-    foreach ($entries->fetchAll() as $entry) {
+    $amounts = []; $invalid = []; $monthlyDays = [];
+    foreach ($entries->fetchAll() as $entryIndex => $entry) {
         $shifts = json_decode((string)$entry['shifts_json'], true);
         if (!is_array($shifts)) { $invalid[$entry['payroll_id']] = true; continue; }
-        $rate = in_array($entry['salary_type'], ['monthly','fixed'], true) ? 0 : (float)$entry['hourly_rate'];
+        $isMonthly = in_array($entry['salary_type'], ['monthly','fixed'], true);
+        $rate = $isMonthly ? (float)($entry['monthly_salary'] ?: $entry['fixed_salary']) / 30 : (float)$entry['hourly_rate'];
+        $employeeKey = (string)($entry['employee_id'] ?: 'row:'.$entryIndex);
         foreach ($shifts as $shift) {
             if (!is_array($shift)) { $invalid[$entry['payroll_id']] = true; continue; }
+            if (isset($shift['isValid']) && !$shift['isValid']) continue;
             $date = str_replace('/', '-', (string)($shift['date'] ?? ''));
             $hours = $shift['hours'] ?? null;
             if (!is_numeric($hours) || (float)$hours < 0 || !is_finite((float)$hours) || $rate < 0 || !is_finite($rate)) {
                 $invalid[$entry['payroll_id']] = true; continue;
             }
-            $amounts[$entry['payroll_id']][$date] = ($amounts[$entry['payroll_id']][$date] ?? 0) + (float)$hours*$rate;
+            if ($isMonthly) {
+                if ((float)$hours === 0.0 || isset($monthlyDays[$entry['payroll_id']][$employeeKey][$date])) continue;
+                $monthlyDays[$entry['payroll_id']][$employeeKey][$date] = true;
+            }
+            $amount = $isMonthly ? $rate : (float)$hours*$rate;
+            $amounts[$entry['payroll_id']][$date] = ($amounts[$entry['payroll_id']][$date] ?? 0) + $amount;
         }
     }
     foreach ($dates as $date) foreach ($reports as $report) {
