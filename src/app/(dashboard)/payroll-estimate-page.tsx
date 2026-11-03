@@ -251,6 +251,12 @@ function getEmployeeKey(employee: Employee) {
   return employee.id || employee.employeeCode || employee.name;
 }
 
+function getEstimateEmployeeStoreLabel(employee: Employee) {
+  if (employee.storeId === "cafe") return "Cafe";
+  if (employee.storeId === "restaurant") return "Bếp / Lẩu";
+  return "";
+}
+
 function getCurrentWeekRange() {
   const today = new Date();
   const start = getWeekStart(today);
@@ -848,6 +854,7 @@ export default function SalaryEstimatePage() {
   const { user, loading } = useAuth();
   const canViewMonthlyDailySalary = user?.role === "admin";
   const { storeId, storeName } = useStore();
+  const canScheduleAcrossCafeAndKitchen = storeId === "cafe" || storeId === "restaurant";
   const router = useRouter();
   const location = useLocation();
 
@@ -1074,10 +1081,12 @@ export default function SalaryEstimatePage() {
       employees
         .filter(
           (employee) =>
-            getEmployeeRoleNames(employee).some((role) => estimateRoles.includes(role)),
+            getEmployeeRoleNames(employee).some((role) =>
+              canScheduleAcrossCafeAndKitchen ? isVisibleEstimateRole(role) : estimateRoles.includes(role),
+            ),
         )
         .sort((left, right) => left.name.localeCompare(right.name, "vi")),
-    [employees, estimateRoles],
+    [employees, estimateRoles, canScheduleAcrossCafeAndKitchen],
   );
 
   const queryPayrollId = useMemo(() => {
@@ -1268,7 +1277,7 @@ export default function SalaryEstimatePage() {
   );
 
   const activeCellEmployees = activeCell
-    ? employeesByRole[activeCell.role] || []
+    ? canScheduleAcrossCafeAndKitchen ? supportedEmployees : employeesByRole[activeCell.role] || []
     : [];
   const activeSelection = activeCell
     ? schedule[
@@ -1289,7 +1298,9 @@ export default function SalaryEstimatePage() {
     );
   }).sort((left, right) =>
     Number(activeSelection.includes(getEmployeeKey(right))) -
-    Number(activeSelection.includes(getEmployeeKey(left))),
+    Number(activeSelection.includes(getEmployeeKey(left))) ||
+    Number(getEmployeeRoleNames(right).includes(activeCell?.role || "")) -
+    Number(getEmployeeRoleNames(left).includes(activeCell?.role || "")),
   );
   const canAccessPayroll = hasPermission(user, "payroll.access");
 
@@ -2011,6 +2022,7 @@ export default function SalaryEstimatePage() {
                                 >
                                   {employee.name}
                                 </span>
+                                {canScheduleAcrossCafeAndKitchen && <span className="shrink-0 text-xs font-normal text-slate-500">{getEstimateEmployeeStoreLabel(employee)}</span>}
                                 {selected ? (
                                   <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
                                     Đã chọn
@@ -2274,6 +2286,7 @@ export default function SalaryEstimatePage() {
                             <span className="block break-words text-sm font-semibold text-slate-900 sm:truncate" title={employee.name}>
                               {employee.name}
                             </span>
+                            {canScheduleAcrossCafeAndKitchen && <div className="mt-0.5 text-xs text-slate-500">{getEstimateEmployeeStoreLabel(employee)}</div>}
                             {!fixedSalary ? (
                               <div className="mt-0.5 truncate text-xs text-slate-500">
                                 {formatCurrency(employee.hourlyRate || 0)}/giờ

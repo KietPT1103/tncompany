@@ -11,7 +11,7 @@ for (const [storeId, userRole] of [['cafe','admin'], ['restaurant','admin'], ['c
     '@/context/AuthContext': `export const useAuth=()=>({user:{id:'test',role:${JSON.stringify(userRole)},permissions:['payroll_estimate.access']},loading:false});`,
     '@/context/StoreContext': `export const useStore=()=>({storeId:${JSON.stringify(storeId)},storeName:'Test'});`,
     '@/services/employeeRoles': `export const getEmployeeRoles=async store=>[{name:store==='restaurant'?'Bếp':'Thu ngân'},{name:'Leader'},{name:'MKT'}];`,
-    '@/services/employees': `export const getEmployees=async store=>[{id:store+'-e',storeId:store,employeeCode:'001',name:store+' employee',role:store==='restaurant'?'Bếp':'Thu ngân',hourlyRate:store==='restaurant'?30000:25000},{id:store+'-monthly',storeId:store,employeeCode:'002',name:store+' monthly employee',role:store==='restaurant'?'Bếp':'Thu ngân',salaryType:'monthly',monthlySalary:9000000,hourlyRate:99999}];export const getEmployeeRoleNames=e=>[e.role];`,
+    '@/services/employees': `export const getEmployees=async store=>[{id:store+'-e',storeId:store,employeeCode:'001',name:store+' employee',role:store==='restaurant'?'Bếp':'Thu ngân',hourlyRate:store==='restaurant'?30000:25000},{id:store+'-monthly',storeId:store,employeeCode:'002',name:store+' monthly employee',role:store==='restaurant'?'Bếp':'Thu ngân',salaryType:'monthly',monthlySalary:9000000,hourlyRate:99999},{id:store+'-other-role',storeId:store,employeeCode:'003',name:store+' other role employee',role:store==='restaurant'?'Phụ bếp':'Pha chế',hourlyRate:20000},{id:store+'-marketing',storeId:store,name:store+' marketing only',role:'MKT',hourlyRate:20000}];export const getEmployeeRoleNames=e=>[e.role];`,
     '@/services/payrolls': `
       const api=window.api={saved:null};
       export const getSavedEstimateSchedules=async()=>({items:[],total:0,summary:null});
@@ -49,6 +49,8 @@ for (const [storeId, userRole] of [['cafe','admin'], ['restaurant','admin'], ['c
         board.querySelector('[data-schedule-day] [role="button"]').click();await wait(80);
         const employee=[...document.querySelectorAll('[role="dialog"] button[aria-pressed]')].find(b=>b.textContent.includes(other+' employee'));
         check('other store employee is available',!!employee);if(!employee)throw new Error('Missing other store employee');
+        check('other store employees with different role are available',[...document.querySelectorAll('[role="dialog"] button[aria-pressed]')].some(b=>b.textContent.includes(other+' other role employee')));
+        check('marketing-only staff remain excluded',!document.querySelector('[role="dialog"]').textContent.includes('marketing only'));
         employee.click();await wait(80);
         const monthly=[...document.querySelectorAll('[role="dialog"] button[aria-pressed]')].find(b=>b.textContent.includes(other+' monthly employee'));
         check('daily salary visibility follows admin role',monthly&&(monthly.textContent.includes('300.000 đ/ngày')===${userRole === 'admin'}));
@@ -73,6 +75,10 @@ for (const [storeId, userRole] of [['cafe','admin'], ['restaurant','admin'], ['c
         restoredBoard.querySelectorAll('tbody tr')[0].querySelectorAll('[data-schedule-day] [role="button"]')[1].click();await wait(80);
         [...document.querySelectorAll('[role="dialog"] button[aria-pressed]')].find(b=>b.textContent.includes(other+' monthly employee')).click();await wait(1500);
         check('second scheduled day adds daily salary',monthlyEntry()?.salary===600000);
+        const alternate=[...document.querySelectorAll('[role="dialog"] button[aria-pressed]')].find(b=>b.textContent.includes(other+' other role employee'));
+        check('employee row identifies its store',alternate?.textContent.includes(other==='restaurant'?'Bếp / Lẩu':'Cafe'));
+        alternate.click();await wait(80);
+        check('can select other-store employee with a different profile role',alternate.getAttribute('aria-pressed')==='true');
       }else{
         check('unrelated stores do not gain kitchen roles',!options.some(o=>o.textContent.trim()==='Bếp'));
       }

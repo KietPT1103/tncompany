@@ -2,6 +2,8 @@
 
 Trang Ước lượng lương có ba tab: Lịch phân ca, Tổng hợp nhân viên và Lịch phân ca đã lưu.
 
+- Popup chọn người tại Cafe/Bếp hiển thị nhân viên của cả hai bên kể cả khi vai trò trong hồ sơ khác tên bảng đang xếp (ví dụ Phụ bếp được xếp vào bảng Bếp). Người đã chọn đứng đầu, sau đó ưu tiên đúng vai trò; mỗi dòng ghi Cafe hoặc Bếp / Lẩu. Nhân viên chỉ có vai trò MKT vẫn bị loại. Vai trò trên ca lưu theo bảng phân ca, không thay đổi vai trò/lương gốc trong hồ sơ nhân viên. Kiểm tra: `node scripts/payroll-estimate-cross-store.test.mjs` và `php scripts/payroll-estimate-employee-test.php`.
+
 - Không tạo thêm lịch ước lượng có cùng ngày bắt đầu và kết thúc tại cùng cửa hàng, kể cả trùng với bản ước lượng cũ. Mở lịch đã có để chỉnh sửa; thay đổi khoảng ngày sang kỳ đã có cũng bị chặn. Giao diện kiểm tra trước khi ghi phân ca; API kiểm tra lại và trả 409 khi trùng, dùng khóa MySQL theo cửa hàng để tránh hai phiên tạo trùng đồng thời. Không tự xoá/gộp các bản trùng đã tồn tại. Kiểm tra bằng `php scripts/payroll-estimate-unique-period-test.php`.
 
 - Danh sách **Tính lương → Các kỳ lương** không liệt kê lịch ước lượng (nguồn `payroll_estimate`, hoặc bản cũ nguồn `timesheet_import` với tên bắt đầu `Ước tính lương `). Các bản này vẫn được giữ và mở trong **Lịch phân ca đã lưu**. Kiểm tra bằng `php scripts/payroll-list-test.php`.

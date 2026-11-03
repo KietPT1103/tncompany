@@ -627,7 +627,9 @@ if ($method === 'POST') {
 
         if ($entries !== []) {
             foreach ($entries as $entry) {
-                $employeeId = payrolls_upsert_employee($storeId, $entry);
+                $employeeId = $isEstimate
+                    ? payroll_estimates_employee_id($pdo, $storeId, $entry)
+                    : payrolls_upsert_employee($storeId, $entry);
                 payrolls_insert_entry($payrollId, $employeeId, $entry);
             }
         } else {

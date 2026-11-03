@@ -74,6 +74,18 @@ function payroll_estimates_roles(array $entries): array
     return array_keys($roles);
 }
 
+function payroll_estimates_employee_id(PDO $pdo, string $store, array $entry): string
+{
+    $id = trim((string)($entry['employeeId'] ?? ''));
+    $query = $pdo->prepare('SELECT store_id FROM employees WHERE id=:id');
+    $query->execute(['id'=>$id]);
+    $employeeStore = $query->fetchColumn();
+    $allowedStores = in_array($store, ['cafe','restaurant'], true) ? ['cafe','restaurant'] : [$store];
+    if ($id === '' || !in_array($employeeStore, $allowedStores, true)) throw new InvalidArgumentException('Nhân viên không thuộc cửa hàng được phân ca. Vui lòng tải lại danh sách nhân viên.');
+    // Scheduling another role must not overwrite the employee's profile or salary settings.
+    return $id;
+}
+
 function payroll_estimates_list(PDO $pdo, string $store, int $page, string $start = '', string $end = ''): array
 {
     if ($page < 1 || $page > 100000) throw new InvalidArgumentException('Trang không hợp lệ.');
