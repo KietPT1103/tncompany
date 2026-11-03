@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Calculator, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, Calculator, FileDown, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { paginateItems } from "@/lib/listPagination";
@@ -46,10 +46,12 @@ export function ProfitCalculation({
   storeId,
   onSaved,
   initialReport,
+  storeName = storeId,
 }: {
   storeId: string;
   onSaved: () => void;
   initialReport?: ProfitHistoryDetail;
+  storeName?: string;
 }) {
   const [preset, setPreset] = useState<ProfitPreset>(initialReport ? "custom" : "day");
   const [editingReportId,setEditingReportId] = useState(initialReport?.id);
@@ -78,6 +80,7 @@ export function ProfitCalculation({
   const [inputs, setInputs] = useState<Record<string, ProfitInputs>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting,setExporting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [reload, setReload] = useState(0);
   const [error, setError] = useState("");
@@ -159,6 +162,16 @@ export function ProfitCalculation({
     setInputs((previous) => ({ ...previous, [date]: value }));
     setDirty(true);
     setMessage("");
+  }
+  async function exportExcel() {
+    if (!data || !calculation.complete || exporting) return;
+    setExporting(true);setError('');
+    try {
+      const {exportProfitExcel} = await import('./profitExcelExport');
+      await exportProfitExcel({storeName,startDate:range.startDate,endDate:range.endDate,days:data.days,inputsByDate:inputs,unsaved:dirty});
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Không xuất được file Excel.');
+    } finally { setExporting(false); }
   }
   async function save() {
     if (!data || !calculation.complete || saving) return;
@@ -266,6 +279,9 @@ export function ProfitCalculation({
           >
             <RefreshCw className="h-4 w-4" />
             Làm mới
+          </Button>
+          <Button variant="outline" disabled={!calculation.complete || loading || saving || exporting} isLoading={exporting} onClick={() => void exportExcel()} className={`gap-2 ${control}`}>
+            <FileDown className="h-4 w-4"/>Xuất Excel
           </Button>
           <Button
             disabled={!calculation.complete || loading || saving}

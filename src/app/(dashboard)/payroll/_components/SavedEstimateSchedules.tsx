@@ -11,7 +11,7 @@ import { estimatePeriodForDate, type EstimatePeriod } from '@/lib/estimatePeriod
 import { deleteSavedEstimateSchedules, getSavedEstimateSchedules, type SavedEstimateSchedule } from '@/services/payrolls';
 
 const dateLabel = (date?: string) => date ? date.split('-').reverse().join('/') : '—';
-const moneyLabel = (value: number) => `${value.toLocaleString('vi-VN')} đ`;
+const moneyLabel = (value: number) => `${(Math.ceil(value / 1000) * 1000).toLocaleString('vi-VN')} đ`;
 const savedAtLabel = (value: string) => {
   const date = new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}+07:00`);
   return Number.isFinite(date.getTime()) ? date.toLocaleString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh',dateStyle:'short',timeStyle:'short'}) : '—';

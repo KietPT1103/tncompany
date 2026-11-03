@@ -192,7 +192,7 @@ function getWeekEnd(date: Date) {
 }
 
 function formatCurrency(value: number) {
-  return `${currencyFormatter.format(Math.round(value))} đ`;
+  return `${currencyFormatter.format(Math.ceil(value / 1000) * 1000)} đ`;
 }
 
 function formatHours(value: number) {

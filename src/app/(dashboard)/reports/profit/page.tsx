@@ -20,7 +20,7 @@ export default function ProfitPage() {
       </nav>
       <div id="profit-calculate-panel" hidden={tab !== 'calculate'}>
         {editingReport && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"><span>Đang chỉnh sửa báo cáo đã lưu</span><Button variant="outline" size="sm" onClick={() => setEditing(null)}>Tạo báo cáo mới</Button></div>}
-        <ProfitCalculation key={`${storeId}:${editingReport?.version ?? 'new'}`} storeId={storeId} initialReport={editingReport?.report} onSaved={() => setRevision(value => value + 1)} />
+        <ProfitCalculation key={`${storeId}:${editingReport?.version ?? 'new'}`} storeId={storeId} storeName={storeName} initialReport={editingReport?.report} onSaved={() => setRevision(value => value + 1)} />
       </div>
       <div id="profit-history-panel" hidden={tab !== 'history'}><ProfitHistory key={storeId} storeId={storeId} active={tab === 'history'} revision={revision} onEdit={report => {setEditing({storeId,report,version:(editing?.version ?? 0)+1});setTab('calculate');}} /></div>
     </div>
