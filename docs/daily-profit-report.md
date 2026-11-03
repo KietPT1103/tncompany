@@ -1,5 +1,7 @@
 # Báo cáo Lợi nhuận
 
+File xuất Excel tự thêm khối **Lợi nhuận gộp** tại D1:E16 và **Lợi nhuận ròng** ngay bên dưới tại D18:E36 trong sheet **Tổng hợp**. Khối gộp có tỷ suất lãi trên vốn (lãi gộp / giá vốn) và biên lợi nhuận gộp (lãi gộp / doanh thu); khối ròng liệt kê các chi phí trừ tiếp sau giá vốn và biên lợi nhuận ròng (lãi ròng / doanh thu). Có phép tính và diễn giải trên 100đ doanh thu. Công thức tỷ lệ tham chiếu số gốc trong sheet ẩn, không chia các số tiền đã làm tròn; báo cáo kỳ dùng tổng kỳ, không trung bình tỷ lệ ngày. Mẫu số bằng 0 hiện “Không xác định”, thiếu giá bán/cost không tự coi là 0. Tiền hiển thị làm tròn lên 1.000đ; tỷ lệ hiển thị một chữ số thập phân. Vùng in bao gồm cả hai khối bên phải.
+
 Trang **Lợi nhuận** tại `/admin/reports/profit` trong nhóm Báo cáo, dùng quyền `reports.access`
 và chỉ đọc/ghi cửa hàng mà tài khoản được phép truy cập.
 

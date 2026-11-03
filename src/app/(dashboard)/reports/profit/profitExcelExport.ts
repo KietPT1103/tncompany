@@ -57,6 +57,76 @@ function finish(ws: ExcelJS.Worksheet, columns: number, moneyColumns: number[]) 
   return total.number;
 }
 
+function addProfitAnalysis(ws: ExcelJS.Worksheet, values: Record<string,number|null>, source: (column:string)=>string|null) {
+  ws.getColumn(3).width=4;ws.getColumn(4).width=60;ws.getColumn(5).width=26;
+  const row=(n:number,label:string,value:ExcelJS.CellValue=null)=>{
+    const line=ws.getRow(n);line.height??=25;
+    line.getCell(4).value=label;line.getCell(5).value=value;
+    for(const c of [4,5]){const cell=line.getCell(c);cell.border=gridBorder;cell.fill=fill(n%2?'FFF8FAFC':'FFFFFFFF');cell.font={name:'Calibri',size:11,color:{argb:INK}};cell.alignment={vertical:'middle',wrapText:true,horizontal:c===5?'right':'left'};}
+  };
+  const band=(n:number,label:string)=>{
+    row(n,label);ws.mergeCells(n,4,n,5);
+    for(const c of [4,5]){const cell=ws.getCell(n,c);cell.fill=fill(GREEN);cell.font={name:'Calibri',bold:true,size:n===1||n===18?15:11,color:{argb:GOLD}};}
+  };
+  const header=(n:number)=>{
+    row(n,'Chỉ tiêu','Giá trị');
+    for(const c of [4,5]){const cell=ws.getCell(n,c);cell.fill=fill(GREEN);cell.font={name:'Calibri',bold:true,size:11,color:{argb:'FFFFFFFF'}};}
+  };
+  const emphasis=(n:number,dark=false)=>{
+    for(const c of [4,5]){const cell=ws.getCell(n,c);cell.fill=fill(dark?GREEN:PALE);cell.font={name:'Calibri',bold:true,size:c===5?15:12,color:{argb:dark?GOLD:GREEN}};}
+  };
+  const amount=(n:number,label:string,value:number|null,formula:string|null)=>{
+    row(n,label,value!==null&&formula?{formula:`CEILING(${formula},1000)`,result:Math.ceil(value/1000)*1000}:'Chưa đủ giá bán/cost');
+    ws.getCell(n,5).numFmt=MONEY;
+  };
+  const money=(n:number,label:string,col:string)=>amount(n,label,values[col],source(col));
+  const note=(n:number,formula:string|null,value:string,last=n)=>{
+    row(n,'');ws.mergeCells(n,4,last,5);
+    const cell=ws.getCell(n,4);cell.value=formula?{formula,result:value}:value;
+    cell.font={name:'Calibri',size:10,italic:true,color:{argb:'FF64748B'}};
+  };
+  const number=(value:number,digits=2)=>value.toLocaleString('vi-VN',{minimumFractionDigits:digits,maximumFractionDigits:digits});
+  const percentage=(n:number,label:string,numerator:string,denominator:string)=>{
+    const a=values[numerator],b=values[denominator],aRef=source(numerator),bRef=source(denominator);
+    const result=a===null||b===null?'Chưa đủ giá bán/cost':b===0?'Không xác định':a/b;
+    row(n,label,aRef&&bRef?{formula:`IF(${bRef}=0,"Không xác định",${aRef}/${bRef})`,result}:result);
+    ws.getCell(n,5).numFmt='0.0%';emphasis(n);
+    return result;
+  };
+  const ratioNote=(n:number,numerator:string,denominator:string)=>{
+    const a=values[numerator],b=values[denominator],aRef=source(numerator),bRef=source(denominator);
+    note(n,aRef&&bRef?`TEXT(${aRef},"#,##0.00")&" ÷ "&TEXT(${bRef},"#,##0.00")&" × 100%"`:null,a!==null&&b!==null?`${number(a)} ÷ ${number(b)} × 100%`:'Chưa đủ số liệu để tính tỷ lệ.');
+  };
+  const explanation=(n:number,ratioRow:number,ratio:number|string,net=false)=>{
+    const ending=net?'sau giá vốn, lương, thuế và các chi phí vận hành.':'trước lương, thuế và các chi phí vận hành.';
+    const label=net?'Biên ròng':'Biên gộp';
+    note(n,`IF(ISNUMBER(E${ratioRow}),"${label} "&TEXT(E${ratioRow},"0.0%")&": cứ 100đ doanh thu, còn khoảng "&TEXT(E${ratioRow}*100,"0.0")&"đ ${ending}","Chưa xác định biên lợi nhuận khi thiếu số liệu hoặc doanh thu bằng 0.")`,typeof ratio==='number'?`${label} ${number(ratio*100,1)}%: cứ 100đ doanh thu, còn khoảng ${number(ratio*100,1)}đ ${ending}`:'Chưa xác định biên lợi nhuận khi thiếu số liệu hoặc doanh thu bằng 0.',n+1);
+    ws.getCell(n,4).font={name:'Calibri',size:11,color:{argb:INK}};
+  };
+  band(1,'LỢI NHUẬN GỘP');header(2);
+  money(3,'Giá bán thực thu sau giảm giá (tổng)','B');
+  money(4,'Giá nhập/cost hàng đã bán (tổng)','C');
+  money(5,'Lợi nhuận gộp ước tính','S');emphasis(5);
+  note(6,source('S')?`TEXT(${source('B')},"#,##0.00")&" − "&TEXT(${source('C')},"#,##0.00")&" = "&TEXT(${source('S')},"#,##0.00")&" đ"`:null,values.S!==null?`${number(values.B!)} − ${number(values.C!)} = ${number(values.S)} đ`:'Lợi nhuận gộp = Giá thực thu sau giảm giá − Giá nhập/cost.');
+  band(7,'PHÂN TÍCH TỶ LỆ');percentage(8,'Tỷ suất lãi trên vốn','S','C');ratioNote(9,'S','C');
+  const grossMargin=percentage(10,'Biên lợi nhuận gộp (GM)','S','B');ratioNote(11,'S','B');
+  band(12,'Ý NGHĨA BIÊN LỢI NHUẬN GỘP');explanation(13,10,grossMargin);
+  note(15,null,'Tiền hiển thị làm tròn lên 1.000đ; phép tính và tỷ lệ sử dụng số gốc chưa làm tròn.',16);
+
+  band(18,'LỢI NHUẬN RÒNG');header(19);
+  money(20,'Lợi nhuận gộp ước tính','S');emphasis(20);
+  money(21,'− Lương nhân viên (1 ngày)','D');
+  amount(22,'− Tiền điện, tiền nước',values.F!+values.G!,`(${source('F')}+${source('G')})`);
+  money(23,'− Chi phí khác trong ngày','H');money(24,'− Chi phí marketing','I');
+  money(25,'− Anh Thiện chi','J');money(26,'− Chi vận hành ngoài bàn giao','R');money(27,'− Thuế (4,5% doanh thu)','Q');
+  const operating=values.M!-values.C!,operatingRef=`(${source('M')}-${source('C')})`;
+  amount(28,'Tổng chi phí trừ tiếp sau giá vốn',operating,operatingRef);emphasis(28);
+  money(29,'Lợi nhuận ròng ước tính','N');emphasis(29,true);
+  note(30,source('S')?`TEXT(${source('S')},"#,##0.00")&" − "&TEXT(${operatingRef},"#,##0.00")&" = "&TEXT(${source('N')},"#,##0.00")&" đ"`:null,values.S!==null?`${number(values.S)} − ${number(operating)} = ${number(values.N!)} đ`:'Lợi nhuận ròng = Doanh thu − Giá vốn − Các chi phí trong ngày.');
+  band(31,'PHÂN TÍCH TỶ LỆ');const netMargin=percentage(32,'Biên lợi nhuận ròng','N','B');ratioNote(33,'N','B');
+  band(34,'Ý NGHĨA BIÊN LỢI NHUẬN RÒNG');explanation(35,32,netMargin,true);
+}
+
 export function buildProfitWorkbook(options: {storeName: string; startDate: string; endDate: string; days: ProfitDay[]; inputsByDate: Record<string,ProfitInputs>; unsaved?: boolean}) {
   const calculation=calculateProfitPeriod(options.days,options.inputsByDate);
   if(!calculation.complete)throw new Error('Cần nhập đủ chi phí và cost của tất cả ngày trong kỳ trước khi xuất Excel.');
@@ -121,13 +191,23 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   // Keep full precision in an audit sheet; visible results round independently, like the UI.
   const raw=workbook.addWorksheet('Dữ liệu gốc',{state:'hidden'});
   raw.columns=[{header:'Sheet',width:24},{header:'Ô',width:12},{header:'Giá trị gốc',width:24}];
+  const preciseTotals: Record<string,number|null>={};
+  for(const column of ['B','C','D','F','G','H','I','J','M','N','Q','R','S']){
+    const value=daily.getCell(`${column}${total}`).result;
+    preciseTotals[column]=typeof value==='number'?value:null;
+  }
+  const rawRefs=new Map<string,string>();
   for(const ws of [summary,daily,costs,expenses])ws.eachRow(row=>row.eachCell(cell=>{
     if(cell.numFmt!==MONEY)return;
     const amount=typeof cell.value==='number'?cell.value:typeof cell.result==='number'?cell.result:null;
     if(amount===null)return;
     const source=raw.addRow([ws.name,cell.address,amount]);source.getCell(3).numFmt='#,##0.########';
+    rawRefs.set(`${ws.name}!${cell.address}`,`'Dữ liệu gốc'!C${source.number}`);
     cell.value={formula:`CEILING('Dữ liệu gốc'!C${source.number},1000)`,result:Math.ceil(amount/1000)*1000};
   }));
+  addProfitAnalysis(summary,preciseTotals,column=>rawRefs.get(`Theo ngày!${column}${total}`)??null);
+  summary.pageSetup.printArea=`A1:E${summary.rowCount}`;
+  summary.pageSetup.paperSize=8;
   return workbook;
 }
 
