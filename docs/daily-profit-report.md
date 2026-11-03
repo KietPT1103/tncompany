@@ -42,6 +42,8 @@ không lẫn dữ liệu; tổng chi tại quầy tự cập nhật theo phiếu
 
 ## Kỳ báo cáo và lịch sử
 
+File Excel bật đường lưới xám và kẻ viền xám cho bảng trên tất cả sheet. Sheet **Tổng hợp** hiển thị từng khoản chi khác ngay dưới tổng **Chi phí khác trong ngày**; khi xuất nhiều ngày, mỗi khoản ghi kèm ngày. Các dòng này chỉ diễn giải tổng đã cộng, không tính chi phí lần thứ hai.
+
 Nút **Xuất Excel** cạnh **Lưu báo cáo** tải file `.xlsx` cho toàn bộ kỳ đang chọn, chỉ bật khi đủ dữ liệu. File gồm **Tổng hợp**, **Theo ngày**, **Giá vốn món**, **Các khoản chi** (phiếu chi tại quầy, từng khoản chi khác, điện/nước, marketing và Anh Thiện chi). Xuất toàn bộ món và ngày, không theo phân trang giao diện. Dùng dữ liệu đang xem, kể cả thay đổi chưa lưu; file ghi rõ nếu chưa lưu và không tự lưu báo cáo. Định dạng xanh–vàng TN Services, tiêu đề cố định, lọc dữ liệu, số tiền/ngày là ô số/ngày thật, số âm màu đỏ, công thức tổng có kết quả lưu sẵn và thiết lập in ngang. Kiểm tra workbook: `node scripts/profit-excel-export.test.mjs`; thao tác tải file: `node scripts/profit-other-expenses.test.mjs`.
 
 Trong lịch sử, cột **Thao tác** có hai nút **Chỉnh sửa** và **Xóa**. Chỉnh sửa tải dữ liệu snapshot về form Tính lợi nhuận, chọn đúng kỳ và điền lại chi phí đã lưu. **Cập nhật báo cáo** gửi `reportId` và cập nhật chính bản lịch sử đó cùng đầu vào từng ngày trong một giao dịch; không tạo thêm bản trùng. API kiểm tra ID thuộc cửa hàng, đúng khoảng ngày và bản còn tồn tại. Nguồn doanh thu, cost và lương được lấy lại tại thời điểm cập nhật. Chọn **Tạo báo cáo mới** để thoát chế độ chỉnh sửa; đổi sang kỳ khác lưu thành báo cáo mới. Kiểm thử: `node scripts/profit-history-edit.test.mjs` và `php scripts/daily-profit-report-test.php`.

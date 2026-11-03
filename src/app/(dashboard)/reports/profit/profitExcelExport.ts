@@ -8,11 +8,12 @@ const MONEY = '#,##0.##" đ";[Red](#,##0.##)" đ";"—"';
 const fill = (argb: string): ExcelJS.Fill => ({type:'pattern',pattern:'solid',fgColor:{argb}});
 const dateLabel = (date: string) => date.split('-').reverse().join('/');
 const excelDate = (date: string) => new Date(`${date}T00:00:00Z`);
+const gridBorder: Partial<ExcelJS.Borders> = Object.fromEntries(['top','bottom','left','right'].map(side=>[side,{style:'thin',color:{argb:'FFD1D5DB'}}]));
 
 function sheet(workbook: ExcelJS.Workbook, name: string, title: string, subtitle: string, widths: number[], headers: string[]) {
   const ws = workbook.addWorksheet(name, {properties:{defaultRowHeight:23},pageSetup:{paperSize:widths.length > 8 ? 8 : 9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:0.25,right:0.25,top:0.4,bottom:0.4,header:0.15,footer:0.15}}});
   ws.columns = widths.map(width => ({width}));
-  ws.views = [{state:'frozen',ySplit:5,xSplit:name==='Theo ngày'?1:0,showGridLines:false}];
+  ws.views = [{state:'frozen',ySplit:5,xSplit:name==='Theo ngày'?1:0,showGridLines:true}];
   ws.mergeCells(1,1,2,widths.length);
   const heading=ws.getCell('A1'); heading.value=title;heading.font={name:'Calibri',size:21,bold:true,color:{argb:GOLD}};heading.fill=fill(GREEN);heading.alignment={vertical:'middle'};
   ws.getRow(1).height=26;ws.getRow(2).height=20;
@@ -29,7 +30,7 @@ function bodyRow(ws: ExcelJS.Worksheet, values: ExcelJS.CellValue[]) {
   row.eachCell({includeEmpty:true},cell=>{
     cell.font={name:'Calibri',size:11,color:{argb:INK}};
     cell.fill=fill(row.number%2===0?'FFFFFFFF':'FFF8FAFC');
-    cell.border={bottom:{style:'hair',color:{argb:'FFE2E8F0'}}};
+    cell.border=gridBorder;
     cell.alignment={vertical:'middle',wrapText:true};
     if(typeof cell.value==='number'||cell.type===ExcelJS.ValueType.Formula){cell.numFmt=MONEY;cell.alignment.horizontal='right';}
     if(cell.value instanceof Date){cell.numFmt='dd/mm/yyyy';cell.alignment.horizontal='center';}
@@ -47,7 +48,7 @@ function finish(ws: ExcelJS.Worksheet, columns: number, moneyColumns: number[]) 
     let value=0;for(let r=6;r<=last;r++){const c=ws.getCell(r,col);value+=typeof c.value==='number'?c.value:typeof c.result==='number'?c.result:0;}
     total.getCell(col).value={formula:last>=6?`SUM(${letter}6:${letter}${last})`:'0',result:value};total.getCell(col).numFmt=MONEY;
   }
-  total.height=30;total.eachCell({includeEmpty:true},cell=>{cell.fill=fill(PALE);cell.font={name:'Calibri',bold:true,color:{argb:GREEN},size:11};cell.border={top:{style:'thin',color:{argb:GREEN}}};});
+  total.height=30;total.eachCell({includeEmpty:true},cell=>{cell.fill=fill(PALE);cell.font={name:'Calibri',bold:true,color:{argb:GREEN},size:11};cell.border={...gridBorder,top:{style:'thin',color:{argb:GREEN}}};});
   ws.pageSetup.printArea=`A1:${ws.getColumn(columns).letter}${ws.rowCount}`;
   return total.number;
 }
@@ -62,6 +63,7 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   const daily=sheet(workbook,'Theo ngày','CHI TIẾT LỢI NHUẬN THEO NGÀY',subtitle,[15,21,21,21,21,19,19,21,21,21,23,21,23,23,15,13],['Ngày','Doanh thu','Giá vốn món','Lương nhân viên','Chi tại quầy','Tiền điện','Tiền nước','Chi phí khác','Marketing','Anh Thiện chi','Tồn kho nguyên liệu','Công nợ','Tổng chi phí','Lợi nhuận ròng','Biên lợi nhuận','Số hóa đơn']);
   const costs=sheet(workbook,'Giá vốn món','CHI TIẾT GIÁ VỐN MÓN ĐÃ BÁN',subtitle,[15,21,44,16,23,24],['Ngày','Mã món','Tên món','Số lượng','Cost / món','Tổng giá vốn']);
   const expenses=sheet(workbook,'Các khoản chi','CHI TIẾT CÁC KHOẢN CHI',subtitle,[15,26,27,44,48,23],['Ngày','Loại chi phí','Mã phiếu','Tên / nội dung','Ghi chú','Số tiền']);
+  const otherExpenseRefs: {date:string;name:string;amount:number;row:number}[]=[];
   for(const day of rows){
     const n=daily.rowCount+1;const {inputs,result,source}=day;
     const row=bodyRow(daily,[excelDate(day.date),source.revenue,result.materialCost,inputs.salary, result.voucherCost,inputs.electricity,inputs.water,inputs.other,inputs.marketing,inputs.thienExpense,inputs.ingredientInventory,inputs.debt,
@@ -74,7 +76,10 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
       const r=costs.rowCount+1;const line=bodyRow(costs,[excelDate(day.date),item.code,item.name,item.quantity,item.unitCost,{formula:`D${r}*E${r}`,result:item.cost!}]);line.getCell(4).numFmt='#,##0.###';
     }
     for(const voucher of source.vouchers)bodyRow(expenses,[excelDate(day.date),'Chi tại quầy',voucher.code,voucher.category,voucher.note||'',voucher.amount]);
-    for(const item of profitOtherExpenses(inputs))bodyRow(expenses,[excelDate(day.date),'Chi phí khác','',item.name,'',item.amount]);
+    for(const item of profitOtherExpenses(inputs)){
+      const expenseRow=bodyRow(expenses,[excelDate(day.date),'Chi phí khác','',item.name,'',item.amount]);
+      otherExpenseRefs.push({date:day.date,name:item.name,amount:item.amount!,row:expenseRow.number});
+    }
     for(const [key,label] of [['electricity','Tiền điện'],['water','Tiền nước'],['marketing','Marketing'],['thienExpense','Anh Thiện chi']] as const)if(inputs[key])bodyRow(expenses,[excelDate(day.date),label,'',label,'',inputs[key]]);
   }
   const total=finish(daily,16,[2,3,4,5,6,7,8,9,10,11,12,13,14,16]);daily.getCell(total,16).numFmt='#,##0';
@@ -85,6 +90,12 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
     const n=summary.rowCount+1;const cached=daily.getCell(`${col}${total}`).result as number;
     bodyRow(summary,[label,null,null,null,null,{formula:`'Theo ngày'!${col}${total}`,result:cached}]);summary.mergeCells(n,1,n,5);summary.getCell(n,6).numFmt=col==='O'?'0.0%':MONEY;
     if(['M','N'].includes(col)){summary.getRow(n).height=34;summary.getRow(n).eachCell({includeEmpty:true},cell=>{cell.fill=fill(col==='N'?GREEN:PALE);cell.font={name:'Calibri',bold:true,size:col==='N'?15:12,color:{argb:col==='N'?GOLD:GREEN}};});}
+    if(col==='H')for(const item of otherExpenseRefs){
+      const detailRow=bodyRow(summary,[`    ${rows.length>1?dateLabel(item.date)+' · ':''}${item.name}`,null,null,null,null,{formula:`'Các khoản chi'!F${item.row}`,result:item.amount}]);
+      summary.mergeCells(detailRow.number,1,detailRow.number,5);
+      detailRow.eachCell({includeEmpty:true},cell=>{cell.font={name:'Calibri',size:10,color:{argb:'FF64748B'}};cell.fill=fill('FFF8FAFC');});
+      detailRow.getCell(6).numFmt=MONEY;
+    }
   }
   summary.mergeCells(5,1,5,5);summary.pageSetup.printArea=`A1:F${summary.rowCount}`;
   return workbook;
