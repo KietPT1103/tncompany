@@ -12,7 +12,7 @@ export function OtherExpensesEditor({inputs, onChange, date}: {inputs: ProfitInp
   return <section className="mt-5 min-w-0 border-t border-slate-200 pt-4 sm:col-span-2" aria-label="Chi phí khác trong ngày">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="text-sm font-semibold">Chi phí khác trong ngày</h3>
-      <Button type="button" variant="outline" size="sm" className="gap-1.5 border-[#064E3B] bg-[#064E3B] text-[#F6C85F] hover:border-[#043D2E] hover:bg-[#043D2E] hover:text-[#F6C85F] focus-visible:ring-[#F6C85F]" disabled={items.length >= 100} onClick={() => update([...items,{id:crypto.randomUUID(),name:'',amount:null}])}><Plus className="h-4 w-4" aria-hidden="true"/>Thêm khoản chi</Button>
+      <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-1 rounded-md border-[#064E3B] bg-[#064E3B] px-2.5 text-xs font-semibold text-[#F6C85F] hover:border-[#043D2E] hover:bg-[#043D2E] hover:text-[#F6C85F] focus-visible:ring-[#F6C85F]" disabled={items.length >= 100} onClick={() => update([...items,{id:crypto.randomUUID(),name:'',amount:null}])}><Plus className="h-3.5 w-3.5" aria-hidden="true"/>Thêm khoản chi</Button>
     </div>
     {!items.length && <p className="mt-2 text-xs text-slate-500">Chưa có khoản chi khác. Thêm tên khoản chi và số tiền khi phát sinh.</p>}
     <div className="mt-3 space-y-3">

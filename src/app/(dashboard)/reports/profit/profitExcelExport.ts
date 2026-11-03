@@ -94,12 +94,17 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   for(const [col,key] of [[21,'cashReceived'],[24,'cashFlow']] as const)if(rows.some(day=>day.result[key]===null))daily.getCell(total,col).value=null;
   daily.getCell(total,15).value={formula:`IF(B${total}>0,N${total}/B${total},0)`,result:calculation.margin===null?0:calculation.margin/100};daily.getCell(total,15).numFmt='0.0%';
   finish(costs,6,[6]);finish(expenses,6,[6]);
-  const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['LÃI GỘP','S'],['Lương nhân viên','D'],['Chi phí tại quầy thu ngân','E'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['Chi vận hành khác','R'],['TỔNG CHI PHÍ','M'],['Tồn kho nguyên liệu (theo dõi)','K'],['Công nợ nhà cung cấp (theo dõi)','L'],['LỢI NHUẬN RÒNG','N'],['Biên lợi nhuận','O'],['Tiền bàn giao trong hệ thống','U'],['Lương thực trả','V'],['Thuế đã nộp','W'],['DÒNG TIỀN THỰC VỀ','X']];
+  const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['LÃI GỘP','S'],['Lương nhân viên (phân bổ trong ngày)','D'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['Chi vận hành thực trả ngoài bàn giao','R'],['TỔNG CHI PHÍ','M'],['LỢI NHUẬN RÒNG','N'],['Biên lợi nhuận','O'],['Tiền bàn giao trong hệ thống','U'],['Chi tại quầy (đã nằm trong bàn giao, không trừ lại)','E'],['Chi vận hành thực trả ngoài bàn giao','R'],['Lương thực trả','V'],['Thuế đã nộp','W'],['DÒNG TIỀN THỰC VỀ','X'],['Tồn kho nguyên liệu (theo dõi)','K'],['Công nợ nhà cung cấp (theo dõi)','L']];
   for(const [label,col] of lines){
+    if(col==='U'){
+      const section=bodyRow(summary,['DÒNG TIỀN THỰC TẾ',null]);
+      section.height=28;
+      section.eachCell({includeEmpty:true},cell=>{cell.fill=fill(GREEN);cell.font={name:'Calibri',bold:true,size:11,color:{argb:GOLD}};});
+    }
     const n=summary.rowCount+1;const cached=daily.getCell(`${col}${total}`).result as number;
     bodyRow(summary,[label,typeof cached==='number'?{formula:`'Theo ngày'!${col}${total}`,result:cached}:'Chưa có bàn giao đã chốt']);summary.getCell(n,2).numFmt=col==='O'?'0.0%':MONEY;
     if(col==='B'){summary.getRow(n).height=30;summary.getRow(n).eachCell(cell=>{cell.font={name:'Calibri',bold:true,size:13,color:{argb:'FF4472C4'}};});}
-    if(['M','N'].includes(col)){summary.getRow(n).height=34;summary.getRow(n).eachCell({includeEmpty:true},cell=>{cell.fill=fill(col==='N'?GREEN:PALE);cell.font={name:'Calibri',bold:true,size:col==='N'?15:12,color:{argb:col==='N'?GOLD:GREEN}};});}
+    if(['M','N','S','X'].includes(col)){const prominent=col==='N'||col==='X';summary.getRow(n).height=34;summary.getRow(n).eachCell({includeEmpty:true},cell=>{cell.fill=fill(prominent?GREEN:PALE);cell.font={name:'Calibri',bold:true,size:prominent?15:12,color:{argb:prominent?GOLD:GREEN}};});}
     if(col==='H')for(const item of otherExpenseRefs){
       const detailRow=bodyRow(summary,[`${rows.length>1?dateLabel(item.date)+' · ':''}${item.name}`,{formula:`'Các khoản chi'!F${item.row}`,result:item.amount}]);
       detailRow.getCell(1).alignment={indent:1,vertical:'middle',wrapText:true};
