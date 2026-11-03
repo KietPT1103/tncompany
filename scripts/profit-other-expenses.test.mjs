@@ -20,6 +20,7 @@ const button=text=>[...document.querySelectorAll('button')].find(b=>b.textConten
 const change=async(el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));await wait(60)};
 (async()=>{try{
 await wait(400);
+check('gross, net and actual cash indicators are visible',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Lãi gộp')&&document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Dòng tiền thực về'));
 check('daily calculation includes automatic tax',document.body.textContent.includes('Thuế (4,5% doanh thu)')&&document.body.textContent.includes('45.000 đ'));
 const costInput=document.querySelector('input[id^="cost-"]');costInput.focus();await change(costInput,'20.000');costInput.blur();await wait(120);
 check('report cost input saves directly to catalog',api.catalog?.code==='DONUT'&&api.catalog?.cost===20000&&api.catalog?.store==='cafe'&&document.body.textContent.includes('Đã lưu vào danh mục'));
@@ -33,6 +34,7 @@ button('Thêm khoản chi').click();await wait(60);
 await change(document.querySelectorAll('input[id^="other-name-"]')[1],'Dung dịch bong bóng');
 await change(document.querySelectorAll('input[id^="other-amount-"]')[1],'75.000');
 check('two valid items enable saving',!button('Lưu báo cáo').disabled);
+check('cash flow uses handover rather than POS revenue or accrued costs',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('900.000 đ'));
 let downloaded;HTMLAnchorElement.prototype.click=function(){downloaded=this.download};
 button('Xuất Excel').click();await wait(500);
 check('Excel export downloads the selected report',downloaded?.startsWith('Loi-nhuan_')&&downloaded?.endsWith('.xlsx'));
@@ -58,7 +60,7 @@ check('confirmed delete clears history and retains inputs',api.report===null&&ap
 }catch(e){check(e.stack,false)}const pre=document.createElement('pre');pre.id='result';pre.textContent=JSON.stringify(checks);document.body.append(pre)})();
 `;
 const mock=`import {emptyProfitInputs,profitInputsForSource,calculateDailyProfit} from '@/app/(dashboard)/reports/profit/dailyProfit';
-const source={revenue:1000000,billCount:1,sales:[{key:'DONUT',code:'DONUT',name:'Bánh Donut',quantity:2,unitCost:null}],vouchers:[],salaryEstimate:{amount:0,payrollId:'p',name:'Lịch'}};
+const source={revenue:1000000,billCount:1,sales:[{key:'DONUT',code:'DONUT',name:'Bánh Donut',quantity:2,unitCost:null}],vouchers:[],handover:{amount:900000,provisional:false,shiftCount:2},salaryEstimate:{amount:0,payrollId:'p',name:'Lịch'}};
 const api=window.api={saved:{...emptyProfitInputs(),other:10000},report:null,detail:null};
 export const updateProductCost=async(code,data,store)=>{api.catalog={code,cost:data.cost,store};source.sales[0].unitCost=data.cost;source.sales[0].costSource='catalog'};
 const day=date=>({date,source,saved:{inputs:api.saved,updatedAt:'2026-11-03'}});

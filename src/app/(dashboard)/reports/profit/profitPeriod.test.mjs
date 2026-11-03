@@ -18,8 +18,8 @@ test('month includes all days including leap day; invalid dates rejected', () =>
 });
 test('period sums daily profit and uses total revenue for margin', () => {
   const result = calculateProfitPeriod(days, { '2026-10-07': inputs, '2026-10-08': inputs });
-  assert.equal(result.profit, 211.5);
-  assert.equal(result.margin, 70.5);
+  assert.equal(result.profit, 216.5);
+  assert.equal(result.margin, 216.5 / 300 * 100);
 });
 test('one missing day prevents a partial result being shown as the full period', () => {
   const result = calculateProfitPeriod(days, { '2026-10-07': inputs });
@@ -31,6 +31,6 @@ test('one missing day prevents a partial result being shown as the full period',
 test('period includes new daily adjustments without counting inventory or debt as expenses', () => {
   const adjusted = { ...inputs, thienExpense: 7, ingredientInventory: 12, debt: 3 };
   const result = calculateProfitPeriod(days, { '2026-10-07': adjusted, '2026-10-08': adjusted });
-  assert.equal(result.totalCosts, 102.5);
-  assert.equal(result.profit, 215.5);
+  assert.equal(result.totalCosts, 97.5);
+  assert.equal(result.profit, 202.5);
 });

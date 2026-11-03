@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/profit_sources.php';
+require_once __DIR__ . '/profit_handover.php';
 
 function profit_period_dates(string $start, string $end): array
 {
@@ -16,6 +17,7 @@ function profit_period_sources(PDO $pdo, string $storeId, string $start, string 
     $days = [];
     foreach (profit_period_dates($start, $end) as $date) $days[$date] = ['revenue'=>0.0,'billCount'=>0,'sales'=>[],'vouchers'=>[]];
     foreach (profit_source_salary($pdo, $storeId, array_keys($days)) as $date=>$estimate) $days[$date]['salaryEstimate'] = $estimate;
+    foreach (profit_source_handover($pdo,$storeId,array_keys($days)) as $date=>$handover) $days[$date]['handover']=$handover;
     $costs = profit_source_costs($pdo, $storeId);
     $params = ['store'=>$storeId,'start'=>$start.' 00:00:00','end'=>(new DateTimeImmutable($end))->modify('+1 day')->format('Y-m-d').' 00:00:00'];
     $filter = "b.store_id=:store AND b.status='completed' AND b.created_at>=:start AND b.created_at<:end";
@@ -69,6 +71,7 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
 {
     if (count($sources) !== count($rawInputs)) throw new InvalidArgumentException('Cần nhập đủ chi phí cho tất cả ngày trong kỳ.');
     $totals = ['revenue'=>0,'materialCost'=>0,'salary'=>0,'electricity'=>0,'water'=>0,'other'=>0,'marketing'=>0,'thienExpense'=>0,'ingredientInventory'=>0,'debt'=>0,'voucherCost'=>0,'tax'=>0,'totalCosts'=>0,'profit'=>0];
+    $totals += array_fill_keys(['grossProfit','netProfit','operatingExpense','salaryPaid','taxPaid'],0);
     $days = [];
     foreach ($sources as $date=>$source) {
         if (!is_array($rawInputs[$date] ?? null)) throw new InvalidArgumentException('Thiếu chi phí ngày '.$date.'.');
@@ -77,18 +80,27 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
             $rawInputs[$date]['salary'] = $source['salaryEstimate']['amount'];
             $inputs = daily_profit_validate_inputs($rawInputs[$date]);
             daily_profit_require_complete($source, $inputs);
+            if($inputs['salaryPaid']>0 && profit_salary_payment_period($date)===null)throw new InvalidArgumentException('Lương thực trả chỉ nhập vào ngày 15 hoặc ngày 05 tháng sau.');
         } catch (InvalidArgumentException $e) { throw new InvalidArgumentException($date.': '.$e->getMessage()); }
         $cost = 0;
         foreach ($source['sales'] as $sale) $cost += $sale['quantity'] * ($inputs['costOverrides'][$sale['key']] ?? $sale['unitCost']);
         $cashier = array_sum(array_column($source['vouchers'], 'amount'));
         $tax = round($source['revenue'] * 0.045, 2);
-        $total = $cost + $cashier + $inputs['salary'] + $inputs['electricity'] + $inputs['water'] + $inputs['other'] + $inputs['marketing'] + $inputs['thienExpense'] + $tax;
-        $result = ['revenue'=>$source['revenue'],'materialCost'=>$cost,'salary'=>$inputs['salary'],'electricity'=>$inputs['electricity'],'water'=>$inputs['water'],'other'=>$inputs['other'],'marketing'=>$inputs['marketing'],'thienExpense'=>$inputs['thienExpense'],'ingredientInventory'=>$inputs['ingredientInventory'],'debt'=>$inputs['debt'],'voucherCost'=>$cashier,'totalCosts'=>$total,'profit'=>$source['revenue']-$total+$inputs['ingredientInventory']-$inputs['debt']];
+        $operating=$inputs['electricity']+$inputs['water']+$inputs['other']+$inputs['marketing']+$inputs['thienExpense']+$inputs['operatingExpense'];
+        $total = $cost + $inputs['salary'] + $operating + $tax;
+        $result = ['revenue'=>$source['revenue'],'materialCost'=>$cost,'salary'=>$inputs['salary'],'electricity'=>$inputs['electricity'],'water'=>$inputs['water'],'other'=>$inputs['other'],'marketing'=>$inputs['marketing'],'thienExpense'=>$inputs['thienExpense'],'ingredientInventory'=>$inputs['ingredientInventory'],'debt'=>$inputs['debt'],'voucherCost'=>$cashier,'totalCosts'=>$total,'profit'=>$source['revenue']-$total];
         $result['tax'] = $tax;
+        $result['grossProfit']=$source['revenue']-$cost;
+        $result['netProfit']=$result['profit'];
+        $result['operatingExpense']=$inputs['operatingExpense'];
+        $result['salaryPaid']=$inputs['salaryPaid'];$result['taxPaid']=$inputs['taxPaid'];
+        $result['cashReceived']=$source['handover']['amount']??null;
+        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['operatingExpense']-$inputs['salaryPaid']-$inputs['taxPaid']:null;
         foreach ($totals as $key=>$_) $totals[$key] += $result[$key];
         $days[] = ['date'=>$date,'inputs'=>$inputs,'result'=>$result];
     }
     $totals['margin'] = $totals['revenue'] > 0 ? $totals['profit']/$totals['revenue']*100 : null;
+    foreach(['cashReceived','cashFlow'] as $key)$totals[$key]=count(array_filter($days,fn($day)=>$day['result'][$key]===null)) ? null : array_sum(array_map(fn($day)=>$day['result'][$key],$days));
     return ['totals'=>$totals,'days'=>$days];
 }
 function profit_period_save(PDO $pdo, string $storeId, string $start, string $end, array $rawInputs, string $userId, ?string $reportId = null): array

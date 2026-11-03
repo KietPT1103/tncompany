@@ -5,9 +5,15 @@ và chỉ đọc/ghi cửa hàng mà tài khoản được phép truy cập.
 
 ## Cách tính
 
-Lợi nhuận ròng ước tính = Doanh thu − Cost − Lương (1 ngày)
-− Chi phí tại quầy thu ngân − Tiền điện − Tiền nước − Chi phí khác trong ngày − Chi phí marketing
-− Anh Thiện chi − Thuế (doanh thu ngày × 4,5%) + Giá trị tồn kho nguyên liệu − Công nợ.
+Lãi gộp = Doanh thu POS − Giá vốn món đã bán từ hệ thống.
+
+Lãi ròng ước tính = Lãi gộp − Lương phân bổ ngày − Tiền điện − Tiền nước − Chi phí khác − Marketing − Anh Thiện chi − Chi vận hành khác − Thuế (doanh thu ngày × 4,5%). Các khoản chi vận hành mặc định 0.
+
+Dòng tiền thực về = Tiền bàn giao đã chốt trong hệ thống − Chi vận hành thực trả ngoài bàn giao − Lương thực trả − Thuế đã nộp. Không trừ lại phiếu chi tại quầy vì đã phản ánh trong bàn giao. Phiếu chi mua nguyên liệu cũng không bị trừ thêm vào lãi ròng khi giá vốn món đã được tính. **Công nợ là nợ nhà cung cấp**; tồn kho và công nợ chỉ theo dõi, không cộng/trừ trực tiếp vào lãi/dòng tiền. Khi trả nợ bằng phiếu chi tại quầy, bàn giao đã phản ánh khoản trả đó.
+
+Nhập tiền lương thực trả vào **ngày 15** (kỳ 01–15 tháng hiện tại) và **ngày 05 tháng sau** (kỳ 16–cuối tháng trước). API chặn số tiền lương thực trả khác 0 ở ngày khác; không tự coi lương ước tính là đã trả. Chi phí tiêu hao/ước tính trong ngày vẫn dùng cho lãi ròng; chỉ ô Chi vận hành thực trả ngoài bàn giao mới trừ thêm vào dòng tiền. Chỉ nhập khoản trả ngoài bàn giao để tránh trừ hai lần. Thuế đã nộp nhập riêng khi thực nộp. Tiền bàn giao dùng công thức có sẵn của hệ thống, loại tiền đầu ca và chuyển giữa các ca; ca chưa chốt, thiếu ca hoặc giao dịch chưa phân ca khiến dòng tiền chưa xác định. Không dùng doanh thu thay cho bàn giao.
+
+Giao diện, Excel và snapshot lịch sử có ba chỉ số riêng; lịch sử cũ chưa có chỉ số mới hiện chưa có dữ liệu. Kiểm tra thêm bằng `php scripts/profit-financial-metrics-test.php`.
 
 - Doanh thu lấy tổng tiền sau giảm giá/phụ thu của bill POS; bỏ bill hủy.
 - Cost = số lượng bán × cost hiện tại trong danh mục; nếu danh mục chưa có thì tính từ công thức nguyên liệu, gồm định lượng và tỷ lệ chuyển đổi. Thiếu cost nguyên liệu hoặc công thức vòng không tự tính là 0; chưa phải lịch sử giá vốn.

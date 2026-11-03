@@ -64,17 +64,19 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   const workbook=new ExcelJS.Workbook();workbook.creator='TN Services';workbook.created=new Date();workbook.calcProperties.fullCalcOnLoad=true;
   const subtitle=`${options.storeName} · ${dateLabel(options.startDate)} – ${dateLabel(options.endDate)} · Đơn vị: VND${options.unsaved?' · Dữ liệu đang chỉnh sửa, chưa lưu':''}`;
   const summary=sheet(workbook,'Tổng hợp','TN SERVICES | BÁO CÁO LỢI NHUẬN',subtitle,[80,24],['Chỉ tiêu','Giá trị'],true);
-  const daily=sheet(workbook,'Theo ngày','CHI TIẾT LỢI NHUẬN THEO NGÀY',subtitle,[15,21,21,21,21,19,19,21,21,21,23,21,23,23,15,13,22],['Ngày','Doanh thu','Giá vốn món','Lương nhân viên','Chi tại quầy','Tiền điện','Tiền nước','Chi phí khác','Marketing','Anh Thiện chi','Tồn kho nguyên liệu','Công nợ','Tổng chi phí','Lợi nhuận ròng','Biên lợi nhuận','Số hóa đơn','Thuế (4,5%)']);
+  const daily=sheet(workbook,'Theo ngày','CHI TIẾT LỢI NHUẬN THEO NGÀY',subtitle,[15,21,21,21,21,19,19,21,21,21,23,21,23,23,15,13,22,21,23,23,23,23,23,24],['Ngày','Doanh thu','Giá vốn món','Lương nhân viên','Chi tại quầy','Tiền điện','Tiền nước','Chi phí khác','Marketing','Anh Thiện chi','Tồn kho nguyên liệu','Công nợ','Tổng chi phí','Lợi nhuận ròng','Biên lợi nhuận','Số hóa đơn','Thuế (4,5%)','Chi vận hành khác','Lãi gộp','Lãi ròng','Tiền bàn giao','Lương thực trả','Thuế đã nộp','Dòng tiền thực về']);
   const costs=sheet(workbook,'Giá vốn món','CHI TIẾT GIÁ VỐN MÓN ĐÃ BÁN',subtitle,[15,21,44,16,23,24],['Ngày','Mã món','Tên món','Số lượng','Cost / món','Tổng giá vốn']);
   const expenses=sheet(workbook,'Các khoản chi','CHI TIẾT CÁC KHOẢN CHI',subtitle,[15,26,27,44,48,23],['Ngày','Loại chi phí','Mã phiếu','Tên / nội dung','Ghi chú','Số tiền']);
   const otherExpenseRefs: {date:string;name:string;amount:number;row:number}[]=[];
   for(const day of rows){
     const n=daily.rowCount+1;const {inputs,result,source}=day;
     const row=bodyRow(daily,[excelDate(day.date),source.revenue,result.materialCost,inputs.salary, result.voucherCost,inputs.electricity,inputs.water,inputs.other,inputs.marketing,inputs.thienExpense,inputs.ingredientInventory,inputs.debt,
-      {formula:`SUM(C${n}:J${n})+Q${n}`,result:result.totalCosts},
-      {formula:`B${n}-M${n}+K${n}-L${n}`,result:result.profit!},
+      {formula:`SUM(C${n}:D${n},F${n}:J${n})+Q${n}+R${n}`,result:result.totalCosts},
+      {formula:`B${n}-M${n}`,result:result.profit!},
       {formula:`IF(B${n}>0,N${n}/B${n},0)`,result:result.margin===null?0:result.margin/100},source.billCount,
-      {formula:`ROUND(B${n}*4.5%,2)`,result:result.tax}]);
+      {formula:`ROUND(B${n}*4.5%,2)`,result:result.tax},inputs.operatingExpense??0,
+      result.grossProfit,result.netProfit,result.cashReceived,inputs.salaryPaid??0,inputs.taxPaid??0,result.cashFlow]);
+    for(const col of [19,20,21,22,23,24])row.getCell(col).numFmt=MONEY;
     row.getCell(15).numFmt='0.0%;[Red](0.0%);"—"';row.getCell(16).numFmt='#,##0';
     row.getCell(14).font={name:'Calibri',bold:true,color:{argb:result.profit!<0?'FFB91C1C':GREEN}};
     for(const item of result.costRows){
@@ -88,13 +90,14 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
     for(const [key,label] of [['electricity','Tiền điện'],['water','Tiền nước'],['marketing','Marketing'],['thienExpense','Anh Thiện chi']] as const)if(inputs[key])bodyRow(expenses,[excelDate(day.date),label,'',label,'',inputs[key]]);
     if(result.tax)bodyRow(expenses,[excelDate(day.date),'Thuế','','Thuế 4,5% doanh thu','Tự động tính theo doanh thu ngày',result.tax]);
   }
-  const total=finish(daily,17,[2,3,4,5,6,7,8,9,10,11,12,13,14,16,17]);daily.getCell(total,16).numFmt='#,##0';
+  const total=finish(daily,24,[2,3,4,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24]);daily.getCell(total,16).numFmt='#,##0';
+  for(const [col,key] of [[21,'cashReceived'],[24,'cashFlow']] as const)if(rows.some(day=>day.result[key]===null))daily.getCell(total,col).value=null;
   daily.getCell(total,15).value={formula:`IF(B${total}>0,N${total}/B${total},0)`,result:calculation.margin===null?0:calculation.margin/100};daily.getCell(total,15).numFmt='0.0%';
   finish(costs,6,[6]);finish(expenses,6,[6]);
-  const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['Lương nhân viên','D'],['Chi phí tại quầy thu ngân','E'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['TỔNG CHI PHÍ','M'],['+ Giá trị tồn kho nguyên liệu','K'],['− Công nợ','L'],['LỢI NHUẬN RÒNG','N'],['Biên lợi nhuận','O']];
+  const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['LÃI GỘP','S'],['Lương nhân viên','D'],['Chi phí tại quầy thu ngân','E'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['Chi vận hành khác','R'],['TỔNG CHI PHÍ','M'],['Tồn kho nguyên liệu (theo dõi)','K'],['Công nợ nhà cung cấp (theo dõi)','L'],['LỢI NHUẬN RÒNG','N'],['Biên lợi nhuận','O'],['Tiền bàn giao trong hệ thống','U'],['Lương thực trả','V'],['Thuế đã nộp','W'],['DÒNG TIỀN THỰC VỀ','X']];
   for(const [label,col] of lines){
     const n=summary.rowCount+1;const cached=daily.getCell(`${col}${total}`).result as number;
-    bodyRow(summary,[label,{formula:`'Theo ngày'!${col}${total}`,result:cached}]);summary.getCell(n,2).numFmt=col==='O'?'0.0%':MONEY;
+    bodyRow(summary,[label,typeof cached==='number'?{formula:`'Theo ngày'!${col}${total}`,result:cached}:'Chưa có bàn giao đã chốt']);summary.getCell(n,2).numFmt=col==='O'?'0.0%':MONEY;
     if(col==='B'){summary.getRow(n).height=30;summary.getRow(n).eachCell(cell=>{cell.font={name:'Calibri',bold:true,size:13,color:{argb:'FF4472C4'}};});}
     if(['M','N'].includes(col)){summary.getRow(n).height=34;summary.getRow(n).eachCell({includeEmpty:true},cell=>{cell.fill=fill(col==='N'?GREEN:PALE);cell.font={name:'Calibri',bold:true,size:col==='N'?15:12,color:{argb:col==='N'?GOLD:GREEN}};});}
     if(col==='H')for(const item of otherExpenseRefs){

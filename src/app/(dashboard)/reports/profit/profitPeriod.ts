@@ -24,5 +24,7 @@ export function calculateProfitPeriod(days: ProfitDay[], inputsByDate: Record<st
   const totalCosts = rows.reduce((sum, day) => sum + day.result.totalCosts, 0);
   const complete = days.length > 0 && missingDays.length === 0;
   const profit = complete ? rows.reduce((sum, day) => sum + day.result.profit!, 0) : null;
-  return { rows, missingDays, revenue, totalCosts, complete, profit, margin: profit !== null && revenue > 0 ? profit / revenue * 100 : null };
+  const grossProfit=rows.length && rows.every(row=>row.result.grossProfit!==null)?rows.reduce((sum,row)=>sum+row.result.grossProfit!,0):null;
+  const cashFlow=rows.length && rows.every(row=>row.result.cashFlow!==null)?rows.reduce((sum,row)=>sum+row.result.cashFlow!,0):null;
+  return { rows, missingDays, revenue, totalCosts, complete, profit, grossProfit, netProfit:profit, cashFlow, margin: profit !== null && revenue > 0 ? profit / revenue * 100 : null };
 }

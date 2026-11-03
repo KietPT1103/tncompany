@@ -79,7 +79,7 @@ $periodInputs = ['2026-10-07'=>[...$zero,'salary'=>20,'electricity'=>3,'water'=>
 $report = profit_period_save($pdo, 'cafe', '2026-10-07','2026-10-08',$periodInputs,'test');
 check($report['totals']['tax'] === 53.46, 'Period tax sums 4.5% of each daily revenue');
 check($report['totals']['electricity'] === 3.0 && $report['totals']['water'] === 2.0, 'Separate electricity and water preserved in history');
-check(abs($report['totals']['profit'] - (-7808.79)) < 0.00001, 'Period net profit sums all daily sources and expenses');
+check(abs($report['totals']['profit'] - (-7803.79)) < 0.00001, 'Period net profit sums all daily sources and expenses');
 $history = profit_history($pdo,'cafe',1);
 check($history['total'] === 1 && count($history['rows']) === 1, 'Saved period appears in history');
 $detail = profit_history($pdo,'cafe',1,$report['id']);
@@ -99,7 +99,7 @@ $sheetSource = ['revenue'=>1394083000,'salaryEstimate'=>['amount'=>254741000],'s
 $sheetInputs = ['salary'=>0,'electricity'=>49999521,'water'=>0,'other'=>257834000,'marketing'=>100000000,'thienExpense'=>640192632,'ingredientInventory'=>220922212,'debt'=>112923000,'costOverrides'=>[]];
 $sheetSnapshot = profit_period_snapshot(['2026-10-07'=>$sheetSource], ['2026-10-07'=>$sheetInputs]);
 check($sheetSnapshot['totals']['tax'] === 62733735.0, 'Server computes tax directly from source revenue');
-check($sheetSnapshot['totals']['totalCosts'] === 1821252888.0 && $sheetSnapshot['totals']['profit'] === -319170676.0, 'Backend matches supplied spreadsheet including inventory and debt');
+check($sheetSnapshot['totals']['totalCosts'] === 1569808888.0 && $sheetSnapshot['totals']['profit'] === -175725888.0, 'Backend matches supplied spreadsheet including inventory and debt');
 check($sheetSnapshot['days'][0]['result']['ingredientInventory'] === 220922212.0 && $sheetSnapshot['totals']['debt'] === 112923000.0, 'New amounts included in daily snapshots and period totals');
 echo "PASS optional amounts: defaults, validation, persistence and spreadsheet formula\n";
 

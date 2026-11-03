@@ -17,6 +17,7 @@ import {
   PROFIT_FIELDS,
   OPTIONAL_PROFIT_FIELDS,
   roundedProfitMoney,
+  salaryPaymentPeriod,
   type ProfitInputs,
 } from "./dailyProfit";
 import {
@@ -388,6 +389,13 @@ export function ProfitCalculation({
                 </p>
               )}
             </section>
+            <section aria-label="Lãi và dòng tiền" className="grid gap-4 sm:grid-cols-3">
+              {[
+                {label:'Lãi gộp',value:calculation.grossProfit,note:'Doanh thu − giá vốn món đã bán'},
+                {label:'Lãi ròng ước tính',value:calculation.netProfit,note:'Lãi gộp − lương − chi phí vận hành − thuế'},
+                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi ngoài bàn giao − lương đã trả − thuế đã nộp'},
+              ].map(metric=><div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-sm font-semibold text-slate-500">{metric.label}</p><p className={`mt-2 text-xl font-bold ${metric.value!==null&&metric.value<0?'text-red-700':'text-emerald-800'}`}>{metric.value===null?'Chưa đủ dữ liệu':roundedProfitMoney(metric.value)}</p><p className="mt-1 text-xs text-slate-500">{metric.note}</p></div>)}
+            </section>
             <fieldset
               disabled={saving}
               className="min-w-0 space-y-5"
@@ -472,6 +480,19 @@ export function ProfitCalculation({
                     </div>
                     </div>
                     <OtherExpensesEditor key={selected.date} date={selected.date} inputs={selected.inputs} onChange={value => edit(selected.date,value)}/>
+                    <div className="mt-5 border-t border-slate-200 pt-4">
+                      <p className="text-sm font-semibold">Tiền thực thu · bàn giao trong hệ thống</p>
+                      <p className="mt-1 font-semibold text-emerald-800">{selected.result.cashReceived===null?'Chưa có ca bàn giao':roundedProfitMoney(selected.result.cashReceived)}</p>
+                      {selected.source.handover?.provisional&&<p className="text-xs text-amber-700">Ca chưa chốt hoặc có giao dịch chưa phân ca; chưa xác nhận dòng tiền thực về.</p>}
+                      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                        <div><label htmlFor={`salary-paid-${selected.date}`} className="mb-1 block text-sm font-semibold">Lương thực trả</label>
+                          <AmountInput id={`salary-paid-${selected.date}`} label="Lương thực trả" value={selected.inputs.salaryPaid??0} required={false} disabled={!salaryPaymentPeriod(selected.date)} onChange={value=>edit(selected.date,{...selected.inputs,salaryPaid:value})}/>
+                          <p className="mt-1 text-xs text-slate-500">{salaryPaymentPeriod(selected.date)?`${salaryPaymentPeriod(selected.date)!.label}: ${profitDate(salaryPaymentPeriod(selected.date)!.startDate)} – ${profitDate(salaryPaymentPeriod(selected.date)!.endDate)}`:'Chỉ trả lương ngày 15 và ngày 05 tháng sau.'}</p>
+                        </div>
+                        <div><label htmlFor={`tax-paid-${selected.date}`} className="mb-1 block text-sm font-semibold">Thuế đã nộp</label><AmountInput id={`tax-paid-${selected.date}`} label="Thuế đã nộp" value={selected.inputs.taxPaid??0} required={false} onChange={value=>edit(selected.date,{...selected.inputs,taxPaid:value})}/></div>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">Chỉ nhập các khoản trả ngoài tiền bàn giao, chưa có trong phiếu chi tại quầy. Công nợ nhà cung cấp và tồn kho là số theo dõi, không cộng/trừ trực tiếp vào lãi.</p>
+                    </div>
                     {selected.inputs.legacyUtilities != null && (
                       <p className="mt-4 rounded-sm bg-amber-50 p-3 text-xs text-amber-900">
                         Ngày này trước đây lưu điện/nước gộp:{" "}
@@ -540,13 +561,13 @@ export function ProfitCalculation({
                         </dd>
                       </div>
                       <div className="flex min-w-0 justify-between gap-3 py-2.5">
-                        <dt>− Chi phí tại quầy thu ngân</dt>
+                          <dt>Chi tại quầy · đã nằm trong tiền bàn giao</dt>
                         <dd className="shrink-0 text-right font-semibold tabular-nums">
                           {roundedProfitMoney(selected.result.voucherCost)}
                         </dd>
                       </div>
                       {(
-                        ["electricity", "water", "other", "marketing", "thienExpense"] as const
+                        ["electricity", "water", "other", "marketing", "thienExpense", "operatingExpense"] as const
                       ).map((key) => (
                         <div
                           key={key}
@@ -581,14 +602,14 @@ export function ProfitCalculation({
                       </div>
                       {(["ingredientInventory", "debt"] as const).map((key) => (
                         <div key={key} className="flex min-w-0 justify-between gap-3 py-2.5">
-                          <dt>{key === "ingredientInventory" ? "+" : "−"} {PROFIT_FIELDS.find((field) => field.key === key)!.label}</dt>
+                          <dt>{PROFIT_FIELDS.find((field) => field.key === key)!.label} · theo dõi</dt>
                           <dd className="shrink-0 text-right font-semibold tabular-nums">
                             {selected.inputs[key] === null ? "Chưa nhập" : roundedProfitMoney(selected.inputs[key]!)}
                           </dd>
                         </div>
                       ))}
                       <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">
-                        <dt>Lợi nhuận ngày</dt>
+                        <dt>Lãi ròng ước tính</dt>
                         <dd
                           className={`text-right tabular-nums ${selected.result.profit === null ? "text-slate-400" : selected.result.profit < 0 ? "text-red-700" : "text-emerald-800"}`}
                         >
@@ -597,6 +618,8 @@ export function ProfitCalculation({
                             : roundedProfitMoney(selected.result.profit)}
                         </dd>
                       </div>
+                      <div className="flex justify-between gap-3 py-3 font-bold"><dt>Lãi gộp</dt><dd>{selected.result.grossProfit===null?'Chưa đủ cost':roundedProfitMoney(selected.result.grossProfit)}</dd></div>
+                      <div className="flex justify-between gap-3 py-3 font-bold"><dt>Dòng tiền thực về</dt><dd>{selected.result.cashFlow===null?'Chờ dữ liệu bàn giao đã chốt':roundedProfitMoney(selected.result.cashFlow)}</dd></div>
                     </dl>
                   </section>
                 </div>
