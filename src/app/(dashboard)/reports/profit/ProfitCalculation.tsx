@@ -436,8 +436,8 @@ export function ProfitCalculation({
                     <div className="mt-5 grid min-w-0 gap-4 sm:grid-cols-2">
                       <div className="min-w-0 sm:col-span-2">
                         <p className="mb-1.5 text-sm font-semibold">Lương nhân viên (1 ngày)</p>
-                        <p className={`rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 font-semibold ${selected.inputs.salary === null ? "text-amber-700" : "text-emerald-800"}`}>
-                          {selected.inputs.salary === null ? "Chưa có ước lượng lương đã lưu" : profitMoney(selected.inputs.salary)}
+                        <p className={`rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 font-bold tabular-nums ${selected.inputs.salary === null ? "text-sm text-amber-700" : "text-xl text-emerald-800 sm:text-2xl"}`}>
+                          {selected.inputs.salary === null ? "Chưa có ước lượng lương đã lưu" : roundedProfitMoney(selected.inputs.salary)}
                         </p>
                         <p className="mt-1.5 text-xs text-slate-500">
                           {selected.source.salaryEstimate ? `Lấy từ ${selected.source.salaryEstimate.name}. ` : "Lưu lịch phân ca trong Ước lượng lương để lấy lương ngày này. "}
