@@ -4,24 +4,28 @@ import { profitOtherExpenses, type ProfitInputs } from './dailyProfit';
 import type { ProfitDay } from '@/services/dailyProfitService';
 
 const GREEN = 'FF064E3B', GOLD = 'FFF6C85F', INK = 'FF0F172A', PALE = 'FFF0FDF4';
-const MONEY = '#,##0.##" đ";[Red](#,##0.##)" đ";"—"';
+const MONEY = '#,##0" đ";[Red](#,##0)" đ";"—"';
 const fill = (argb: string): ExcelJS.Fill => ({type:'pattern',pattern:'solid',fgColor:{argb}});
 const dateLabel = (date: string) => date.split('-').reverse().join('/');
 const excelDate = (date: string) => new Date(`${date}T00:00:00Z`);
 const gridBorder: Partial<ExcelJS.Borders> = Object.fromEntries(['top','bottom','left','right'].map(side=>[side,{style:'thin',color:{argb:'FFD1D5DB'}}]));
 
-function sheet(workbook: ExcelJS.Workbook, name: string, title: string, subtitle: string, widths: number[], headers: string[]) {
+function sheet(workbook: ExcelJS.Workbook, name: string, title: string, subtitle: string, widths: number[], headers: string[], compact = false) {
   const ws = workbook.addWorksheet(name, {properties:{defaultRowHeight:23},pageSetup:{paperSize:widths.length > 8 ? 8 : 9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:0.25,right:0.25,top:0.4,bottom:0.4,header:0.15,footer:0.15}}});
   ws.columns = widths.map(width => ({width}));
-  ws.views = [{state:'frozen',ySplit:5,xSplit:name==='Theo ngày'?1:0,showGridLines:true}];
-  ws.mergeCells(1,1,2,widths.length);
+  ws.views = [{state:'frozen',ySplit:compact?2:5,xSplit:name==='Theo ngày'?1:0,showGridLines:true}];
+  ws.mergeCells(1,1,compact?1:2,widths.length);
   const heading=ws.getCell('A1'); heading.value=title;heading.font={name:'Calibri',size:21,bold:true,color:{argb:GOLD}};heading.fill=fill(GREEN);heading.alignment={vertical:'middle'};
-  ws.getRow(1).height=26;ws.getRow(2).height=20;
+  ws.getRow(1).height=compact?34:26;ws.getRow(2).height=20;
+  if(compact){heading.font={name:'Calibri',size:15,bold:true,color:{argb:GOLD}};ws.headerFooter.oddHeader=subtitle;}
+  else {
   ws.mergeCells(3,1,3,widths.length);ws.getCell('A3').value=subtitle;ws.getCell('A3').font={name:'Calibri',size:11,color:{argb:'FF64748B'}};
   ws.getCell('A3').alignment={vertical:'middle',wrapText:true};ws.getRow(3).height=32;
-  ws.getRow(5).values=headers;ws.getRow(5).height=34;
-  ws.getRow(5).eachCell(cell=>{cell.fill=fill(GREEN);cell.font={name:'Calibri',bold:true,color:{argb:'FFFFFFFF'},size:11};cell.alignment={vertical:'middle',wrapText:true};});
-  ws.pageSetup.printTitlesRow='1:5';
+  }
+  const headerRow=compact?2:5;
+  ws.getRow(headerRow).values=headers;ws.getRow(headerRow).height=compact?27:34;
+  ws.getRow(headerRow).eachCell(cell=>{cell.fill=fill(GREEN);cell.border=gridBorder;cell.font={name:'Calibri',bold:true,color:{argb:'FFFFFFFF'},size:11};cell.alignment={vertical:'middle',wrapText:true};});
+  ws.pageSetup.printTitlesRow=`1:${headerRow}`;
   ws.headerFooter.oddFooter='&LTN Services · Báo cáo lợi nhuận&RTrang &P / &N';
   return ws;
 }
@@ -59,7 +63,7 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   const rows=[...calculation.rows].sort((a,b)=>a.date.localeCompare(b.date));
   const workbook=new ExcelJS.Workbook();workbook.creator='TN Services';workbook.created=new Date();workbook.calcProperties.fullCalcOnLoad=true;
   const subtitle=`${options.storeName} · ${dateLabel(options.startDate)} – ${dateLabel(options.endDate)} · Đơn vị: VND${options.unsaved?' · Dữ liệu đang chỉnh sửa, chưa lưu':''}`;
-  const summary=sheet(workbook,'Tổng hợp','TN SERVICES | BÁO CÁO LỢI NHUẬN',subtitle,[24,18,18,18,18,22],['Chỉ tiêu','','','','','Giá trị']);
+  const summary=sheet(workbook,'Tổng hợp','TN SERVICES | BÁO CÁO LỢI NHUẬN',subtitle,[80,24],['Chỉ tiêu','Giá trị'],true);
   const daily=sheet(workbook,'Theo ngày','CHI TIẾT LỢI NHUẬN THEO NGÀY',subtitle,[15,21,21,21,21,19,19,21,21,21,23,21,23,23,15,13,22],['Ngày','Doanh thu','Giá vốn món','Lương nhân viên','Chi tại quầy','Tiền điện','Tiền nước','Chi phí khác','Marketing','Anh Thiện chi','Tồn kho nguyên liệu','Công nợ','Tổng chi phí','Lợi nhuận ròng','Biên lợi nhuận','Số hóa đơn','Thuế (4,5%)']);
   const costs=sheet(workbook,'Giá vốn món','CHI TIẾT GIÁ VỐN MÓN ĐÃ BÁN',subtitle,[15,21,44,16,23,24],['Ngày','Mã món','Tên món','Số lượng','Cost / món','Tổng giá vốn']);
   const expenses=sheet(workbook,'Các khoản chi','CHI TIẾT CÁC KHOẢN CHI',subtitle,[15,26,27,44,48,23],['Ngày','Loại chi phí','Mã phiếu','Tên / nội dung','Ghi chú','Số tiền']);
@@ -90,16 +94,28 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['Lương nhân viên','D'],['Chi phí tại quầy thu ngân','E'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['TỔNG CHI PHÍ','M'],['+ Giá trị tồn kho nguyên liệu','K'],['− Công nợ','L'],['LỢI NHUẬN RÒNG','N'],['Biên lợi nhuận','O']];
   for(const [label,col] of lines){
     const n=summary.rowCount+1;const cached=daily.getCell(`${col}${total}`).result as number;
-    bodyRow(summary,[label,null,null,null,null,{formula:`'Theo ngày'!${col}${total}`,result:cached}]);summary.mergeCells(n,1,n,5);summary.getCell(n,6).numFmt=col==='O'?'0.0%':MONEY;
+    bodyRow(summary,[label,{formula:`'Theo ngày'!${col}${total}`,result:cached}]);summary.getCell(n,2).numFmt=col==='O'?'0.0%':MONEY;
+    if(col==='B'){summary.getRow(n).height=30;summary.getRow(n).eachCell(cell=>{cell.font={name:'Calibri',bold:true,size:13,color:{argb:'FF4472C4'}};});}
     if(['M','N'].includes(col)){summary.getRow(n).height=34;summary.getRow(n).eachCell({includeEmpty:true},cell=>{cell.fill=fill(col==='N'?GREEN:PALE);cell.font={name:'Calibri',bold:true,size:col==='N'?15:12,color:{argb:col==='N'?GOLD:GREEN}};});}
     if(col==='H')for(const item of otherExpenseRefs){
-      const detailRow=bodyRow(summary,[`    ${rows.length>1?dateLabel(item.date)+' · ':''}${item.name}`,null,null,null,null,{formula:`'Các khoản chi'!F${item.row}`,result:item.amount}]);
-      summary.mergeCells(detailRow.number,1,detailRow.number,5);
+      const detailRow=bodyRow(summary,[`${rows.length>1?dateLabel(item.date)+' · ':''}${item.name}`,{formula:`'Các khoản chi'!F${item.row}`,result:item.amount}]);
+      detailRow.getCell(1).alignment={indent:1,vertical:'middle',wrapText:true};
       detailRow.eachCell({includeEmpty:true},cell=>{cell.font={name:'Calibri',size:10,color:{argb:'FF64748B'}};cell.fill=fill('FFF8FAFC');});
-      detailRow.getCell(6).numFmt=MONEY;
+      detailRow.getCell(2).numFmt=MONEY;
     }
   }
-  summary.mergeCells(5,1,5,5);summary.pageSetup.printArea=`A1:F${summary.rowCount}`;
+  summary.pageSetup.printArea=`A1:B${summary.rowCount}`;
+  summary.headerFooter.oddFooter='&LTN Services · Số tiền làm tròn lên 1.000đ; tổng tính từ số gốc&RTrang &P / &N';
+  // Keep full precision in an audit sheet; visible results round independently, like the UI.
+  const raw=workbook.addWorksheet('Dữ liệu gốc',{state:'hidden'});
+  raw.columns=[{header:'Sheet',width:24},{header:'Ô',width:12},{header:'Giá trị gốc',width:24}];
+  for(const ws of [summary,daily,costs,expenses])ws.eachRow(row=>row.eachCell(cell=>{
+    if(cell.numFmt!==MONEY)return;
+    const amount=typeof cell.value==='number'?cell.value:typeof cell.result==='number'?cell.result:null;
+    if(amount===null)return;
+    const source=raw.addRow([ws.name,cell.address,amount]);source.getCell(3).numFmt='#,##0.########';
+    cell.value={formula:`CEILING('Dữ liệu gốc'!C${source.number},1000)`,result:Math.ceil(amount/1000)*1000};
+  }));
   return workbook;
 }
 

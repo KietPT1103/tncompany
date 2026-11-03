@@ -43,6 +43,8 @@ không lẫn dữ liệu; tổng chi tại quầy tự cập nhật theo phiếu
 
 ## Kỳ báo cáo và lịch sử
 
+Sheet Excel **Tổng hợp** theo mẫu hai cột **Chỉ tiêu / Giá trị**: tiêu đề xanh đậm–vàng, doanh thu xanh dương đậm, các khoản chi khác thụt vào, tổng chi phí nền xanh nhạt và lợi nhuận nền xanh đậm. Tất cả ô tiền trên bốn sheet hiển thị đều dùng `CEILING(...,1000)` và định dạng không có phần thập phân. Số lượng, ngày và phần trăm không làm tròn theo tiền. Sheet ẩn **Dữ liệu gốc** giữ các giá trị chính xác để đối chiếu; mỗi tổng được tính từ dữ liệu gốc rồi làm tròn riêng, không cộng dồn sai số của từng dòng đã làm tròn. Thông tin cửa hàng/kỳ báo cáo nằm ở đầu trang in, không chiếm dòng trong bảng Tổng hợp.
+
 **Thuế** tự tính bằng **doanh thu từng ngày × 4,5%**, làm tròn đến hai chữ số thập phân khi tính, không lấy từ dữ liệu nhập của trình duyệt. Thuế được cộng vào tổng chi phí và trừ khỏi lợi nhuận; tổng kỳ cộng thuế của từng ngày. Giao diện hiển thị làm tròn lên hàng nghìn như các khoản tiền khác, còn số gốc dùng để tính/lưu và xuất Excel. Báo cáo lưu mới/cập nhật có `tax` trong snapshot; lịch sử cũ chưa có thuế giữ nguyên cho đến khi chỉnh sửa và lưu lại. Excel có dòng thuế trong Tổng hợp, cột Thuế trong Theo ngày và khoản thuế trong Các khoản chi, kèm công thức 4,5%.
 
 File Excel bật đường lưới xám và kẻ viền xám cho bảng trên tất cả sheet. Sheet **Tổng hợp** hiển thị từng khoản chi khác ngay dưới tổng **Chi phí khác trong ngày**; khi xuất nhiều ngày, mỗi khoản ghi kèm ngày. Các dòng này chỉ diễn giải tổng đã cộng, không tính chi phí lần thứ hai.
