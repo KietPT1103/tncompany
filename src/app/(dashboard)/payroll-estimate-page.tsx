@@ -416,7 +416,7 @@ function buildScheduleFromEntries(
 
     const employeeKey = getEmployeeKey(matchedEmployee);
     (entry.shifts || []).forEach((shift) => {
-      if (!shift.isValid) return;
+      if (shift.isValid === false) return;
       const role = shift.role || entry.role;
       if (!estimateRoles.includes(role)) return;
       const shiftId = getShiftIdFromStoredShift(shift);
@@ -859,6 +859,7 @@ export default function SalaryEstimatePage() {
   const location = useLocation();
 
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [savedEmployees, setSavedEmployees] = useState<Employee[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [schedule, setSchedule] = useState<ScheduleState>({});
@@ -1018,6 +1019,7 @@ export default function SalaryEstimatePage() {
     setSelectedRole(estimateRoles[0] || "");
     setActiveCell(null);
     setSchedule({});
+    setSavedEmployees([]);
     setEditingPayrollId("");
     savedDraft.current = "";
     setScheduleBoardRoles(estimateRoles.length > 0 ? [estimateRoles[0]] : []);
@@ -1078,7 +1080,7 @@ export default function SalaryEstimatePage() {
 
   const supportedEmployees = useMemo(
     () =>
-      employees
+      Array.from(new Map([...employees, ...savedEmployees].map(employee => [getEmployeeKey(employee), employee])).values())
         .filter(
           (employee) =>
             getEmployeeRoleNames(employee).some((role) =>
@@ -1086,7 +1088,7 @@ export default function SalaryEstimatePage() {
             ),
         )
         .sort((left, right) => left.name.localeCompare(right.name, "vi")),
-    [employees, estimateRoles, canScheduleAcrossCafeAndKitchen],
+    [employees, savedEmployees, estimateRoles, canScheduleAcrossCafeAndKitchen],
   );
 
   const queryPayrollId = useMemo(() => {
@@ -1103,7 +1105,7 @@ export default function SalaryEstimatePage() {
   }, [supportedEmployees]);
 
   useEffect(() => {
-    if (!queryPayrollId || supportedEmployees.length === 0) return;
+    if (!queryPayrollId || employeesLoading || rolesLoading) return;
     const loadKey = `${storeId}:${queryPayrollId}:${openSavedRevision}`;
     if (loadedScheduleKey.current === loadKey) return;
 
@@ -1115,9 +1117,25 @@ export default function SalaryEstimatePage() {
     getSavedEstimateSchedule(storeId, queryPayrollId)
       .then(({ entries, schedule: savedSchedule }) => {
         if (ignore) return;
+        const snapshotEmployees: Employee[] = entries.map(entry => {
+          const current = employees.find(employee => employee.id === entry.employeeId);
+          return {
+            ...current,
+            id: entry.employeeId,
+            employeeCode: entry.employeeCode || current?.employeeCode,
+            name: entry.employeeName,
+            storeId: current?.storeId || storeId,
+            role: entry.role,
+            roles: Array.from(new Set([entry.role, ...(current?.roles || []), ...(entry.shifts || []).map(shift => shift.role || entry.role)])),
+            hourlyRate: entry.hourlyRate ?? current?.hourlyRate ?? 0,
+            salaryType: entry.salaryType || current?.salaryType,
+            monthlySalary: entry.monthlySalary || entry.fixedSalary || 0,
+          };
+        });
+        setSavedEmployees(snapshotEmployees);
         const restored = buildScheduleFromEntries(
           entries,
-          supportedEmployees,
+          snapshotEmployees,
           estimateRoles,
         );
         const startDate = savedSchedule.startDate || normalizedRange.startDate;
@@ -1155,7 +1173,7 @@ export default function SalaryEstimatePage() {
     return () => {
       ignore = true;
     };
-  }, [estimateRoles, queryPayrollId, supportedEmployees, storeId, openSavedRevision]);
+  }, [estimateRoles, queryPayrollId, employeesLoading, rolesLoading, employees, storeId, openSavedRevision]);
 
   const employeesByRole = useMemo(() => {
     const next = Object.fromEntries(
@@ -1407,6 +1425,7 @@ export default function SalaryEstimatePage() {
   }
 
   function createNewSchedule() {
+    setSavedEmployees([]);
     saveGeneration.current += 1;
     editingIdRef.current = "";
     loadedScheduleKey.current = "";
@@ -1844,6 +1863,7 @@ export default function SalaryEstimatePage() {
                 setAutosaveError("");
                 setEditingPayrollId("");
                 setSchedule({});
+                setSavedEmployees([]);
                 setScheduleBoardRoles(selectedRole ? [selectedRole] : []);
                 setActiveCell(null);
                 setSaveMessage("");

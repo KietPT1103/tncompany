@@ -86,6 +86,41 @@ function payroll_estimates_employee_id(PDO $pdo, string $store, array $entry): s
     return $id;
 }
 
+function payroll_estimates_totals(array $entries, string $start, string $end): array
+{
+    $hours = 0.0; $salary = 0.0; $people = []; $monthlyDays = []; $cells = [];
+    foreach ($entries as $index=>$entry) {
+        $person = (string)($entry['employee_id'] ?? $entry['id'] ?? $index);
+        $shifts = json_decode((string)($entry['shifts_json'] ?? '[]'), true);
+        // Very old records without shift details can only use their saved aggregates.
+        if (!is_array($shifts) || !$shifts) {
+            $people[$person] = true;
+            $hours += (float)($entry['total_hours'] ?? 0);
+            $salary += (float)($entry['salary'] ?? 0);
+            continue;
+        }
+        $monthly = in_array($entry['salary_type'] ?? '', ['monthly','fixed'], true);
+        $rate = $monthly ? (float)(($entry['monthly_salary'] ?? 0) ?: ($entry['fixed_salary'] ?? 0)) / 30 : (float)($entry['hourly_rate'] ?? 0);
+        foreach ($shifts as $shiftIndex=>$shift) {
+            if (!is_array($shift) || ($shift['isValid'] ?? true) === false) continue;
+            $date = str_replace('/', '-', (string)($shift['date'] ?? substr((string)($shift['inTime'] ?? ''),0,10)));
+            if ($date < $start || $date > $end || !is_numeric($shift['hours'] ?? null) || (float)$shift['hours'] <= 0) continue;
+            $role = (string)($shift['role'] ?? $entry['role'] ?? '');
+            $slot = isset($shift['inTime'],$shift['outTime']) ? $shift['inTime'].'|'.$shift['outTime'] : (string)$shiftIndex;
+            $cell = $person.'|'.$date.'|'.$role.'|'.$slot;
+            if (isset($cells[$cell])) continue;
+            $cells[$cell] = true; $people[$person] = true;
+            $hours += (float)$shift['hours'];
+            if ($monthly) {
+                if (isset($monthlyDays[$person][$date])) continue;
+                $monthlyDays[$person][$date] = true;
+                $salary += $rate;
+            } else $salary += (float)$shift['hours'] * $rate;
+        }
+    }
+    return ['employee_count'=>count($people),'total_hours'=>$hours,'total_salary'=>$salary,'employee_keys'=>array_keys($people)];
+}
+
 function payroll_estimates_list(PDO $pdo, string $store, int $page, string $start = '', string $end = ''): array
 {
     if ($page < 1 || $page > 100000) throw new InvalidArgumentException('Trang không hợp lệ.');
@@ -102,33 +137,38 @@ function payroll_estimates_list(PDO $pdo, string $store, int $page, string $star
     }
     $count = $pdo->prepare("SELECT COUNT(*) FROM payrolls p WHERE $filter");
     $count->execute($params);
-    $stmt = $pdo->prepare("SELECT p.*,
-        (SELECT COUNT(DISTINCT e.employee_id) FROM payroll_entries e WHERE e.payroll_id=p.id) AS employee_count,
-        (SELECT SUM(e.total_hours) FROM payroll_entries e WHERE e.payroll_id=p.id) AS total_hours,
-        (SELECT SUM(e.salary) FROM payroll_entries e WHERE e.payroll_id=p.id) AS total_salary
-        FROM payrolls p WHERE $filter
+    $stmt = $pdo->prepare("SELECT p.* FROM payrolls p WHERE $filter
         ORDER BY COALESCE(p.updated_at,p.created_at) DESC,p.created_at DESC,p.id DESC
         LIMIT 10 OFFSET ".(($page-1)*10));
     $stmt->execute($params);
     $items = $stmt->fetchAll();
     if ($items) {
-        $entries = $pdo->prepare('SELECT payroll_id,role,shifts_json FROM payroll_entries WHERE payroll_id IN ('.implode(',',array_fill(0,count($items),'?')).')');
+        $entries = $pdo->prepare('SELECT * FROM payroll_entries WHERE payroll_id IN ('.implode(',',array_fill(0,count($items),'?')).')');
         $entries->execute(array_column($items,'id'));
         $byPayroll = [];
         foreach ($entries->fetchAll() as $entry) $byPayroll[$entry['payroll_id']][] = $entry;
-        foreach ($items as &$item) $item['roles'] = payroll_estimates_roles($byPayroll[$item['id']] ?? []);
+        foreach ($items as &$item) {
+            $savedEntries = $byPayroll[$item['id']] ?? [];
+            $item['roles'] = payroll_estimates_roles($savedEntries);
+            $item = array_merge($item,payroll_estimates_totals($savedEntries,(string)$item['period_start'],(string)$item['period_end']));
+        }
         unset($item);
     }
     $summary = null;
     if ($start !== '') {
-        $totals = $pdo->prepare("SELECT COUNT(DISTINCT p.id) AS schedule_count, COUNT(DISTINCT e.employee_id) AS employee_count,
-            SUM(e.total_hours) AS total_hours,SUM(e.salary) AS total_salary
-            FROM payrolls p LEFT JOIN payroll_entries e ON e.payroll_id=p.id WHERE $filter");
+        $totals = $pdo->prepare("SELECT e.* FROM payroll_entries e JOIN payrolls p ON p.id=e.payroll_id WHERE $filter");
         $totals->execute($params);
-        $row = $totals->fetch();
-        $summary = ['startDate'=>$start,'endDate'=>$end,'scheduleCount'=>(int)$row['schedule_count'],
-            'employeeCount'=>(int)$row['employee_count'],'totalHours'=>(float)($row['total_hours'] ?? 0),
-            'totalSalary'=>round((float)($row['total_salary'] ?? 0),2)];
+        $groups = []; $people = []; $hours = 0.0; $salary = 0.0;
+        foreach ($totals->fetchAll() as $entry) $groups[$entry['payroll_id']][] = $entry;
+        foreach ($groups as $group) {
+            $total = payroll_estimates_totals($group,$start,$end);
+            $hours += $total['total_hours']; $salary += $total['total_salary'];
+            foreach ($total['employee_keys'] as $key) $people[$key] = true;
+        }
+        $scheduleCount = $pdo->prepare("SELECT COUNT(*) FROM payrolls p WHERE $filter");
+        $scheduleCount->execute($params);
+        $summary = ['startDate'=>$start,'endDate'=>$end,'scheduleCount'=>(int)$scheduleCount->fetchColumn(),
+            'employeeCount'=>count($people),'totalHours'=>$hours,'totalSalary'=>round($salary,2)];
     }
     return ['items'=>array_map('payroll_estimates_map',$items),'total'=>(int)$count->fetchColumn(),'page'=>$page,'summary'=>$summary];
 }
@@ -143,6 +183,7 @@ function payroll_estimates_detail(PDO $pdo, string $store, string $id): ?array
     $stmt->execute(['id'=>$id]);
     $entries = $stmt->fetchAll();
     $row['roles'] = payroll_estimates_roles($entries);
+    $row = array_merge($row,payroll_estimates_totals($entries,(string)$row['period_start'],(string)$row['period_end']));
     return ['schedule'=>payroll_estimates_map($row),'entries'=>$entries];
 }
 

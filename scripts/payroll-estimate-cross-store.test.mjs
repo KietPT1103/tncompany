@@ -79,6 +79,15 @@ for (const [storeId, userRole] of [['cafe','admin'], ['restaurant','admin'], ['c
         check('employee row identifies its store',alternate?.textContent.includes(other==='restaurant'?'Bếp / Lẩu':'Cafe'));
         alternate.click();await wait(80);
         check('can select other-store employee with a different profile role',alternate.getAttribute('aria-pressed')==='true');
+        document.querySelector('[aria-label="Đóng popup"]').click();await wait(80);
+        api.saved.entries[0].hourlyRate=50000;
+        api.saved.entries.push({...structuredClone(api.saved.entries[0]),employeeId:'deleted-person',employeeCode:'old-99',employeeName:'Nhân viên đã xóa',hourlyRate:40000});
+        window.navigate('/payroll-estimate?payrollId=historical');await wait(400);
+        const historicalBoard=document.getElementById('estimate-board-'+encodeURIComponent(role));
+        check('restores employees no longer in current roster',historicalBoard?.textContent.includes('Nhân viên đã xóa'));
+        historicalBoard.querySelector('[data-schedule-day] [role="button"]').click();await wait(80);
+        const historicalEmployee=[...document.querySelectorAll('[role="dialog"] button[aria-pressed]')].find(b=>b.textContent.includes(other+' employee'));
+        check('reopened schedule uses its saved hourly rate',historicalEmployee?.textContent.includes('250.000 đ'));
       }else{
         check('unrelated stores do not gain kitchen roles',!options.some(o=>o.textContent.trim()==='Bếp'));
       }
