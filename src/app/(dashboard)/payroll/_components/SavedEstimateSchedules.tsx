@@ -6,6 +6,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { SingleDatePicker } from '@/components/ui/SingleDatePicker';
 import { SelectBox } from '@/components/ui/SelectBox';
+import { Input } from '@/components/ui/Input';
 import { estimatePeriodForDate, type EstimatePeriod } from '@/lib/estimatePeriods';
 import { deleteSavedEstimateSchedules, getSavedEstimateSchedules, type SavedEstimateSchedule } from '@/services/payrolls';
 
@@ -124,9 +125,23 @@ export function SavedEstimateSchedules({ storeId, revision, onOpen, onDeleted, o
           }}
           disabled={opening || deleting} className="w-full sm:w-80" triggerClassName={`h-10 ${outline}`} openTriggerClassName="!border-[#064E3B] !ring-0"
         />}
-        {(preset === 'week' || preset === 'month') && <SingleDatePicker
-          label={preset === 'week' ? 'Chọn ngày trong tuần' : 'Chọn ngày trong tháng'} value={anchorDate}
-          onChange={date => { setAnchorDate(date); changePeriod(estimatePeriodForDate(date,preset)); }}
+        {preset === 'month' && <label className="block w-full sm:w-56">
+          <span className="mb-2 block text-sm font-medium text-slate-600">Chọn tháng/năm</span>
+          <Input
+            type="month" value={anchorDate.slice(0,7)}
+            onChange={event => {
+              const month = event.target.value;
+              if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return;
+              const date = `${month}-01`;
+              setAnchorDate(date);
+              changePeriod(estimatePeriodForDate(date,'month'));
+            }}
+            disabled={opening || deleting} className={`h-10 w-full ${outline}`}
+          />
+        </label>}
+        {preset === 'week' && <SingleDatePicker
+          label="Chọn ngày trong tuần" value={anchorDate}
+          onChange={date => { setAnchorDate(date); changePeriod(estimatePeriodForDate(date,'week')); }}
           disabled={opening || deleting} className="w-full sm:w-56" triggerClassName={`h-10 ${outline}`}
         />}
       </div>

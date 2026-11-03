@@ -19,6 +19,44 @@ function payroll_estimates_filter(): string
     return "p.store_id=:store AND (p.source='payroll_estimate' OR (p.source='timesheet_import' AND p.name LIKE :legacy))";
 }
 
+function payroll_estimates_assert_unique_period(PDO $pdo, string $store, string $start, string $end, string $exclude = ''): void
+{
+    foreach ([$start, $end] as $value) {
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        if (!$date || $date->format('Y-m-d') !== $value) throw new InvalidArgumentException('Khoảng ngày không hợp lệ.');
+    }
+    if ($start > $end) throw new InvalidArgumentException('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.');
+    if ($exclude !== '') {
+        $current = $pdo->prepare('SELECT period_start,period_end FROM payrolls WHERE id=:id AND store_id=:store');
+        $current->execute(['id'=>$exclude,'store'=>$store]);
+        $period = $current->fetch(PDO::FETCH_ASSOC);
+        // Existing duplicate records remain editable when their period is unchanged.
+        if ($period && $period['period_start'] === $start && $period['period_end'] === $end) return;
+    }
+    $query = $pdo->prepare('SELECT p.id FROM payrolls p WHERE '.payroll_estimates_filter().'
+        AND p.period_start=:start AND p.period_end=:end AND p.id<>:exclude LIMIT 1');
+    $query->execute(['store'=>$store,'legacy'=>'Ước tính lương %','start'=>$start,'end'=>$end,'exclude'=>$exclude]);
+    if ($query->fetchColumn() !== false) {
+        throw new DomainException('Đã có lịch ước tính lương cho khoảng ngày này tại cửa hàng. Vui lòng mở lịch trong Lịch phân ca đã lưu để chỉnh sửa.');
+    }
+}
+
+// Serialize estimate writes per store, including concurrent requests from different tabs.
+function payroll_estimates_lock_store(PDO $pdo, string $store): string
+{
+    $key = 'estimate:'.substr(hash('sha256', $store), 0, 50);
+    $query = $pdo->prepare('SELECT GET_LOCK(:key, 10)');
+    $query->execute(['key'=>$key]);
+    if ((int)$query->fetchColumn() !== 1) throw new RuntimeException('Lịch đang được lưu ở phiên khác. Vui lòng thử lại.');
+    return $key;
+}
+
+function payroll_estimates_unlock_store(PDO $pdo, string $key): void
+{
+    $query = $pdo->prepare('SELECT RELEASE_LOCK(:key)');
+    $query->execute(['key'=>$key]);
+}
+
 function payroll_estimates_roles(array $entries): array
 {
     $roles = [];

@@ -1287,7 +1287,10 @@ export default function SalaryEstimatePage() {
       adminSearchText(employee.name).includes(keyword) ||
       adminSearchText((employee.employeeCode || "")).includes(keyword)
     );
-  });
+  }).sort((left, right) =>
+    Number(activeSelection.includes(getEmployeeKey(right))) -
+    Number(activeSelection.includes(getEmployeeKey(left))),
+  );
   const canAccessPayroll = hasPermission(user, "payroll.access");
 
   function updateCellEmployees(
@@ -1452,6 +1455,15 @@ export default function SalaryEstimatePage() {
     setSaveMessage("");
 
     try {
+      const existingSchedules = await getSavedEstimateSchedules(storeId, 1, normalizedRange);
+      if (!isCurrent()) return false;
+      if (existingSchedules.items.some(item => item.id !== requestPayrollId)) {
+        const current = requestPayrollId ? await getSavedEstimateSchedule(storeId, requestPayrollId) : null;
+        if (!isCurrent()) return false;
+        if (!current || current.schedule.startDate !== normalizedRange.startDate || current.schedule.endDate !== normalizedRange.endDate) {
+          throw new Error("Đã có lịch ước tính lương cho khoảng ngày này tại cửa hàng. Vui lòng mở lịch trong Lịch phân ca đã lưu để chỉnh sửa.");
+        }
+      }
       const payrollName = `Ước tính lương ${shortDateFormatter.format(
         parseDateKey(normalizedRange.startDate),
       )} - ${shortDateFormatter.format(parseDateKey(normalizedRange.endDate))}`;

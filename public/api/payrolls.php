@@ -548,10 +548,12 @@ if ($method === 'GET') {
 
     $storeId = trim((string) ($_GET['storeId'] ?? 'cafe'));
     $statement = db()->prepare(
-        'SELECT id, store_id, name, status, period_start, period_end, created_at
+        "SELECT id, store_id, name, status, period_start, period_end, created_at
          FROM payrolls
          WHERE store_id = :store_id
-         ORDER BY created_at DESC'
+           AND COALESCE(source, '') <> 'payroll_estimate'
+           AND NOT (COALESCE(source, '') = 'timesheet_import' AND COALESCE(name, '') LIKE 'Ước tính lương %')
+         ORDER BY created_at DESC"
     );
     $statement->execute([
         'store_id' => $storeId,
@@ -602,9 +604,13 @@ if ($method === 'POST') {
 
     $payrollId = uuidv4();
     $pdo = db();
-    $pdo->beginTransaction();
+    $isEstimate = ($body['source'] ?? '') === 'payroll_estimate'
+        || ($entries !== [] && str_starts_with($name, 'Ước tính lương '));
+    $estimateLock = $isEstimate ? payroll_estimates_lock_store($pdo, $storeId) : null;
 
     try {
+        if ($isEstimate) payroll_estimates_assert_unique_period($pdo, $storeId, (string)($body['startDate'] ?? ''), (string)($body['endDate'] ?? ''));
+        $pdo->beginTransaction();
         $insertPayroll = $pdo->prepare(
             'INSERT INTO payrolls (id, store_id, name, status, source, period_start, period_end, created_at)
              VALUES (:id, :store_id, :name, :status, :source, :period_start, :period_end, NOW())'
@@ -614,7 +620,7 @@ if ($method === 'POST') {
             'store_id' => $storeId,
             'name' => $name,
             'status' => trim((string) ($body['status'] ?? 'draft')) ?: 'draft',
-            'source' => $entries !== [] ? (($body['source'] ?? '') === 'payroll_estimate' ? 'payroll_estimate' : 'timesheet_import') : 'manual',
+            'source' => $isEstimate ? 'payroll_estimate' : ($entries !== [] ? 'timesheet_import' : 'manual'),
             'period_start' => $body['startDate'] ?: null,
             'period_end' => $body['endDate'] ?: null,
         ]);
@@ -657,9 +663,21 @@ if ($method === 'POST') {
         }
 
         $pdo->commit();
+    } catch (DomainException $exception) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
+        $estimateLock = null;
+        respond_error($exception->getMessage(), 409);
+    } catch (InvalidArgumentException $exception) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
+        $estimateLock = null;
+        respond_error($exception->getMessage(), 422);
     } catch (Throwable $exception) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) $pdo->rollBack();
         throw $exception;
+    } finally {
+        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
     }
 
     respond_ok([
@@ -799,10 +817,32 @@ if ($method === 'PATCH') {
     }
 
     $fields[] = 'updated_at = NOW()';
-    $statement = db()->prepare(
-        sprintf('UPDATE payrolls SET %s WHERE id = :id', implode(', ', $fields))
-    );
-    $statement->execute($params);
+    $pdo = db();
+    $currentQuery = $pdo->prepare('SELECT store_id, source, name, period_start, period_end FROM payrolls WHERE id=:id');
+    $currentQuery->execute(['id'=>$id]);
+    $current = $currentQuery->fetch(PDO::FETCH_ASSOC);
+    $isEstimate = $current && ($current['source'] === 'payroll_estimate'
+        || ($current['source'] === 'timesheet_import' && str_starts_with($current['name'], 'Ước tính lương ')));
+    $estimateLock = $isEstimate ? payroll_estimates_lock_store($pdo, $current['store_id']) : null;
+    try {
+        if ($isEstimate) {
+            payroll_estimates_assert_unique_period($pdo, $current['store_id'],
+                (string)(array_key_exists('startDate', $body) ? $body['startDate'] : $current['period_start']),
+                (string)(array_key_exists('endDate', $body) ? $body['endDate'] : $current['period_end']), $id);
+        }
+        $statement = $pdo->prepare(sprintf('UPDATE payrolls SET %s WHERE id = :id', implode(', ', $fields)));
+        $statement->execute($params);
+    } catch (DomainException $exception) {
+        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
+        $estimateLock = null;
+        respond_error($exception->getMessage(), 409);
+    } catch (InvalidArgumentException $exception) {
+        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
+        $estimateLock = null;
+        respond_error($exception->getMessage(), 422);
+    } finally {
+        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
+    }
 
     respond_ok([
         'updated' => true,

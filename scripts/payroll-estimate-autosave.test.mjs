@@ -10,10 +10,10 @@ const mocks = {
   '@/context/AuthContext': `const user={id:'test',role:'admin'};export const useAuth=()=>({user,loading:false});`,
   '@/context/StoreContext': `export const useStore=()=>({storeId:'cafe',storeName:'Cafe'});`,
   '@/services/employeeRoles': `export const getEmployeeRoles=async()=>[{name:'Thu ngân'}];`,
-  '@/services/employees': `export const getEmployees=async()=>[{id:'e1',name:'Nhân viên A',role:'Thu ngân',hourlyRate:25000},{id:'e2',name:'Nhân viên B',role:'Thu ngân',hourlyRate:25000}];export const getEmployeeRoleNames=e=>[e.role];`,
+  '@/services/employees': `export const getEmployees=async store=>store==='cafe'?[{id:'e1',name:'Nhân viên A',role:'Thu ngân',hourlyRate:25000},{id:'e2',name:'Nhân viên B',role:'Thu ngân',hourlyRate:25000}]:[];export const getEmployeeRoleNames=e=>[e.role];`,
   '@/services/payrolls': `
 const api=window.api={creates:[],updates:[],entries:[],loads:0,attempts:0,fail:false,hold:false};
-export const getSavedEstimateSchedules=async()=>({items:api.creates.length&&!api.deleted?[{...api.creates[0],id:api.detailId||'schedule1',updatedAt:'2026-10-28 12:00:00',roles:['Thu ngân'],employeeCount:api.entries.length,totalHours:0,totalSalary:0}]:[],total:api.deleted?0:api.creates.length,summary:null});
+export const getSavedEstimateSchedules=async()=>api.duplicate?{items:[{id:'duplicate'}],total:1,summary:null}:({items:api.creates.length&&!api.deleted?[{...api.creates[0],id:api.detailId||'schedule1',updatedAt:'2026-10-28 12:00:00',roles:['Thu ngân'],employeeCount:api.entries.length,totalHours:0,totalSalary:0}]:[],total:api.deleted?0:api.creates.length,summary:null});
 export const saveImportedPayroll=async p=>{api.creates.push(p);const id='schedule'+api.creates.length;while(api.hold)await new Promise(r=>setTimeout(r,50));api.entries=p.entries.map((e,i)=>({...e,id:'entry'+i}));return id};
 export const getPayrollEntries=async()=>{api.attempts++;if(api.fail)throw new Error('Mất kết nối');return structuredClone(api.entries)};
 export const updatePayrollEntry=async(id,e)=>{api.entries=api.entries.map(v=>v.id===id?{...e,id}:v)};
@@ -41,6 +41,7 @@ const clickText=(selector,text)=>{const button=[...document.querySelectorAll(sel
  check('debounces rapid edits',api.creates.length===0);await wait(500);
  check('creates one schedule automatically',api.creates.length===1&&api.creates[0].entries.length===2);
  clickEmployee('Nhân viên A');await wait(80);check('accepts edits while saving',document.querySelector('[role="dialog"] button[aria-pressed="false"]')?.textContent.includes('Nhân viên A'));
+ check('selected employees move above unselected employees',document.querySelector('[role="dialog"] button[aria-pressed]')?.textContent.includes('Nhân viên B'));
  api.hold=false;await wait(1800);
  check('queues latest change against returned id',api.creates.length===1&&api.updates.length===1&&api.updates[0].id==='schedule1'&&api.entries.length===1&&api.entries[0].employeeId==='e2');
  check('does not reload or overwrite own created schedule',api.loads===0);
@@ -55,6 +56,7 @@ const clickText=(selector,text)=>{const button=[...document.querySelectorAll(sel
  api.failDeleteAfter=undefined;clickEmployee('Nhân viên B');clickEmployee('Nhân viên A');await wait(1400);
  check('reconciles server after reverting a partially saved draft',api.entries.length===2&&status()?.includes('Đã lưu lịch'));
  clickEmployee('Nhân viên A');clickEmployee('Nhân viên B');await wait(1500);
+ check('clearing selection restores name order',document.querySelector('[role="dialog"] button[aria-pressed]')?.textContent.includes('Nhân viên A'));
  check('autosaves removal of final assignment',api.entries.length===0&&status()?.includes('Đã lưu lịch')&&api.creates.length===1);
  closePicker();await wait(80);window.navigate('/payroll-estimate?payrollId=bad');await wait(200);
  document.querySelector('[data-schedule-day] [role="button"]').click();await wait(80);clickEmployee('Nhân viên A');await wait(1400);
@@ -68,6 +70,12 @@ const clickText=(selector,text)=>{const button=[...document.querySelectorAll(sel
  clickText('button','Lịch phân ca');await wait(80);
  document.querySelector('[data-schedule-day] [role="button"]').click();await wait(80);clickEmployee('Nhân viên A');await wait(1400);
  check('deleting active saved schedule resets identity for next create',api.creates.length===2&&api.entries.length===1);
+ closePicker();await wait(80);clickText('button','Tạo lịch mới');await wait(150);
+ api.duplicate=true;const createCount=api.creates.length;
+ document.querySelector('[data-schedule-day] [role="button"]').click();await wait(80);clickEmployee('Nhân viên A');await wait(1400);
+ check('duplicate period blocks automatic create with a clear error',api.creates.length===createCount&&status()?.includes('Đã có lịch ước tính lương'));
+ closePicker();await wait(80);clickText('button','Lưu ước tính');await wait(200);
+ check('duplicate period also blocks manual create',api.creates.length===createCount&&document.body.textContent.includes('Vui lòng mở lịch'));
 }catch(e){check('Exception: '+e.message,false)}
 const p=document.createElement('pre');p.id='result';p.textContent=JSON.stringify(checks);document.body.append(p);
 })();

@@ -2,6 +2,14 @@
 
 Trang Ước lượng lương có ba tab: Lịch phân ca, Tổng hợp nhân viên và Lịch phân ca đã lưu.
 
+- Không tạo thêm lịch ước lượng có cùng ngày bắt đầu và kết thúc tại cùng cửa hàng, kể cả trùng với bản ước lượng cũ. Mở lịch đã có để chỉnh sửa; thay đổi khoảng ngày sang kỳ đã có cũng bị chặn. Giao diện kiểm tra trước khi ghi phân ca; API kiểm tra lại và trả 409 khi trùng, dùng khóa MySQL theo cửa hàng để tránh hai phiên tạo trùng đồng thời. Không tự xoá/gộp các bản trùng đã tồn tại. Kiểm tra bằng `php scripts/payroll-estimate-unique-period-test.php`.
+
+- Danh sách **Tính lương → Các kỳ lương** không liệt kê lịch ước lượng (nguồn `payroll_estimate`, hoặc bản cũ nguồn `timesheet_import` với tên bắt đầu `Ước tính lương `). Các bản này vẫn được giữ và mở trong **Lịch phân ca đã lưu**. Kiểm tra bằng `php scripts/payroll-list-test.php`.
+
+- Bộ lọc **Theo tháng** dùng ô **Chọn tháng/năm**, tự xác định ngày đầu và cuối tháng, kể cả tháng 2 năm nhuận. **Theo tuần** tiếp tục chọn một ngày trong tuần. Kiểm tra giao diện bằng `node scripts/payroll-estimate-month-picker.test.mjs`.
+
+- Trong danh sách chọn nhân viên, người đã chọn cho ca đang mở luôn đứng đầu; trong mỗi nhóm vẫn theo thứ tự tên. Bỏ chọn đưa người đó về nhóm chưa chọn. Tìm kiếm vẫn lọc theo tên hoặc mã nhân viên.
+
 - Nhân viên lương tháng được tính **lương tháng ÷ 30** cho mỗi ngày có phân ca trong khoảng đang chọn. Nhiều ca trong cùng ngày chỉ tính một lần; nhiều vai trò trong ngày chia chi phí theo số giờ từng vai trò. Chi phí được cộng vào tổng toàn khoảng, tổng vai trò và số tiền lưu trong lịch. Chỉ Admin thấy đơn giá **đ/ngày** trong popup chọn nhân viên và tổng hợp nhân viên. Các tài khoản khác vẫn ẩn tiền riêng của người lương tháng; popup hiển thị nhãn **Lương tháng**. Ô phân ca vẫn chỉ hiển thị chi phí nhân viên theo giờ. Quy tắc này áp dụng cho hiển thị trên màn ước lượng, không thay đổi quyền truy cập API.
 
 - Tại Cafe và Bếp, bộ chọn vai trò và nhân viên lấy dữ liệu của cả hai cửa hàng, ưu tiên thứ tự vai trò của cửa hàng đang chọn và gộp vai trò trùng tên. Có thể thêm bảng, phân ca và ước lượng lương nhân viên bên còn lại theo mức lương của họ. Lịch vẫn lưu và mở lại theo cửa hàng đang chọn. Farm, Tiệm bánh và Kho thợ tiếp tục dùng dữ liệu riêng; MKT không xuất hiện trong bộ chọn phân ca.
@@ -21,7 +29,7 @@ Trang Ước lượng lương có ba tab: Lịch phân ca, Tổng hợp nhân vi
 - Tab lịch đã lưu mặc định chọn **Tất cả lịch**, hiển thị khoảng ngày, lần cập nhật, số nhân viên, tổng giờ và tổng lương ước tính; mỗi trang có 10 lịch.
 - Badge trên tab hiển thị tổng số lịch đã lưu của cửa hàng, cập nhật khi lưu, xoá hoặc làm mới. Badge dùng cùng giao diện với Tổng hợp nhân viên.
 - Cột **Loại lịch** liệt kê các vai trò có phân ca. Lịch cũ dùng vai trò trên dòng nhân viên nếu chưa có vai trò riêng từng ca.
-- Có thể chọn tuần, tháng hoặc khoảng ngày để xem tổng lương. Chỉ cộng các bản có **ngày bắt đầu và ngày kết thúc trùng hoàn toàn** với kỳ đã chọn, kể cả trùng vai trò; tổng lấy tất cả trang. Không phân bổ các lịch tuần vào kỳ tháng hay cộng các lịch chỉ giao nhau. Số nhân viên tính không trùng; giờ và lương cộng tất cả bản. Chọn **Tất cả lịch** để xem các kỳ khác nhau, không hiển thị tổng gộp khác kỳ.
+- Có thể chọn tuần, tháng hoặc khoảng ngày để xem tổng lương. Chỉ cộng các bản có **ngày bắt đầu và ngày kết thúc trùng hoàn toàn** với kỳ đã chọn, kể cả các bản trùng cũ; tổng lấy tất cả trang. Không phân bổ các lịch tuần vào kỳ tháng hay cộng các lịch chỉ giao nhau. Số nhân viên tính không trùng; giờ và lương cộng tất cả bản. Chọn **Tất cả lịch** để xem các kỳ khác nhau, không hiển thị tổng gộp khác kỳ.
 - Khi mở lịch, trang khôi phục cả khoảng ngày đã lưu, kể cả ngày chưa phân ca.
 - Bộ chọn ngày nằm bên phải tiêu đề trên màn hình rộng. Các nút tự xuống hàng ở màn hình nhỏ; bảng phân ca cuộn ngang khi không đủ chiều rộng.
 - Nút lưu dùng cùng kiểu viền, bóng đổ và hiệu ứng với nút chụp; nền vàng, chữ xanh lá đậm.
