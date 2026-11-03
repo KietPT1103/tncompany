@@ -21,8 +21,12 @@ const change=async(el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.
 (async()=>{try{
 await wait(400);
 check('gross, net and actual cash indicators are visible',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Lãi gộp')&&document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Dòng tiền thực về'));
-check('salary is read-only and no manual payment input remains',!document.querySelector('input[id^="salary-paid-"]')&&document.body.textContent.includes('Lương ước tính (1 ngày)'));
-check('tax is automatic and no manual payment input remains',!document.querySelector('input[id^="tax-paid-"]')&&!document.body.textContent.includes('Thuế đã nộp')&&document.body.textContent.includes('Tự tính từ doanh thu ngày, không nhập tay.'));
+check('salary is read-only and no manual payment input remains',!document.querySelector('input[id^="salary-paid-"]')&&document.body.textContent.includes('Lương nhân viên (1 ngày)'));
+check('tax is automatic and no manual payment input remains',!document.querySelector('input[id^="tax-paid-"]')&&!document.body.textContent.includes('Thuế đã nộp'));
+const dailyPanel=[...document.querySelectorAll('section')].find(s=>s.querySelector('h2')?.textContent.includes('Bảng tính trong ngày'));
+check('cash receipts moved into daily breakdown with requested title',dailyPanel?.textContent.includes('Tiền thực thu (tiền bàn giao trong hệ thống)')&&[...document.querySelectorAll('dt')].filter(el=>el.textContent.includes('Tiền thực thu (tiền bàn giao trong hệ thống)')).length===1);
+check('duplicate salary and tax fields are removed',!document.body.textContent.includes('Lương ước tính (1 ngày)')&&!document.body.textContent.includes('Tự tính từ doanh thu ngày, không nhập tay.'));
+check('gross profit uses estimated label',dailyPanel?.textContent.includes('Lãi gộp ước tính')&&document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Lãi gộp ước tính'));
 check('daily calculation includes automatic tax',document.body.textContent.includes('Thuế (4,5% doanh thu)')&&document.body.textContent.includes('45.000 đ'));
 const costInput=document.querySelector('input[id^="cost-"]');costInput.focus();await change(costInput,'20.000');costInput.blur();await wait(120);
 check('report cost input saves directly to catalog',api.catalog?.code==='DONUT'&&api.catalog?.cost===20000&&api.catalog?.store==='cafe'&&document.body.textContent.includes('Đã lưu vào danh mục'));

@@ -55,13 +55,13 @@ for(const ws of reopened.worksheets.filter(s=>s.state==='visible'))ws.eachRow(ro
 }));
 const raw=reopened.getWorksheet('Dữ liệu gốc');let originalProfit;raw.eachRow(row=>{if(row.getCell(1).value==='Tổng hợp'&&row.getCell(2).value===`B${profitRow}`)originalProfit=row.getCell(3).value;});
 assert.equal(originalProfit,658500,'Original precision is retained without compounding rounded amounts');
-assert.ok(rowFor(summary,'LÃI GỘP'));
+assert.ok(rowFor(summary,'LÃI GỘP ƯỚC TÍNH'));
 assert.equal(summary.getCell(rowFor(summary,'DÒNG TIỀN THỰC VỀ'),2).value,'Chưa có bàn giao đã chốt');
 const cashBook=buildProfitWorkbook({...options,days:[{...days[0],source:{...days[0].source,handover:{amount:800000,provisional:false,shiftCount:1}}}],inputsByDate:{'2026-11-03':{...inputs,salaryPaid:300000,taxPaid:20000}}}).getWorksheet('Tổng hợp');
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).result,555000);
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC TẾ'),1).fill.fgColor.argb,'FF064E3B');
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).font.color.argb,'FFF6C85F');
-assert.equal(cashBook.getCell(rowFor(cashBook,'LÃI GỘP'),1).font.bold,true);
+assert.equal(cashBook.getCell(rowFor(cashBook,'LÃI GỘP ƯỚC TÍNH'),1).font.bold,true);
 assert.ok(rowFor(cashBook,'Chi tại quầy (đã nằm trong bàn giao, không trừ lại)')>rowFor(cashBook,'DÒNG TIỀN THỰC TẾ'),'Cashier payments are informational in the cash section');
 const paidOptions={...options,days:[{...days[0],source:{...days[0].source,handover:{amount:800000,provisional:false,shiftCount:1}}}],inputsByDate:{'2026-11-03':{...inputs,operatingExpense:12345,salaryPaid:300001,taxPaid:20001}}};
 const paidBook=new ExcelJS.Workbook();await paidBook.xlsx.load(await buildProfitWorkbook(paidOptions).xlsx.writeBuffer());
