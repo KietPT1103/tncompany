@@ -21,6 +21,7 @@ export const PROFIT_FIELDS = [
 export const OPTIONAL_PROFIT_FIELDS = ['thienExpense', 'ingredientInventory', 'debt'] as const;
 export const emptyProfitInputs = (): ProfitInputs => ({ salary: null, electricity: 0, water: 0, other: 0, marketing: 0, thienExpense: 0, ingredientInventory: 0, debt: 0, costOverrides: {} });
 export const validProfitAmount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1e12;
+export const roundedProfitMoney = (value: number) => `${(Math.ceil(value / 1000) * 1000).toLocaleString('vi-VN')} đ`;
 export function profitOtherExpenses(inputs: ProfitInputs) {
   return inputs.otherExpenses ?? (inputs.other !== 0 ? [{id:'legacy-other', name:'Chi phí khác đã nhập trước đây', amount:inputs.other}] : []);
 }
@@ -68,9 +69,10 @@ export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
   });
   const voucherCost = data.vouchers.reduce((sum, voucher) => sum + voucher.amount, 0);
   const materialCost = costRows.reduce((sum, row) => sum + (row.cost ?? 0), 0);
-  const totalCosts = materialCost + enteredCosts + voucherCost;
+  const tax = Math.round(data.revenue * 4.5) / 100;
+  const totalCosts = materialCost + enteredCosts + voucherCost + tax;
   const complete = missingFields.length === 0;
   const profit = complete ? data.revenue - totalCosts + inputs.ingredientInventory! - inputs.debt! : null;
-  return { complete, missingFields, costRows, materialCost, enteredCosts, voucherCost, totalCosts, profit,
+  return { complete, missingFields, costRows, materialCost, enteredCosts, voucherCost, tax, totalCosts, profit,
     margin: profit !== null && data.revenue > 0 ? profit / data.revenue * 100 : null };
 }

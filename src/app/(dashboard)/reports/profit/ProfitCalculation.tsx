@@ -16,6 +16,7 @@ import {
   emptyProfitInputs,
   PROFIT_FIELDS,
   OPTIONAL_PROFIT_FIELDS,
+  roundedProfitMoney,
   type ProfitInputs,
 } from "./dailyProfit";
 import {
@@ -349,7 +350,7 @@ export function ProfitCalculation({
                 >
                   {calculation.profit === null
                     ? "Chưa đủ số liệu"
-                    : profitMoney(calculation.profit)}
+                    : profitMoney(Math.ceil(calculation.profit / 1000) * 1000)}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   {calculation.margin === null
@@ -364,7 +365,7 @@ export function ProfitCalculation({
                 <p
                   className={`mt-2 break-words text-2xl font-bold tabular-nums ${calculation.revenue < 0 ? "text-red-700" : "text-emerald-800"}`}
                 >
-                  {profitMoney(calculation.revenue)}
+                  {profitMoney(Math.ceil(calculation.revenue / 1000) * 1000)}
                 </p>
               </div>
               <div className="min-w-0">
@@ -373,7 +374,7 @@ export function ProfitCalculation({
                 </p>
                 <p className="mt-2 break-words text-2xl font-bold text-slate-800 tabular-nums">
                   {calculation.complete
-                    ? profitMoney(calculation.totalCosts)
+                    ? profitMoney(Math.ceil(calculation.totalCosts / 1000) * 1000)
                     : "Chưa đủ số liệu"}
                 </p>
               </div>
@@ -517,7 +518,7 @@ export function ProfitCalculation({
                         <dd
                           className={`shrink-0 text-right font-bold tabular-nums ${selected.source.revenue < 0 ? "text-red-700" : "text-emerald-800"}`}
                         >
-                          {profitMoney(selected.source.revenue)}
+                          {roundedProfitMoney(selected.source.revenue)}
                         </dd>
                       </div>
                       <div className="flex min-w-0 justify-between gap-3 py-2.5">
@@ -527,7 +528,7 @@ export function ProfitCalculation({
                             (row) => row.cost === null,
                           )
                             ? "Cần bổ sung cost"
-                            : profitMoney(selected.result.materialCost)}
+                            : roundedProfitMoney(selected.result.materialCost)}
                         </dd>
                       </div>
                       <div className="flex min-w-0 justify-between gap-3 py-2.5">
@@ -535,13 +536,13 @@ export function ProfitCalculation({
                         <dd className="shrink-0 text-right font-semibold tabular-nums">
                           {selected.inputs.salary === null
                             ? "Chưa nhập"
-                            : profitMoney(selected.inputs.salary)}
+                            : roundedProfitMoney(selected.inputs.salary)}
                         </dd>
                       </div>
                       <div className="flex min-w-0 justify-between gap-3 py-2.5">
                         <dt>− Chi phí tại quầy thu ngân</dt>
                         <dd className="shrink-0 text-right font-semibold tabular-nums">
-                          {profitMoney(selected.result.voucherCost)}
+                          {roundedProfitMoney(selected.result.voucherCost)}
                         </dd>
                       </div>
                       {(
@@ -561,16 +562,20 @@ export function ProfitCalculation({
                           <dd className="shrink-0 text-right font-semibold tabular-nums">
                             {selected.inputs[key] === null
                               ? "Chưa nhập"
-                              : profitMoney(selected.inputs[key]!)}
+                              : roundedProfitMoney(selected.inputs[key]!)}
                           </dd>
                           {key === "other" && <dd className="w-full"><OtherExpensesDetails inputs={selected.inputs}/></dd>}
                         </div>
                       ))}
+                      <div className="flex min-w-0 justify-between gap-3 py-2.5">
+                        <dt>− Thuế (4,5% doanh thu)</dt>
+                        <dd className="shrink-0 text-right font-semibold tabular-nums">{roundedProfitMoney(selected.result.tax)}</dd>
+                      </div>
                       <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">
                         <dt>Tổng chi phí ngày</dt>
                         <dd className="text-right tabular-nums">
                           {selected.result.complete
-                            ? profitMoney(selected.result.totalCosts)
+                            ? roundedProfitMoney(selected.result.totalCosts)
                             : "Chưa đủ số liệu"}
                         </dd>
                       </div>
@@ -578,7 +583,7 @@ export function ProfitCalculation({
                         <div key={key} className="flex min-w-0 justify-between gap-3 py-2.5">
                           <dt>{key === "ingredientInventory" ? "+" : "−"} {PROFIT_FIELDS.find((field) => field.key === key)!.label}</dt>
                           <dd className="shrink-0 text-right font-semibold tabular-nums">
-                            {selected.inputs[key] === null ? "Chưa nhập" : profitMoney(selected.inputs[key]!)}
+                            {selected.inputs[key] === null ? "Chưa nhập" : roundedProfitMoney(selected.inputs[key]!)}
                           </dd>
                         </div>
                       ))}
@@ -589,7 +594,7 @@ export function ProfitCalculation({
                         >
                           {selected.result.profit === null
                             ? "Chưa đủ số liệu"
-                            : profitMoney(selected.result.profit)}
+                            : roundedProfitMoney(selected.result.profit)}
                         </dd>
                       </div>
                     </dl>

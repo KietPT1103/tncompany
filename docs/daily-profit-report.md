@@ -6,7 +6,8 @@ và chỉ đọc/ghi cửa hàng mà tài khoản được phép truy cập.
 ## Cách tính
 
 Lợi nhuận ròng ước tính = Doanh thu − Cost − Lương (1 ngày)
-− Chi phí tại quầy thu ngân − Tiền điện − Tiền nước − Chi phí khác trong ngày − Chi phí marketing.
+− Chi phí tại quầy thu ngân − Tiền điện − Tiền nước − Chi phí khác trong ngày − Chi phí marketing
+− Anh Thiện chi − Thuế (doanh thu ngày × 4,5%) + Giá trị tồn kho nguyên liệu − Công nợ.
 
 - Doanh thu lấy tổng tiền sau giảm giá/phụ thu của bill POS; bỏ bill hủy.
 - Cost = số lượng bán × cost hiện tại trong danh mục; nếu danh mục chưa có thì tính từ công thức nguyên liệu, gồm định lượng và tỷ lệ chuyển đổi. Thiếu cost nguyên liệu hoặc công thức vòng không tự tính là 0; chưa phải lịch sử giá vốn.
@@ -41,6 +42,8 @@ nhập 0 và các khoản hợp lệ, bốn khoản chi mặc định 0, lưu r�
 không lẫn dữ liệu; tổng chi tại quầy tự cập nhật theo phiếu chi hợp lệ.
 
 ## Kỳ báo cáo và lịch sử
+
+**Thuế** tự tính bằng **doanh thu từng ngày × 4,5%**, làm tròn đến hai chữ số thập phân khi tính, không lấy từ dữ liệu nhập của trình duyệt. Thuế được cộng vào tổng chi phí và trừ khỏi lợi nhuận; tổng kỳ cộng thuế của từng ngày. Giao diện hiển thị làm tròn lên hàng nghìn như các khoản tiền khác, còn số gốc dùng để tính/lưu và xuất Excel. Báo cáo lưu mới/cập nhật có `tax` trong snapshot; lịch sử cũ chưa có thuế giữ nguyên cho đến khi chỉnh sửa và lưu lại. Excel có dòng thuế trong Tổng hợp, cột Thuế trong Theo ngày và khoản thuế trong Các khoản chi, kèm công thức 4,5%.
 
 File Excel bật đường lưới xám và kẻ viền xám cho bảng trên tất cả sheet. Sheet **Tổng hợp** hiển thị từng khoản chi khác ngay dưới tổng **Chi phí khác trong ngày**; khi xuất nhiều ngày, mỗi khoản ghi kèm ngày. Các dòng này chỉ diễn giải tổng đã cộng, không tính chi phí lần thứ hai.
 

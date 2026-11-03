@@ -20,6 +20,7 @@ const button=text=>[...document.querySelectorAll('button')].find(b=>b.textConten
 const change=async(el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));await wait(60)};
 (async()=>{try{
 await wait(400);
+check('daily calculation includes automatic tax',document.body.textContent.includes('Thuế (4,5% doanh thu)')&&document.body.textContent.includes('45.000 đ'));
 const costInput=document.querySelector('input[id^="cost-"]');costInput.focus();await change(costInput,'20.000');costInput.blur();await wait(120);
 check('report cost input saves directly to catalog',api.catalog?.code==='DONUT'&&api.catalog?.cost===20000&&api.catalog?.store==='cafe'&&document.body.textContent.includes('Đã lưu vào danh mục'));
 check('legacy aggregate cost remains editable',document.querySelector('input[id^="other-name-"]')?.value==='Chi phí khác đã nhập trước đây');
