@@ -1,4 +1,4 @@
-export type ProfitSale = { key: string; code: string; name: string; quantity: number; unitCost: number | null; costSource?: 'catalog' | 'recipe' | null };
+export type ProfitSale = { key: string; code: string; name: string; quantity: number; unitCost: number | null; netSales?: number | null; costSource?: 'catalog' | 'recipe' | null };
 export type ProfitVoucher = { id: string; code: string; category: string; amount: number; note?: string };
 export type ProfitData = { revenue: number; billCount: number; sales: ProfitSale[]; vouchers: ProfitVoucher[]; handover?: {amount:number|null; provisional:boolean; shiftCount:number} | null; salaryEstimate?: { amount: number | null; payrollId: string; name: string } | null };
 export type ProfitInputs = {
@@ -67,7 +67,11 @@ export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
     const unitCost = Object.prototype.hasOwnProperty.call(inputs.costOverrides, sale.key) ? inputs.costOverrides[sale.key] : sale.unitCost;
     const known = validProfitAmount(unitCost);
     if (!known) missingFields.push(`Cost: ${sale.name}`);
-    return { ...sale, unitCost: known ? unitCost : null, cost: known ? sale.quantity * unitCost : null };
+    const netSales = validProfitAmount(sale.netSales) ? sale.netSales : null;
+    const cost = known ? sale.quantity * unitCost : null;
+    return { ...sale, unitCost: known ? unitCost : null, cost, netSales,
+      unitSalePrice: netSales !== null && sale.quantity > 0 ? netSales / sale.quantity : null,
+      grossProfit: netSales !== null && cost !== null ? netSales - cost : null };
   });
   const voucherCost = data.vouchers.reduce((sum, voucher) => sum + voucher.amount, 0);
   const materialCost = costRows.reduce((sum, row) => sum + (row.cost ?? 0), 0);
@@ -75,7 +79,10 @@ export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
   const operatingCosts = enteredCosts - (inputs.salary ?? 0);
   const totalCosts = materialCost + enteredCosts + tax;
   const complete = missingFields.length === 0;
-  const grossProfit = costRows.every(row=>row.cost!==null) ? data.revenue - materialCost : null;
+  const legacySales = data.sales.every(sale=>sale.netSales===undefined);
+  const grossProfit = legacySales
+    ? (costRows.every(row=>row.cost!==null) ? data.revenue - materialCost : null)
+    : (costRows.every(row=>row.grossProfit!==null) ? costRows.reduce((sum,row)=>sum+row.grossProfit!,0) : null);
   const profit = complete ? data.revenue - totalCosts : null;
   const cashReceived = data.handover?.amount ?? null;
   const cashFlow = complete && cashReceived !== null && !data.handover?.provisional

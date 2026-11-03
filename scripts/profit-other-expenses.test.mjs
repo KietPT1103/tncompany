@@ -30,6 +30,8 @@ check('gross profit uses estimated label',dailyPanel?.textContent.includes('Lãi
 check('daily calculation includes automatic tax',document.body.textContent.includes('Thuế (4,5% doanh thu)')&&document.body.textContent.includes('45.000 đ'));
 const costInput=document.querySelector('input[id^="cost-"]');costInput.focus();await change(costInput,'20.000');costInput.blur();await wait(120);
 check('report cost input saves directly to catalog',api.catalog?.code==='DONUT'&&api.catalog?.cost===20000&&api.catalog?.store==='cafe'&&document.body.textContent.includes('Đã lưu vào danh mục'));
+const itemRow=[...document.querySelectorAll('tr')].find(row=>row.textContent.includes('Bánh Donut'));
+check('item detail displays actual selling price and gross profit',itemRow?.textContent.includes('500.000 đ')&&itemRow?.textContent.includes('960.000 đ'));
 check('legacy aggregate cost remains editable',document.querySelector('input[id^="other-name-"]')?.value==='Chi phí khác đã nhập trước đây');
 document.querySelector('[aria-label="Xóa khoản chi 1"]').click();await wait(60);
 button('Thêm khoản chi').click();await wait(60);
@@ -66,7 +68,7 @@ check('confirmed delete clears history and retains inputs',api.report===null&&ap
 }catch(e){check(e.stack,false)}const pre=document.createElement('pre');pre.id='result';pre.textContent=JSON.stringify(checks);document.body.append(pre)})();
 `;
 const mock=`import {emptyProfitInputs,profitInputsForSource,calculateDailyProfit} from '@/app/(dashboard)/reports/profit/dailyProfit';
-const source={revenue:1000000,billCount:1,sales:[{key:'DONUT',code:'DONUT',name:'Bánh Donut',quantity:2,unitCost:null}],vouchers:[],handover:{amount:900000,provisional:false,shiftCount:2},salaryEstimate:{amount:0,payrollId:'p',name:'Lịch'}};
+const source={revenue:1000000,billCount:1,sales:[{key:'DONUT',code:'DONUT',name:'Bánh Donut',quantity:2,unitCost:null,netSales:1000000}],vouchers:[],handover:{amount:900000,provisional:false,shiftCount:2},salaryEstimate:{amount:0,payrollId:'p',name:'Lịch'}};
 const api=window.api={saved:{...emptyProfitInputs(),other:10000},report:null,detail:null};
 export const updateProductCost=async(code,data,store)=>{api.catalog={code,cost:data.cost,store};source.sales[0].unitCost=data.cost;source.sales[0].costSource='catalog'};
 const day=date=>({date,source,saved:{inputs:api.saved,updatedAt:'2026-11-03'}});

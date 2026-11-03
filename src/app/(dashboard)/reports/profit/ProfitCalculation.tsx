@@ -390,7 +390,7 @@ export function ProfitCalculation({
             </section>
             <section aria-label="Lãi và dòng tiền" className="grid gap-4 sm:grid-cols-3">
               {[
-                {label:'Lãi gộp ước tính',value:calculation.grossProfit,note:'Doanh thu − giá vốn món đã bán'},
+                {label:'Lãi gộp ước tính',value:calculation.grossProfit,note:'Tổng (giá bán thực thu sau giảm giá − cost) × số lượng'},
                 {label:'Lãi ròng ước tính',value:calculation.netProfit,note:'Lãi gộp − lương − chi phí vận hành − thuế'},
                 {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi ngoài bàn giao − lương ước tính ngày − thuế 4,5% doanh thu'},
               ].map(metric=><div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-sm font-semibold text-slate-500">{metric.label}</p><p className={`mt-2 text-xl font-bold ${metric.value!==null&&metric.value<0?'text-red-700':'text-emerald-800'}`}>{metric.value===null?'Chưa đủ dữ liệu':roundedProfitMoney(metric.value)}</p><p className="mt-1 text-xs text-slate-500">{metric.note}</p></div>)}
@@ -604,7 +604,7 @@ export function ProfitCalculation({
                             : roundedProfitMoney(selected.result.profit)}
                         </dd>
                       </div>
-                      <div className="flex justify-between gap-3 py-3 font-bold"><dt>Lãi gộp ước tính</dt><dd>{selected.result.grossProfit===null?'Chưa đủ cost':roundedProfitMoney(selected.result.grossProfit)}</dd></div>
+                      <div className="flex justify-between gap-3 py-3 font-bold"><dt>Lãi gộp ước tính</dt><dd>{selected.result.grossProfit===null?'Chưa đủ giá bán/cost':roundedProfitMoney(selected.result.grossProfit)}</dd></div>
                       <div className="flex min-w-0 justify-between gap-3 py-3">
                         <dt className="min-w-0">Tiền thực thu (tiền bàn giao trong hệ thống)
                           {selected.source.handover?.provisional&&<p className="mt-1 text-xs font-normal text-amber-700">Ca chưa chốt hoặc có giao dịch chưa phân ca; chưa xác nhận dòng tiền thực về.</p>}
@@ -744,19 +744,23 @@ export function ProfitCalculation({
                     </div>
                   </div>
                     <div className="mt-4 min-w-0 overflow-x-auto">
-                      <table className="w-full min-w-[600px] table-fixed text-sm">
+                      <table className="w-full min-w-[950px] table-fixed text-sm">
                         <colgroup>
-                          <col className="w-[35%]" />
-                          <col className="w-[15%]" />
                           <col className="w-[25%]" />
-                          <col className="w-[25%]" />
+                          <col className="w-[10%]" />
+                          <col className="w-[17%]" />
+                          <col className="w-[16%]" />
+                          <col className="w-[16%]" />
+                          <col className="w-[16%]" />
                         </colgroup>
                         <thead className="bg-slate-50 text-slate-500">
                           <tr>
                             <th scope="col" className="p-3 text-left">Món</th>
                             <th scope="col" className="whitespace-nowrap p-3 text-right">Số lượng</th>
+                            <th scope="col" className="p-3 text-right">Giá thực thu / món</th>
                             <th scope="col" className="p-3 text-right">Cost / món</th>
                             <th scope="col" className="whitespace-nowrap p-3 text-right">Tổng giá vốn</th>
+                            <th scope="col" className="p-3 text-right">Lãi gộp ước tính</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -766,6 +770,7 @@ export function ProfitCalculation({
                               <td className="px-3 py-2.5 text-right tabular-nums">
                                 {row.quantity.toLocaleString("vi-VN")}
                               </td>
+                              <td className="px-3 py-2.5 text-right tabular-nums">{row.unitSalePrice===null?'Chưa có giá bán':profitMoney(row.unitSalePrice)}</td>
                               <td className="px-3 py-2.5 text-right tabular-nums">
                                 <div className="ml-auto max-w-48">
                                 {row.unitCost === null ||
@@ -812,12 +817,13 @@ export function ProfitCalculation({
                                   ? <span className="font-normal text-slate-400"><span aria-hidden="true">—</span><span className="sr-only">Chưa có cost</span></span>
                                   : profitMoney(row.cost)}
                               </td>
+                              <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${row.grossProfit!==null&&row.grossProfit<0?'text-red-700':'text-emerald-800'}`}>{row.grossProfit===null?'—':roundedProfitMoney(row.grossProfit)}</td>
                             </tr>
                           ))}
                           {!selected.result.costRows.length && (
                             <tr>
                               <td
-                                colSpan={4}
+                                colSpan={6}
                                 className="p-5 text-center text-slate-500"
                               >
                                 Không có món bán trong ngày này.

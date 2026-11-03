@@ -79,4 +79,18 @@ assert.throws(()=>buildProfitWorkbook({...options,inputsByDate:{...options.input
 const loss=buildProfitWorkbook({...options,days:[{...days[0],source:{...days[0].source,revenue:0}}]});
 assert.equal(loss.getWorksheet('Theo ngày').getCell('N6').font.color.argb,'FFB91C1C');
 assert.equal(loss.getWorksheet('Theo ngày').getCell('O6').result,0,'Zero revenue does not produce division errors');
+const discounted={...options,days:[{...days[0],source:{...days[0].source,revenue:135000,sales:[
+  {key:'a',code:'A',name:'Món A',quantity:2,unitCost:10000,netSales:90000},
+  {key:'b',code:'B',name:'Món B',quantity:1,unitCost:5000,netSales:45000},
+]}}]};
+const discountedReloaded=new ExcelJS.Workbook();await discountedReloaded.xlsx.load(await buildProfitWorkbook(discounted).xlsx.writeBuffer());
+const pricedCosts=discountedReloaded.getWorksheet('Giá vốn món');
+assert.equal(pricedCosts.getCell('G6').result,45000,'Exports actual unit price after discount');
+assert.equal(pricedCosts.getCell('H6').result,90000);
+assert.equal(pricedCosts.getCell('I6').result,70000);
+assert.equal(pricedCosts.getCell('I8').result,110000,'Gross profit reconciles to per-item totals');
+const discountedSummary=discountedReloaded.getWorksheet('Tổng hợp');
+assert.equal(discountedSummary.getCell(rowFor(discountedSummary,'LÃI GỘP ƯỚC TÍNH'),2).result,110000);
+const missingPrice=buildProfitWorkbook({...discounted,days:[{...discounted.days[0],source:{...discounted.days[0].source,sales:[{...discounted.days[0].source.sales[0],netSales:null}]}}]}).getWorksheet('Tổng hợp');
+assert.equal(missingPrice.getCell(rowFor(missingPrice,'LÃI GỘP ƯỚC TÍNH'),2).value,'Chưa đủ giá bán/cost');
 console.log('PASS profit Excel: 4 styled sheets, full period and products, itemized costs, formulas and cached values, numeric money, print/freeze/filter, loss/zero, incomplete input guard');

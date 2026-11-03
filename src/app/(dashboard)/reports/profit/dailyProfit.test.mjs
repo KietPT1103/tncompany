@@ -5,6 +5,21 @@ import { calculateDailyProfit, emptyProfitInputs, parseMoneyInput, formatProfitM
 const data = { revenue: 1000000, billCount: 10, sales: [{ key: "coffee", code: "coffee", name: "Cà phê", quantity: 10, unitCost: 10000 }], vouchers: [{ id: "v1", code: "PC1", category: "Chi tại quầy", amount: 50000 }] };
 const complete = () => ({ ...emptyProfitInputs(), salary: 200000, electricity: 0, water: 0, other: 100000 });
 
+test('gross profit sums actual discounted selling price less cost for each sold item',()=>{
+  const source={...data,revenue:135000,sales:[
+    {key:'a',code:'a',name:'A',quantity:2,unitCost:10000,netSales:90000},
+    {key:'b',code:'b',name:'B',quantity:1,unitCost:5000,netSales:45000},
+  ]};
+  const result=calculateDailyProfit(source,complete());
+  assert.equal(result.costRows[0].unitSalePrice,45000);
+  assert.equal(result.costRows[0].grossProfit,70000);
+  assert.equal(result.costRows[1].grossProfit,40000);
+  assert.equal(result.grossProfit,110000);
+  assert.equal(calculateDailyProfit(source,{...complete(),costOverrides:{a:15000}}).grossProfit,100000);
+  assert.equal(calculateDailyProfit({...source,sales:[{...source.sales[0],netSales:0}]},complete()).grossProfit,-20000,'Free items still incur cost');
+  assert.equal(calculateDailyProfit({...source,sales:[{...source.sales[0],netSales:null}]},complete()).grossProfit,null,'Missing sale amount is not zero');
+});
+
 test('gross, net and actual cash use separate inputs without double-counting cashier spending',()=>{
   const source={...data,handover:{amount:800000,provisional:false,shiftCount:2}};
   const result=calculateDailyProfit(source,{...complete(),salaryPaid:300000,taxPaid:20000,ingredientInventory:999999,debt:888888});

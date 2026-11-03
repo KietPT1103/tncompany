@@ -5,7 +5,7 @@ và chỉ đọc/ghi cửa hàng mà tài khoản được phép truy cập.
 
 ## Cách tính
 
-Lãi gộp = Doanh thu POS − Giá vốn món đã bán từ hệ thống.
+Lãi gộp ước tính từng món = (Giá thực thu sau giảm giá / món − Giá nhập/cost / món) × Số lượng đã bán. Tổng lãi gộp ngày = tổng lãi gộp các món. Số thực thu của mỗi bill hoàn tất được phân bổ theo tỷ trọng thành tiền từng món trong chính bill đó, sau đó mới cộng theo món/ngày; không lấy giá danh mục hiện tại làm giá bán lịch sử. Giá thực thu / món hiển thị là giá bình quân khi cùng món có nhiều mức giá hoặc giảm giá. Món miễn phí có doanh thu 0 nhưng vẫn tính cost; bill hủy bị loại. Thiếu dữ liệu giá bán hiện chưa đủ số liệu, không tự coi là 0. Với dữ liệu hợp lệ đầy đủ, tổng vẫn bằng doanh thu thuần trừ giá vốn món đã bán. Dữ liệu API cũ chưa có giá bán từng món giữ cách tính tổng trước đây, chi tiết để trống giá bán.
 
 Lãi ròng ước tính = Lãi gộp − Lương phân bổ ngày − Tiền điện − Tiền nước − Chi phí khác − Marketing − Anh Thiện chi − Chi vận hành khác − Thuế (doanh thu ngày × 4,5%). Các khoản chi vận hành mặc định 0.
 

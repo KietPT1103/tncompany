@@ -39,7 +39,7 @@ check(daily_profit_load($pdo, 'cafe', '2026-10-07')['inputs']['thienExpense'] ==
 check(daily_profit_load($pdo, 'restaurant', '2026-10-07') === null, 'Store isolation');
 check(daily_profit_load($pdo, 'cafe', '2026-10-08') === null, 'Date isolation');
 $pdo->exec('CREATE TABLE bills (id TEXT, store_id TEXT, status TEXT, created_at TEXT, total REAL)');
-$pdo->exec('CREATE TABLE bill_items (bill_id TEXT, menu_id TEXT, name TEXT, quantity REAL)');
+$pdo->exec('CREATE TABLE bill_items (bill_id TEXT, menu_id TEXT, name TEXT, quantity REAL, line_total REAL DEFAULT 0)');
 $pdo->exec('CREATE TABLE products (id TEXT, store_id TEXT, product_code TEXT, cost REAL, has_cost INTEGER)');
 $pdo->exec('CREATE TABLE payrolls (id TEXT,store_id TEXT,name TEXT,source TEXT,period_start TEXT,period_end TEXT,created_at TEXT,updated_at TEXT)');
 $pdo->exec('CREATE TABLE payroll_entries (payroll_id TEXT,hourly_rate REAL,salary_type TEXT,shifts_json TEXT,employee_id TEXT,monthly_salary REAL DEFAULT 0,fixed_salary REAL DEFAULT 0)');
@@ -48,7 +48,7 @@ $stmt = $pdo->prepare('INSERT INTO payroll_entries (payroll_id,hourly_rate,salar
 $stmt->execute(['estimate',4,'hourly',json_encode([['date'=>'2026-10-07','hours'=>5]])]);
 $pdo->exec('CREATE TABLE cash_vouchers (id TEXT, code TEXT, store_id TEXT, voucher_type TEXT, amount REAL, category TEXT, note TEXT, cancelled_at TEXT, include_in_cash_flow INTEGER, happened_at TEXT)');
 $pdo->exec("INSERT INTO bills VALUES ('b1','cafe','completed','2026-10-07 00:00:00',100), ('b2','cafe','completed','2026-10-07 23:59:59',200), ('cancel','cafe','cancelled','2026-10-07 15:00:00',999), ('next','cafe','completed','2026-10-08 00:00:00',888), ('other','restaurant','completed','2026-10-07 12:00:00',777)");
-$pdo->exec("INSERT INTO bill_items VALUES ('b1','coffee','Coffee',2.333),('b2','missing','Missing',3),('cancel','coffee','Coffee',900),('next','coffee','Coffee',888),('other','coffee','Coffee',777)");
+$pdo->exec("INSERT INTO bill_items (bill_id,menu_id,name,quantity) VALUES ('b1','coffee','Coffee',2.333),('b2','missing','Missing',3),('cancel','coffee','Coffee',900),('next','coffee','Coffee',888),('other','coffee','Coffee',777)");
 $pdo->exec("INSERT INTO products VALUES ('coffee-id','cafe','coffee',10,1)");
 $pdo->exec("INSERT INTO cash_vouchers VALUES ('v1','PC1','cafe','expense',5,'Repair','',NULL,1,'2026-10-07 12:00:00'),('v2','PC2','cafe','expense',99,'Cancelled','', '2026-10-07',1,'2026-10-07 12:00:00'),('v3','PC3','cafe','expense',99,'Excluded','',NULL,0,'2026-10-07 12:00:00'),('v4','PT1','cafe','income',99,'Income','',NULL,1,'2026-10-07 12:00:00')");
 $source = daily_profit_source($pdo, 'cafe', '2026-10-07');
@@ -146,3 +146,24 @@ rejected(fn()=>profit_period_save($pdo,'restaurant','2026-10-07','2026-10-07',$e
 rejected(fn()=>profit_period_save($pdo,'cafe','2026-10-07','2026-10-08',$editedInputs,'test',$itemReport['id']));
 rejected(fn()=>profit_period_save($pdo,'cafe','2026-10-07','2026-10-07',$editedInputs,'test','missing'));
 echo "PASS report editing: same snapshot, changed inputs, store and period protection\n";
+
+$pdo->beginTransaction();
+$pdo->exec("INSERT INTO bills VALUES ('discount-a','cafe','completed','2026-10-10 10:00:00',135000),('discount-b','cafe','completed','2026-10-10 11:00:00',40000),('free','cafe','completed','2026-10-10 12:00:00',0),('discount-cancel','cafe','cancelled','2026-10-10 10:00:00',999999)");
+$pdo->exec("INSERT INTO bill_items VALUES ('discount-a','coffee','Coffee',2,100000),('discount-a','missing','Missing',1,50000),('discount-b','coffee','Coffee',1,50000),('free','coffee','Coffee',1,0),('discount-cancel','coffee','Coffee',99,999999)");
+$priced=daily_profit_source($pdo,'cafe','2026-10-10');
+$coffee=array_values(array_filter($priced['sales'],fn($sale)=>$sale['code']==='coffee'))[0];
+$cake=array_values(array_filter($priced['sales'],fn($sale)=>$sale['code']==='missing'))[0];
+check($coffee['quantity']===4.0 && $coffee['netSales']===130000.0,'Actual selling amounts use each bill discount before aggregating the same product; free items retain quantity');
+check($cake['netSales']===45000.0 && array_sum(array_column($priced['sales'],'netSales'))===$priced['revenue'],'Discount allocation reconciles to completed bill revenue');
+$priced['salaryEstimate']=['amount'=>0];
+$pricedSnapshot=profit_period_snapshot(['2026-10-10'=>$priced],['2026-10-10'=>[...$zero,'costOverrides'=>['missing'=>10000]]]);
+check($pricedSnapshot['totals']['grossProfit']===164600.0,'Gross profit sums discounted sale proceeds less the sold quantity cost');
+$priced['sales'][0]['netSales']=null;
+check(profit_period_snapshot(['2026-10-10'=>$priced],['2026-10-10'=>[...$zero,'costOverrides'=>['missing'=>10000]]])['totals']['grossProfit']===null,'Missing sale prices cannot become a zero gross profit');
+$pdo->exec("INSERT INTO bills VALUES ('one-cent','cafe','completed','2026-10-11 10:00:00',0.01)");
+$pdo->exec("INSERT INTO bill_items VALUES ('one-cent','coffee','Coffee',1,100),('one-cent','missing','Missing',1,100),('one-cent','free-item','Free item',1,0)");
+$centSales=daily_profit_source($pdo,'cafe','2026-10-11')['sales'];
+check(array_sum(array_column($centSales,'netSales'))===0.01,'Discount allocation preserves exact bill totals at cent rounding boundaries');
+check(array_values(array_filter($centSales,fn($sale)=>$sale['code']==='free-item'))[0]['netSales']===0.0,'Free items cannot receive discount allocation rounding residue');
+$pdo->rollBack();
+echo "PASS item gross profit: actual prices after each bill discount, quantities, free items, canceled bills and missing prices\n";
