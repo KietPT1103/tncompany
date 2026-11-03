@@ -30,7 +30,7 @@ function Trend({ data, field, color }: { data: RevenueReport; field: string; col
   </div>;
 }
 
-export function TnReport({ data }: { data: RevenueReport }) {
+export function TnReport({ data, allStores = false }: { data: RevenueReport; allStores?: boolean }) {
   const t = data.totals;
   const labels: Record<string, string> = { shift_1: 'Ca 1', shift_2: 'Ca 2', shift_3: 'Ca 3', single: 'Ca đơn', unassigned: 'Chưa gán ca' };
   return <div className="space-y-4">
@@ -51,7 +51,7 @@ export function TnReport({ data }: { data: RevenueReport }) {
       <Stat label="Tổng chi" value={t.expense} icon={ArrowUpRight} color="text-rose-700" />
       <Stat label="Thu khác" value={t.income} icon={Receipt} />
     </div>
-    {data.cashflow && <CashflowPanel data={data.cashflow} />}
+    {data.cashflow && <CashflowPanel data={data.cashflow} allStores={allStores} stores={data.stores} />}
     <h2 className="pt-2 text-base font-bold text-slate-900">Theo ngày & ca</h2>
     {data.days.map(day => <details key={day.date} open={data.days.length === 1 || undefined} className="group rounded-2xl border border-slate-200 bg-white">
       <summary className={`flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-4 hover:bg-slate-50 ${focus}`}>

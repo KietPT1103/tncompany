@@ -111,7 +111,7 @@ export default function RevenuePage() {
       {!valid ? <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Chọn khoảng ngày hợp lệ, tối đa 93 ngày.</p>
         : error && loadedKey === requestKey ? <div role="alert" className="rounded-2xl border border-rose-200 bg-white p-5"><p className="text-sm text-rose-800">{error}</p><button type="button" onClick={() => setReload(value => value + 1)} className={`mt-3 min-h-11 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 ${focus}`}>Thử lại</button></div>
           : !visible ? <div role="status" aria-live="polite" className="animate-pulse space-y-3 motion-reduce:animate-none"><span className="sr-only">Đang tải doanh thu</span><div className="h-44 rounded-3xl bg-slate-200" /><div className="grid grid-cols-2 gap-3">{[1, 2, 3, 4].map(i => <div key={i} className="h-24 rounded-2xl bg-slate-200" />)}</div></div>
-            : <><Report data={visible} /><p className="mt-5 text-center text-[11px] text-slate-400">Cập nhật {new Date(visible.updatedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></>}
+            : <><Report data={visible} allStores={store === 'all'} /><p className="mt-5 text-center text-[11px] text-slate-400">Cập nhật {new Date(visible.updatedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></>}
     </div>
   </main>;
 }

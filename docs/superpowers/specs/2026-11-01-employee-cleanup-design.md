@@ -1,0 +1,4 @@
+# Employee payroll recency and cleanup
+Approved in chat: show latest payroll period end date; filter before a date, inclusive date range, or never paid; select multiple employees and confirm deletion. Preserve payroll history. Existing search and role filters combine with date filters. Unknown period dates are distinct from never paid. Selection clears when filters/store change; select all means all filtered results, across pages. Implement within the existing React/PHP app, without dependencies.
+
+Approaches: calculate summaries server-side in one grouped query (chosen: avoids per-employee API calls); fetch every payroll in the browser (rejected: excessive data and requests). Bulk deletion uses one scoped transactional database statement instead of independent requests, preserving history and preventing partial deletion.

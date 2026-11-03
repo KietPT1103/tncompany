@@ -24,6 +24,8 @@ export type Employee = {
   attendanceBonusAmount?: number;
   standardHours?: number;
   allowances?: EmployeeAllowance[];
+  lastPayrollDate?: string | null;
+  payrollCount?: number;
   createdAt?: any;
 };
 
@@ -51,9 +53,9 @@ type EmployeeUpdateResponse = {
   item?: Employee;
 };
 
-export async function getEmployees(storeId: string): Promise<Employee[]> {
+export async function getEmployees(storeId: string, includePayrollSummary = false): Promise<Employee[]> {
   const response = await apiRequest<EmployeesResponse>(
-    `/employees.php?storeId=${encodeURIComponent(storeId)}`,
+    `/employees.php?storeId=${encodeURIComponent(storeId)}${includePayrollSummary ? "&includePayrollSummary=1" : ""}`,
     {
       method: "GET",
     }
@@ -98,3 +100,10 @@ export async function deleteEmployee(id: string) {
 }
 
 
+
+export function deleteEmployees(storeId: string, ids: string[]) {
+  return apiRequest<{ deleted: number }>("/employees.php?resource=batch", {
+    method: "DELETE",
+    body: JSON.stringify({ storeId, ids }),
+  });
+}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/employee_codes.php';
+require_once __DIR__ . '/_lib/employee_cleanup.php';
 
 function employees_ensure_column(string $table, string $column, string $definition): void
 {
@@ -175,14 +176,19 @@ if ($method === 'GET') {
         'store_id' => $storeId,
     ]);
 
-    respond_ok([
-        'items' => array_map(
-            static function (array $row): array {
-                return employees_map_row($row);
-            },
-            $statement->fetchAll()
-        ),
-    ]);
+    $items = array_map('employees_map_row', $statement->fetchAll());
+    if (($_GET['includePayrollSummary'] ?? '') === '1') {
+        // The employee screen can be opened before the first payroll is created.
+        $tables = db()->query("SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema = DATABASE() AND table_name IN ('payrolls', 'payroll_entries')")->fetchColumn();
+        $summaries = (int)$tables === 2 ? employees_payroll_summary(db(), $storeId) : [];
+        foreach ($items as &$item) {
+            $summary = $summaries[$item['id']] ?? ['lastPayrollDate' => null, 'payrollCount' => 0];
+            $item = array_merge($item, $summary);
+        }
+        unset($item);
+    }
+    respond_ok(['items' => $items]);
 }
 
 if ($method === 'POST') {
@@ -410,6 +416,18 @@ if ($method === 'PATCH') {
 if ($method === 'DELETE') {
     auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
+    if (($_GET['resource'] ?? '') === 'batch') {
+        $body = read_json_body();
+        if (!isset($body['ids']) || !is_array($body['ids'])) {
+            respond_error('Vui lòng chọn nhân viên cần xóa.', 422);
+        }
+        try {
+            $deleted = employees_delete_many(db(), trim((string)($body['storeId'] ?? '')), $body['ids']);
+        } catch (InvalidArgumentException $error) {
+            respond_error($error->getMessage(), 422);
+        }
+        respond_ok(['deleted' => $deleted]);
+    }
     $id = trim((string) ($_GET['id'] ?? ''));
     if ($id === '') {
         respond_error('Employee id is required', 422);

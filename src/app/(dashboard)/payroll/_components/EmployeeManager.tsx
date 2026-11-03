@@ -1,11 +1,12 @@
 "use client";
 import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   addEmployee,
   deleteEmployee,
+  deleteEmployees,
   Employee,
   getEmployeeRoleNames,
   getEmployees,
@@ -44,6 +45,8 @@ import EmployeeSalaryFields, {
   validateEmployeeSalaryForm,
 } from "./EmployeeSalaryFields";
 import EmployeeRoleManager from "./EmployeeRoleManager";
+
+import { matchesPayrollDate, formatLastPayrollDate, type PayrollDateFilter } from "./employeeCleanup";
 
 const EMPLOYEE_PAGE_SIZE = 15;
 
@@ -129,6 +132,15 @@ export default function EmployeeManager({
   const [loadError, setLoadError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState<PayrollDateFilter>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const employeeLoadSequence = useRef(0);
+  const currentStoreId = useRef(storeId);
+  currentStoreId.current = storeId;
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -146,10 +158,15 @@ export default function EmployeeManager({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [roleFilter, searchTerm, storeId]);
+    setSelectedIds(new Set());
+    setDeleteMessage("");
+  }, [roleFilter, searchTerm, dateFilter, dateFrom, dateTo, storeId]);
 
   useEffect(() => {
     setRoleFilter("all");
+    setDateFilter("all");
+    setDateFrom("");
+    setDateTo("");
   }, [storeId]);
 
   useEffect(() => {
@@ -166,13 +183,17 @@ export default function EmployeeManager({
   }, [availableRoles, defaultRole]);
 
   async function loadEmployees() {
-    if (!storeId) return;
+    if (!storeId || currentStoreId.current !== storeId) return;
+    const sequence = ++employeeLoadSequence.current;
+    setSelectedIds(new Set());
     try {
       setLoadError("");
       setLoading(true);
-      setEmployees(await getEmployees(storeId));
+      const items = await getEmployees(storeId, true);
+      if (sequence === employeeLoadSequence.current && currentStoreId.current === storeId) setEmployees(items);
     } catch (error) {
       console.error(error);
+      if (sequence !== employeeLoadSequence.current) return;
       setEmployees([]);
       setLoadError(
         error instanceof Error
@@ -180,7 +201,7 @@ export default function EmployeeManager({
           : "Không tải được danh sách nhân viên.",
       );
     } finally {
-      setLoading(false);
+      if (sequence === employeeLoadSequence.current) setLoading(false);
     }
   }
 
@@ -255,7 +276,7 @@ export default function EmployeeManager({
         if (updatedEmployee?.id) {
           setEmployees((current) =>
             current.map((employee) =>
-              employee?.id === updatedEmployee.id ? updatedEmployee : employee,
+              employee?.id === updatedEmployee.id ? { ...employee, ...updatedEmployee } : employee,
             ),
           );
         } else {
@@ -277,14 +298,47 @@ export default function EmployeeManager({
   }
 
   async function handleDelete(id: string) {
+    if (deleting || loading) return;
     if (!confirm("Bạn có chắc muốn xóa nhân viên này?")) return;
+    setDeleting(true);
     try {
       await deleteEmployee(id);
+      if (currentStoreId.current !== storeId) return;
       await loadEmployees();
     } catch (error) {
       console.error(error);
       alert("Không thể xóa nhân viên.");
+    } finally {
+      setDeleting(false);
     }
+  }
+
+  async function handleBulkDelete() {
+    if (deleting || loading || selectedEmployees.length === 0) return;
+    const ids = selectedEmployees.map((employee) => employee.id!);
+    if (!confirm(`Xóa ${ids.length} nhân viên đã chọn? Lịch sử bảng lương đã lưu vẫn được giữ lại. Thao tác này không thể hoàn tác.`)) return;
+    setDeleting(true);
+    setDeleteMessage("");
+    try {
+      const result = await deleteEmployees(storeId, ids);
+      if (currentStoreId.current !== storeId) return;
+      setSelectedIds(new Set());
+      setDeleteMessage(`Đã xóa ${result.deleted} nhân viên.`);
+      await loadEmployees();
+    } catch (error) {
+      if (currentStoreId.current !== storeId) return;
+      setDeleteMessage(error instanceof Error ? error.message : "Không thể xóa các nhân viên đã chọn.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function toggleEmployee(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   }
 
   const roleFilterOptions = useMemo<SelectBoxOption<string>[]>(() => {
@@ -302,6 +356,8 @@ export default function EmployeeManager({
   }, [availableRoles, employees]);
 
   const filteredEmployees = employees.filter((employee) => {
+    if (employee.storeId !== storeId) return false;
+    if (!matchesPayrollDate(employee, dateFilter, dateFrom, dateTo)) return false;
     const employeeRoles = getEmployeeRoleNames(employee);
     if (roleFilter !== "all" && !employeeRoles.includes(roleFilter)) return false;
     const keyword = adminSearchText(searchTerm.trim());
@@ -312,6 +368,10 @@ export default function EmployeeManager({
       adminSearchText((employee.employeeCode || "")).includes(keyword)
     );
   });
+  const selectedEmployees = filteredEmployees.filter((employee) => employee.id && selectedIds.has(employee.id));
+  const selectableEmployees = filteredEmployees.filter((employee) => employee.id);
+  const allSelected = selectableEmployees.length > 0 && selectedEmployees.length === selectableEmployees.length;
+  const dateRangeError = dateFilter === "range" && dateFrom && dateTo && dateFrom > dateTo;
   const paginatedEmployees = paginateItems(
     filteredEmployees,
     currentPage,
@@ -412,6 +472,44 @@ export default function EmployeeManager({
           </div>
         </div>
 
+        <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 bg-slate-50/50 px-4 py-3">
+          <div className="w-full sm:w-56">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">Tính lương lần cuối</span>
+            <SelectBox<PayrollDateFilter> value={dateFilter} onValueChange={setDateFilter} ariaLabel="Lọc theo lần tính lương cuối"
+              options={[{ value: "all", label: "Tất cả thời gian" }, { value: "before", label: "Trước ngày" }, { value: "range", label: "Trong khoảng ngày" }, { value: "never", label: "Chưa từng tính lương" }]} />
+          </div>
+          {dateFilter === "range" ? (
+            <label className="text-xs font-semibold text-slate-600">Từ ngày
+              <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 h-9 w-full sm:w-40" />
+            </label>
+          ) : null}
+          {dateFilter === "before" || dateFilter === "range" ? (
+            <label className="text-xs font-semibold text-slate-600">{dateFilter === "before" ? "Trước ngày" : "Đến ngày"}
+              <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-9 w-full sm:w-40" />
+            </label>
+          ) : null}
+          {dateFilter !== "all" ? <Button variant="ghost" onClick={() => { setDateFilter("all"); setDateFrom(""); setDateTo(""); }}>Bỏ lọc ngày</Button> : null}
+          <p className="w-full text-xs text-slate-500">Theo ngày kết thúc kỳ lương gần nhất có nhân viên. Ngày này không xác nhận nhân viên đã nghỉ việc.</p>
+          {dateRangeError ? <p role="alert" className="w-full text-sm text-rose-700">Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.</p> : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-3 text-sm">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input type="checkbox" aria-label="Chọn tất cả kết quả đang lọc" className="h-4 w-4 accent-emerald-700"
+              checked={allSelected} disabled={loading || deleting || selectableEmployees.length === 0}
+              ref={(node) => { if (node) node.indeterminate = selectedEmployees.length > 0 && !allSelected; }}
+              onChange={() => setSelectedIds(allSelected ? new Set() : new Set(selectableEmployees.map((employee) => employee.id!)))} />
+            Chọn tất cả {filteredEmployees.length} kết quả (mọi trang)
+          </label>
+          <span className="text-slate-500">Đã chọn {selectedEmployees.length}</span>
+          {selectedEmployees.length > 0 ? <>
+            <Button variant="ghost" disabled={deleting} onClick={() => setSelectedIds(new Set())}>Bỏ chọn</Button>
+            <Button disabled={loading || deleting} onClick={handleBulkDelete} className="gap-2 bg-rose-600 text-white hover:bg-rose-700">
+              <Trash2 className="h-4 w-4" />{deleting ? "Đang xóa..." : `Xóa đã chọn (${selectedEmployees.length})`}
+            </Button>
+          </> : null}
+          {deleteMessage ? <p role="status" className="w-full">{deleteMessage}</p> : null}
+        </div>
+
         {loadError ? (
           <div
             className="m-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
@@ -422,13 +520,15 @@ export default function EmployeeManager({
         ) : null}
 
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-[1060px] text-sm">
             <thead className="bg-slate-50/80">
               <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+                <th className="w-12 px-4 py-3 font-semibold"><span className="sr-only">Chọn nhân viên</span></th>
                 <th className="px-4 py-3 font-semibold">Mã NV</th>
                 <th className="px-4 py-3 font-semibold">Nhân viên</th>
                 <th className="px-4 py-3 font-semibold">Vai trò</th>
                 <th className="px-4 py-3 font-semibold">Cấu hình lương</th>
+                <th className="px-4 py-3 font-semibold">Tính lương lần cuối</th>
                 <th className="sticky right-0 bg-slate-50/95 px-4 py-3 text-right font-semibold">
                   Thao tác
                 </th>
@@ -442,6 +542,11 @@ export default function EmployeeManager({
                     key={employee.id}
                     className="group align-middle hover:bg-slate-50/70"
                   >
+                    <td className="px-4 py-3">
+                      <input type="checkbox" aria-label={`Chọn ${employee.name}`} className="h-4 w-4 accent-emerald-700"
+                        disabled={!employee.id || loading || deleting} checked={!!employee.id && selectedIds.has(employee.id)}
+                        onChange={() => employee.id && toggleEmployee(employee.id)} />
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="font-mono text-xs font-semibold text-slate-700">
                         {employee.employeeCode || "--"}
@@ -473,6 +578,7 @@ export default function EmployeeManager({
                         {compensation.secondary}
                       </div>
                     </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatLastPayrollDate(employee)}</td>
                     <td className="sticky right-0 bg-white px-4 py-3 text-right group-hover:bg-slate-50">
                       <div className="flex items-center justify-end gap-1">
                         <Button
@@ -489,6 +595,7 @@ export default function EmployeeManager({
                           variant="ghost"
                           size="icon"
                           className="h-9 w-9 rounded-md text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                          disabled={loading || deleting}
                           onClick={() => handleDelete(employee.id!)}
                           aria-label={"Xóa " + employee.name}
                           title="Xóa"
@@ -502,7 +609,7 @@ export default function EmployeeManager({
               })}
               {!loading && filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center">
+                  <td colSpan={7} className="px-4 py-12 text-center">
                     <div className="text-sm font-semibold text-slate-900">
                       Không có nhân viên phù hợp
                     </div>
@@ -520,12 +627,11 @@ export default function EmployeeManager({
           {paginatedEmployees.items.map((employee) => {
             const compensation = getCompensationSummary(employee);
             return (
-              <button
-                key={employee.id}
-                type="button"
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
-                onClick={() => setViewingEmployee(employee)}
-              >
+              <div key={employee.id} className="flex items-center gap-3 px-4 py-3">
+                <input type="checkbox" aria-label={`Chọn ${employee.name}`} className="h-4 w-4 shrink-0 accent-emerald-700"
+                  disabled={!employee.id || loading || deleting} checked={!!employee.id && selectedIds.has(employee.id)}
+                  onChange={() => employee.id && toggleEmployee(employee.id)} />
+                <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setViewingEmployee(employee)}>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-semibold text-slate-950">
@@ -542,9 +648,11 @@ export default function EmployeeManager({
                       {compensation.primary}
                     </span>
                   </div>
+                  <p className="mt-1 text-xs text-slate-500">Tính lương lần cuối: {formatLastPayrollDate(employee)}</p>
                 </div>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
-              </button>
+                </button>
+              </div>
             );
           })}
           {!loading && filteredEmployees.length === 0 ? (
