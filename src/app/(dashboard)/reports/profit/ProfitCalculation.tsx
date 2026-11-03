@@ -486,11 +486,9 @@ export function ProfitCalculation({
                       <div className="mt-3 grid gap-4 sm:grid-cols-2">
                         <div><p className="mb-1 text-sm font-semibold">Lương ước tính (1 ngày)</p>
                           <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-emerald-800">{selected.inputs.salary===null?'Chưa có ước lượng lương':roundedProfitMoney(selected.inputs.salary)}</p>
-                          <p className="mt-1 text-xs text-slate-500">Tự lấy từ ước lượng lương của ngày đang xem, không nhập tay.</p>
                         </div>
                         <div><p className="mb-1 text-sm font-semibold">Thuế (4,5% doanh thu)</p><p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-emerald-800">{roundedProfitMoney(selected.result.tax)}</p><p className="mt-1 text-xs text-slate-500">Tự tính từ doanh thu ngày, không nhập tay.</p></div>
                       </div>
-                      <p className="mt-2 text-xs text-slate-500">Chỉ nhập các khoản trả ngoài tiền bàn giao, chưa có trong phiếu chi tại quầy. Công nợ nhà cung cấp và tồn kho là số theo dõi, không cộng/trừ trực tiếp vào lãi.</p>
                     </div>
                     {selected.inputs.legacyUtilities != null && (
                       <p className="mt-4 rounded-sm bg-amber-50 p-3 text-xs text-amber-900">

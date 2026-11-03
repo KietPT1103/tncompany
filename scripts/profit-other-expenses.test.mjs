@@ -21,7 +21,7 @@ const change=async(el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.
 (async()=>{try{
 await wait(400);
 check('gross, net and actual cash indicators are visible',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Lãi gộp')&&document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Dòng tiền thực về'));
-check('salary is read-only and no manual payment input remains',!document.querySelector('input[id^="salary-paid-"]')&&document.body.textContent.includes('Tự lấy từ ước lượng lương của ngày đang xem, không nhập tay.'));
+check('salary is read-only and no manual payment input remains',!document.querySelector('input[id^="salary-paid-"]')&&document.body.textContent.includes('Lương ước tính (1 ngày)'));
 check('tax is automatic and no manual payment input remains',!document.querySelector('input[id^="tax-paid-"]')&&!document.body.textContent.includes('Thuế đã nộp')&&document.body.textContent.includes('Tự tính từ doanh thu ngày, không nhập tay.'));
 check('daily calculation includes automatic tax',document.body.textContent.includes('Thuế (4,5% doanh thu)')&&document.body.textContent.includes('45.000 đ'));
 const costInput=document.querySelector('input[id^="cost-"]');costInput.focus();await change(costInput,'20.000');costInput.blur();await wait(120);
