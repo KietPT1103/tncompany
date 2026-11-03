@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Plus,
@@ -11,10 +11,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock3,
+  Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SingleDatePicker } from "@/components/ui/SingleDatePicker";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { Toast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import type { RoleStartTimeSetting } from "@/services/roleStartTimes";
 import { calculateShiftLateMinutes } from "../payroll/_components/payrollShared";
@@ -174,6 +176,13 @@ export default function ShiftDetailModal({
   scheduledStartTimes,
 }: ShiftDetailModalProps) {
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const captureRef = useRef<HTMLDivElement>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [captureNotice, setCaptureNotice] = useState<{
+    variant: "success" | "error";
+    title: string;
+    description: string;
+  } | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [activeInsertIndex, setActiveInsertIndex] = useState<number | null>(
     null,
@@ -183,6 +192,7 @@ export default function ShiftDetailModal({
     if (isOpen) {
       setShifts(JSON.parse(JSON.stringify(initialShifts)));
       setActiveInsertIndex(null);
+      setCaptureNotice(null);
     }
   }, [isOpen, initialShifts]);
 
@@ -598,11 +608,115 @@ export default function ShiftDetailModal({
     (shift) => getLateMinutes(shift.inTime) > 0,
   ).length;
 
+  async function handleCapture() {
+    const section = captureRef.current;
+    if (!section || isCapturing) return;
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      setCaptureNotice({
+        variant: "error",
+        title: "Không thể sao chép ảnh",
+        description: "Vui lòng mở trang bằng HTTPS trên trình duyệt hỗ trợ sao chép ảnh.",
+      });
+      return;
+    }
+
+    setIsCapturing(true);
+    setCaptureNotice(null);
+    try {
+      // Pass a promise to ClipboardItem to keep the original click's user activation.
+      const imagePromise = (async () => {
+        const { default: html2canvas } = await import("html2canvas");
+        await document.fonts.ready;
+        const sourceLayout = Array.from(
+          section.querySelectorAll<HTMLElement>("[data-shift-layout]"),
+        ).find((layout) => getComputedStyle(layout).display !== "none");
+        const sourceScroller = section.querySelector<HTMLElement>("[data-shift-scroll]");
+        if (!sourceLayout || !sourceScroller) {
+          throw new Error("Không tìm thấy danh sách ca để chụp.");
+        }
+        const layoutName = sourceLayout.dataset.shiftLayout;
+        const contentHeight = sourceScroller.scrollHeight;
+        const captureScale = Math.min(2, 30000 / (contentHeight + section.offsetHeight));
+        // Tailwind's block images break html2canvas's inline font-metrics probe.
+        const fontMetricsStyle = document.createElement("style");
+        fontMetricsStyle.textContent =
+          'img[src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"] { display: inline-block !important; }';
+        document.head.append(fontMetricsStyle);
+        const canvas = await html2canvas(section, {
+          backgroundColor: "#ffffff",
+          scale: captureScale,
+          windowWidth: window.innerWidth,
+          windowHeight: window.innerHeight,
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (doc) => {
+            const panel = doc.querySelector<HTMLElement>("[data-shift-capture]");
+            const scroller = panel?.querySelector<HTMLElement>("[data-shift-scroll]");
+            if (!panel || !scroller) throw new Error("Không thể dựng danh sách ca.");
+
+            // Preserve the visible layout even if the cloned viewport changes breakpoints.
+            panel.querySelectorAll<HTMLElement>("[data-shift-layout]").forEach((layout) => {
+              layout.style.display = layout.dataset.shiftLayout === layoutName ? "block" : "none";
+            });
+
+            Object.assign(panel.style, {
+              height: "auto",
+              maxHeight: "none",
+              overflow: "visible",
+              width: `${section.offsetWidth}px`,
+              flexShrink: "0",
+            });
+            Object.assign(scroller.style, {
+              height: `${contentHeight}px`,
+              maxHeight: "none",
+              overflow: "visible",
+              flex: "none",
+            });
+            scroller.scrollTop = 0;
+            const capturedLayout = panel.querySelector<HTMLElement>(
+              `[data-shift-layout="${layoutName}"]`,
+            );
+            if (shifts.length > 0 && (!capturedLayout || capturedLayout.offsetHeight === 0)) {
+              throw new Error("Danh sách ca bị ẩn trong ảnh chụp.");
+            }
+            const header = panel.querySelector("thead");
+            if (header) header.style.position = "static";
+          },
+        }).finally(() => fontMetricsStyle.remove());
+        return new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Không thể tạo ảnh chấm công."));
+          }, "image/png");
+        });
+      })();
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": imagePromise }),
+      ]);
+      setCaptureNotice({
+        variant: "success",
+        title: "Đã sao chép ảnh chấm công",
+        description: "Dán ảnh vào tin nhắn bằng Ctrl+V hoặc chọn Dán.",
+      });
+    } catch (error) {
+      console.error("Shift capture failed", error);
+      setCaptureNotice({
+        variant: "error",
+        title: "Không thể sao chép ảnh",
+        description: "Vui lòng cho phép sao chép vào bộ nhớ tạm và thử lại.",
+      });
+    } finally {
+      setIsCapturing(false);
+    }
+  }
+
   if (typeof document === "undefined") return null;
 
   const modal = (
     <div className="fixed inset-0 z-[100] flex h-[100dvh] w-screen items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4">
       <div
+        ref={captureRef}
+        data-shift-capture
         role="dialog"
         aria-modal="true"
         aria-labelledby="shift-detail-title"
@@ -619,9 +733,9 @@ export default function ShiftDetailModal({
         }}
       >
         <header className="shrink-0 border-b border-slate-200 bg-white px-3 py-3 sm:px-5">
-          <div className="flex items-center justify-between gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:gap-4">
             {/* Tiêu đề */}
-            <div className="min-w-0">
+            <div className="w-full min-w-0 sm:w-auto">
               <h2
                 id="shift-detail-title"
                 className="truncate text-base font-semibold text-slate-950 sm:text-lg"
@@ -630,9 +744,9 @@ export default function ShiftDetailModal({
               </h2>
             </div>
             {/* Tên nhân viên và mã */}
-            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:gap-3">
               <div
-                className="flex h-8 max-w-[44vw] min-w-0 items-center gap-1.5 border-2 border-slate-950 bg-amber-300 px-2.5 text-xs font-bold text-slate-950 shadow-[3px_3px_0_#0f172a] sm:h-9 sm:max-w-xs sm:px-3"
+                className="mr-auto flex h-8 max-w-[44vw] min-w-0 items-center gap-1.5 border-2 border-slate-950 bg-amber-300 px-2.5 text-xs font-bold text-slate-950 shadow-[3px_3px_0_#0f172a] sm:mr-0 sm:h-9 sm:max-w-xs sm:px-3"
                 title={`${employeeName} · ${employeeId}`}
               >
                 <span className="truncate">{employeeName}</span>
@@ -641,9 +755,22 @@ export default function ShiftDetailModal({
                   {employeeId}
                 </span>
               </div>
+              <Button
+                variant="outline"
+                onClick={handleCapture}
+                isLoading={isCapturing}
+                aria-label="Sao chép ảnh chấm công"
+                title="Sao chép ảnh để dán vào tin nhắn"
+                data-html2canvas-ignore="true"
+                className="h-10 w-10 shrink-0 gap-2 px-0 sm:w-auto sm:px-3"
+              >
+                {!isCapturing ? <Camera className="h-4 w-4" /> : null}
+                <span className="hidden sm:inline">Sao chép ảnh</span>
+              </Button>
               <Tooltip content="Đóng hộp thoại" side="bottom">
                 <button
                   type="button"
+                  data-html2canvas-ignore="true"
                   onClick={onClose}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-400 transition-[background-color,color,transform] duration-150 hover:bg-slate-100 hover:text-slate-700 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   aria-label="Đóng"
@@ -722,8 +849,8 @@ export default function ShiftDetailModal({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="hidden xl:block">
+        <div data-shift-scroll className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div data-shift-layout="desktop" className="hidden xl:block">
             <table className="w-full table-fixed border-collapse text-left text-sm">
               <colgroup>
                 <col className="w-10" />
@@ -905,7 +1032,7 @@ export default function ShiftDetailModal({
               </tbody>
             </table>
           </div>
-          <div className="bg-slate-50 px-3 pb-3 sm:px-4 xl:hidden">
+          <div data-shift-layout="mobile" className="bg-slate-50 px-3 pb-3 sm:px-4 xl:hidden">
             {shifts.length > 0 ? renderMobileInsertShift(0) : null}
             {shifts.map((shift, index) => {
               const hours = calculateHours(shift.inTime, shift.outTime);
@@ -1109,5 +1236,17 @@ export default function ShiftDetailModal({
     </div>
   );
 
-  return createPortal(modal, document.body);
+  return createPortal(
+    <>
+      {modal}
+      <Toast
+        open={Boolean(captureNotice)}
+        variant={captureNotice?.variant ?? "success"}
+        title={captureNotice?.title ?? ""}
+        description={captureNotice?.description}
+        onDismiss={() => setCaptureNotice(null)}
+      />
+    </>,
+    document.body,
+  );
 }

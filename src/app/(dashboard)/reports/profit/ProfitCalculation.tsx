@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Calculator, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, Calculator, FileDown, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { paginateItems } from "@/lib/listPagination";
@@ -10,6 +10,7 @@ import {
   getProfitPeriod,
   saveProfitPeriod,
   type ProfitPeriodResponse,
+  type ProfitHistoryDetail,
 } from "@/services/dailyProfitService";
 import {
   emptyProfitInputs,
@@ -23,6 +24,8 @@ import {
   type ProfitPreset,
 } from "./profitPeriod";
 import { AmountInput } from "./AmountInput";
+import { OtherExpensesEditor, OtherExpensesDetails } from "./OtherExpenses";
+import { ReportProductCostInput } from "./ReportProductCostInput";
 
 export const profitMoney = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) + " đ";
@@ -42,15 +45,20 @@ const openControl = "border-[#064E3B] ring-0 ring-offset-0";
 export function ProfitCalculation({
   storeId,
   onSaved,
+  initialReport,
+  storeName = storeId,
 }: {
   storeId: string;
   onSaved: () => void;
+  initialReport?: ProfitHistoryDetail;
+  storeName?: string;
 }) {
-  const [preset, setPreset] = useState<ProfitPreset>("day");
+  const [preset, setPreset] = useState<ProfitPreset>(initialReport ? "custom" : "day");
+  const [editingReportId,setEditingReportId] = useState(initialReport?.id);
   const [anchor, setAnchor] = useState(today);
   const [custom, setCustom] = useState(() => ({
-    startDate: today(),
-    endDate: today(),
+    startDate: initialReport?.startDate ?? today(),
+    endDate: initialReport?.endDate ?? today(),
   }));
   const range = useMemo(() => {
     if (preset === "custom") return custom;
@@ -63,7 +71,7 @@ export function ProfitCalculation({
   const scope = `${storeId}:${range.startDate}:${range.endDate}`;
   const currentScope = useRef(scope);
   currentScope.current = scope;
-  const drafts = useRef<Record<string, ProfitInputs>>({});
+  const drafts = useRef<Record<string, ProfitInputs>>(Object.fromEntries(initialReport?.snapshot.days.map(day => [`${storeId}:${day.date}`, day.inputs]) ?? []));
   const formPanel = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<{
     scope: string;
@@ -72,6 +80,7 @@ export function ProfitCalculation({
   const [inputs, setInputs] = useState<Record<string, ProfitInputs>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting,setExporting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [reload, setReload] = useState(0);
   const [error, setError] = useState("");
@@ -154,6 +163,16 @@ export function ProfitCalculation({
     setDirty(true);
     setMessage("");
   }
+  async function exportExcel() {
+    if (!data || !calculation.complete || exporting) return;
+    setExporting(true);setError('');
+    try {
+      const {exportProfitExcel} = await import('./profitExcelExport');
+      await exportProfitExcel({storeName,startDate:range.startDate,endDate:range.endDate,days:data.days,inputsByDate:inputs,unsaved:dirty});
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Không xuất được file Excel.');
+    } finally { setExporting(false); }
+  }
   async function save() {
     if (!data || !calculation.complete || saving) return;
     const savingScope = scope;
@@ -166,7 +185,9 @@ export function ProfitCalculation({
         range.startDate,
         range.endDate,
         inputs,
+        initialReport?.startDate === range.startDate && initialReport?.endDate === range.endDate ? editingReportId : undefined,
       );
+      if (currentScope.current === savingScope && response.report && initialReport?.startDate === range.startDate && initialReport?.endDate === range.endDate) setEditingReportId(response.report.id);
       for (const day of response.days)
         delete drafts.current[`${storeId}:${day.date}`];
       if (currentScope.current === savingScope) {
@@ -259,6 +280,9 @@ export function ProfitCalculation({
             <RefreshCw className="h-4 w-4" />
             Làm mới
           </Button>
+          <Button variant="outline" disabled={!calculation.complete || loading || saving || exporting} isLoading={exporting} onClick={() => void exportExcel()} className={`gap-2 ${control}`}>
+            <FileDown className="h-4 w-4"/>Xuất Excel
+          </Button>
           <Button
             disabled={!calculation.complete || loading || saving}
             isLoading={saving}
@@ -266,7 +290,7 @@ export function ProfitCalculation({
             className="gap-2 rounded-sm bg-emerald-800 text-white hover:bg-emerald-900"
           >
             <Save className="h-4 w-4" />
-            Lưu báo cáo
+            {initialReport?.startDate === range.startDate && initialReport?.endDate === range.endDate ? "Cập nhật báo cáo" : "Lưu báo cáo"}
           </Button>
         </div>
       </div>
@@ -412,10 +436,10 @@ export function ProfitCalculation({
                           <a className="font-semibold text-emerald-800 underline" href={`/admin/payroll-estimate${selected.source.salaryEstimate ? `?payrollId=${encodeURIComponent(selected.source.salaryEstimate.payrollId)}` : ""}`}>Xem ước lượng lương</a>
                         </p>
                       </div>
-                      {PROFIT_FIELDS.filter((field) => field.key !== "salary").map((field) => (
+                      {PROFIT_FIELDS.filter((field) => field.key !== "salary" && field.key !== "other" && field.key !== "debt").map((field) => (
                         <div
                           key={field.key}
-                          className={field.key === "debt" ? "min-w-0 sm:col-span-2" : "min-w-0"}
+                          className="min-w-0"
                         >
                           <label
                             htmlFor={`profit-${selected.date}-${field.key}`}
@@ -441,7 +465,12 @@ export function ProfitCalculation({
                           />
                         </div>
                       ))}
+                    <div className="min-w-0">
+                      <label htmlFor={`profit-${selected.date}-debt`} className="mb-1.5 block text-sm font-semibold">Công nợ</label>
+                      <AmountInput key={`${selected.date}:debt`} id={`profit-${selected.date}-debt`} label={`Công nợ ngày ${profitDate(selected.date)}`} value={selected.inputs.debt} required={false} onChange={value => edit(selected.date,{...selected.inputs,debt:value})}/>
                     </div>
+                    </div>
+                    <OtherExpensesEditor key={selected.date} date={selected.date} inputs={selected.inputs} onChange={value => edit(selected.date,value)}/>
                     {selected.inputs.legacyUtilities != null && (
                       <p className="mt-4 rounded-sm bg-amber-50 p-3 text-xs text-amber-900">
                         Ngày này trước đây lưu điện/nước gộp:{" "}
@@ -520,7 +549,7 @@ export function ProfitCalculation({
                       ).map((key) => (
                         <div
                           key={key}
-                          className="flex min-w-0 justify-between gap-3 py-2.5"
+                          className="flex min-w-0 flex-wrap justify-between gap-3 py-2.5"
                         >
                           <dt>
                             −{" "}
@@ -534,6 +563,7 @@ export function ProfitCalculation({
                               ? "Chưa nhập"
                               : profitMoney(selected.inputs[key]!)}
                           </dd>
+                          {key === "other" && <dd className="w-full"><OtherExpensesDetails inputs={selected.inputs}/></dd>}
                         </div>
                       ))}
                       <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">
@@ -723,10 +753,21 @@ export function ProfitCalculation({
                                   selected.inputs.costOverrides,
                                   row.key,
                                 ) ? (
-                                  <AmountInput
+                                  <ReportProductCostInput
                                     key={`${selected.date}:${row.key}`}
                                     id={`cost-${selected.date}-${encodeURIComponent(row.key)}`}
                                     label={`Cost ${row.name} ngày ${profitDate(selected.date)}`}
+                                    storeId={storeId}
+                                    productCode={row.code}
+                                    onSaved={cost => {
+                                      if (currentScope.current !== scope) return;
+                                      setLoaded(previous => previous?.scope !== scope ? previous : {
+                                        ...previous,
+                                        data: {...previous.data, days:previous.data.days.map(day => ({
+                                          ...day, source:{...day.source,sales:day.source.sales.map(sale => sale.code === row.code ? {...sale,unitCost:cost,costSource:'catalog'} : sale)},
+                                        }))},
+                                      });
+                                    }}
                                     value={row.unitCost}
                                     onChange={(value) =>
                                       edit(selected.date, {

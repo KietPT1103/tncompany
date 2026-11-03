@@ -855,6 +855,38 @@ function DecimalHoursInput({ value, onValueChange, onBlur, className, label }: {
   />;
 }
 
+function SelectionCheckbox({
+  label,
+  checked,
+  indeterminate = false,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  indeterminate?: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useLayoutEffect(() => {
+    if (inputRef.current) inputRef.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+
+  return (
+    <input
+      ref={inputRef}
+      type="checkbox"
+      aria-label={label}
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      className="h-4 w-4 accent-emerald-700 focus-visible:outline-emerald-700"
+    />
+  );
+}
+
 export default function PayrollDetail({
   payrollId,
   onBack,
@@ -959,9 +991,12 @@ export default function PayrollDetail({
       left: 0,
       placement: "bottom",
     });
-  const [entryPendingDelete, setEntryPendingDelete] =
-    useState<PayrollEntry | null>(null);
-  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+  const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
+  const [entriesPendingDelete, setEntriesPendingDelete] = useState<PayrollEntry[]>(
+    [],
+  );
+  const [isDeletingEntries, setIsDeletingEntries] = useState(false);
+  const deleteInProgressRef = useRef(false);
   const [notice, setNotice] = useState<PayrollDetailNotice | null>(null);
   const actionMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1012,6 +1047,13 @@ export default function PayrollDetail({
   const [roleStartTimes, setRoleStartTimes] = useState<
     Record<string, RoleStartTimeSetting>
   >({});
+
+  useEffect(() => {
+    setSelectedEntryIds(new Set());
+  }, [
+    payrollId, storeId, searchTerm, filterRole, filterError, filterLateOnly,
+    filterImportedOnly, filterHourlyOnly, filterMonthlyOnly,
+  ]);
 
   function showNotice(
     variant: ToastVariant,
@@ -1678,32 +1720,50 @@ export default function PayrollDetail({
 
   function requestDeleteEntry(entry: PayrollEntry) {
     if (!entry.id) return;
-    setEntryPendingDelete(entry);
+    setEntriesPendingDelete([entry]);
     setOpenActionMenuId(null);
   }
 
   async function confirmDeleteEntry() {
-    if (!entryPendingDelete?.id) return;
-    const entryToDelete = entryPendingDelete;
-    setDeletingEntryId(entryToDelete.id);
+    if (entriesPendingDelete.length === 0 || deleteInProgressRef.current) return;
+    deleteInProgressRef.current = true;
+    setIsDeletingEntries(true);
 
     try {
-      await deletePayrollEntry(entryToDelete.id);
-
-      setEntries((current) =>
-        current.filter((entry) => entry.id !== entryToDelete.id),
+      // Finish queued edits before deleting so an autosave cannot race the removal.
+      await debouncedUpdate.flush();
+      const results = await Promise.allSettled(
+        entriesPendingDelete.map(async (entry) => {
+          const id = entry.id!;
+          await entrySaveQueuesRef.current[id]?.catch(() => undefined);
+          await deletePayrollEntry(id);
+          return id;
+        }),
       );
-      setEntryUiMeta((current) => {
-        if (!current[entryToDelete.id!]) return current;
-        const next = { ...current };
-        delete next[entryToDelete.id!];
-        return next;
-      });
-      setEntryPendingDelete(null);
+      const deletedIds = new Set(
+        results.flatMap((result) =>
+          result.status === "fulfilled" ? [result.value] : [],
+        ),
+      );
+      setEntries((current) =>
+        current.filter((entry) => !deletedIds.has(entry.id!)),
+      );
+      setEntryUiMeta((current) =>
+        Object.fromEntries(
+          Object.entries(current).filter(([id]) => !deletedIds.has(id)),
+        ),
+      );
+      setSelectedEntryIds((current) =>
+        new Set([...current].filter((id) => !deletedIds.has(id))),
+      );
+      setEntriesPendingDelete([]);
+      const failedCount = results.length - deletedIds.size;
       showNotice(
-        "success",
-        "Đã xóa dòng lương",
-        entryToDelete.employeeName + " đã được xóa khỏi kỳ lương.",
+        failedCount ? "error" : "success",
+        failedCount ? "Chưa xóa hết dòng lương" : "Đã xóa dòng lương",
+        failedCount
+          ? `Đã xóa ${deletedIds.size} nhân viên. ${failedCount} nhân viên chưa xóa được, vui lòng thử lại.`
+          : `Đã xóa ${deletedIds.size} nhân viên khỏi kỳ lương.`,
       );
     } catch (error) {
       console.error(error);
@@ -1713,7 +1773,8 @@ export default function PayrollDetail({
         "Đã xảy ra lỗi khi xóa nhân viên khỏi kỳ lương. Vui lòng thử lại.",
       );
     } finally {
-      setDeletingEntryId(null);
+      deleteInProgressRef.current = false;
+      setIsDeletingEntries(false);
     }
   }
 
@@ -2051,7 +2112,31 @@ export default function PayrollDetail({
       return (right.totalHours || 0) - (left.totalHours || 0);
     });
 
-  const visibleCount = COLUMN_OPTIONS.filter(
+  const selectedEntries = filteredEntries.filter(
+    (entry) => entry.id && selectedEntryIds.has(entry.id),
+  );
+  const selectableEntries = filteredEntries.filter((entry) => entry.id);
+  const allEntriesSelected = selectableEntries.length > 0
+    && selectedEntries.length === selectableEntries.length;
+
+  function toggleEntrySelection(entryId: string) {
+    setSelectedEntryIds((current) => {
+      const next = new Set(current);
+      if (next.has(entryId)) next.delete(entryId);
+      else next.add(entryId);
+      return next;
+    });
+  }
+
+  function toggleAllEntries() {
+    setSelectedEntryIds(
+      allEntriesSelected
+        ? new Set()
+        : new Set(selectableEntries.map((entry) => entry.id!)),
+    );
+  }
+
+  const visibleCount = 1 + COLUMN_OPTIONS.filter(
     (option) => visibleColumns[option.key],
   ).length;
 
@@ -2701,6 +2786,45 @@ export default function PayrollDetail({
               </Button>
             </div>
           </header>
+          <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2">
+            <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-slate-700 md:hidden">
+              <SelectionCheckbox
+                label="Chọn tất cả nhân viên đang hiển thị"
+                checked={allEntriesSelected}
+                indeterminate={selectedEntries.length > 0 && !allEntriesSelected}
+                disabled={selectableEntries.length === 0 || isDeletingEntries}
+                onChange={toggleAllEntries}
+              />
+              Chọn tất cả
+            </label>
+            <span role="status" className="text-sm text-slate-500">
+              Đã chọn {selectedEntries.length} nhân viên
+            </span>
+            {selectedEntries.length > 0 ? (
+              <>
+                <Button
+                  variant="outline"
+                  className="h-9 px-3"
+                  disabled={isDeletingEntries}
+                  onClick={() => setSelectedEntryIds(new Set())}
+                >
+                  Bỏ chọn
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="h-9 gap-2 px-3"
+                  disabled={isDeletingEntries}
+                  onClick={() => {
+                    setEntriesPendingDelete(selectedEntries);
+                    setOpenActionMenuId(null);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Xóa đã chọn ({selectedEntries.length})
+                </Button>
+              </>
+            ) : null}
+          </div>
           <div className="divide-y divide-slate-200 md:hidden">
             {filteredEntries.map((entry) => {
               const breakdown = getPayrollBreakdown(entry);
@@ -2708,6 +2832,15 @@ export default function PayrollDetail({
 
               return (
                 <article key={entry.id} className="space-y-3 px-4 py-3">
+                  <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-slate-700">
+                    <SelectionCheckbox
+                      label={`Chọn ${entry.employeeName}`}
+                      checked={Boolean(entry.id && selectedEntryIds.has(entry.id))}
+                      disabled={!entry.id || isDeletingEntries}
+                      onChange={() => toggleEntrySelection(entry.id!)}
+                    />
+                    Chọn nhân viên
+                  </label>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h4 className="truncate text-sm font-semibold text-slate-950">
@@ -2771,8 +2904,17 @@ export default function PayrollDetail({
             <table className="w-full min-w-[1080px] border-separate border-spacing-0 text-sm">
               <thead className="bg-slate-50">
                 <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500">
+                  <th className="sticky left-0 top-0 z-30 w-12 min-w-12 bg-slate-50 px-3 py-3 text-center">
+                    <SelectionCheckbox
+                      label="Chọn tất cả nhân viên đang hiển thị"
+                      checked={allEntriesSelected}
+                      indeterminate={selectedEntries.length > 0 && !allEntriesSelected}
+                      disabled={selectableEntries.length === 0 || isDeletingEntries}
+                      onChange={toggleAllEntries}
+                    />
+                  </th>
                   {visibleColumns.name ? (
-                    <th className="sticky left-0 top-0 z-30 w-[190px] min-w-[190px] max-w-[190px] bg-slate-50 px-3 py-3 text-left shadow-[1px_0_0_0_rgba(226,232,240,1)]">
+                    <th className="sticky left-12 top-0 z-30 w-[190px] min-w-[190px] max-w-[190px] bg-slate-50 px-3 py-3 text-left shadow-[1px_0_0_0_rgba(226,232,240,1)]">
                       Tên nhân viên
                     </th>
                   ) : null}
@@ -2886,10 +3028,18 @@ export default function PayrollDetail({
                           "ring-2 ring-inset ring-emerald-200",
                       )}
                     >
+                      <td className={cn("sticky left-0 z-10 w-12 min-w-12 border-b border-slate-200 px-3 py-3 text-center", stickyCellBackground)}>
+                        <SelectionCheckbox
+                          label={`Chọn ${entry.employeeName}`}
+                          checked={Boolean(entry.id && selectedEntryIds.has(entry.id))}
+                          disabled={!entry.id || isDeletingEntries}
+                          onChange={() => toggleEntrySelection(entry.id!)}
+                        />
+                      </td>
                       {visibleColumns.name ? (
                         <td
                           className={cn(
-                            "sticky left-0 z-10 w-[190px] min-w-[190px] max-w-[190px] border-b border-slate-200 px-3 py-3 align-middle shadow-[1px_0_0_0_rgba(226,232,240,1)]",
+                            "sticky left-12 z-10 w-[190px] min-w-[190px] max-w-[190px] border-b border-slate-200 px-3 py-3 align-middle shadow-[1px_0_0_0_rgba(226,232,240,1)]",
                             stickyCellBackground,
                           )}
                         >
@@ -4080,12 +4230,14 @@ export default function PayrollDetail({
       ) : null}
 
       <ConfirmDialog
-        open={Boolean(entryPendingDelete)}
+        open={entriesPendingDelete.length > 0}
         title="Xóa dòng lương?"
         description={
           <>
             <span className="font-medium text-slate-900">
-              {entryPendingDelete?.employeeName}
+              {entriesPendingDelete.length === 1
+                ? entriesPendingDelete[0].employeeName
+                : `${entriesPendingDelete.length} nhân viên đã chọn`}
             </span>{" "}
             sẽ bị xóa khỏi kỳ lương hiện tại. Hồ sơ nhân viên trong hệ thống
             không bị ảnh hưởng.
@@ -4094,9 +4246,9 @@ export default function PayrollDetail({
         confirmLabel="Xóa dòng lương"
         variant="destructive"
         icon={Trash2}
-        isLoading={Boolean(deletingEntryId)}
+        isLoading={isDeletingEntries}
         onCancel={() => {
-          if (!deletingEntryId) setEntryPendingDelete(null);
+          if (!isDeletingEntries) setEntriesPendingDelete([]);
         }}
         onConfirm={confirmDeleteEntry}
       />

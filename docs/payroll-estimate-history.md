@@ -2,6 +2,22 @@
 
 Trang Ước lượng lương có ba tab: Lịch phân ca, Tổng hợp nhân viên và Lịch phân ca đã lưu.
 
+- Tổng tiền ở danh sách, chi tiết và bộ lọc kỳ được tính lại từ các ca và mức lương đã lưu trong lịch; bao gồm lương tháng ÷ 30, không dùng tổng `salary` cũ từng loại bỏ fulltime. Khi mở lịch, dùng tên/mức lương trong bản đã lưu và khôi phục cả nhân viên đã bị xóa khỏi danh sách hiện tại, để không mất người, giờ hoặc thay đổi tổng do hồ sơ hiện tại đổi. Mở lịch chỉ đọc, không tự viết lại số tiền cũ. Bản rất cũ không có chi tiết ca vẫn dùng tổng đã lưu. Kiểm tra: `php scripts/payroll-estimate-totals-test.php` và `node scripts/payroll-estimate-cross-store.test.mjs`.
+
+- Popup chọn người tại Cafe/Bếp hiển thị nhân viên của cả hai bên kể cả khi vai trò trong hồ sơ khác tên bảng đang xếp (ví dụ Phụ bếp được xếp vào bảng Bếp). Người đã chọn đứng đầu, sau đó ưu tiên đúng vai trò; mỗi dòng ghi Cafe hoặc Bếp / Lẩu. Nhân viên chỉ có vai trò MKT vẫn bị loại. Vai trò trên ca lưu theo bảng phân ca, không thay đổi vai trò/lương gốc trong hồ sơ nhân viên. Kiểm tra: `node scripts/payroll-estimate-cross-store.test.mjs` và `php scripts/payroll-estimate-employee-test.php`.
+
+- Không tạo thêm lịch ước lượng có cùng ngày bắt đầu và kết thúc tại cùng cửa hàng, kể cả trùng với bản ước lượng cũ. Mở lịch đã có để chỉnh sửa; thay đổi khoảng ngày sang kỳ đã có cũng bị chặn. Giao diện kiểm tra trước khi ghi phân ca; API kiểm tra lại và trả 409 khi trùng, dùng khóa MySQL theo cửa hàng để tránh hai phiên tạo trùng đồng thời. Không tự xoá/gộp các bản trùng đã tồn tại. Kiểm tra bằng `php scripts/payroll-estimate-unique-period-test.php`.
+
+- Danh sách **Tính lương → Các kỳ lương** không liệt kê lịch ước lượng (nguồn `payroll_estimate`, hoặc bản cũ nguồn `timesheet_import` với tên bắt đầu `Ước tính lương `). Các bản này vẫn được giữ và mở trong **Lịch phân ca đã lưu**. Kiểm tra bằng `php scripts/payroll-list-test.php`.
+
+- Bộ lọc **Theo tháng** dùng ô **Chọn tháng/năm**, tự xác định ngày đầu và cuối tháng, kể cả tháng 2 năm nhuận. **Theo tuần** tiếp tục chọn một ngày trong tuần. Kiểm tra giao diện bằng `node scripts/payroll-estimate-month-picker.test.mjs`.
+
+- Trong danh sách chọn nhân viên, người đã chọn cho ca đang mở luôn đứng đầu; trong mỗi nhóm vẫn theo thứ tự tên. Bỏ chọn đưa người đó về nhóm chưa chọn. Tìm kiếm vẫn lọc theo tên hoặc mã nhân viên.
+
+- Nhân viên lương tháng được tính **lương tháng ÷ 30** cho mỗi ngày có phân ca trong khoảng đang chọn. Nhiều ca trong cùng ngày chỉ tính một lần; nhiều vai trò trong ngày chia chi phí theo số giờ từng vai trò. Chi phí được cộng vào tổng toàn khoảng, tổng vai trò và số tiền lưu trong lịch. Chỉ Admin thấy đơn giá **đ/ngày** trong popup chọn nhân viên và tổng hợp nhân viên. Các tài khoản khác vẫn ẩn tiền riêng của người lương tháng; popup hiển thị nhãn **Lương tháng**. Ô phân ca vẫn chỉ hiển thị chi phí nhân viên theo giờ. Quy tắc này áp dụng cho hiển thị trên màn ước lượng, không thay đổi quyền truy cập API.
+
+- Tại Cafe và Bếp, bộ chọn vai trò và nhân viên lấy dữ liệu của cả hai cửa hàng, ưu tiên thứ tự vai trò của cửa hàng đang chọn và gộp vai trò trùng tên. Có thể thêm bảng, phân ca và ước lượng lương nhân viên bên còn lại theo mức lương của họ. Lịch vẫn lưu và mở lại theo cửa hàng đang chọn. Farm, Tiệm bánh và Kho thợ tiếp tục dùng dữ liệu riêng; MKT không xuất hiện trong bộ chọn phân ca.
+
 - Lịch tự động lưu lên máy chủ sau khoảng 1 giây ngừng chỉnh sửa phân ca hoặc khoảng ngày. Lịch mới chỉ được tạo khi có phân ca; chỉnh sửa tiếp cập nhật cùng bản. Xoá hết phân ca của bản đã lưu vẫn cập nhật bản đó thành rỗng.
 - Trạng thái dưới các tab hiển thị đang chờ lưu, đang lưu, đã lưu hoặc lỗi cùng nút thử lại. Vẫn có thể chỉnh phân ca trong lúc đang lưu; thay đổi mới được gửi tiếp sau lần lưu hiện tại. Lỗi không tự lặp lại liên tục; chỉnh tiếp hoặc bấm thử lại để gửi lại.
 - Khi cập nhật nhiều phân ca bị lỗi giữa chừng, lần chỉnh tiếp hoặc thử lại sẽ đồng bộ lại toàn bộ lịch, kể cả khi bạn đưa lịch về nội dung trước lần lưu lỗi.
@@ -17,7 +33,7 @@ Trang Ước lượng lương có ba tab: Lịch phân ca, Tổng hợp nhân vi
 - Tab lịch đã lưu mặc định chọn **Tất cả lịch**, hiển thị khoảng ngày, lần cập nhật, số nhân viên, tổng giờ và tổng lương ước tính; mỗi trang có 10 lịch.
 - Badge trên tab hiển thị tổng số lịch đã lưu của cửa hàng, cập nhật khi lưu, xoá hoặc làm mới. Badge dùng cùng giao diện với Tổng hợp nhân viên.
 - Cột **Loại lịch** liệt kê các vai trò có phân ca. Lịch cũ dùng vai trò trên dòng nhân viên nếu chưa có vai trò riêng từng ca.
-- Có thể chọn tuần, tháng hoặc khoảng ngày để xem tổng lương. Chỉ cộng các bản có **ngày bắt đầu và ngày kết thúc trùng hoàn toàn** với kỳ đã chọn, kể cả trùng vai trò; tổng lấy tất cả trang. Không phân bổ các lịch tuần vào kỳ tháng hay cộng các lịch chỉ giao nhau. Số nhân viên tính không trùng; giờ và lương cộng tất cả bản. Chọn **Tất cả lịch** để xem các kỳ khác nhau, không hiển thị tổng gộp khác kỳ.
+- Có thể chọn tuần, tháng hoặc khoảng ngày để xem tổng lương. Chỉ cộng các bản có **ngày bắt đầu và ngày kết thúc trùng hoàn toàn** với kỳ đã chọn, kể cả các bản trùng cũ; tổng lấy tất cả trang. Không phân bổ các lịch tuần vào kỳ tháng hay cộng các lịch chỉ giao nhau. Số nhân viên tính không trùng; giờ và lương cộng tất cả bản. Chọn **Tất cả lịch** để xem các kỳ khác nhau, không hiển thị tổng gộp khác kỳ.
 - Khi mở lịch, trang khôi phục cả khoảng ngày đã lưu, kể cả ngày chưa phân ca.
 - Bộ chọn ngày nằm bên phải tiêu đề trên màn hình rộng. Các nút tự xuống hàng ở màn hình nhỏ; bảng phân ca cuộn ngang khi không đủ chiều rộng.
 - Nút lưu dùng cùng kiểu viền, bóng đổ và hiệu ứng với nút chụp; nền vàng, chữ xanh lá đậm.
@@ -30,6 +46,9 @@ API đọc lịch dùng `payrolls.php?resource=estimates&storeId=...&page=...` v
 Danh sách nhận thêm `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` (cả hai bắt buộc khi lọc) và trả `summary` cho toàn bộ kết quả cùng kỳ. Khi không lọc, `summary` là `null`.
 
 Kiểm tra dữ liệu độc lập: `php scripts/payroll-estimate-history-test.php` (SQLite trong bộ nhớ).
+Quyền cửa hàng: admin và manager được truy cập lịch đã lưu tại mọi cửa hàng, thống nhất với bộ chọn cửa hàng. Các vai trò khác chỉ được truy cập cửa hàng chính hoặc cửa hàng được cấp trong `user_store_access`; vẫn phải có quyền truy cập chức năng. Kiểm tra bằng `php scripts/payroll-estimate-permissions-test.php`.
 Kiểm tra tự lưu trong Chrome: `node scripts/payroll-estimate-autosave.test.mjs` (dùng dữ liệu/API giả lập, không gửi dữ liệu lên máy chủ thật).
 Kiểm tra kỳ tuần/tháng: `node --experimental-strip-types --test scripts/estimate-periods.test.mjs`.
 Kiểm tra xoá bảng vai trò: `node --experimental-strip-types --test scripts/estimate-schedule.test.mjs`.
+Kiểm tra ước lượng chéo Cafe/Bếp trong Chrome: `node scripts/payroll-estimate-cross-store.test.mjs` (dữ liệu/API giả lập).
+Kiểm tra lương tháng theo ngày: `node --experimental-strip-types --test scripts/estimate-monthly-salary.test.mjs`; kiểm thử Chrome ở trên cũng kiểm tra cộng tổng, lưu chi phí, ẩn số tiền riêng và nhiều ca trong cùng ngày.

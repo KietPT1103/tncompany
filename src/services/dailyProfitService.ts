@@ -15,12 +15,15 @@ export type ProfitPeriodResponse = { days: ProfitDay[]; report: ProfitReport | n
 export function getProfitPeriod(storeId: string, startDate: string, endDate: string) {
   return apiRequest<ProfitPeriodResponse>(`/daily-profit.php?${new URLSearchParams({ mode: 'range', storeId, startDate, endDate })}`);
 }
-export function saveProfitPeriod(storeId: string, startDate: string, endDate: string, inputsByDate: Record<string, ProfitInputs>) {
-  return apiRequest<ProfitPeriodResponse>('/daily-profit.php', { method: 'POST', body: JSON.stringify({ mode: 'range', storeId, startDate, endDate, inputsByDate }) });
+export function saveProfitPeriod(storeId: string, startDate: string, endDate: string, inputsByDate: Record<string, ProfitInputs>, reportId?: string) {
+  return apiRequest<ProfitPeriodResponse>('/daily-profit.php', { method: 'POST', body: JSON.stringify({ mode: 'range', storeId, startDate, endDate, inputsByDate, reportId }) });
 }
 export function getProfitHistory(storeId: string, page: number) {
   return apiRequest<{ rows: ProfitReport[]; total: number; page: number }>(`/daily-profit.php?${new URLSearchParams({ mode: 'history', storeId, page: String(page) })}`);
 }
 export function getProfitHistoryDetail(storeId: string, id: string) {
   return apiRequest<ProfitHistoryDetail>(`/daily-profit.php?${new URLSearchParams({ mode: 'history', storeId, id })}`);
+}
+export function deleteProfitHistory(storeId: string, id: string) {
+  return apiRequest<{deleted: boolean}>(`/daily-profit.php?${new URLSearchParams({mode:'history',storeId,id})}`, {method:'DELETE'});
 }

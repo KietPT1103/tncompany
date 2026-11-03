@@ -32,6 +32,7 @@ import { Toast } from "@/components/ui/Toast";
 import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { removeEstimateRole } from "@/lib/estimateSchedule";
+import { getMonthlyEstimateCosts } from "@/lib/estimateMonthlySalary";
 import { SavedEstimateSchedules } from "./payroll/_components/SavedEstimateSchedules";
 import {
   ArrowLeft,
@@ -191,7 +192,7 @@ function getWeekEnd(date: Date) {
 }
 
 function formatCurrency(value: number) {
-  return `${currencyFormatter.format(Math.round(value))} đ`;
+  return `${currencyFormatter.format(Math.ceil(value / 1000) * 1000)} đ`;
 }
 
 function formatHours(value: number) {
@@ -240,8 +241,20 @@ function getEstimateRolesForStore(storeId: string) {
     .filter(isVisibleEstimateRole);
 }
 
+function getEstimateStoreIds(storeId: string) {
+  if (storeId === "cafe") return ["cafe", "restaurant"];
+  if (storeId === "restaurant") return ["restaurant", "cafe"];
+  return [storeId];
+}
+
 function getEmployeeKey(employee: Employee) {
   return employee.id || employee.employeeCode || employee.name;
+}
+
+function getEstimateEmployeeStoreLabel(employee: Employee) {
+  if (employee.storeId === "cafe") return "Cafe";
+  if (employee.storeId === "restaurant") return "Bếp / Lẩu";
+  return "";
 }
 
 function getCurrentWeekRange() {
@@ -343,7 +356,7 @@ function buildEstimateEntryPayload(
     hourlyRate: isMonthly ? 0 : item.employee.hourlyRate || 0,
     totalHours: item.totalHours,
     weekendHours: 0,
-    salary: isMonthly ? 0 : item.totalSalary,
+    salary: item.totalSalary,
     allowances: [],
     note: `Ước tính từ lịch phân ca ${startDate} đến ${endDate}`,
     salaryType,
@@ -388,28 +401,22 @@ function buildScheduleFromEntries(
   let suggestedRole: EstimateRole | null = null;
 
   entries.forEach((entry) => {
-    const matchedEmployee = employees.find((employee) => {
-      if (entry.employeeId && employee.id && entry.employeeId === employee.id) {
-        return true;
-      }
-
-      const entryCode = (entry.employeeCode || "").trim().toLowerCase();
-      const employeeCode = (employee.employeeCode || "").trim().toLowerCase();
-      if (entryCode && employeeCode && entryCode === employeeCode) {
-        return true;
-      }
-
-      return (
-        employee.name.trim().toLowerCase() ===
-        entry.employeeName.trim().toLowerCase()
+    // Codes can repeat across stores, so resolve the saved ID before legacy fallbacks.
+    const matchedEmployee =
+      employees.find((employee) => employee.id && employee.id === entry.employeeId) ||
+      employees.find((employee) => {
+        const entryCode = (entry.employeeCode || "").trim().toLowerCase();
+        return entryCode && entryCode === (employee.employeeCode || "").trim().toLowerCase();
+      }) ||
+      employees.find((employee) =>
+        employee.name.trim().toLowerCase() === entry.employeeName.trim().toLowerCase(),
       );
-    });
 
     if (!matchedEmployee) return;
 
     const employeeKey = getEmployeeKey(matchedEmployee);
     (entry.shifts || []).forEach((shift) => {
-      if (!shift.isValid) return;
+      if (shift.isValid === false) return;
       const role = shift.role || entry.role;
       if (!estimateRoles.includes(role)) return;
       const shiftId = getShiftIdFromStoredShift(shift);
@@ -845,11 +852,14 @@ function RoleScheduleTable({
 
 export default function SalaryEstimatePage() {
   const { user, loading } = useAuth();
+  const canViewMonthlyDailySalary = user?.role === "admin";
   const { storeId, storeName } = useStore();
+  const canScheduleAcrossCafeAndKitchen = storeId === "cafe" || storeId === "restaurant";
   const router = useRouter();
   const location = useLocation();
 
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [savedEmployees, setSavedEmployees] = useState<Employee[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [schedule, setSchedule] = useState<ScheduleState>({});
@@ -907,7 +917,7 @@ export default function SalaryEstimatePage() {
     () =>
       (managedEstimateRoles.length > 0
         ? managedEstimateRoles
-        : getEstimateRolesForStore(storeId)
+        : Array.from(new Set(getEstimateStoreIds(storeId).flatMap(getEstimateRolesForStore)))
       ).filter(isVisibleEstimateRole),
     [managedEstimateRoles, storeId],
   );
@@ -949,10 +959,10 @@ export default function SalaryEstimatePage() {
     setEmployeesLoading(true);
     setLoadError("");
 
-    getEmployees(storeId)
+    Promise.all(getEstimateStoreIds(storeId).map(getEmployees))
       .then((items) => {
         if (ignore) return;
-        setEmployees(items);
+        setEmployees(items.flat());
       })
       .catch((error) => {
         if (ignore) return;
@@ -979,9 +989,19 @@ export default function SalaryEstimatePage() {
     let ignore = false;
     setRolesLoading(true);
     setManagedEstimateRoles([]);
-    getEmployeeRoles(storeId)
+    Promise.all(getEstimateStoreIds(storeId).map(async (estimateStoreId) => {
+      try {
+        const items = await getEmployeeRoles(estimateStoreId);
+        return items.length > 0
+          ? items.map((item) => item.name)
+          : getEstimateRolesForStore(estimateStoreId);
+      } catch (error) {
+        console.error(error);
+        return getEstimateRolesForStore(estimateStoreId);
+      }
+    }))
       .then((items) => {
-        if (!ignore) setManagedEstimateRoles(items.map((item) => item.name));
+        if (!ignore) setManagedEstimateRoles(Array.from(new Set(items.flat())));
       })
       .catch((error) => console.error(error))
       .finally(() => { if (!ignore) setRolesLoading(false); });
@@ -999,6 +1019,7 @@ export default function SalaryEstimatePage() {
     setSelectedRole(estimateRoles[0] || "");
     setActiveCell(null);
     setSchedule({});
+    setSavedEmployees([]);
     setEditingPayrollId("");
     savedDraft.current = "";
     setScheduleBoardRoles(estimateRoles.length > 0 ? [estimateRoles[0]] : []);
@@ -1059,13 +1080,15 @@ export default function SalaryEstimatePage() {
 
   const supportedEmployees = useMemo(
     () =>
-      employees
+      Array.from(new Map([...employees, ...savedEmployees].map(employee => [getEmployeeKey(employee), employee])).values())
         .filter(
           (employee) =>
-            getEmployeeRoleNames(employee).some((role) => estimateRoles.includes(role)),
+            getEmployeeRoleNames(employee).some((role) =>
+              canScheduleAcrossCafeAndKitchen ? isVisibleEstimateRole(role) : estimateRoles.includes(role),
+            ),
         )
         .sort((left, right) => left.name.localeCompare(right.name, "vi")),
-    [employees, estimateRoles],
+    [employees, savedEmployees, estimateRoles, canScheduleAcrossCafeAndKitchen],
   );
 
   const queryPayrollId = useMemo(() => {
@@ -1082,7 +1105,7 @@ export default function SalaryEstimatePage() {
   }, [supportedEmployees]);
 
   useEffect(() => {
-    if (!queryPayrollId || supportedEmployees.length === 0) return;
+    if (!queryPayrollId || employeesLoading || rolesLoading) return;
     const loadKey = `${storeId}:${queryPayrollId}:${openSavedRevision}`;
     if (loadedScheduleKey.current === loadKey) return;
 
@@ -1094,9 +1117,25 @@ export default function SalaryEstimatePage() {
     getSavedEstimateSchedule(storeId, queryPayrollId)
       .then(({ entries, schedule: savedSchedule }) => {
         if (ignore) return;
+        const snapshotEmployees: Employee[] = entries.map(entry => {
+          const current = employees.find(employee => employee.id === entry.employeeId);
+          return {
+            ...current,
+            id: entry.employeeId,
+            employeeCode: entry.employeeCode || current?.employeeCode,
+            name: entry.employeeName,
+            storeId: current?.storeId || storeId,
+            role: entry.role,
+            roles: Array.from(new Set([entry.role, ...(current?.roles || []), ...(entry.shifts || []).map(shift => shift.role || entry.role)])),
+            hourlyRate: entry.hourlyRate ?? current?.hourlyRate ?? 0,
+            salaryType: entry.salaryType || current?.salaryType,
+            monthlySalary: entry.monthlySalary || entry.fixedSalary || 0,
+          };
+        });
+        setSavedEmployees(snapshotEmployees);
         const restored = buildScheduleFromEntries(
           entries,
-          supportedEmployees,
+          snapshotEmployees,
           estimateRoles,
         );
         const startDate = savedSchedule.startDate || normalizedRange.startDate;
@@ -1134,7 +1173,7 @@ export default function SalaryEstimatePage() {
     return () => {
       ignore = true;
     };
-  }, [estimateRoles, queryPayrollId, supportedEmployees, storeId, openSavedRevision]);
+  }, [estimateRoles, queryPayrollId, employeesLoading, rolesLoading, employees, storeId, openSavedRevision]);
 
   const employeesByRole = useMemo(() => {
     const next = Object.fromEntries(
@@ -1207,6 +1246,15 @@ export default function SalaryEstimatePage() {
       });
     });
 
+    for (const summary of summaryMap.values()) {
+      if (!isFixedSalaryEmployee(summary.employee)) continue;
+      const costs = getMonthlyEstimateCosts(summary.employee.monthlySalary || 0, summary.shifts);
+      summary.totalSalary = costs.salary;
+      for (const [role, salary] of Object.entries(costs.roleSalaries)) {
+        summary.roleTotals[role].salary = salary;
+      }
+    }
+
     return Array.from(summaryMap.values()).sort((left, right) => {
       const roleDiff =
         getRoleOrder(left.assignedRoles[0] || left.employee.role, estimateRoles) -
@@ -1247,7 +1295,7 @@ export default function SalaryEstimatePage() {
   );
 
   const activeCellEmployees = activeCell
-    ? employeesByRole[activeCell.role] || []
+    ? canScheduleAcrossCafeAndKitchen ? supportedEmployees : employeesByRole[activeCell.role] || []
     : [];
   const activeSelection = activeCell
     ? schedule[
@@ -1266,7 +1314,12 @@ export default function SalaryEstimatePage() {
       adminSearchText(employee.name).includes(keyword) ||
       adminSearchText((employee.employeeCode || "")).includes(keyword)
     );
-  });
+  }).sort((left, right) =>
+    Number(activeSelection.includes(getEmployeeKey(right))) -
+    Number(activeSelection.includes(getEmployeeKey(left))) ||
+    Number(getEmployeeRoleNames(right).includes(activeCell?.role || "")) -
+    Number(getEmployeeRoleNames(left).includes(activeCell?.role || "")),
+  );
   const canAccessPayroll = hasPermission(user, "payroll.access");
 
   function updateCellEmployees(
@@ -1372,6 +1425,7 @@ export default function SalaryEstimatePage() {
   }
 
   function createNewSchedule() {
+    setSavedEmployees([]);
     saveGeneration.current += 1;
     editingIdRef.current = "";
     loadedScheduleKey.current = "";
@@ -1431,6 +1485,15 @@ export default function SalaryEstimatePage() {
     setSaveMessage("");
 
     try {
+      const existingSchedules = await getSavedEstimateSchedules(storeId, 1, normalizedRange);
+      if (!isCurrent()) return false;
+      if (existingSchedules.items.some(item => item.id !== requestPayrollId)) {
+        const current = requestPayrollId ? await getSavedEstimateSchedule(storeId, requestPayrollId) : null;
+        if (!isCurrent()) return false;
+        if (!current || current.schedule.startDate !== normalizedRange.startDate || current.schedule.endDate !== normalizedRange.endDate) {
+          throw new Error("Đã có lịch ước tính lương cho khoảng ngày này tại cửa hàng. Vui lòng mở lịch trong Lịch phân ca đã lưu để chỉnh sửa.");
+        }
+      }
       const payrollName = `Ước tính lương ${shortDateFormatter.format(
         parseDateKey(normalizedRange.startDate),
       )} - ${shortDateFormatter.format(parseDateKey(normalizedRange.endDate))}`;
@@ -1800,6 +1863,7 @@ export default function SalaryEstimatePage() {
                 setAutosaveError("");
                 setEditingPayrollId("");
                 setSchedule({});
+                setSavedEmployees([]);
                 setScheduleBoardRoles(selectedRole ? [selectedRole] : []);
                 setActiveCell(null);
                 setSaveMessage("");
@@ -1978,6 +2042,7 @@ export default function SalaryEstimatePage() {
                                 >
                                   {employee.name}
                                 </span>
+                                {canScheduleAcrossCafeAndKitchen && <span className="shrink-0 text-xs font-normal text-slate-500">{getEstimateEmployeeStoreLabel(employee)}</span>}
                                 {selected ? (
                                   <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
                                     Đã chọn
@@ -1988,13 +2053,17 @@ export default function SalaryEstimatePage() {
                                 <div className="mt-1 text-sm text-slate-500">
                                   {formatCurrency(employee.hourlyRate || 0)}/giờ
                                 </div>
+                              ) : canViewMonthlyDailySalary ? (
+                                <div className="mt-1 text-sm text-slate-500">
+                                  {formatCurrency(Math.max(0, employee.monthlySalary || 0) / 30)}/ngày
+                                </div>
                               ) : null}
                             </div>
 
                             <div className="flex items-center gap-3">
                               {fixedSalary ? (
                                 <div className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-                                  Không tính theo ca
+                                  Lương tháng
                                 </div>
                               ) : (
                                 <div className="text-right">
@@ -2084,6 +2153,8 @@ export default function SalaryEstimatePage() {
                             {item.assignedRoles.join(", ")}
                             {!fixedSalary ? (
                               <> • {formatCurrency(item.employee.hourlyRate || 0)}/giờ</>
+                            ) : canViewMonthlyDailySalary ? (
+                              <> • {formatCurrency(Math.max(0, item.employee.monthlySalary || 0) / 30)}/ngày</>
                             ) : null}
                           </div>
                         </div>
@@ -2235,16 +2306,21 @@ export default function SalaryEstimatePage() {
                             <span className="block break-words text-sm font-semibold text-slate-900 sm:truncate" title={employee.name}>
                               {employee.name}
                             </span>
+                            {canScheduleAcrossCafeAndKitchen && <div className="mt-0.5 text-xs text-slate-500">{getEstimateEmployeeStoreLabel(employee)}</div>}
                             {!fixedSalary ? (
                               <div className="mt-0.5 truncate text-xs text-slate-500">
                                 {formatCurrency(employee.hourlyRate || 0)}/giờ
+                              </div>
+                            ) : canViewMonthlyDailySalary ? (
+                              <div className="mt-0.5 truncate text-xs text-slate-500">
+                                {formatCurrency(Math.max(0, employee.monthlySalary || 0) / 30)}/ngày
                               </div>
                             ) : null}
                           </div>
                           <div className="col-span-2 flex shrink-0 items-center justify-between gap-3 border-t border-slate-200/70 pt-2 sm:justify-start sm:border-0 sm:pt-0">
                             {fixedSalary ? (
                               <div className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">
-                                Không tính theo ca
+                                Lương tháng
                               </div>
                             ) : (
                               <div className="text-left sm:text-right">

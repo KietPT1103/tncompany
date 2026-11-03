@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/Input";
 import { formatProfitMoneyInput, normalizeProfitMoneyInput, parseMoneyInput } from "./dailyProfit";
-export function AmountInput({ id, value, onChange, label, required = true }: { id: string; value: number | null; onChange: (value: number | null) => void; label: string; required?: boolean }) {
+export function AmountInput({ id, value, onChange, label, required = true, onCommit, disabled }: { id: string; value: number | null; onChange: (value: number | null) => void; label: string; required?: boolean; onCommit?: (value: number | null) => void; disabled?: boolean }) {
   const [raw, setRaw] = useState(value === null ? "" : String(value));
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingCaret = useRef<number | null>(null);
@@ -15,7 +15,7 @@ export function AmountInput({ id, value, onChange, label, required = true }: { i
   const invalid = raw !== "" && parseMoneyInput(raw) === null;
   return <div>
     <div className="relative"><Input ref={inputRef} id={id} aria-label={label} aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined}
-      type="text" inputMode="decimal" required={required} placeholder="Nhập số tiền" value={formatProfitMoneyInput(raw)} className="min-w-0 rounded-sm border-slate-200 bg-white pr-12 text-slate-900 tabular-nums hover:border-[#064E3B] focus-visible:border-[#064E3B] focus-visible:ring-0 focus-visible:ring-offset-0"
+      type="text" inputMode="decimal" required={required} disabled={disabled} onBlur={() => onCommit?.(parseMoneyInput(raw))} placeholder="Nhập số tiền" value={formatProfitMoneyInput(raw)} className="min-w-0 rounded-sm border-slate-200 bg-white pr-12 text-slate-900 tabular-nums hover:border-[#064E3B] focus-visible:border-[#064E3B] focus-visible:ring-0 focus-visible:ring-offset-0"
       onChange={event => {
         const display = event.target.value;
         const nextRaw = normalizeProfitMoneyInput(display);

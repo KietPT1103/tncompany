@@ -42,6 +42,22 @@ không lẫn dữ liệu; tổng chi tại quầy tự cập nhật theo phiếu
 
 ## Kỳ báo cáo và lịch sử
 
+File Excel bật đường lưới xám và kẻ viền xám cho bảng trên tất cả sheet. Sheet **Tổng hợp** hiển thị từng khoản chi khác ngay dưới tổng **Chi phí khác trong ngày**; khi xuất nhiều ngày, mỗi khoản ghi kèm ngày. Các dòng này chỉ diễn giải tổng đã cộng, không tính chi phí lần thứ hai.
+
+Nút **Xuất Excel** cạnh **Lưu báo cáo** tải file `.xlsx` cho toàn bộ kỳ đang chọn, chỉ bật khi đủ dữ liệu. File gồm **Tổng hợp**, **Theo ngày**, **Giá vốn món**, **Các khoản chi** (phiếu chi tại quầy, từng khoản chi khác, điện/nước, marketing và Anh Thiện chi). Xuất toàn bộ món và ngày, không theo phân trang giao diện. Dùng dữ liệu đang xem, kể cả thay đổi chưa lưu; file ghi rõ nếu chưa lưu và không tự lưu báo cáo. Định dạng xanh–vàng TN Services, tiêu đề cố định, lọc dữ liệu, số tiền/ngày là ô số/ngày thật, số âm màu đỏ, công thức tổng có kết quả lưu sẵn và thiết lập in ngang. Kiểm tra workbook: `node scripts/profit-excel-export.test.mjs`; thao tác tải file: `node scripts/profit-other-expenses.test.mjs`.
+
+Trong lịch sử, cột **Thao tác** có hai nút **Chỉnh sửa** và **Xóa**. Chỉnh sửa tải dữ liệu snapshot về form Tính lợi nhuận, chọn đúng kỳ và điền lại chi phí đã lưu. **Cập nhật báo cáo** gửi `reportId` và cập nhật chính bản lịch sử đó cùng đầu vào từng ngày trong một giao dịch; không tạo thêm bản trùng. API kiểm tra ID thuộc cửa hàng, đúng khoảng ngày và bản còn tồn tại. Nguồn doanh thu, cost và lương được lấy lại tại thời điểm cập nhật. Chọn **Tạo báo cáo mới** để thoát chế độ chỉnh sửa; đổi sang kỳ khác lưu thành báo cáo mới. Kiểm thử: `node scripts/profit-history-edit.test.mjs` và `php scripts/daily-profit-report-test.php`.
+
+Trong bảng **Cost / món**, nhập cost rồi rời ô sẽ lưu vào danh mục sản phẩm bằng API cập nhật cost hiện có, theo đúng mã món và cửa hàng. Hiển thị trạng thái đang lưu/đã lưu/lỗi và nút thử lại. Giá trị trống hoặc sai không ghi đè cost; số 0 hợp lệ. Quyền sửa danh mục sản phẩm vẫn được API kiểm tra. Các ngày sau tải cost từ danh mục; số liệu lịch sử đã lưu vẫn giữ nguyên. Kiểm thử: `node scripts/profit-product-cost.test.mjs`.
+
+Tab **Lịch sử** có nút **Xóa** cạnh mỗi báo cáo và hộp xác nhận kỳ sẽ xoá. Xóa riêng snapshot của báo cáo tại cửa hàng đang chọn, giữ nguyên đầu vào chi phí theo ngày. Lỗi xóa hiển thị trong hộp xác nhận để thử lại; xóa dòng cuối một trang sẽ lùi về trang trước. API `DELETE daily-profit.php?mode=history&storeId=...&id=...` dùng cùng quyền báo cáo và kiểm tra phạm vi cửa hàng. Kiểm thử: `php scripts/profit-history-delete-test.php`; `node scripts/profit-other-expenses.test.mjs` cũng kiểm tra xác nhận, hủy, lỗi và xóa thành công.
+
+**Chi phí khác trong ngày** nhập theo từng khoản bằng nút **Thêm khoản chi**, gồm tên và số tiền; có thể xoá từng dòng. Tổng tự cộng vào chi phí và lợi nhuận, không nhập tổng riêng. Tên không được trống (tối đa 200 ký tự), tiền không âm; cần nhập đủ trước khi lưu, tối đa 100 khoản/ngày. Chi tiết được lưu trong `inputs_json` và snapshot lịch sử, hiển thị bên dưới tổng chi phí khác trong bảng tính và lịch sử. Không cần thay đổi cấu trúc cơ sở dữ liệu. Dữ liệu cũ chỉ có tổng `other` tiếp tục giữ số tiền và hiện thành dòng **Chi phí khác đã nhập trước đây** để sửa.
+
+Kiểm thử thao tác nhập, xoá, cộng tổng, lưu/tải lại và chi tiết lịch sử trong Chrome: `node scripts/profit-other-expenses.test.mjs`.
+
+Lương nhân viên một ngày lấy từ lịch ước lượng đã lưu: nhân viên theo giờ tính theo giờ phân ca, nhân viên lương tháng tính lương tháng ÷ 30. Một nhân viên lương tháng chỉ tính một lần/ngày dù có nhiều ca hoặc nhiều dòng vai trò. Dùng lương tháng (hoặc `fixed_salary` của bản cũ) trong lịch đã lưu, không cần lưu lại lịch cũ chỉ để cập nhật cách tính. Cả báo cáo ngày và kỳ đều dùng công thức này; bản lịch mới nhất áp dụng cho ngày đó vẫn được ưu tiên.
+
 Hai tab Tính lợi nhuận và Lịch sử nằm ngay tại `/admin/reports/profit`, dùng cùng kiểu tab như trang ước lượng lương.
 Chọn một ngày, tuần (thứ Hai đến Chủ nhật), tháng lịch hoặc khoảng ngày tùy chọn, tối đa 366 ngày.
 Ngày đại diện chọn tuần/tháng; chi phí đã lưu từng ngày tự dùng lại. Đổi kỳ hoặc tab không mất bản nhập
