@@ -10,6 +10,7 @@ import {
   getProfitPeriod,
   saveProfitPeriod,
   type ProfitPeriodResponse,
+  type ProfitHistoryDetail,
 } from "@/services/dailyProfitService";
 import {
   emptyProfitInputs,
@@ -24,6 +25,7 @@ import {
 } from "./profitPeriod";
 import { AmountInput } from "./AmountInput";
 import { OtherExpensesEditor, OtherExpensesDetails } from "./OtherExpenses";
+import { ReportProductCostInput } from "./ReportProductCostInput";
 
 export const profitMoney = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) + " đ";
@@ -43,15 +45,18 @@ const openControl = "border-[#064E3B] ring-0 ring-offset-0";
 export function ProfitCalculation({
   storeId,
   onSaved,
+  initialReport,
 }: {
   storeId: string;
   onSaved: () => void;
+  initialReport?: ProfitHistoryDetail;
 }) {
-  const [preset, setPreset] = useState<ProfitPreset>("day");
+  const [preset, setPreset] = useState<ProfitPreset>(initialReport ? "custom" : "day");
+  const [editingReportId,setEditingReportId] = useState(initialReport?.id);
   const [anchor, setAnchor] = useState(today);
   const [custom, setCustom] = useState(() => ({
-    startDate: today(),
-    endDate: today(),
+    startDate: initialReport?.startDate ?? today(),
+    endDate: initialReport?.endDate ?? today(),
   }));
   const range = useMemo(() => {
     if (preset === "custom") return custom;
@@ -64,7 +69,7 @@ export function ProfitCalculation({
   const scope = `${storeId}:${range.startDate}:${range.endDate}`;
   const currentScope = useRef(scope);
   currentScope.current = scope;
-  const drafts = useRef<Record<string, ProfitInputs>>({});
+  const drafts = useRef<Record<string, ProfitInputs>>(Object.fromEntries(initialReport?.snapshot.days.map(day => [`${storeId}:${day.date}`, day.inputs]) ?? []));
   const formPanel = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<{
     scope: string;
@@ -167,7 +172,9 @@ export function ProfitCalculation({
         range.startDate,
         range.endDate,
         inputs,
+        initialReport?.startDate === range.startDate && initialReport?.endDate === range.endDate ? editingReportId : undefined,
       );
+      if (currentScope.current === savingScope && response.report && initialReport?.startDate === range.startDate && initialReport?.endDate === range.endDate) setEditingReportId(response.report.id);
       for (const day of response.days)
         delete drafts.current[`${storeId}:${day.date}`];
       if (currentScope.current === savingScope) {
@@ -267,7 +274,7 @@ export function ProfitCalculation({
             className="gap-2 rounded-sm bg-emerald-800 text-white hover:bg-emerald-900"
           >
             <Save className="h-4 w-4" />
-            Lưu báo cáo
+            {initialReport?.startDate === range.startDate && initialReport?.endDate === range.endDate ? "Cập nhật báo cáo" : "Lưu báo cáo"}
           </Button>
         </div>
       </div>
@@ -730,10 +737,21 @@ export function ProfitCalculation({
                                   selected.inputs.costOverrides,
                                   row.key,
                                 ) ? (
-                                  <AmountInput
+                                  <ReportProductCostInput
                                     key={`${selected.date}:${row.key}`}
                                     id={`cost-${selected.date}-${encodeURIComponent(row.key)}`}
                                     label={`Cost ${row.name} ngày ${profitDate(selected.date)}`}
+                                    storeId={storeId}
+                                    productCode={row.code}
+                                    onSaved={cost => {
+                                      if (currentScope.current !== scope) return;
+                                      setLoaded(previous => previous?.scope !== scope ? previous : {
+                                        ...previous,
+                                        data: {...previous.data, days:previous.data.days.map(day => ({
+                                          ...day, source:{...day.source,sales:day.source.sales.map(sale => sale.code === row.code ? {...sale,unitCost:cost,costSource:'catalog'} : sale)},
+                                        }))},
+                                      });
+                                    }}
                                     value={row.unitCost}
                                     onChange={(value) =>
                                       edit(selected.date, {

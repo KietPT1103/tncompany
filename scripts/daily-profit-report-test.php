@@ -134,3 +134,12 @@ check($itemDetail['snapshot']['days'][0]['result']['other'] === 125000, 'History
 check(daily_profit_load($pdo,'cafe','2026-10-07')['inputs']['otherExpenses'][0]['amount'] === 50000, 'Reload preserves item amounts');
 rejected(fn()=>daily_profit_validate_inputs([...$itemized,'otherExpenses'=>[$itemized['otherExpenses'][0],$itemized['otherExpenses'][0]]]));
 echo "PASS itemized other costs: validated sums, daily persistence and history detail\n";
+$historyCount = profit_history($pdo,'cafe',1)['total'];
+$editedInputs = ['2026-10-07'=>[...$itemized,'otherExpenses'=>[['id'=>'edited','name'=>'Khoản đã sửa','amount'=>1000]],'costOverrides'=>['missing'=>0]]];
+$updatedReport = profit_period_save($pdo,'cafe','2026-10-07','2026-10-07',$editedInputs,'test',$itemReport['id']);
+check($updatedReport['id'] === $itemReport['id'] && profit_history($pdo,'cafe',1)['total'] === $historyCount, 'Editing updates the same report without creating a duplicate');
+check(profit_history($pdo,'cafe',1,$itemReport['id'])['snapshot']['days'][0]['result']['other'] === 1000, 'Edited snapshot includes changed costs');
+rejected(fn()=>profit_period_save($pdo,'restaurant','2026-10-07','2026-10-07',$editedInputs,'test',$itemReport['id']));
+rejected(fn()=>profit_period_save($pdo,'cafe','2026-10-07','2026-10-08',$editedInputs,'test',$itemReport['id']));
+rejected(fn()=>profit_period_save($pdo,'cafe','2026-10-07','2026-10-07',$editedInputs,'test','missing'));
+echo "PASS report editing: same snapshot, changed inputs, store and period protection\n";

@@ -89,19 +89,39 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
     $totals['margin'] = $totals['revenue'] > 0 ? $totals['profit']/$totals['revenue']*100 : null;
     return ['totals'=>$totals,'days'=>$days];
 }
-function profit_period_save(PDO $pdo, string $storeId, string $start, string $end, array $rawInputs, string $userId): array
+function profit_period_save(PDO $pdo, string $storeId, string $start, string $end, array $rawInputs, string $userId, ?string $reportId = null): array
 {
     $pdo->beginTransaction();
     try {
+        if ($reportId !== null) {
+            if ($reportId === '' || strlen($reportId) > 64) throw new InvalidArgumentException('Mã báo cáo không hợp lệ.');
+            $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+            $find = $pdo->prepare('SELECT start_date,end_date FROM profit_report_history WHERE id=:id AND store_id=:store'.$lock);
+            $find->execute(['id'=>$reportId,'store'=>$storeId]);
+            $existing = $find->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) throw new InvalidArgumentException('Báo cáo không còn tồn tại tại cửa hàng này.');
+            if ($existing['start_date'] !== $start || $existing['end_date'] !== $end) throw new InvalidArgumentException('Khoảng ngày không khớp với báo cáo đang chỉnh sửa.');
+        }
         $snapshot = profit_period_snapshot(profit_period_sources($pdo, $storeId, $start, $end), $rawInputs);
         foreach ($snapshot['days'] as $day) daily_profit_save($pdo, $storeId, $day['date'], $day['inputs'], $userId);
-        $id = bin2hex(random_bytes(16)); $now = date('c');
-        $pdo->prepare('INSERT INTO profit_report_history (id,store_id,start_date,end_date,snapshot_json,saved_by,saved_at) VALUES (:id,:store,:start,:end,:snapshot,:user,:now)')->execute([
+        $id = $reportId ?? bin2hex(random_bytes(16)); $now = date('c');
+        $sql = $reportId === null
+            ? 'INSERT INTO profit_report_history (id,store_id,start_date,end_date,snapshot_json,saved_by,saved_at) VALUES (:id,:store,:start,:end,:snapshot,:user,:now)'
+            : 'UPDATE profit_report_history SET start_date=:start,end_date=:end,snapshot_json=:snapshot,saved_by=:user,saved_at=:now WHERE id=:id AND store_id=:store';
+        $pdo->prepare($sql)->execute([
             'id'=>$id,'store'=>$storeId,'start'=>$start,'end'=>$end,'snapshot'=>json_encode($snapshot, JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),'user'=>$userId,'now'=>$now]);
         $pdo->commit();
         return ['id'=>$id,'startDate'=>$start,'endDate'=>$end,'savedAt'=>$now,'totals'=>$snapshot['totals']];
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
 }
+function profit_history_delete(PDO $pdo, string $storeId, string $id): bool
+{
+    if ($id === '' || strlen($id) > 64) throw new InvalidArgumentException('Mã báo cáo không hợp lệ.');
+    $query = $pdo->prepare('DELETE FROM profit_report_history WHERE store_id=:store AND id=:id');
+    $query->execute(['store'=>$storeId,'id'=>$id]);
+    return $query->rowCount() > 0;
+}
+
 function profit_history(PDO $pdo, string $storeId, int $page, ?string $id = null): array
 {
     if ($id !== null) {
