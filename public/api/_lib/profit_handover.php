@@ -25,12 +25,3 @@ function profit_source_handover(PDO $pdo,string $store,array $dates): array
     }
     return $result;
 }
-
-function profit_salary_payment_period(string $date): ?array
-{
-    $day=(int)substr($date,8,2);
-    if($day===15)return ['startDate'=>substr($date,0,8).'01','endDate'=>$date,'label'=>'Đợt 1'];
-    if($day!==5)return null;
-    $end=(new DateTimeImmutable($date))->modify('first day of this month')->modify('-1 day')->format('Y-m-d');
-    return ['startDate'=>substr($end,0,8).'16','endDate'=>$end,'label'=>'Đợt 2'];
-}

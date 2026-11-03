@@ -71,7 +71,7 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
 {
     if (count($sources) !== count($rawInputs)) throw new InvalidArgumentException('Cần nhập đủ chi phí cho tất cả ngày trong kỳ.');
     $totals = ['revenue'=>0,'materialCost'=>0,'salary'=>0,'electricity'=>0,'water'=>0,'other'=>0,'marketing'=>0,'thienExpense'=>0,'ingredientInventory'=>0,'debt'=>0,'voucherCost'=>0,'tax'=>0,'totalCosts'=>0,'profit'=>0];
-    $totals += array_fill_keys(['grossProfit','netProfit','operatingExpense','salaryPaid','taxPaid'],0);
+    $totals += array_fill_keys(['grossProfit','netProfit','operatingExpense','taxPaid'],0);
     $days = [];
     foreach ($sources as $date=>$source) {
         if (!is_array($rawInputs[$date] ?? null)) throw new InvalidArgumentException('Thiếu chi phí ngày '.$date.'.');
@@ -80,7 +80,6 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
             $rawInputs[$date]['salary'] = $source['salaryEstimate']['amount'];
             $inputs = daily_profit_validate_inputs($rawInputs[$date]);
             daily_profit_require_complete($source, $inputs);
-            if($inputs['salaryPaid']>0 && profit_salary_payment_period($date)===null)throw new InvalidArgumentException('Lương thực trả chỉ nhập vào ngày 15 hoặc ngày 05 tháng sau.');
         } catch (InvalidArgumentException $e) { throw new InvalidArgumentException($date.': '.$e->getMessage()); }
         $cost = 0;
         foreach ($source['sales'] as $sale) $cost += $sale['quantity'] * ($inputs['costOverrides'][$sale['key']] ?? $sale['unitCost']);
@@ -93,9 +92,9 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
         $result['grossProfit']=$source['revenue']-$cost;
         $result['netProfit']=$result['profit'];
         $result['operatingExpense']=$inputs['operatingExpense'];
-        $result['salaryPaid']=$inputs['salaryPaid'];$result['taxPaid']=$inputs['taxPaid'];
+        $result['taxPaid']=$inputs['taxPaid'];
         $result['cashReceived']=$source['handover']['amount']??null;
-        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['operatingExpense']-$inputs['salaryPaid']-$inputs['taxPaid']:null;
+        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['operatingExpense']-$inputs['salary']-$inputs['taxPaid']:null;
         foreach ($totals as $key=>$_) $totals[$key] += $result[$key];
         $days[] = ['date'=>$date,'inputs'=>$inputs,'result'=>$result];
     }

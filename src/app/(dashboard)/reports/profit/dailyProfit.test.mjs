@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateDailyProfit, emptyProfitInputs, parseMoneyInput, formatProfitMoneyInput, normalizeProfitMoneyInput, salaryPaymentPeriod } from "./dailyProfit.ts";
+import { calculateDailyProfit, emptyProfitInputs, parseMoneyInput, formatProfitMoneyInput, normalizeProfitMoneyInput } from "./dailyProfit.ts";
 
 const data = { revenue: 1000000, billCount: 10, sales: [{ key: "coffee", code: "coffee", name: "Cà phê", quantity: 10, unitCost: 10000 }], vouchers: [{ id: "v1", code: "PC1", category: "Chi tại quầy", amount: 50000 }] };
 const complete = () => ({ ...emptyProfitInputs(), salary: 200000, electricity: 0, water: 0, other: 100000 });
@@ -10,16 +10,17 @@ test('gross, net and actual cash use separate inputs without double-counting cas
   const result=calculateDailyProfit(source,{...complete(),salaryPaid:300000,taxPaid:20000,ingredientInventory:999999,debt:888888});
   assert.equal(result.grossProfit,900000);
   assert.equal(result.netProfit,555000);
-  assert.equal(result.cashFlow,480000);
+  assert.equal(result.cashFlow,580000);
   assert.equal(result.cashReceived,800000);
   assert.equal(calculateDailyProfit({...source,handover:{...source.handover,provisional:true}},complete()).cashFlow,null);
   assert.equal(calculateDailyProfit(data,complete()).cashFlow,null);
 });
-test('salary payments map to the 15th and the 5th of the next month',()=>{
-  assert.deepEqual(salaryPaymentPeriod('2026-11-15'),{startDate:'2026-11-01',endDate:'2026-11-15',label:'Đợt 1'});
-  assert.deepEqual(salaryPaymentPeriod('2026-12-05'),{startDate:'2026-11-16',endDate:'2026-11-30',label:'Đợt 2'});
-  assert.equal(salaryPaymentPeriod('2024-03-05').endDate,'2024-02-29');
-  assert.equal(salaryPaymentPeriod('2026-11-04'),null);
+test('daily estimated salary replaces legacy manual payment values in cash flow',()=>{
+  const source={...data,salaryEstimate:{amount:123456.67,payrollId:'estimate',name:'Lịch'},handover:{amount:800000,provisional:false,shiftCount:2}};
+  const result=calculateDailyProfit(source,{...complete(),salary:999999,salaryPaid:700000});
+  assert.equal(result.cashFlow,800000-123456.67);
+  assert.ok(Math.abs(result.netProfit-(1000000-100000-123456.67-100000-45000))<0.000001);
+  assert.equal(calculateDailyProfit({...source,salaryEstimate:null},complete()).cashFlow,null);
 });
 
 test('tax is automatically 4.5% of daily revenue and is included in costs', () => {

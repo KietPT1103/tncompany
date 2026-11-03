@@ -58,7 +58,7 @@ assert.equal(originalProfit,658500,'Original precision is retained without compo
 assert.ok(rowFor(summary,'LÃI GỘP'));
 assert.equal(summary.getCell(rowFor(summary,'DÒNG TIỀN THỰC VỀ'),2).value,'Chưa có bàn giao đã chốt');
 const cashBook=buildProfitWorkbook({...options,days:[{...days[0],source:{...days[0].source,handover:{amount:800000,provisional:false,shiftCount:1}}}],inputsByDate:{'2026-11-03':{...inputs,salaryPaid:300000,taxPaid:20000}}}).getWorksheet('Tổng hợp');
-assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).result,480000);
+assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).result,580000);
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC TẾ'),1).fill.fgColor.argb,'FF064E3B');
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).font.color.argb,'FFF6C85F');
 assert.equal(cashBook.getCell(rowFor(cashBook,'LÃI GỘP'),1).font.bold,true);
@@ -67,9 +67,9 @@ const paidOptions={...options,days:[{...days[0],source:{...days[0].source,handov
 const paidBook=new ExcelJS.Workbook();await paidBook.xlsx.load(await buildProfitWorkbook(paidOptions).xlsx.writeBuffer());
 const paidSummary=paidBook.getWorksheet('Tổng hợp');
 assert.equal(paidSummary.getCell(rowFor(paidSummary,'Chi vận hành thực trả ngoài bàn giao'),2).result,13000);
-assert.equal(paidSummary.getCell(rowFor(paidSummary,'Lương thực trả'),2).result,301000);
+assert.equal(paidSummary.getCell(rowFor(paidSummary,'Lương ước tính (1 ngày)'),2).result,200000);
 assert.equal(paidSummary.getCell(rowFor(paidSummary,'Thuế đã nộp'),2).result,21000);
-assert.equal(paidSummary.getCell(rowFor(paidSummary,'DÒNG TIỀN THỰC VỀ'),2).result,468000,'Cash total rounds the original amount, without subtracting cashier spending twice');
+assert.equal(paidSummary.getCell(rowFor(paidSummary,'DÒNG TIỀN THỰC VỀ'),2).result,568000,'Cash total rounds the original amount, without subtracting cashier spending twice');
 const sample=buildProfitWorkbook({...options,endDate:options.startDate,days:[{...days[0],source:{...days[0].source,revenue:22092000}}],inputsByDate:{...options.inputsByDate,'2026-11-03':{...inputs,salary:6178333.33}}}).getWorksheet('Tổng hợp');
 assert.equal(sample.getCell(rowFor(sample,'Lương nhân viên (phân bổ trong ngày)'),2).result,6179000);
 assert.equal(sample.getCell(rowFor(sample,'Thuế (4,5% doanh thu)'),2).result,995000);

@@ -15,17 +15,16 @@ $inputs=['salary'=>0,'electricity'=>0,'water'=>0,'other'=>0,'marketing'=>0,'oper
 $snapshot=profit_period_snapshot(['2026-11-15'=>$source],['2026-11-15'=>$inputs]);
 check((float)$snapshot['totals']['grossProfit']===1500000.0,'Gross profit is revenue less system cost of goods sold');
 check($snapshot['totals']['netProfit']===1300000.0,'Net profit excludes informational inventory/payables and cashier payments already accounted for');
-check($snapshot['totals']['cashFlow']===770000.0,'Actual cash deducts actual payroll and tax only once');
+check($snapshot['totals']['cashFlow']===970000.0,'Cash flow deducts system daily estimated salary and tax only once');
 daily_profit_ensure_schema($pdo);
 daily_profit_save($pdo,'cafe','2026-11-15',$snapshot['days'][0]['inputs'],'admin');
 $saved=daily_profit_saved_row($pdo->query('SELECT * FROM daily_profit_inputs')->fetch());
-check($saved['inputs']['salaryPaid']===300000.0 || $saved['inputs']['salaryPaid']===300000,'Actual salary payment survives persistence');
+check((float)$saved['inputs']['salary']===100000.0 && !isset($saved['inputs']['salaryPaid']),'Daily salary comes from source and legacy manual payment is discarded');
 $accrued=$inputs;$accrued['other']=1234;
 $withAccrual=profit_period_snapshot(['2026-11-15'=>$source],['2026-11-15'=>$accrued]);
 check($withAccrual['totals']['cashFlow']===$snapshot['totals']['cashFlow'],'Accrued consumable cost does not reduce actual cash again');
 check($withAccrual['totals']['netProfit']===$snapshot['totals']['netProfit']-1234,'Accrued consumable cost still reduces net profit');
-check(profit_salary_payment_period('2026-12-05')['startDate']==='2026-11-16','Second salary period is previous month');
-try{profit_period_snapshot(['2026-11-14'=>$source],['2026-11-14'=>$inputs]);throw new RuntimeException('Must reject payroll on another day');}catch(InvalidArgumentException $e){}
+check(profit_period_snapshot(['2026-11-14'=>$source],['2026-11-14'=>$inputs])['totals']['cashFlow']===970000.0,'Daily salary estimate applies every day, independent of payday');
 $source['handover']['provisional']=true;
 check(profit_period_snapshot(['2026-11-15'=>$source],['2026-11-15'=>$inputs])['totals']['cashFlow']===null,'Unclosed handover is not presented as actual cash');
-echo "PASS financial metrics: system handover, store scope, transfers, gross/net/cash, payment dates, no inventory/debt double counting\n";
+echo "PASS financial metrics: system handover, store scope, transfers, gross/net/cash, daily estimated salary, no inventory/debt double counting\n";

@@ -17,7 +17,6 @@ import {
   PROFIT_FIELDS,
   OPTIONAL_PROFIT_FIELDS,
   roundedProfitMoney,
-  salaryPaymentPeriod,
   type ProfitInputs,
 } from "./dailyProfit";
 import {
@@ -393,7 +392,7 @@ export function ProfitCalculation({
               {[
                 {label:'Lãi gộp',value:calculation.grossProfit,note:'Doanh thu − giá vốn món đã bán'},
                 {label:'Lãi ròng ước tính',value:calculation.netProfit,note:'Lãi gộp − lương − chi phí vận hành − thuế'},
-                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi ngoài bàn giao − lương đã trả − thuế đã nộp'},
+                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi ngoài bàn giao − lương ước tính ngày − thuế đã nộp'},
               ].map(metric=><div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-sm font-semibold text-slate-500">{metric.label}</p><p className={`mt-2 text-xl font-bold ${metric.value!==null&&metric.value<0?'text-red-700':'text-emerald-800'}`}>{metric.value===null?'Chưa đủ dữ liệu':roundedProfitMoney(metric.value)}</p><p className="mt-1 text-xs text-slate-500">{metric.note}</p></div>)}
             </section>
             <fieldset
@@ -485,9 +484,9 @@ export function ProfitCalculation({
                       <p className="mt-1 font-semibold text-emerald-800">{selected.result.cashReceived===null?'Chưa có ca bàn giao':roundedProfitMoney(selected.result.cashReceived)}</p>
                       {selected.source.handover?.provisional&&<p className="text-xs text-amber-700">Ca chưa chốt hoặc có giao dịch chưa phân ca; chưa xác nhận dòng tiền thực về.</p>}
                       <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                        <div><label htmlFor={`salary-paid-${selected.date}`} className="mb-1 block text-sm font-semibold">Lương thực trả</label>
-                          <AmountInput id={`salary-paid-${selected.date}`} label="Lương thực trả" value={selected.inputs.salaryPaid??0} required={false} disabled={!salaryPaymentPeriod(selected.date)} onChange={value=>edit(selected.date,{...selected.inputs,salaryPaid:value})}/>
-                          <p className="mt-1 text-xs text-slate-500">{salaryPaymentPeriod(selected.date)?`${salaryPaymentPeriod(selected.date)!.label}: ${profitDate(salaryPaymentPeriod(selected.date)!.startDate)} – ${profitDate(salaryPaymentPeriod(selected.date)!.endDate)}`:'Chỉ trả lương ngày 15 và ngày 05 tháng sau.'}</p>
+                        <div><p className="mb-1 text-sm font-semibold">Lương ước tính (1 ngày)</p>
+                          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-emerald-800">{selected.inputs.salary===null?'Chưa có ước lượng lương':roundedProfitMoney(selected.inputs.salary)}</p>
+                          <p className="mt-1 text-xs text-slate-500">Tự lấy từ ước lượng lương của ngày đang xem, không nhập tay.</p>
                         </div>
                         <div><label htmlFor={`tax-paid-${selected.date}`} className="mb-1 block text-sm font-semibold">Thuế đã nộp</label><AmountInput id={`tax-paid-${selected.date}`} label="Thuế đã nộp" value={selected.inputs.taxPaid??0} required={false} onChange={value=>edit(selected.date,{...selected.inputs,taxPaid:value})}/></div>
                       </div>
