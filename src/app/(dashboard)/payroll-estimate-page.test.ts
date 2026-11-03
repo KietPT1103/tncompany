@@ -74,7 +74,7 @@ test("excludes MKT from the schedule role selector", () => {
 test("keeps fixed-salary employees schedulable without showing salary amounts", () => {
   assert.match(source, /function isFixedSalaryEmployee\(employee: Employee\)/);
   assert.match(source, /function getEstimatedHourlyRate\(employee: Employee\)/);
-  assert.match(source, /Không tính theo ca/);
+  assert.match(source, /Lương tháng/);
   assert.doesNotMatch(
     source,
     /getEmployeeRoleNames\(employee\)\.some\(\(role\) => estimateRoles\.includes\(role\)\)\s*&&\s*resolveEmployeeSalaryType/,

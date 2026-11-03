@@ -2,6 +2,10 @@
 
 Trang Ước lượng lương có ba tab: Lịch phân ca, Tổng hợp nhân viên và Lịch phân ca đã lưu.
 
+- Nhân viên lương tháng được tính **lương tháng ÷ 30** cho mỗi ngày có phân ca trong khoảng đang chọn. Nhiều ca trong cùng ngày chỉ tính một lần; nhiều vai trò trong ngày chia chi phí theo số giờ từng vai trò. Chi phí được cộng vào tổng toàn khoảng, tổng vai trò và số tiền lưu trong lịch. Chỉ Admin thấy đơn giá **đ/ngày** trong popup chọn nhân viên và tổng hợp nhân viên. Các tài khoản khác vẫn ẩn tiền riêng của người lương tháng; popup hiển thị nhãn **Lương tháng**. Ô phân ca vẫn chỉ hiển thị chi phí nhân viên theo giờ. Quy tắc này áp dụng cho hiển thị trên màn ước lượng, không thay đổi quyền truy cập API.
+
+- Tại Cafe và Bếp, bộ chọn vai trò và nhân viên lấy dữ liệu của cả hai cửa hàng, ưu tiên thứ tự vai trò của cửa hàng đang chọn và gộp vai trò trùng tên. Có thể thêm bảng, phân ca và ước lượng lương nhân viên bên còn lại theo mức lương của họ. Lịch vẫn lưu và mở lại theo cửa hàng đang chọn. Farm, Tiệm bánh và Kho thợ tiếp tục dùng dữ liệu riêng; MKT không xuất hiện trong bộ chọn phân ca.
+
 - Lịch tự động lưu lên máy chủ sau khoảng 1 giây ngừng chỉnh sửa phân ca hoặc khoảng ngày. Lịch mới chỉ được tạo khi có phân ca; chỉnh sửa tiếp cập nhật cùng bản. Xoá hết phân ca của bản đã lưu vẫn cập nhật bản đó thành rỗng.
 - Trạng thái dưới các tab hiển thị đang chờ lưu, đang lưu, đã lưu hoặc lỗi cùng nút thử lại. Vẫn có thể chỉnh phân ca trong lúc đang lưu; thay đổi mới được gửi tiếp sau lần lưu hiện tại. Lỗi không tự lặp lại liên tục; chỉnh tiếp hoặc bấm thử lại để gửi lại.
 - Khi cập nhật nhiều phân ca bị lỗi giữa chừng, lần chỉnh tiếp hoặc thử lại sẽ đồng bộ lại toàn bộ lịch, kể cả khi bạn đưa lịch về nội dung trước lần lưu lỗi.
@@ -34,3 +38,5 @@ Quyền cửa hàng: admin và manager được truy cập lịch đã lưu tạ
 Kiểm tra tự lưu trong Chrome: `node scripts/payroll-estimate-autosave.test.mjs` (dùng dữ liệu/API giả lập, không gửi dữ liệu lên máy chủ thật).
 Kiểm tra kỳ tuần/tháng: `node --experimental-strip-types --test scripts/estimate-periods.test.mjs`.
 Kiểm tra xoá bảng vai trò: `node --experimental-strip-types --test scripts/estimate-schedule.test.mjs`.
+Kiểm tra ước lượng chéo Cafe/Bếp trong Chrome: `node scripts/payroll-estimate-cross-store.test.mjs` (dữ liệu/API giả lập).
+Kiểm tra lương tháng theo ngày: `node --experimental-strip-types --test scripts/estimate-monthly-salary.test.mjs`; kiểm thử Chrome ở trên cũng kiểm tra cộng tổng, lưu chi phí, ẩn số tiền riêng và nhiều ca trong cùng ngày.
