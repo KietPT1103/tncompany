@@ -71,7 +71,7 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
 {
     if (count($sources) !== count($rawInputs)) throw new InvalidArgumentException('Cần nhập đủ chi phí cho tất cả ngày trong kỳ.');
     $totals = ['revenue'=>0,'materialCost'=>0,'salary'=>0,'electricity'=>0,'water'=>0,'other'=>0,'marketing'=>0,'thienExpense'=>0,'ingredientInventory'=>0,'debt'=>0,'voucherCost'=>0,'tax'=>0,'totalCosts'=>0,'profit'=>0];
-    $totals += array_fill_keys(['grossProfit','netProfit','operatingExpense','taxPaid'],0);
+    $totals += array_fill_keys(['grossProfit','netProfit','operatingExpense'],0);
     $days = [];
     foreach ($sources as $date=>$source) {
         if (!is_array($rawInputs[$date] ?? null)) throw new InvalidArgumentException('Thiếu chi phí ngày '.$date.'.');
@@ -92,9 +92,8 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
         $result['grossProfit']=$source['revenue']-$cost;
         $result['netProfit']=$result['profit'];
         $result['operatingExpense']=$inputs['operatingExpense'];
-        $result['taxPaid']=$inputs['taxPaid'];
         $result['cashReceived']=$source['handover']['amount']??null;
-        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['operatingExpense']-$inputs['salary']-$inputs['taxPaid']:null;
+        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['operatingExpense']-$inputs['salary']-$tax:null;
         foreach ($totals as $key=>$_) $totals[$key] += $result[$key];
         $days[] = ['date'=>$date,'inputs'=>$inputs,'result'=>$result];
     }

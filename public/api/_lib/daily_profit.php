@@ -36,7 +36,7 @@ function daily_profit_validate_inputs(array $body): array
         $result[$key] = daily_profit_money($body[$key] ?? null, $label);
     }
     $result['marketing'] = daily_profit_money(array_key_exists('marketing', $body) ? $body['marketing'] : 0, 'marketing');
-    foreach (['thienExpense'=>'Anh Thiện chi', 'ingredientInventory'=>'giá trị tồn kho nguyên liệu', 'debt'=>'công nợ', 'operatingExpense'=>'chi vận hành', 'taxPaid'=>'thuế đã nộp'] as $key=>$label) {
+    foreach (['thienExpense'=>'Anh Thiện chi', 'ingredientInventory'=>'giá trị tồn kho nguyên liệu', 'debt'=>'công nợ', 'operatingExpense'=>'chi vận hành'] as $key=>$label) {
         $result[$key] = daily_profit_money($body[$key] ?? 0, $label);
     }
     $overrides = $body['costOverrides'] ?? [];

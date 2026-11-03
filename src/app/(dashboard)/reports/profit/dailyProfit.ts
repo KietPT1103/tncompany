@@ -8,7 +8,6 @@ export type ProfitInputs = {
   costOverrides: Record<string, number | null>;
   otherExpenses?: { id: string; name: string; amount: number | null }[];
   operatingExpense?: number | null;
-  taxPaid?: number | null;
 };
 export const PROFIT_FIELDS = [
   { key: "salary", label: "Lương nhân viên (1 ngày)" },
@@ -21,7 +20,7 @@ export const PROFIT_FIELDS = [
   { key: "debt", label: "Công nợ" },
   { key: "operatingExpense", label: "Chi vận hành thực trả ngoài bàn giao" },
 ] as const;
-export const OPTIONAL_PROFIT_FIELDS = ['thienExpense', 'ingredientInventory', 'debt', 'operatingExpense', 'taxPaid'] as const;
+export const OPTIONAL_PROFIT_FIELDS = ['thienExpense', 'ingredientInventory', 'debt', 'operatingExpense'] as const;
 export const emptyProfitInputs = (): ProfitInputs => ({ salary: null, electricity: 0, water: 0, other: 0, marketing: 0, thienExpense: 0, ingredientInventory: 0, debt: 0, costOverrides: {} });
 export const validProfitAmount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1e12;
 export const roundedProfitMoney = (value: number) => `${(Math.ceil(value / 1000) * 1000).toLocaleString('vi-VN')} đ`;
@@ -73,7 +72,6 @@ export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
   const voucherCost = data.vouchers.reduce((sum, voucher) => sum + voucher.amount, 0);
   const materialCost = costRows.reduce((sum, row) => sum + (row.cost ?? 0), 0);
   const tax = Math.round(data.revenue * 4.5) / 100;
-  if(!validProfitAmount(inputs.taxPaid))missingFields.push('Thuế đã nộp');
   const operatingCosts = enteredCosts - (inputs.salary ?? 0);
   const totalCosts = materialCost + enteredCosts + tax;
   const complete = missingFields.length === 0;
@@ -81,7 +79,7 @@ export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
   const profit = complete ? data.revenue - totalCosts : null;
   const cashReceived = data.handover?.amount ?? null;
   const cashFlow = complete && cashReceived !== null && !data.handover?.provisional
-    ? cashReceived - inputs.operatingExpense! - inputs.salary! - inputs.taxPaid! : null;
+    ? cashReceived - inputs.operatingExpense! - inputs.salary! - tax : null;
   return { complete, missingFields, costRows, materialCost, enteredCosts, operatingCosts, voucherCost, tax, totalCosts, grossProfit, netProfit:profit, cashReceived, cashFlow, profit,
     margin: profit !== null && data.revenue > 0 ? profit / data.revenue * 100 : null };
 }

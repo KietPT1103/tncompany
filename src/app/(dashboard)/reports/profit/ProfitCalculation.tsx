@@ -392,7 +392,7 @@ export function ProfitCalculation({
               {[
                 {label:'Lãi gộp',value:calculation.grossProfit,note:'Doanh thu − giá vốn món đã bán'},
                 {label:'Lãi ròng ước tính',value:calculation.netProfit,note:'Lãi gộp − lương − chi phí vận hành − thuế'},
-                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi ngoài bàn giao − lương ước tính ngày − thuế đã nộp'},
+                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi ngoài bàn giao − lương ước tính ngày − thuế 4,5% doanh thu'},
               ].map(metric=><div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-sm font-semibold text-slate-500">{metric.label}</p><p className={`mt-2 text-xl font-bold ${metric.value!==null&&metric.value<0?'text-red-700':'text-emerald-800'}`}>{metric.value===null?'Chưa đủ dữ liệu':roundedProfitMoney(metric.value)}</p><p className="mt-1 text-xs text-slate-500">{metric.note}</p></div>)}
             </section>
             <fieldset
@@ -488,7 +488,7 @@ export function ProfitCalculation({
                           <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-emerald-800">{selected.inputs.salary===null?'Chưa có ước lượng lương':roundedProfitMoney(selected.inputs.salary)}</p>
                           <p className="mt-1 text-xs text-slate-500">Tự lấy từ ước lượng lương của ngày đang xem, không nhập tay.</p>
                         </div>
-                        <div><label htmlFor={`tax-paid-${selected.date}`} className="mb-1 block text-sm font-semibold">Thuế đã nộp</label><AmountInput id={`tax-paid-${selected.date}`} label="Thuế đã nộp" value={selected.inputs.taxPaid??0} required={false} onChange={value=>edit(selected.date,{...selected.inputs,taxPaid:value})}/></div>
+                        <div><p className="mb-1 text-sm font-semibold">Thuế (4,5% doanh thu)</p><p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-emerald-800">{roundedProfitMoney(selected.result.tax)}</p><p className="mt-1 text-xs text-slate-500">Tự tính từ doanh thu ngày, không nhập tay.</p></div>
                       </div>
                       <p className="mt-2 text-xs text-slate-500">Chỉ nhập các khoản trả ngoài tiền bàn giao, chưa có trong phiếu chi tại quầy. Công nợ nhà cung cấp và tồn kho là số theo dõi, không cộng/trừ trực tiếp vào lãi.</p>
                     </div>

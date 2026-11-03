@@ -22,6 +22,7 @@ const change=async(el,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.
 await wait(400);
 check('gross, net and actual cash indicators are visible',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Lãi gộp')&&document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('Dòng tiền thực về'));
 check('salary is read-only and no manual payment input remains',!document.querySelector('input[id^="salary-paid-"]')&&document.body.textContent.includes('Tự lấy từ ước lượng lương của ngày đang xem, không nhập tay.'));
+check('tax is automatic and no manual payment input remains',!document.querySelector('input[id^="tax-paid-"]')&&!document.body.textContent.includes('Thuế đã nộp')&&document.body.textContent.includes('Tự tính từ doanh thu ngày, không nhập tay.'));
 check('daily calculation includes automatic tax',document.body.textContent.includes('Thuế (4,5% doanh thu)')&&document.body.textContent.includes('45.000 đ'));
 const costInput=document.querySelector('input[id^="cost-"]');costInput.focus();await change(costInput,'20.000');costInput.blur();await wait(120);
 check('report cost input saves directly to catalog',api.catalog?.code==='DONUT'&&api.catalog?.cost===20000&&api.catalog?.store==='cafe'&&document.body.textContent.includes('Đã lưu vào danh mục'));
@@ -35,7 +36,7 @@ button('Thêm khoản chi').click();await wait(60);
 await change(document.querySelectorAll('input[id^="other-name-"]')[1],'Dung dịch bong bóng');
 await change(document.querySelectorAll('input[id^="other-amount-"]')[1],'75.000');
 check('two valid items enable saving',!button('Lưu báo cáo').disabled);
-check('cash flow uses handover rather than POS revenue or accrued costs',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('900.000 đ'));
+check('cash flow uses handover rather than POS revenue or accrued costs',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('855.000 đ'));
 let downloaded;HTMLAnchorElement.prototype.click=function(){downloaded=this.download};
 button('Xuất Excel').click();await wait(500);
 check('Excel export downloads the selected report',downloaded?.startsWith('Loi-nhuan_')&&downloaded?.endsWith('.xlsx'));

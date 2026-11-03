@@ -10,7 +10,7 @@ test('gross, net and actual cash use separate inputs without double-counting cas
   const result=calculateDailyProfit(source,{...complete(),salaryPaid:300000,taxPaid:20000,ingredientInventory:999999,debt:888888});
   assert.equal(result.grossProfit,900000);
   assert.equal(result.netProfit,555000);
-  assert.equal(result.cashFlow,580000);
+  assert.equal(result.cashFlow,555000);
   assert.equal(result.cashReceived,800000);
   assert.equal(calculateDailyProfit({...source,handover:{...source.handover,provisional:true}},complete()).cashFlow,null);
   assert.equal(calculateDailyProfit(data,complete()).cashFlow,null);
@@ -18,9 +18,19 @@ test('gross, net and actual cash use separate inputs without double-counting cas
 test('daily estimated salary replaces legacy manual payment values in cash flow',()=>{
   const source={...data,salaryEstimate:{amount:123456.67,payrollId:'estimate',name:'Lịch'},handover:{amount:800000,provisional:false,shiftCount:2}};
   const result=calculateDailyProfit(source,{...complete(),salary:999999,salaryPaid:700000});
-  assert.equal(result.cashFlow,800000-123456.67);
+  assert.equal(result.cashFlow,800000-123456.67-45000);
   assert.ok(Math.abs(result.netProfit-(1000000-100000-123456.67-100000-45000))<0.000001);
   assert.equal(calculateDailyProfit({...source,salaryEstimate:null},complete()).cashFlow,null);
+});
+
+test('cash flow uses automatic daily tax and ignores legacy tax payment inputs',()=>{
+  const source={...data,handover:{amount:800000,provisional:false,shiftCount:1}};
+  for(const taxPaid of [0,20000,999999,null,-1]){
+    const result=calculateDailyProfit(source,{...complete(),taxPaid});
+    assert.equal(result.tax,45000);
+    assert.equal(result.cashFlow,555000);
+    assert.equal(result.complete,true);
+  }
 });
 
 test('tax is automatically 4.5% of daily revenue and is included in costs', () => {
