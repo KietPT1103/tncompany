@@ -1,3 +1,4 @@
+import { SelectBox } from "@/components/ui/SelectBox";
 import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
 import { inventoryToday } from "@/lib/inventoryPeriods";
 import { Pagination } from "@/components/ui/Pagination";
@@ -258,7 +259,7 @@ export default function InventoryIssuesPage() {
               return <tr key={item.key} className={insufficient ? "bg-rose-50" : "hover:bg-blue-50/40"}>
                 <td data-label="STT" className="px-4 py-2 text-center font-semibold">{index + 1}</td>
                 <td data-label="Mã NL" className="px-4 py-2 font-bold text-emerald-800">{ingredient?.ingredientCode || "—"}</td>
-                <td data-label="Nguyên vật liệu" className="px-4 py-2"><select value={item.ingredientCode} onChange={(e) => updateLine(index, { ingredientCode: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3"><option value="">Chọn {stockItemLabel}...</option>{ingredients.filter((option) => option.isActive || form.originalItems?.some((old) => old.ingredientCode === option.ingredientCode)).map((option) => <option key={option.id} value={option.ingredientCode}>{option.ingredientName} ({option.ingredientCode})</option>)}</select></td>
+                <td data-label="Nguyên vật liệu" className="px-4 py-2"><SelectBox value={item.ingredientCode} onValueChange={(value) => updateLine(index, { ingredientCode: value })} searchable searchThreshold={0} ariaLabel={`${stockItemLabel} dòng ${index + 1}`} placeholder={`Chọn ${stockItemLabel}...`} searchPlaceholder="Nhập tên hoặc mã không dấu..." className="w-full min-w-64" options={ingredients.filter((option) => option.isActive || form.originalItems?.some((old) => old.ingredientCode === option.ingredientCode)).map((option) => ({ value: option.ingredientCode, label: `${option.ingredientName} (${option.ingredientCode})` }))} /></td>
                 <td data-label="Số lượng xuất" className="px-4 py-2"><input inputMode="decimal" value={item.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} className={`h-10 w-full rounded-md border px-3 text-right font-bold ${insufficient ? "border-rose-500 text-rose-700" : "border-slate-300"}`} /></td>
                 <td data-label="Đơn vị" className="px-4 py-2">{ingredient?.purchaseUnit || ingredient?.unit || "—"}</td>
                 <td data-label="Tồn kho" className="px-4 py-2 text-right font-semibold">{ingredient ? <>{quantity(availableStock / factor)} {ingredient.purchaseUnit || ingredient.unit}<small className="block font-normal text-slate-500">{quantity(availableStock)} {ingredient.baseUnit || ingredient.unit}</small></> : "—"}</td>
