@@ -129,7 +129,7 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
         $result['netProfit']=$result['profit'];
         $result['operatingExpense']=$inputs['operatingExpense'];
         $result['cashReceived']=$source['handover']['amount']??null;
-        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['operatingExpense']-$inputs['salary']-$tax:null;
+        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['other']-$inputs['operatingExpense']-$inputs['salary']-$tax:null;
         foreach ($totals as $key=>$_) $totals[$key] += $result[$key];
         $days[] = ['date'=>$date,'inputs'=>$inputs,'result'=>$result];
     }

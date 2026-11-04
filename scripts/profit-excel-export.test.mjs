@@ -70,7 +70,7 @@ assert.equal(originalProfit,658500,'Original precision is retained without compo
 assert.ok(rowFor(summary,'LÃI GỘP ƯỚC TÍNH'));
 assert.equal(summary.getCell(rowFor(summary,'DÒNG TIỀN THỰC VỀ'),2).value,'Chưa có bàn giao đã chốt');
 const cashBook=buildProfitWorkbook({...options,days:[{...days[0],source:{...days[0].source,handover:{amount:800000,provisional:false,shiftCount:1}}}],inputsByDate:{'2026-11-03':{...inputs,salaryPaid:300000,taxPaid:20000}}}).getWorksheet('Tổng hợp');
-assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).result,555000);
+assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).result,430000);
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC TẾ'),1).fill.fgColor.argb,'FF064E3B');
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).font.color.argb,'FFF6C85F');
 assert.equal(cashBook.getCell(rowFor(cashBook,'LÃI GỘP ƯỚC TÍNH'),1).font.bold,true);
@@ -83,7 +83,7 @@ assert.equal(paidSummary.getCell(rowFor(paidSummary,'Lương ước tính (1 ng�
 assert.equal(rowFor(paidSummary,'Thuế đã nộp'),undefined,'Legacy manual tax field is not exported');
 assert.equal(paidBook.getWorksheet('Theo ngày').getCell('W6').result,45000,'Cash flow tax equals the automatic daily tax');
 assert.equal(paidSummary.getCell(rowFor(paidSummary,'Thuế (4,5% doanh thu)'),2).result,45000);
-assert.equal(paidSummary.getCell(rowFor(paidSummary,'DÒNG TIỀN THỰC VỀ'),2).result,543000,'Cash total rounds the original amount, without subtracting cashier spending twice');
+assert.equal(paidSummary.getCell(rowFor(paidSummary,'DÒNG TIỀN THỰC VỀ'),2).result,418000,'Cash total rounds the original amount, without subtracting cashier spending twice');
 const sample=buildProfitWorkbook({...options,endDate:options.startDate,days:[{...days[0],source:{...days[0].source,revenue:22092000}}],inputsByDate:{...options.inputsByDate,'2026-11-03':{...inputs,salary:6178333.33}}}).getWorksheet('Tổng hợp');
 assert.equal(sample.getCell(rowFor(sample,'Lương nhân viên (phân bổ trong ngày)'),2).result,6179000);
 assert.equal(sample.getCell(rowFor(sample,'Thuế (4,5% doanh thu)'),2).result,995000);

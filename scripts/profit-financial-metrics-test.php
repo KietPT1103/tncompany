@@ -22,8 +22,8 @@ $saved=daily_profit_saved_row($pdo->query('SELECT * FROM daily_profit_inputs')->
 check((float)$saved['inputs']['salary']===100000.0 && !isset($saved['inputs']['salaryPaid']) && !isset($saved['inputs']['taxPaid']),'Daily salary comes from source and legacy manual payroll and tax payments are discarded');
 $accrued=$inputs;$accrued['other']=1234;
 $withAccrual=profit_period_snapshot(['2026-11-15'=>$source],['2026-11-15'=>$accrued]);
-check($withAccrual['totals']['cashFlow']===$snapshot['totals']['cashFlow'],'Accrued consumable cost does not reduce actual cash again');
-check($withAccrual['totals']['netProfit']===$snapshot['totals']['netProfit']-1234,'Accrued consumable cost still reduces net profit');
+check($withAccrual['totals']['cashFlow']===$snapshot['totals']['cashFlow']-1234,'Other expenses paid outside handover reduce cash flow once');
+check($withAccrual['totals']['netProfit']===$snapshot['totals']['netProfit']-1234,'Other expenses still reduce net profit');
 check(profit_period_snapshot(['2026-11-14'=>$source],['2026-11-14'=>$inputs])['totals']['cashFlow']===900000.0,'Daily salary estimate applies every day, independent of payday');
 $source['handover']['provisional']=true;
 check(profit_period_snapshot(['2026-11-15'=>$source],['2026-11-15'=>$inputs])['totals']['cashFlow']===null,'Unclosed handover is not presented as actual cash');

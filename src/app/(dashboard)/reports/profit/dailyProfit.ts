@@ -86,7 +86,7 @@ export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
   const profit = complete ? data.revenue - totalCosts : null;
   const cashReceived = data.handover?.amount ?? null;
   const cashFlow = complete && cashReceived !== null && !data.handover?.provisional
-    ? cashReceived - inputs.operatingExpense! - inputs.salary! - tax : null;
+    ? cashReceived - inputs.other! - inputs.operatingExpense! - inputs.salary! - tax : null;
   return { complete, missingFields, costRows, materialCost, enteredCosts, operatingCosts, voucherCost, tax, totalCosts, grossProfit, netProfit:profit, cashReceived, cashFlow, profit,
     margin: profit !== null && data.revenue > 0 ? profit / data.revenue * 100 : null };
 }

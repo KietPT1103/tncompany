@@ -42,7 +42,7 @@ button('Thêm khoản chi').click();await wait(60);
 await change(document.querySelectorAll('input[id^="other-name-"]')[1],'Dung dịch bong bóng');
 await change(document.querySelectorAll('input[id^="other-amount-"]')[1],'75.000');
 check('two valid items enable saving',!button('Lưu báo cáo').disabled);
-check('cash flow uses handover rather than POS revenue or accrued costs',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('855.000 đ'));
+check('cash flow deducts paid other expenses from handover',document.querySelector('[aria-label="Lãi và dòng tiền"]')?.textContent.includes('730.000 đ'));
 let downloaded;HTMLAnchorElement.prototype.click=function(){downloaded=this.download};
 button('Xuất Excel').click();await wait(500);
 check('Excel export downloads the selected report',downloaded?.startsWith('Loi-nhuan_')&&downloaded?.endsWith('.xlsx'));
