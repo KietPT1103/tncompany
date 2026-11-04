@@ -167,7 +167,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
   }
 
   if (!response.ok || !payload?.ok) {
-    throw new Error(payload?.error || `API request failed with ${response.status}`);
+    throw Object.assign(new Error(payload?.error || `API request failed with ${response.status}`), { status: response.status, code: payload?.meta?.code });
   }
   return payload.data;
 }

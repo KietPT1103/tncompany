@@ -1,26 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
-import { RefreshCw, ChevronDown, ShieldX } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import { hasPermission } from '@/lib/permissions';
+import { useSearchParams } from 'react-router-dom';
+import { RefreshCw, ChevronDown } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { formatDisplayDate } from '@/components/ui/dateRangePickerUtils';
 import { quickRange, validRange } from './filters';
 import { getRevenueSource, revenueSources } from './sources';
 import type { RevenueReport } from './types';
+import RevenueAccessGate, { revenueHeaders } from './RevenueAccessGate';
 
 const focus = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2';
 
 export default function RevenuePage() {
-  const { user, loading: authLoading } = useAuth();
-  const location = useLocation();
+  return <RevenueAccessGate>{(token, lock) => <RevenueDashboard token={token} onLocked={lock} />}</RevenueAccessGate>;
+}
+
+function RevenueDashboard({ token, onLocked }: { token: string; onLocked: () => void }) {
   const [params, setParams] = useSearchParams();
   const today = quickRange('today');
   const source = getRevenueSource(params.get('source'));
   const from = params.get('from') || today[0], to = params.get('to') || today[1];
   const store = params.get('store') || 'cafe';
-  const allowed = hasPermission(user, 'revenue_hub.view');
   const [data, setData] = useState<RevenueReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +39,7 @@ export default function RevenuePage() {
   };
 
   useEffect(() => {
-    if (!allowed || !valid) return;
+    if (!valid) return;
     const id = ++sequence.current;
     const controller = new AbortController();
     setBusy(true);
@@ -53,7 +53,7 @@ export default function RevenuePage() {
       setBusy(false);
     }, 14000);
     const query = new URLSearchParams({ source: source.id, from, to, store });
-    apiRequest<RevenueReport>(`/revenue-hub.php?${query}`, { signal: controller.signal, timeoutMs: 14000 })
+    apiRequest<RevenueReport>(`/revenue-hub.php?${query}`, { signal: controller.signal, timeoutMs: 14000, headers: revenueHeaders(token) }, false)
       .then(result => {
         if (id !== sequence.current || controller.signal.aborted) return;
         setData(result);
@@ -61,6 +61,7 @@ export default function RevenuePage() {
       })
       .catch(reason => {
         if (!controller.signal.aborted && id === sequence.current) {
+          if ((reason as { code?: string })?.code === 'REVENUE_LOCKED') { onLocked(); return; }
           setError(reason instanceof Error ? reason.message : 'Chưa tải được dữ liệu.');
           setLoadedKey(requestKey);
         }
@@ -70,11 +71,8 @@ export default function RevenuePage() {
         if (!controller.signal.aborted && id === sequence.current) setBusy(false);
       });
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [allowed, from, to, store, source.id, reload, valid]);
+  }, [token, onLocked, from, to, store, source.id, reload, valid]);
 
-  if (authLoading) return <div className="flex min-h-screen items-center justify-center bg-slate-50" role="status"><RefreshCw className="h-6 w-6 animate-spin text-emerald-700 motion-reduce:animate-none" /><span className="sr-only">Đang tải</span></div>;
-  if (!user) return <Navigate replace to={`/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`} />;
-  if (!allowed) return <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><div className="text-center"><ShieldX className="mx-auto mb-4 h-8 w-8 text-slate-400" /><h1 className="text-lg font-bold text-slate-900">Chưa được cấp quyền</h1><p className="mt-2 text-sm text-slate-500">Liên hệ admin để được cấp quyền xem doanh thu.</p></div></main>;
   const visible = loadedKey === requestKey ? data : null;
   const Report = source.Report;
   return <main className="min-h-screen bg-[#f4f6f5] text-slate-900" style={{ fontFamily: "'Nunito Sans Variable', sans-serif" }}>

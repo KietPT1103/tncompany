@@ -15,7 +15,9 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   {
     id: "revenue_hub.view",
     label: "Xem doanh thu liên hệ thống",
-    description: "Quyền cấp riêng để truy cập URL /doanh-thu.",
+    description: "Quyền cũ; trang doanh thu hiện mở bằng mã chia sẻ.",
+    hidden: true,
+    routePermission: false,
     category: "Hệ thống",
     path: "/doanh-thu",
   },

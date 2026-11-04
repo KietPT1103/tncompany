@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
-require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/db.php';
+require_once __DIR__ . '/_lib/response.php';
+require_once __DIR__ . '/_lib/revenue_access.php';
 require_once __DIR__ . '/_lib/revenue_hub.php';
 
 header('Cache-Control: no-store');
-auth_require_permission('revenue_hub.view');
+revenue_access_require(db());
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') respond_error('Method not allowed', 405);
 
 try {

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import RevenueAccessCode from "./RevenueAccessCode";
+
 type Result = {
   config: null | {
     url: string;
@@ -170,6 +172,7 @@ export default function OutsideExpensesPage() {
           </button>
         </div>
       </form>
+      <RevenueAccessCode />
       <div aria-live="polite">
         {error && (
           <p

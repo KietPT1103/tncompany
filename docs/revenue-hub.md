@@ -3,9 +3,13 @@
 URL: `/doanh-thu` (legacy `/revenue` redirects here, preserving filters). Uses the existing TN login. There is deliberately no navigation link.
 
 ## Access
-In TN account management, edit permissions and tick **Xem doanh thu liên hệ thống** (`revenue_hub.view`). Admin accounts automatically have access. Other roles need an explicit grant; their role defaults and the reports permission do not grant it. Revoke the checkbox to deny the next API request. No separate Mo login is required.
+The public `/doanh-thu` page uses a shared code, independent of TN account login or role. Both TN and Mo reports require a separate revenue bearer token on every API call. Admin tokens and the legacy `revenue_hub.view` grant do not bypass this gate.
 
-This permission allows reading reports across all counters and all connected sources. It does not grant POS, booking mutation or account management rights.
+Admins create a random code or save their own (6–64 characters, case-sensitive) below the sheet-link form in **Liên kết sheet chi**. The new code is returned only once for copying; the database stores its password hash. No code exists until an admin first creates one. Creating/saving a code revokes all previous revenue tokens. This code is shared across all dates, stores and sources, not tied to the sheet currently selected.
+
+After unlocking, the browser stores a random token in `localStorage` with no application expiry. Clearing site storage or replacing the code requires entering the code again. Only token digests are stored server-side. Temporary connectivity failures retain the remembered token and offer retry. Unlocking is limited to ten attempts per client IP per 15-minute window. When running behind a reverse proxy, ensure `REMOTE_ADDR` identifies the client appropriately.
+
+The token permits revenue reads only; it does not grant account, sheet-management, POS or booking access. No guest names, contact details or door codes are exposed.
 
 ## Connect MoHomestay
 Deploy both code changes. Set server-only configuration (never use VITE_ variables):
@@ -39,3 +43,5 @@ No database migration or data synchronization is needed. Never enable a source b
 ## Checks
 TN: `php scripts/revenue-hub-test.php`, `node --test scripts/revenue-hub-*.test.mjs`, `npm run build`.
 Mo: `php tools/revenue-integration-test.php` and the required repository checks in AGENTS.md.
+
+Access checks: `php scripts/revenue-access-test.php`, `node scripts/revenue-hub-browser.test.mjs`.
