@@ -185,7 +185,7 @@ export function ProfitCalculation({
         storeId,
         range.startDate,
         range.endDate,
-        inputs,
+        Object.fromEntries(calculation.rows.map(day => [day.date, day.inputs])),
         initialReport?.startDate === range.startDate && initialReport?.endDate === range.endDate ? editingReportId : undefined,
       );
       if (currentScope.current === savingScope && response.report && initialReport?.startDate === range.startDate && initialReport?.endDate === range.endDate) setEditingReportId(response.report.id);
@@ -392,7 +392,7 @@ export function ProfitCalculation({
               {[
                 {label:'Lãi gộp ước tính',value:calculation.grossProfit,note:'Tổng (giá bán thực thu sau giảm giá − cost) × số lượng'},
                 {label:'Lãi ròng ước tính',value:calculation.netProfit,note:'Lãi gộp − lương − chi phí vận hành − thuế'},
-                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi phí khác − chi vận hành ngoài bàn giao − lương ước tính ngày − thuế 4,5% doanh thu'},
+                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi phí khác − lương ước tính ngày − thuế 4,5% doanh thu'},
               ].map(metric=><div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-sm font-semibold text-slate-500">{metric.label}</p><p className={`mt-2 text-xl font-bold ${metric.value!==null&&metric.value<0?'text-red-700':'text-emerald-800'}`}>{metric.value===null?'Chưa đủ dữ liệu':roundedProfitMoney(metric.value)}</p><p className="mt-1 text-xs text-slate-500">{metric.note}</p></div>)}
             </section>
             <fieldset
@@ -553,7 +553,7 @@ export function ProfitCalculation({
                         </dd>
                       </div>
                       {(
-                        ["electricity", "water", "other", "marketing", "thienExpense", "operatingExpense"] as const
+                        ["electricity", "water", "other", "marketing", "thienExpense"] as const
                       ).map((key) => (
                         <div
                           key={key}

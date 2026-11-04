@@ -78,10 +78,11 @@ assert.ok(rowFor(cashBook,'Chi tại quầy (đã nằm trong bàn giao, không 
 const paidOptions={...options,days:[{...days[0],source:{...days[0].source,handover:{amount:800000,provisional:false,shiftCount:1}}}],inputsByDate:{'2026-11-03':{...inputs,operatingExpense:12345,salaryPaid:300001,taxPaid:20001}}};
 const paidBook=new ExcelJS.Workbook();await paidBook.xlsx.load(await buildProfitWorkbook(paidOptions).xlsx.writeBuffer());
 const paidSummary=paidBook.getWorksheet('Tổng hợp');
-assert.equal(paidSummary.getCell(rowFor(paidSummary,'Chi vận hành thực trả ngoài bàn giao'),2).result,13000);
+assert.equal(rowFor(paidSummary,'Chi vận hành thực trả ngoài bàn giao'),undefined);
+assert.equal(paidSummary.getCell(rowFor(paidSummary,'Chi phí khác trong ngày'),2).result,138000);
 assert.equal(paidSummary.getCell(rowFor(paidSummary,'Lương ước tính (1 ngày)'),2).result,200000);
 assert.equal(rowFor(paidSummary,'Thuế đã nộp'),undefined,'Legacy manual tax field is not exported');
-assert.equal(paidBook.getWorksheet('Theo ngày').getCell('W6').result,45000,'Cash flow tax equals the automatic daily tax');
+assert.equal(paidBook.getWorksheet('Theo ngày').getCell('V6').result,45000,'Cash flow tax equals the automatic daily tax');
 assert.equal(paidSummary.getCell(rowFor(paidSummary,'Thuế (4,5% doanh thu)'),2).result,45000);
 assert.equal(paidSummary.getCell(rowFor(paidSummary,'DÒNG TIỀN THỰC VỀ'),2).result,418000,'Cash total rounds the original amount, without subtracting cashier spending twice');
 const sample=buildProfitWorkbook({...options,endDate:options.startDate,days:[{...days[0],source:{...days[0].source,revenue:22092000}}],inputsByDate:{...options.inputsByDate,'2026-11-03':{...inputs,salary:6178333.33}}}).getWorksheet('Tổng hợp');

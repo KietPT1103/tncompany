@@ -19,7 +19,7 @@ function daily_profit_validate_inputs(array $body): array
 {
     $result = [];
     if (array_key_exists('otherExpenses', $body)) {
-        if (!is_array($body['otherExpenses']) || !array_is_list($body['otherExpenses']) || count($body['otherExpenses']) > 100) throw new InvalidArgumentException('Danh sách chi phí khác không hợp lệ (tối đa 100 khoản).');
+        if (!is_array($body['otherExpenses']) || !array_is_list($body['otherExpenses']) || count($body['otherExpenses']) > 101) throw new InvalidArgumentException('Danh sách chi phí khác không hợp lệ (tối đa 101 khoản).');
         $result['otherExpenses'] = []; $ids = []; $total = 0;
         foreach ($body['otherExpenses'] as $expense) {
             if (!is_array($expense) || !is_string($expense['id'] ?? null) || !is_string($expense['name'] ?? null)) throw new InvalidArgumentException('Chi phí khác cần tên và số tiền.');

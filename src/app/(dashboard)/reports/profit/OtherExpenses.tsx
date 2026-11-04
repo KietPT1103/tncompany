@@ -2,7 +2,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AmountInput } from './AmountInput';
-import { profitOtherExpenses, roundedProfitMoney, type ProfitInputs } from './dailyProfit';
+import { MAX_OTHER_EXPENSES, profitOtherExpenses, roundedProfitMoney, type ProfitInputs } from './dailyProfit';
 
 const money = roundedProfitMoney;
 
@@ -12,9 +12,9 @@ export function OtherExpensesEditor({inputs, onChange, date}: {inputs: ProfitInp
   return <section className="mt-5 min-w-0 border-t border-slate-200 pt-4 sm:col-span-2" aria-label="Chi phí khác trong ngày">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="text-sm font-semibold">Chi phí khác trong ngày</h3>
-      <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-1 rounded-md border-[#064E3B] bg-[#064E3B] px-2.5 text-xs font-semibold text-[#F6C85F] hover:border-[#043D2E] hover:bg-[#043D2E] hover:text-[#F6C85F] focus-visible:ring-[#F6C85F]" disabled={items.length >= 100} onClick={() => update([...items,{id:crypto.randomUUID(),name:'',amount:null}])}><Plus className="h-3.5 w-3.5" aria-hidden="true"/>Thêm khoản chi</Button>
+      <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-1 rounded-md border-[#064E3B] bg-[#064E3B] px-2.5 text-xs font-semibold text-[#F6C85F] hover:border-[#043D2E] hover:bg-[#043D2E] hover:text-[#F6C85F] focus-visible:ring-[#F6C85F]" disabled={items.length >= MAX_OTHER_EXPENSES} onClick={() => update([...items,{id:crypto.randomUUID(),name:'',amount:null}])}><Plus className="h-3.5 w-3.5" aria-hidden="true"/>Thêm khoản chi</Button>
     </div>
-    <p className="mt-2 text-xs text-slate-500">Nhập các khoản đã trả trong ngày, ngoài phiếu chi tại quầy và chưa ghi ở ô chi vận hành ngoài bàn giao.</p>
+    <p className="mt-2 text-xs text-slate-500">Nhập các khoản đã trả trong ngày, ngoài phiếu chi tại quầy.</p>
     {!items.length && <p className="mt-2 text-xs text-slate-500">Chưa có khoản chi khác. Thêm tên khoản chi và số tiền khi phát sinh.</p>}
     <div className="mt-3 space-y-3">
       {items.map((item,index) => <div key={item.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 rounded-md border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto]">
