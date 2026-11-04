@@ -40,22 +40,22 @@ assert.ok(summary.headerFooter.oddHeader.includes('chưa lưu'));
 assert.equal(summary.columnCount,5,'Summary includes the analysis panels on the right');
 assert.equal(summary.getCell('C1').value,null,'Blank gutter separates the original report and analysis');
 assert.equal(summary.getCell('D1').value,'LỢI NHUẬN GỘP');
-assert.equal(summary.getCell('D18').value,'LỢI NHUẬN RÒNG');
+assert.equal(summary.getCell('D13').value,'LỢI NHUẬN RÒNG');
 assert.equal(summary.getCell('E5').result,1048000);
 assert.ok(Math.abs(summary.getCell('E8').result-1048000/52000)<1e-12,'Markup uses cost as denominator');
 assert.ok(Math.abs(summary.getCell('E10').result-1048000/1100000)<1e-12,'Gross margin uses period revenue, not average daily percentages');
-assert.equal(summary.getCell('E29').result,659000);
-assert.ok(Math.abs(summary.getCell('E32').result-658500/1100000)<1e-12,'Net margin uses original unrounded profit');
+assert.equal(summary.getCell('E23').result,659000);
+assert.ok(Math.abs(summary.getCell('E26').result-658500/1100000)<1e-12,'Net margin uses original unrounded profit');
 assert.equal(summary.getCell('E10').numFmt,'0.0%');
 assert.match(summary.getCell('E10').formula,/Dữ liệu gốc/);
-assert.match(summary.pageSetup.printArea,/A1:E36/);
+assert.equal(summary.pageSetup.printArea,`A1:E${summary.rowCount}`);
 assert.equal(summary.getCell('A3').value,'Doanh thu thuần');
 assert.equal(summary.getCell('B3').font.color.argb,'FF4472C4');
 assert.equal(summary.views[0].ySplit,2);
 const bytes=await workbook.xlsx.writeBuffer();
 const reopened=new ExcelJS.Workbook();await reopened.xlsx.load(bytes);
 assert.equal(reopened.getWorksheet('Tổng hợp').getCell(profitRow,2).result,659000,'Rounded formula results survive serialization');
-assert.ok(Math.abs(reopened.getWorksheet('Tổng hợp').getCell('E32').result-658500/1100000)<1e-12,'Analysis percentages survive XLSX serialization');
+assert.ok(Math.abs(reopened.getWorksheet('Tổng hợp').getCell('E26').result-658500/1100000)<1e-12,'Analysis percentages survive XLSX serialization');
 assert.equal(reopened.getWorksheet('Các khoản chi').getCell('F7').result,50000,'Amounts remain numeric formula results');
 assert.equal(reopened.getWorksheet('Theo ngày').getCell('B6').border.right.color.argb,'FFD1D5DB','Gray borders persist in the downloaded file');
 for(const ws of reopened.worksheets.filter(s=>s.state==='visible'))assert.equal(ws.views[0].showGridLines,true);
@@ -93,15 +93,15 @@ const loss=buildProfitWorkbook({...options,days:[{...days[0],source:{...days[0].
 assert.equal(loss.getWorksheet('Theo ngày').getCell('N6').font.color.argb,'FFB91C1C');
 assert.equal(loss.getWorksheet('Theo ngày').getCell('O6').result,0,'Zero revenue does not produce division errors');
 assert.equal(loss.getWorksheet('Tổng hợp').getCell('E10').result,'Không xác định');
-assert.equal(loss.getWorksheet('Tổng hợp').getCell('E32').result,'Không xác định');
+assert.equal(loss.getWorksheet('Tổng hợp').getCell('E26').result,'Không xác định');
 const zeroCost=buildProfitWorkbook({...options,days:[{...days[0],source:{...days[0].source,sales:[]}}]}).getWorksheet('Tổng hợp');
 assert.equal(zeroCost.getCell('E8').result,'Không xác định','Zero cost does not cause division by zero');
 const november3=buildProfitWorkbook({...options,endDate:options.startDate,days:[{date:options.startDate,source:{revenue:22092000,billCount:211,sales:[{key:'all',code:'all',name:'Các món đã bán',quantity:1,unitCost:3360006,netSales:22092000}],vouchers:[]}}],inputsByDate:{[options.startDate]:{...inputs,salary:6178333.33,electricity:0,water:0,otherExpenses:[{id:'all',name:'Chi phí khác',amount:655222}]}}}).getWorksheet('Tổng hợp');
 assert.equal(november3.getCell('E5').result,18732000);
 assert.ok(Math.abs(november3.getCell('E8').result-18731994/3360006)<1e-12);
 assert.ok(Math.abs(november3.getCell('E10').result-18731994/22092000)<1e-12);
-assert.equal(november3.getCell('E29').result,10905000);
-assert.ok(Math.abs(november3.getCell('E32').result-10904298.67/22092000)<1e-12);
+assert.equal(november3.getCell('E23').result,10905000);
+assert.ok(Math.abs(november3.getCell('E26').result-10904298.67/22092000)<1e-12);
 const discounted={...options,days:[{...days[0],source:{...days[0].source,revenue:135000,sales:[
   {key:'a',code:'A',name:'Món A',quantity:2,unitCost:10000,netSales:90000},
   {key:'b',code:'B',name:'Món B',quantity:1,unitCost:5000,netSales:45000},

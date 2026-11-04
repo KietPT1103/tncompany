@@ -66,7 +66,7 @@ function addProfitAnalysis(ws: ExcelJS.Worksheet, values: Record<string,number|n
   };
   const band=(n:number,label:string)=>{
     row(n,label);ws.mergeCells(n,4,n,5);
-    for(const c of [4,5]){const cell=ws.getCell(n,c);cell.fill=fill(GREEN);cell.font={name:'Calibri',bold:true,size:n===1||n===18?15:11,color:{argb:GOLD}};}
+    for(const c of [4,5]){const cell=ws.getCell(n,c);cell.fill=fill(GREEN);cell.font={name:'Calibri',bold:true,size:n===1||n===13?15:11,color:{argb:GOLD}};}
   };
   const header=(n:number)=>{
     row(n,'Chỉ tiêu','Giá trị');
@@ -80,8 +80,8 @@ function addProfitAnalysis(ws: ExcelJS.Worksheet, values: Record<string,number|n
     ws.getCell(n,5).numFmt=MONEY;
   };
   const money=(n:number,label:string,col:string)=>amount(n,label,values[col],source(col));
-  const note=(n:number,formula:string|null,value:string,last=n)=>{
-    row(n,'');ws.mergeCells(n,4,last,5);
+  const note=(n:number,formula:string|null,value:string)=>{
+    row(n,'');ws.mergeCells(n,4,n,5);
     const cell=ws.getCell(n,4);cell.value=formula?{formula,result:value}:value;
     cell.font={name:'Calibri',size:10,italic:true,color:{argb:'FF64748B'}};
   };
@@ -91,17 +91,10 @@ function addProfitAnalysis(ws: ExcelJS.Worksheet, values: Record<string,number|n
     const result=a===null||b===null?'Chưa đủ giá bán/cost':b===0?'Không xác định':a/b;
     row(n,label,aRef&&bRef?{formula:`IF(${bRef}=0,"Không xác định",${aRef}/${bRef})`,result}:result);
     ws.getCell(n,5).numFmt='0.0%';emphasis(n);
-    return result;
   };
   const ratioNote=(n:number,numerator:string,denominator:string)=>{
     const a=values[numerator],b=values[denominator],aRef=source(numerator),bRef=source(denominator);
     note(n,aRef&&bRef?`TEXT(${aRef},"#,##0.00")&" ÷ "&TEXT(${bRef},"#,##0.00")&" × 100%"`:null,a!==null&&b!==null?`${number(a)} ÷ ${number(b)} × 100%`:'Chưa đủ số liệu để tính tỷ lệ.');
-  };
-  const explanation=(n:number,ratioRow:number,ratio:number|string,net=false)=>{
-    const ending=net?'sau giá vốn, lương, thuế và các chi phí vận hành.':'trước lương, thuế và các chi phí vận hành.';
-    const label=net?'Biên ròng':'Biên gộp';
-    note(n,`IF(ISNUMBER(E${ratioRow}),"${label} "&TEXT(E${ratioRow},"0.0%")&": cứ 100đ doanh thu, còn khoảng "&TEXT(E${ratioRow}*100,"0.0")&"đ ${ending}","Chưa xác định biên lợi nhuận khi thiếu số liệu hoặc doanh thu bằng 0.")`,typeof ratio==='number'?`${label} ${number(ratio*100,1)}%: cứ 100đ doanh thu, còn khoảng ${number(ratio*100,1)}đ ${ending}`:'Chưa xác định biên lợi nhuận khi thiếu số liệu hoặc doanh thu bằng 0.',n+1);
-    ws.getCell(n,4).font={name:'Calibri',size:11,color:{argb:INK}};
   };
   band(1,'LỢI NHUẬN GỘP');header(2);
   money(3,'Giá bán thực thu sau giảm giá (tổng)','B');
@@ -109,22 +102,19 @@ function addProfitAnalysis(ws: ExcelJS.Worksheet, values: Record<string,number|n
   money(5,'Lợi nhuận gộp ước tính','R');emphasis(5);
   note(6,source('R')?`TEXT(${source('B')},"#,##0.00")&" − "&TEXT(${source('C')},"#,##0.00")&" = "&TEXT(${source('R')},"#,##0.00")&" đ"`:null,values.R!==null?`${number(values.B!)} − ${number(values.C!)} = ${number(values.R)} đ`:'Lợi nhuận gộp = Giá thực thu sau giảm giá − Giá nhập/cost.');
   band(7,'PHÂN TÍCH TỶ LỆ');percentage(8,'Tỷ suất lãi trên vốn','R','C');ratioNote(9,'R','C');
-  const grossMargin=percentage(10,'Biên lợi nhuận gộp (GM)','R','B');ratioNote(11,'R','B');
-  band(12,'Ý NGHĨA BIÊN LỢI NHUẬN GỘP');explanation(13,10,grossMargin);
-  note(15,null,'Tiền hiển thị làm tròn lên 1.000đ; phép tính và tỷ lệ sử dụng số gốc chưa làm tròn.',16);
+  percentage(10,'Biên lợi nhuận gộp (GM)','R','B');ratioNote(11,'R','B');
 
-  band(18,'LỢI NHUẬN RÒNG');header(19);
-  money(20,'Lợi nhuận gộp ước tính','R');emphasis(20);
-  money(21,'− Lương nhân viên (1 ngày)','D');
-  amount(22,'− Tiền điện, tiền nước',values.F!+values.G!,`(${source('F')}+${source('G')})`);
-  money(23,'− Chi phí khác trong ngày','H');money(24,'− Chi phí marketing','I');
-  money(25,'− Anh Thiện chi','J');money(27,'− Thuế (4,5% doanh thu)','Q');
+  band(13,'LỢI NHUẬN RÒNG');header(14);
+  money(15,'Lợi nhuận gộp ước tính','R');emphasis(15);
+  money(16,'− Lương nhân viên (1 ngày)','D');
+  amount(17,'− Tiền điện, tiền nước',values.F!+values.G!,`(${source('F')}+${source('G')})`);
+  money(18,'− Chi phí khác trong ngày','H');money(19,'− Chi phí marketing','I');
+  money(20,'− Anh Thiện chi','J');money(21,'− Thuế (4,5% doanh thu)','Q');
   const operating=values.M!-values.C!,operatingRef=`(${source('M')}-${source('C')})`;
-  amount(28,'Tổng chi phí trừ tiếp sau giá vốn',operating,operatingRef);emphasis(28);
-  money(29,'Lợi nhuận ròng ước tính','N');emphasis(29,true);
-  note(30,source('R')?`TEXT(${source('R')},"#,##0.00")&" − "&TEXT(${operatingRef},"#,##0.00")&" = "&TEXT(${source('N')},"#,##0.00")&" đ"`:null,values.R!==null?`${number(values.R)} − ${number(operating)} = ${number(values.N!)} đ`:'Lợi nhuận ròng = Doanh thu − Giá vốn − Các chi phí trong ngày.');
-  band(31,'PHÂN TÍCH TỶ LỆ');const netMargin=percentage(32,'Biên lợi nhuận ròng','N','B');ratioNote(33,'N','B');
-  band(34,'Ý NGHĨA BIÊN LỢI NHUẬN RÒNG');explanation(35,32,netMargin,true);
+  amount(22,'Tổng chi phí trừ tiếp sau giá vốn',operating,operatingRef);emphasis(22);
+  money(23,'Lợi nhuận ròng ước tính','N');emphasis(23,true);
+  note(24,source('R')?`TEXT(${source('R')},"#,##0.00")&" − "&TEXT(${operatingRef},"#,##0.00")&" = "&TEXT(${source('N')},"#,##0.00")&" đ"`:null,values.R!==null?`${number(values.R)} − ${number(operating)} = ${number(values.N!)} đ`:'Lợi nhuận ròng = Doanh thu − Giá vốn − Các chi phí trong ngày.');
+  band(25,'PHÂN TÍCH TỶ LỆ');percentage(26,'Biên lợi nhuận ròng','N','B');ratioNote(27,'N','B');
 }
 
 export function buildProfitWorkbook(options: {storeName: string; startDate: string; endDate: string; days: ProfitDay[]; inputsByDate: Record<string,ProfitInputs>; unsaved?: boolean}) {
