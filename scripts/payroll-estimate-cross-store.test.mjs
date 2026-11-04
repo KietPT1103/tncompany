@@ -14,6 +14,8 @@ for (const [storeId, userRole] of [['cafe','admin'], ['restaurant','admin'], ['c
     '@/services/employees': `export const getEmployees=async store=>[{id:store+'-e',storeId:store,employeeCode:'001',name:store+' employee',role:store==='restaurant'?'Bếp':'Thu ngân',hourlyRate:store==='restaurant'?30000:25000},{id:store+'-monthly',storeId:store,employeeCode:'002',name:store+' monthly employee',role:store==='restaurant'?'Bếp':'Thu ngân',salaryType:'monthly',monthlySalary:9000000,hourlyRate:99999},{id:store+'-other-role',storeId:store,employeeCode:'003',name:store+' other role employee',role:store==='restaurant'?'Phụ bếp':'Pha chế',hourlyRate:20000},{id:store+'-marketing',storeId:store,name:store+' marketing only',role:'MKT',hourlyRate:20000}];export const getEmployeeRoleNames=e=>[e.role];`,
     '@/services/payrolls': `
       const api=window.api={saved:null};
+      export const getEstimateDayLocks=async()=>({dates:[]});
+      export const setEstimateDayLock=async()=>({dates:[]});
       export const getSavedEstimateSchedules=async()=>({items:[],total:0,summary:null});
       export const saveImportedPayroll=async p=>{api.saved=p;return 'saved'};
       export const getSavedEstimateSchedule=async()=>({schedule:{...api.saved,roles:api.saved.entries.map(e=>e.role)},entries:api.saved.entries});

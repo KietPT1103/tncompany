@@ -13,11 +13,13 @@ import { getEmployeeRoles } from "@/services/employeeRoles";
 import {
   addPayrollEntry,
   deletePayrollEntry,
+  getEstimateDayLocks,
   getPayrollEntries,
   getSavedEstimateSchedule,
   getSavedEstimateSchedules,
   type PayrollEntry,
   saveImportedPayroll,
+  setEstimateDayLock,
   updatePayroll,
   updatePayrollEntry,
 } from "@/services/payrolls";
@@ -37,6 +39,8 @@ import { SavedEstimateSchedules } from "./payroll/_components/SavedEstimateSched
 import {
   ArrowLeft,
   CalendarDays,
+  Lock,
+  LockOpen,
   CalendarRange,
   History,
   Check,
@@ -447,6 +451,9 @@ function buildScheduleFromEntries(
 }
 
 function RoleScheduleTable({
+  lockedDates,
+  onToggleDayLock,
+  lockDisabled,
   activeCell,
   employeeByKey,
   onRemoveEmployee,
@@ -461,6 +468,9 @@ function RoleScheduleTable({
 }: {
   activeCell: ActiveCell | null;
   employeeByKey: Map<string, Employee>;
+  lockedDates: ReadonlySet<string>;
+  onToggleDayLock?: (date: string) => void;
+  lockDisabled: boolean;
   onRemoveEmployee: (cell: ActiveCell, employeeKey: string) => void;
   onDelete: () => void;
   onSave: () => void;
@@ -688,7 +698,24 @@ function RoleScheduleTable({
                     ) : null}
                   </div>
                   <div className="mt-1 whitespace-nowrap text-[13px] font-semibold normal-case tracking-normal text-slate-800">
-                    {day.shortDateLabel}
+                    {onToggleDayLock && day.inRange ? (
+                      <button
+                        type="button"
+                        disabled={lockDisabled}
+                        aria-label={`${lockedDates.has(day.date) ? "Mở khóa" : "Khóa"} ngày ${day.shortDateLabel}`}
+                        title={lockDisabled ? "Lưu lịch trước khi khóa hoặc mở khóa ngày" : undefined}
+                        onClick={() => onToggleDayLock(day.date)}
+                        className="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-emerald-50 disabled:opacity-50"
+                      >
+                        {day.shortDateLabel}
+                        {lockedDates.has(day.date) ? <Lock className="h-3.5 w-3.5 text-emerald-800" /> : <LockOpen className="h-3.5 w-3.5 text-slate-500" />}
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        {day.shortDateLabel}
+                        {lockedDates.has(day.date) && <Lock className="h-3.5 w-3.5 text-emerald-800" aria-label="Đã khóa" />}
+                      </span>
+                    )}
                   </div>
                 </th>
               ))}
@@ -773,7 +800,8 @@ function RoleScheduleTable({
                     >
                       <div
                         role="button"
-                        tabIndex={0}
+                        tabIndex={!onToggleDayLock && lockedDates.has(day.date) ? -1 : 0}
+                        aria-disabled={!onToggleDayLock && lockedDates.has(day.date)}
                         onClick={() => onSelectCell(cell)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
@@ -819,7 +847,7 @@ function RoleScheduleTable({
                                   >
                                     {employee.name}
                                   </span>
-                                  <button
+                                  {(onToggleDayLock || !lockedDates.has(day.date)) && <button
                                     type="button"
                                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:text-rose-600 md:mt-1 md:h-5 md:w-5"
                                     onClick={(event) => {
@@ -829,7 +857,7 @@ function RoleScheduleTable({
                                     aria-label={`Xóa ${employee.name}`}
                                   >
                                     <X className="h-3.5 w-3.5" />
-                                  </button>
+                                  </button>}
                                 </div>
                               );
                             })
@@ -867,6 +895,9 @@ export default function SalaryEstimatePage() {
   const [cellSearch, setCellSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [dayLocks, setDayLocks] = useState<{ storeId: string; dates: string[] } | null>(null);
+  const [updatingDayLock, setUpdatingDayLock] = useState(false);
+  const lockedDates = useMemo(() => new Set(dayLocks?.storeId === storeId ? dayLocks.dates : []), [dayLocks, storeId]);
   const [saveMessage, setSaveMessage] = useState("");
   const [editingPayrollId, setEditingPayrollId] = useState("");
   const [range, setRange] = useState(getCurrentWeekRange);
@@ -899,6 +930,15 @@ export default function SalaryEstimatePage() {
   const [managedEstimateRoles, setManagedEstimateRoles] = useState<string[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   useEffect(() => () => { saveGeneration.current += 1; }, []);
+
+  useEffect(() => {
+    if (!storeId || loading || !user) return;
+    let active = true;
+    getEstimateDayLocks(storeId)
+      .then(({ dates }) => { if (active) setDayLocks({ storeId, dates }); })
+      .catch(error => { if (active) setSubmitError(error instanceof Error ? error.message : "Không tải được ngày đã khóa."); });
+    return () => { active = false; };
+  }, [storeId, loading, user?.id]);
 
   useEffect(() => {
     if (!storeId || loading || !user) return;
@@ -1326,7 +1366,7 @@ export default function SalaryEstimatePage() {
     cell: ActiveCell,
     updater: (current: string[]) => string[],
   ) {
-    if (loadingSavedEstimate) return;
+    if (loadingSavedEstimate || (!canViewMonthlyDailySalary && lockedDates.has(cell.date))) return;
     const cellKey = makeCellKey(cell.date, cell.role, cell.shiftId);
 
     setSchedule((current) => {
@@ -1398,6 +1438,7 @@ export default function SalaryEstimatePage() {
 
   function handleSelectScheduleCell(cell: ActiveCell) {
     if (loadingSavedEstimate || rolesLoading) return;
+    if (!canViewMonthlyDailySalary && lockedDates.has(cell.date)) return;
     setRange((current) => {
       const orderedRange =
         current.startDate <= current.endDate
@@ -1453,6 +1494,14 @@ export default function SalaryEstimatePage() {
 
   function deleteRoleSchedule() {
     if (!pendingDeleteRole || saving || loadingSavedEstimate) return;
+    if (!canViewMonthlyDailySalary && Object.keys(schedule).some(key => {
+      const [date, role] = key.split("__");
+      return role === pendingDeleteRole && lockedDates.has(date);
+    })) {
+      setPendingDeleteRole(null);
+      setSubmitError("Lịch có ca trong ngày đã chốt lương. Chỉ admin có thể xóa.");
+      return;
+    }
     const remaining = displayedScheduleRoles.filter(role => role !== pendingDeleteRole);
     setSchedule(current => removeEstimateRole(current,pendingDeleteRole));
     setScheduleBoardRoles(remaining);
@@ -1587,6 +1636,23 @@ export default function SalaryEstimatePage() {
   const currentDraft = JSON.stringify({ schedule, range: normalizedRange });
   const hasSchedule = Boolean(editingPayrollId) || estimateSummaries.length > 0;
   const hasUnsavedChanges = hasSchedule && currentDraft !== savedDraft.current;
+
+  async function toggleDayLock(date: string) {
+    if (!canViewMonthlyDailySalary || !storeId || dayLocks?.storeId !== storeId
+      || updatingDayLock || saveInFlight.current || loadingSavedEstimate || hasUnsavedChanges) return;
+    setUpdatingDayLock(true);
+    setSubmitError("");
+    try {
+      const { dates } = await setEstimateDayLock(storeId, date, !lockedDates.has(date));
+      if (activeStore.current === storeId) setDayLocks({ storeId, dates });
+    } catch (error) {
+      if (activeStore.current === storeId) {
+        setSubmitError(error instanceof Error ? error.message : "Không cập nhật được trạng thái khóa ngày.");
+      }
+    } finally {
+      setUpdatingDayLock(false);
+    }
+  }
   saveLatest.current = () => handleSaveEstimate(true);
   useEffect(() => {
     const requestedKey = `${storeId}:${queryPayrollId}:${openSavedRevision}`;
@@ -1935,6 +2001,9 @@ export default function SalaryEstimatePage() {
                     key={`${week.key}-${role}`}
                     activeCell={activeCell}
                     employeeByKey={employeeByKey}
+                    lockedDates={lockedDates}
+                    onToggleDayLock={canViewMonthlyDailySalary ? toggleDayLock : undefined}
+                    lockDisabled={dayLocks?.storeId !== storeId || updatingDayLock || saving || loadingSavedEstimate || hasUnsavedChanges}
                     onRemoveEmployee={removeEmployeeFromCell}
                     onDelete={() => { if (!saving && !loadingSavedEstimate) setPendingDeleteRole(role); }}
                     onSave={() => void handleSaveEstimate()}

@@ -176,3 +176,28 @@ check($legacyRow['totals']['grossProfit'] === 18731994, 'History restores gross 
 check(profit_history($pdo,'cafe',1,'legacy-gross')['snapshot']['totals']['profit'] === 9984298.67, 'Historical net profit remains as saved');
 check(profit_history_snapshot('{"totals":{"revenue":100,"materialCost":10,"grossProfit":null}}')['totals']['grossProfit'] === null, 'Explicitly unavailable gross profit is preserved');
 echo "PASS legacy gross profit in history\n";
+
+$lockedDate = '2026-10-07';
+$nextDate = '2026-10-08';
+payroll_day_locks_ensure($pdo);
+$snapshot = profit_source_salary($pdo, 'cafe', [$lockedDate])[$lockedDate];
+$pdo->prepare('INSERT INTO payroll_estimate_day_locks VALUES (?, ?, ?, ?)')
+    ->execute(['cafe', $lockedDate, json_encode($snapshot), 'admin']);
+$pdo->exec("UPDATE payroll_entries SET hourly_rate = 12345, monthly_salary = 9000000, fixed_salary = 9000000");
+$lockedSalary = profit_source_salary($pdo, 'cafe', [$lockedDate, $nextDate]);
+check($lockedSalary[$lockedDate]['amount'] == $snapshot['amount'], 'Locked day retains the saved salary after entry edits');
+check(!payroll_day_locks_read($pdo, 'restaurant'), 'Day locks are isolated by store');
+check($lockedSalary[$nextDate] === profit_source_salary($pdo, 'cafe', [$nextDate])[$nextDate], 'Unlocked days still use live estimates');
+
+$dates = payroll_day_locks_read($pdo, 'cafe');
+$lockedShift = ['date' => $lockedDate, 'role' => 'Bếp', 'hours' => 5];
+$unlockedShift = ['date' => $nextDate, 'role' => 'Bếp', 'hours' => 5];
+$entry = ['employee_id' => 'worker', 'hourly_rate' => 15000, 'shifts_json' => json_encode([$lockedShift])];
+$withAnotherDay = array_replace($entry, ['shifts_json' => json_encode([$unlockedShift, $lockedShift])]);
+$projection = payroll_day_locks_entry_projection($entry, $dates);
+check($projection === payroll_day_locks_entry_projection($withAnotherDay, $dates), 'Editing an unlocked day leaves the locked projection unchanged');
+check($projection !== payroll_day_locks_entry_projection(array_replace($entry, ['hourly_rate' => 20000]), $dates), 'Rate edits affect the locked day');
+check($projection !== payroll_day_locks_entry_projection(null, $dates), 'Removing a locked assignment changes the projection');
+$pdo->exec('DELETE FROM payroll_estimate_day_locks');
+check(profit_source_salary($pdo, 'cafe', [$lockedDate])[$lockedDate]['amount'] != $snapshot['amount'], 'Unlock uses the current estimate again');
+echo "PASS payroll day locks: frozen profit, store isolation and locked assignments\n";

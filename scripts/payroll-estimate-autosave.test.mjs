@@ -13,6 +13,8 @@ const mocks = {
   '@/services/employees': `export const getEmployees=async store=>store==='cafe'?[{id:'e1',name:'Nhân viên A',role:'Thu ngân',hourlyRate:25000},{id:'e2',name:'Nhân viên B',role:'Thu ngân',hourlyRate:25000}]:[];export const getEmployeeRoleNames=e=>[e.role];`,
   '@/services/payrolls': `
 const api=window.api={creates:[],updates:[],entries:[],loads:0,attempts:0,fail:false,hold:false};
+export const getEstimateDayLocks=async()=>({dates:[]});
+export const setEstimateDayLock=async()=>({dates:[]});
 export const getSavedEstimateSchedules=async()=>api.duplicate?{items:[{id:'duplicate'}],total:1,summary:null}:({items:api.creates.length&&!api.deleted?[{...api.creates[0],id:api.detailId||'schedule1',updatedAt:'2026-10-28 12:00:00',roles:['Thu ngân'],employeeCount:api.entries.length,totalHours:0,totalSalary:0}]:[],total:api.deleted?0:api.creates.length,summary:null});
 export const saveImportedPayroll=async p=>{api.creates.push(p);const id='schedule'+api.creates.length;while(api.hold)await new Promise(r=>setTimeout(r,50));api.entries=p.entries.map((e,i)=>({...e,id:'entry'+i}));return id};
 export const getPayrollEntries=async()=>{api.attempts++;if(api.fail)throw new Error('Mất kết nối');return structuredClone(api.entries)};
