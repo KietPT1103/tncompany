@@ -167,3 +167,12 @@ check(array_sum(array_column($centSales,'netSales'))===0.01,'Discount allocation
 check(array_values(array_filter($centSales,fn($sale)=>$sale['code']==='free-item'))[0]['netSales']===0.0,'Free items cannot receive discount allocation rounding residue');
 $pdo->rollBack();
 echo "PASS item gross profit: actual prices after each bill discount, quantities, free items, canceled bills and missing prices\n";
+
+$legacyHistory = ['totals'=>['revenue'=>22092000,'materialCost'=>3360006,'profit'=>9984298.67]];
+$insert = $pdo->prepare('INSERT INTO profit_report_history (id,store_id,start_date,end_date,snapshot_json,saved_by,saved_at) VALUES (?,?,?,?,?,?,?)');
+$insert->execute(['legacy-gross','cafe','2026-11-03','2026-11-03',json_encode($legacyHistory),'test','2026-11-04 00:19:03']);
+$legacyRow = array_values(array_filter(profit_history($pdo,'cafe',1)['rows'], fn($row) => $row['id'] === 'legacy-gross'))[0];
+check($legacyRow['totals']['grossProfit'] === 18731994, 'History restores gross profit from saved revenue and cost');
+check(profit_history($pdo,'cafe',1,'legacy-gross')['snapshot']['totals']['profit'] === 9984298.67, 'Historical net profit remains as saved');
+check(profit_history_snapshot('{"totals":{"revenue":100,"materialCost":10,"grossProfit":null}}')['totals']['grossProfit'] === null, 'Explicitly unavailable gross profit is preserved');
+echo "PASS legacy gross profit in history\n";
