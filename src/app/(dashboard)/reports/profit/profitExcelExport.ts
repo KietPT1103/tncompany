@@ -123,7 +123,10 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   const rows=[...calculation.rows].sort((a,b)=>a.date.localeCompare(b.date));
   const workbook=new ExcelJS.Workbook();workbook.creator='TN Services';workbook.created=new Date();workbook.calcProperties.fullCalcOnLoad=true;
   const subtitle=`${options.storeName} · ${dateLabel(options.startDate)} – ${dateLabel(options.endDate)} · Đơn vị: VND${options.unsaved?' · Dữ liệu đang chỉnh sửa, chưa lưu':''}`;
-  const summary=sheet(workbook,'Tổng hợp','TN SERVICES | BÁO CÁO LỢI NHUẬN',subtitle,[80,24],['Chỉ tiêu','Giá trị'],true);
+  const reportDateLabel = options.startDate === options.endDate
+    ? dateLabel(options.startDate)
+    : `${dateLabel(options.startDate)} – ${dateLabel(options.endDate)}`;
+  const summary=sheet(workbook,'Tổng hợp',`TN SERVICES | BÁO CÁO LỢI NHUẬN ${reportDateLabel}`,subtitle,[80,24],['Chỉ tiêu','Giá trị'],true);
   const daily=sheet(workbook,'Theo ngày','CHI TIẾT LỢI NHUẬN THEO NGÀY',subtitle,[15,21,21,21,21,19,19,21,21,21,23,21,23,23,15,13,22,23,23,23,23,23,24],['Ngày','Doanh thu','Giá vốn món','Lương nhân viên','Chi tại quầy','Tiền điện','Tiền nước','Chi phí khác','Marketing','Anh Thiện chi','Tồn kho nguyên liệu','Công nợ','Tổng chi phí','Lợi nhuận ròng','Biên lợi nhuận','Số hóa đơn','Thuế (4,5%)','Lãi gộp ước tính','Lãi ròng','Tiền bàn giao','Lương ước tính (1 ngày)','Thuế (4,5% doanh thu)','Dòng tiền thực về']);
   const costs=sheet(workbook,'Giá vốn món','CHI TIẾT GIÁ VỐN VÀ LÃI GỘP MÓN ĐÃ BÁN',subtitle,[15,21,44,16,23,24,24,26,26],['Ngày','Mã món','Tên món','Số lượng','Cost / món','Tổng giá vốn','Giá thực thu / món','Doanh thu sau giảm giá','Lãi gộp ước tính']);
   const expenses=sheet(workbook,'Các khoản chi','CHI TIẾT CÁC KHOẢN CHI',subtitle,[15,26,27,44,48,23],['Ngày','Loại chi phí','Mã phiếu','Tên / nội dung','Ghi chú','Số tiền']);
