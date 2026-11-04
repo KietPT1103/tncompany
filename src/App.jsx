@@ -8,7 +8,6 @@ import DashboardLayout from "./app/(dashboard)/layout";
 import BillsPage from "./app/(dashboard)/bills/page";
 import PosPage from "./app/(dashboard)/pos/page";
 import BarBoardPage from "./app/(dashboard)/bar/page";
-import CashFlowPage from "./app/(dashboard)/cash-flow/page";
 import AccountManagementPage from "./app/(dashboard)/accounts-page";
 import ActivityLogsPage from "./app/(dashboard)/activity-logs/page";
 import CategoryManagementPage from "./app/(dashboard)/categories/page";
@@ -28,8 +27,6 @@ import FieldInventoryReceiptsPage from "./app/(dashboard)/inventory-receipts/pag
 import ManualInventoryReceiptPage from "./app/(dashboard)/inventory-receipts/manual/page";
 import FieldInventoryReceiptDetailPage from "./app/(dashboard)/inventory-receipts/[id]/page";
 import InventoryWorkspacePage from "./app/(dashboard)/inventory/page";
-import ReportDetailPage from "./app/(dashboard)/reports/[id]/page";
-import ReportsPage from "./app/(dashboard)/reports/page";
 import ProductSalesReportPage from "./app/(dashboard)/reports/products/page";
 import DailyRevenueReportPage from "./app/(dashboard)/reports/revenue/page";
 import IngredientUsagePage from "./app/(dashboard)/reports/ingredient-usage/page";
@@ -241,14 +238,11 @@ export function App() {
               </Route>
               <Route path="bills" element={<BillsPage />} />
               <Route path="payroll-estimate" element={<SalaryEstimatePage />} />
-              <Route path="reports" element={<ReportsPage />} />
               <Route path="reports/products" element={<ProductSalesReportPage />} />
               <Route path="reports/revenue" element={<DailyRevenueReportPage />} />
               <Route path="reports/ingredient-usage" element={<IngredientUsagePage />} />
               <Route path="reports/kitchen-reconciliation" element={<RoleGuard allowedRoles={["admin"]} inferPermission={false}><KitchenReconciliationPage /></RoleGuard>} />
               <Route path="reports/profit" element={<DailyProfitPage />} />
-              <Route path="reports/:id" element={<ReportDetailPage />} />
-              <Route path="cash-flow" element={<CashFlowPage />} />
               <Route path="virtual-bills" element={<Navigate to="/admin/sample-bills/coffee" replace />} />
               <Route path="sample-bills/products" element={<SampleBillProductsPage />} />
               <Route path="sample-bills/coffee" element={<CoffeeSampleBillsPage />} />

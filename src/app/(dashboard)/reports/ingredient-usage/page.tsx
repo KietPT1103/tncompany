@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { useStore } from '@/context/StoreContext';
 import { apiRequest } from '@/lib/api';
 import { formatRevenueDate, vietnamDateKey } from '../revenue/dailyRevenueReport';
+
+import { downloadIngredientUsage } from './ingredientUsageExport';
 
 type Row = { code: string; name: string; unit: string; quantity: number; pendingQuantity?: number };
 type Report = { sales: Row[]; ingredients: Row[]; totalSoldQuantity: number; pendingQuantity: number };
@@ -77,12 +79,22 @@ export default function IngredientUsagePage() {
     } finally { if (mounted.current) setSyncing(false); }
   }
 
+  function exportExcel() {
+    if (!valid || !report || loading || syncing) return;
+    try {
+      downloadIngredientUsage(report, tab, { from, to, storeId, storeName });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không xuất được Excel. Vui lòng thử lại.');
+    }
+  }
+
   return <main className="min-h-full bg-[#F4F7F6] p-4 font-nunito text-slate-900 sm:p-6">
     <div className="mx-auto max-w-5xl space-y-5">
       <header><h1 className="text-2xl font-bold text-emerald-950">Món bán và nguyên liệu đã dùng</h1><p className="mt-1 text-sm text-slate-500">Tính theo món trên hóa đơn hoàn tất và công thức đã lưu, không gồm hóa đơn đã hủy.</p></header>
       <div className="flex flex-wrap items-end gap-4 rounded-lg border border-slate-200 bg-white p-4">
         <DateRangePicker label="Thời gian" startDate={from} endDate={to} onChange={(start, end) => { setFrom(start); setTo(end); }} />
         <div className="mr-auto text-sm"><span className="block text-slate-500">Chi nhánh</span><span className="font-semibold">{storeName}</span></div>
+        <button type="button" disabled={!valid || !report || loading || syncing} onClick={exportExcel} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emerald-800 px-3 text-sm font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50"><Download className="h-4 w-4" />Xuất Excel</button>
         <button type="button" disabled={loading || syncing} onClick={() => setReload(value => value + 1)} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm hover:bg-slate-50 disabled:opacity-50"><RefreshCw className="h-4 w-4" />Tải lại</button>
         <button type="button" disabled={!valid || loading || syncing || !report || !report.pendingQuantity} onClick={() => void syncMissing()} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-800 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />{syncing ? 'Đang đồng bộ…' : 'Đồng bộ theo công thức hiện tại'}</button>
         <p className="w-full text-xs text-slate-500">Đồng bộ bổ sung món bán cũ chưa ghi nhận hoặc từng thiếu công thức trong khoảng ngày đã chọn. Giữ nguyên công thức đã lưu và không trừ thêm tồn kho.</p>

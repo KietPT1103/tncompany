@@ -151,13 +151,6 @@ const navGroups: NavGroup[] = [
         icon: PackageSearch,
         permission: "reports.products.view",
       },
-      {
-        href: "/reports",
-        label: "Báo cáo cost",
-        icon: FileText,
-        permission: "reports.cost.access",
-        exact: true,
-      },
     ],
   },
   {
@@ -182,12 +175,6 @@ const navGroups: NavGroup[] = [
         label: "Danh sách hóa đơn",
         icon: ReceiptText,
         permission: "bills.access",
-      },
-      {
-        href: "/cash-flow",
-        label: "Dòng tiền",
-        icon: BarChart3,
-        permission: "cash_flow.access",
       },
     ],
   },

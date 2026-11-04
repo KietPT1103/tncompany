@@ -1,13 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  BarChart3,
   Calculator,
-  FileText,
   LogOut,
   Menu,
   Package,
@@ -19,8 +17,6 @@ import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: Calculator },
-  { href: "/reports", label: "Báo cáo", icon: FileText },
-  { href: "/cash-flow", label: "Dòng tiền", icon: BarChart3 },
   { href: "/product", label: "Sản phẩm", icon: Package },
   { href: "/categories", label: "Danh mục", icon: Tags },
 ];
