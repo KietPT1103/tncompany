@@ -4,6 +4,16 @@ import test from "node:test";
 
 const source = readFileSync(new URL("./payroll-estimate-page.tsx", import.meta.url), "utf8");
 
+test("switches filter each role and week from the displayed totals only", () => {
+  assert.match(source, /role="switch"\s+aria-checked=\{includedInTotals\}/);
+  assert.match(source, /includedInTotals=\{!excludedBoards.has\(getBoardKey\(role, week.key\)\)\}/);
+  assert.match(source, /if \(excludedBoards\?\.has\(getBoardKey\(roleName, weekKey\)\)\) return/);
+  assert.match(source, /const displayedSummaries = useMemo\(\s*\(\) => excludedBoards.size > 0 \? buildEstimateSummaries\(excludedBoards\) : estimateSummaries/);
+  assert.match(source, /const totalEstimate = displayedSummaries.reduce/);
+  assert.match(source, /const totalHours = displayedSummaries.reduce/);
+  assert.match(source, /const nextEntries = estimateSummaries.map/);
+});
+
 test("only shows the payroll back link to users with payroll access", () => {
   assert.match(source, /hasPermission\(user,\s*"payroll\.access"\)/);
   assert.match(source, /canAccessPayroll\s*\?\s*\(/);

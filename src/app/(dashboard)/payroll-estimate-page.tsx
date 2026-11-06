@@ -1,7 +1,7 @@
 "use client";
 import { normalizeSearchText as adminSearchText } from "@/lib/utils";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -153,7 +153,7 @@ type EstimateSummary = {
   shiftCount: number;
   shifts: Array<{
     id: string;
-    role?: string;
+    role: EstimateRole;
     date: string;
     inTime: string;
     outTime: string;
@@ -309,6 +309,32 @@ function buildWeekSegments(startDate: string, endDate: string): WeekSegment[] {
   return segments;
 }
 
+function getBoardKey(role: EstimateRole, weekKey: string) {
+  return `${weekKey}-${role}`;
+}
+
+function getBoardEstimates(summaries: EstimateSummary[], weeksByDate: ReadonlyMap<string, string>) {
+  const totals = new Map<string, number>();
+  for (const summary of summaries) {
+    const shifts = summary.shifts.map(shift => ({
+      ...shift,
+      role: getBoardKey(shift.role, weeksByDate.get(shift.date)!),
+    }));
+    if (isFixedSalaryEmployee(summary.employee)) {
+      const { roleSalaries } = getMonthlyEstimateCosts(summary.employee.monthlySalary || 0, shifts);
+      for (const [boardKey, salary] of Object.entries(roleSalaries)) {
+        totals.set(boardKey, (totals.get(boardKey) ?? 0) + salary);
+      }
+    } else {
+      const hourlyRate = getEstimatedHourlyRate(summary.employee);
+      for (const shift of shifts) {
+        totals.set(shift.role, (totals.get(shift.role) ?? 0) + shift.hours * hourlyRate);
+      }
+    }
+  }
+  return totals;
+}
+
 function makeCellKey(date: string, role: EstimateRole, shiftId: ShiftId) {
   return `${date}__${role}__${shiftId}`;
 }
@@ -451,6 +477,9 @@ function buildScheduleFromEntries(
 }
 
 function RoleScheduleTable({
+  boardEstimate,
+  includedInTotals,
+  onToggleIncludedInTotals,
   lockedDates,
   onToggleDayLock,
   lockDisabled,
@@ -466,6 +495,9 @@ function RoleScheduleTable({
   schedule,
   week,
 }: {
+  boardEstimate: number;
+  includedInTotals: boolean;
+  onToggleIncludedInTotals: () => void;
   activeCell: ActiveCell | null;
   employeeByKey: Map<string, Employee>;
   lockedDates: ReadonlySet<string>;
@@ -588,7 +620,34 @@ function RoleScheduleTable({
       >
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70">Lịch phân ca</p>
-          <h3 className="text-lg font-bold">{role}</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-bold">{role}</h3>
+            <div className="flex flex-col items-center" data-html2canvas-ignore="true">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={includedInTotals}
+                aria-label={`Tính lịch ${role} tuần ${week.label} vào tổng ước tính`}
+                onClick={onToggleIncludedInTotals}
+                className="inline-flex h-8 items-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "flex h-6 w-14 items-center justify-between rounded-full px-1 text-[10px] font-bold",
+                    includedInTotals ? "bg-emerald-700 pl-2 text-white" : "flex-row-reverse bg-slate-200 pr-2 text-slate-700",
+                  )}
+                >
+                  {includedInTotals ? "ON" : "OFF"}
+                  <span className="size-4 rounded-full bg-white shadow-sm" />
+                </span>
+              </button>
+              <span className={cn("text-xs font-semibold tabular-nums", !includedInTotals && "text-slate-600")}>
+                <span className="sr-only">Ước tính của bảng: </span>
+                {formatCurrency(boardEstimate)}
+              </span>
+            </div>
+          </div>
         </div>
         <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="grid grid-cols-2 gap-3 pb-1 sm:flex sm:flex-wrap sm:items-center" data-html2canvas-ignore="true">
@@ -891,6 +950,7 @@ export default function SalaryEstimatePage() {
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [schedule, setSchedule] = useState<ScheduleState>({});
+  const [excludedBoards, setExcludedBoards] = useState<Set<string>>(() => new Set());
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [cellSearch, setCellSearch] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1059,6 +1119,7 @@ export default function SalaryEstimatePage() {
     setSelectedRole(estimateRoles[0] || "");
     setActiveCell(null);
     setSchedule({});
+    setExcludedBoards(new Set());
     setSavedEmployees([]);
     setEditingPayrollId("");
     savedDraft.current = "";
@@ -1102,21 +1163,21 @@ export default function SalaryEstimatePage() {
     [normalizedRange],
   );
 
-  const visibleDateSet = useMemo(() => {
-    const next = new Set<string>();
+  const visibleWeeksByDate = useMemo(() => {
+    const next = new Map<string, string>();
     weekSegments.forEach((segment) => {
       segment.days.forEach((day) => {
-        if (day.inRange) next.add(day.date);
+        if (day.inRange) next.set(day.date, segment.key);
       });
     });
     return next;
   }, [weekSegments]);
 
   useEffect(() => {
-    if (activeCell && !visibleDateSet.has(activeCell.date)) {
+    if (activeCell && !visibleWeeksByDate.has(activeCell.date)) {
       setActiveCell(null);
     }
-  }, [activeCell, visibleDateSet]);
+  }, [activeCell, visibleWeeksByDate]);
 
   const supportedEmployees = useMemo(
     () =>
@@ -1182,6 +1243,7 @@ export default function SalaryEstimatePage() {
         const endDate = savedSchedule.endDate || normalizedRange.endDate;
         const restoredRange = startDate <= endDate ? { startDate, endDate } : { startDate: endDate, endDate: startDate };
         setSchedule(restored.schedule);
+        setExcludedBoards(new Set());
         loadedScheduleKey.current = loadKey;
         editingIdRef.current = queryPayrollId;
         failedDraft.current = "";
@@ -1229,11 +1291,12 @@ export default function SalaryEstimatePage() {
     return next;
   }, [estimateRoles, supportedEmployees]);
 
-  const estimateSummaries = useMemo(() => {
+  const buildEstimateSummaries = useCallback((excludedBoards?: ReadonlySet<string>) => {
     const summaryMap = new Map<string, EstimateSummary>();
 
-    visibleDateSet.forEach((date) => {
+    visibleWeeksByDate.forEach((weekKey, date) => {
       estimateRoles.forEach((roleName) => {
+        if (excludedBoards?.has(getBoardKey(roleName, weekKey))) return;
         SHIFT_DEFINITIONS.forEach((shift) => {
           const selectedEmployeeKeys =
             schedule[makeCellKey(date, roleName, shift.id)] || [];
@@ -1302,19 +1365,45 @@ export default function SalaryEstimatePage() {
       if (roleDiff !== 0) return roleDiff;
       return left.employee.name.localeCompare(right.employee.name, "vi");
     });
-  }, [employeeByKey, estimateRoles, schedule, visibleDateSet]);
+  }, [employeeByKey, estimateRoles, schedule, visibleWeeksByDate]);
 
-  const totalEstimate = estimateSummaries.reduce(
+  const estimateSummaries = useMemo(() => buildEstimateSummaries(), [buildEstimateSummaries]);
+  const displayedSummaries = useMemo(
+    () => excludedBoards.size > 0 ? buildEstimateSummaries(excludedBoards) : estimateSummaries,
+    [buildEstimateSummaries, estimateSummaries, excludedBoards],
+  );
+  const boardEstimates = useMemo(
+    () => getBoardEstimates(estimateSummaries, visibleWeeksByDate),
+    [estimateSummaries, visibleWeeksByDate],
+  );
+  const displayedBoardEstimates = useMemo(
+    () => displayedSummaries === estimateSummaries
+      ? boardEstimates
+      : getBoardEstimates(displayedSummaries, visibleWeeksByDate),
+    [boardEstimates, displayedSummaries, estimateSummaries, visibleWeeksByDate],
+  );
+
+  function toggleBoardInTotals(role: EstimateRole, weekKey: string) {
+    const boardKey = getBoardKey(role, weekKey);
+    setExcludedBoards(current => {
+      const next = new Set(current);
+      if (next.has(boardKey)) next.delete(boardKey);
+      else next.add(boardKey);
+      return next;
+    });
+  }
+
+  const totalEstimate = displayedSummaries.reduce(
     (sum, item) => sum + item.totalSalary,
     0,
   );
-  const totalHours = estimateSummaries.reduce(
+  const totalHours = displayedSummaries.reduce(
     (sum, item) => sum + item.totalHours,
     0,
   );
   const totalsByRole = useMemo(() => {
     return estimateRoles.map((roleName) => {
-      const entries = estimateSummaries.filter(
+      const entries = displayedSummaries.filter(
         (item) => item.assignedRoles.includes(roleName),
       );
       return {
@@ -1324,7 +1413,7 @@ export default function SalaryEstimatePage() {
         totalSalary: entries.reduce((sum, item) => sum + (item.roleTotals[roleName]?.salary || 0), 0),
       };
     });
-  }, [estimateRoles, estimateSummaries]);
+  }, [estimateRoles, displayedSummaries]);
 
   const displayedRoleTotals = totalsByRole.filter(
     item => displayedScheduleRoles.includes(item.role),
@@ -1473,6 +1562,7 @@ export default function SalaryEstimatePage() {
     failedDraft.current = "";
     setAutosaveError("");
     setSchedule({});
+    setExcludedBoards(new Set());
     setEditingPayrollId("");
     savedDraft.current = "";
     setActiveCell(null);
@@ -1761,7 +1851,7 @@ export default function SalaryEstimatePage() {
                       {formatCurrency(totalEstimate)}
                     </div>
                     <div className="mt-1 text-sm text-slate-500">
-                      {estimateSummaries.length} người •{" "}
+                      {displayedSummaries.length} người •{" "}
                       {formatHours(totalHours)}
                     </div>
                   </div>
@@ -1823,7 +1913,7 @@ export default function SalaryEstimatePage() {
                       ) {
                         return;
                       }
-                      clearDateCollection(Array.from(visibleDateSet));
+                      clearDateCollection(Array.from(visibleWeeksByDate.keys()));
                     }}
                     disabled={estimateSummaries.length === 0}
                   >
@@ -1929,6 +2019,7 @@ export default function SalaryEstimatePage() {
                 setAutosaveError("");
                 setEditingPayrollId("");
                 setSchedule({});
+                setExcludedBoards(new Set());
                 setSavedEmployees([]);
                 setScheduleBoardRoles(selectedRole ? [selectedRole] : []);
                 setActiveCell(null);
@@ -1998,7 +2089,10 @@ export default function SalaryEstimatePage() {
                   </div>
 
                   <RoleScheduleTable
-                    key={`${week.key}-${role}`}
+                    boardEstimate={displayedBoardEstimates.get(getBoardKey(role, week.key))
+                      ?? boardEstimates.get(getBoardKey(role, week.key)) ?? 0}
+                    includedInTotals={!excludedBoards.has(getBoardKey(role, week.key))}
+                    onToggleIncludedInTotals={() => toggleBoardInTotals(role, week.key)}
                     activeCell={activeCell}
                     employeeByKey={employeeByKey}
                     lockedDates={lockedDates}
