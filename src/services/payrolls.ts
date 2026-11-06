@@ -20,6 +20,7 @@ export interface Shift {
   outTime: string;
   hours: number;
   hourlyRateOverride?: number;
+  excludedFromEstimate?: boolean;
   isWeekend: boolean;
   isValid: boolean;
 }

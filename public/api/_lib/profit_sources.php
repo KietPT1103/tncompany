@@ -46,6 +46,7 @@ function profit_source_salary(PDO $pdo, string $store, array $dates): array
         foreach ($shifts as $shift) {
             if (!is_array($shift)) { $invalid[$entry['payroll_id']] = true; continue; }
             if (isset($shift['isValid']) && !$shift['isValid']) continue;
+            if (($shift['excludedFromEstimate'] ?? false) === true) continue;
             $date = str_replace('/', '-', (string)($shift['date'] ?? ''));
             $hours = $shift['hours'] ?? null;
             if (!is_numeric($hours) || (float)$hours < 0 || !is_finite((float)$hours) || $rate < 0 || !is_finite($rate)) {

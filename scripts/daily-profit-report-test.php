@@ -118,6 +118,9 @@ check(profit_source_salary($pdo,'cafe',['2026-10-07','2026-10-08'])['2026-10-07'
 $pdo->exec("INSERT INTO payroll_entries SELECT payroll_id,hourly_rate,salary_type,shifts_json,employee_id,monthly_salary,fixed_salary FROM payroll_entries WHERE employee_id='fulltime-a'");
 check(profit_source_salary($pdo,'cafe',['2026-10-07'])['2026-10-07']['amount'] === 500035.0, 'Monthly employee repeated across role entries still costs one daily salary');
 check(profit_period_sources($pdo,'cafe','2026-10-07','2026-10-08')['2026-10-07']['salaryEstimate']['amount'] === 500035.0, 'Period report receives fulltime costs');
+$stmt->execute(['latest',100,'hourly',json_encode([['date'=>'2026-10-07','hours'=>5,'excludedFromEstimate'=>true]])]);
+$stmt->execute(['latest',1000,'monthly',json_encode([['date'=>'2026-10-07','hours'=>5,'excludedFromEstimate'=>true]])]);
+check(profit_source_salary($pdo,'cafe',['2026-10-07'])['2026-10-07']['amount'] === 500035.0, 'Off boards contribute no hourly or monthly costs');
 $pdo->exec('CREATE TABLE ingredients (id TEXT,store_id TEXT,cost REAL,conversion_source_ingredient_id TEXT,conversion_input_quantity REAL,conversion_output_quantity REAL)');
 $pdo->exec('CREATE TABLE product_ingredients (store_id TEXT,product_id TEXT,ingredient_id TEXT,quantity REAL)');
 $pdo->exec('CREATE TABLE ingredient_components (parent_ingredient_id TEXT,component_ingredient_id TEXT,input_quantity REAL)');
@@ -198,6 +201,8 @@ $projection = payroll_day_locks_entry_projection($entry, $dates);
 check($projection === payroll_day_locks_entry_projection($withAnotherDay, $dates), 'Editing an unlocked day leaves the locked projection unchanged');
 check($projection !== payroll_day_locks_entry_projection(array_replace($entry, ['hourly_rate' => 20000]), $dates), 'Rate edits affect the locked day');
 check($projection !== payroll_day_locks_entry_projection(null, $dates), 'Removing a locked assignment changes the projection');
+$excludedLockedShift = $lockedShift + ['excludedFromEstimate' => true];
+check($projection !== payroll_day_locks_entry_projection(array_replace($entry, ['shifts_json' => json_encode([$excludedLockedShift])]), $dates), 'Excluding a locked assignment changes the projection');
 $pdo->exec('DELETE FROM payroll_estimate_day_locks');
 check(profit_source_salary($pdo, 'cafe', [$lockedDate])[$lockedDate]['amount'] != $snapshot['amount'], 'Unlock uses the current estimate again');
 echo "PASS payroll day locks: frozen profit, store isolation and locked assignments\n";

@@ -42,6 +42,7 @@ function payroll_day_locks_entry_projection(?array $entry, array $lockedDates): 
             'outTime' => (string)($shift['outTime'] ?? ''),
             'hours' => (float)($shift['hours'] ?? 0),
             'valid' => (bool)($shift['isValid'] ?? true),
+            'excludedFromEstimate' => ($shift['excludedFromEstimate'] ?? false) === true,
             'weekend' => (bool)($shift['isWeekend'] ?? false),
             'rateOverride' => (float)($shift['hourlyRateOverride'] ?? 0),
         ];

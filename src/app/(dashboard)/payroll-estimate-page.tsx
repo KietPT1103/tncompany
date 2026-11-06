@@ -18,6 +18,7 @@ import {
   getSavedEstimateSchedule,
   getSavedEstimateSchedules,
   type PayrollEntry,
+  type Shift,
   saveImportedPayroll,
   setEstimateDayLock,
   updatePayroll,
@@ -348,7 +349,7 @@ function getRoleOrder(role: string, estimateRoles: string[]) {
   return index === -1 ? estimateRoles.length : index;
 }
 
-function getShiftIdFromStoredShift(shift: EstimateSummary["shifts"][number]) {
+function getShiftIdFromStoredShift(shift: Shift) {
   if (shift.id) {
     const matchedById = SHIFT_DEFINITIONS.find((item) =>
       shift.id.endsWith(`-${item.id}`),
@@ -374,6 +375,8 @@ function buildEstimateEntryPayload(
   item: EstimateSummary,
   startDate: string,
   endDate: string,
+  included: EstimateSummary | undefined,
+  isExcluded: (shift: EstimateSummary["shifts"][number]) => boolean,
 ): Partial<PayrollEntry> {
   const salaryType = resolveEmployeeSalaryType(item.employee);
   const isMonthly = salaryType === "monthly";
@@ -384,15 +387,15 @@ function buildEstimateEntryPayload(
     employeeName: item.employee.name,
     role: item.assignedRoles[0] || item.employee.role,
     hourlyRate: isMonthly ? 0 : item.employee.hourlyRate || 0,
-    totalHours: item.totalHours,
+    totalHours: included?.totalHours ?? 0,
     weekendHours: 0,
-    salary: item.totalSalary,
+    salary: included?.totalSalary ?? 0,
     allowances: [],
     note: `Ước tính từ lịch phân ca ${startDate} đến ${endDate}`,
     salaryType,
     fixedSalary: isMonthly ? item.employee.monthlySalary || 0 : 0,
     standardHours: isMonthly ? item.employee.standardHours || 0 : 0,
-    shifts: item.shifts,
+    shifts: item.shifts.map(shift => isExcluded(shift) ? { ...shift, excludedFromEstimate: true } : shift),
   };
 }
 
@@ -420,12 +423,13 @@ function buildScheduleFromEntries(
     employeeCode?: string;
     employeeName: string;
     role: string;
-    shifts?: EstimateSummary["shifts"];
+    shifts?: Shift[];
   }>,
   employees: Employee[],
   estimateRoles: string[],
 ) {
   const schedule: ScheduleState = {};
+  const excludedBoards = new Set<string>();
   let minDate = "";
   let maxDate = "";
   let suggestedRole: EstimateRole | null = null;
@@ -457,6 +461,9 @@ function buildScheduleFromEntries(
       );
       if (!date) return;
 
+      if (shift.excludedFromEstimate === true) {
+        excludedBoards.add(getBoardKey(role, toDateKey(getWeekStart(parseDateKey(date)))));
+      }
       const cellKey = makeCellKey(date, role, shiftId);
       schedule[cellKey] = Array.from(
         new Set([...(schedule[cellKey] || []), employeeKey]),
@@ -470,6 +477,7 @@ function buildScheduleFromEntries(
 
   return {
     schedule,
+    excludedBoards,
     startDate: minDate,
     endDate: maxDate,
     selectedRole: suggestedRole,
@@ -629,7 +637,9 @@ function RoleScheduleTable({
                 aria-checked={includedInTotals}
                 aria-label={`Tính lịch ${role} tuần ${week.label} vào tổng ước tính`}
                 onClick={onToggleIncludedInTotals}
-                className="inline-flex h-8 items-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
+                disabled={week.days.some(day => day.inRange && lockedDates.has(day.date))}
+                title={week.days.some(day => day.inRange && lockedDates.has(day.date)) ? "Cần mở khóa ngày đã chốt lương để đổi trạng thái bảng" : undefined}
+                className="inline-flex h-8 items-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span
                   aria-hidden="true"
@@ -1243,12 +1253,12 @@ export default function SalaryEstimatePage() {
         const endDate = savedSchedule.endDate || normalizedRange.endDate;
         const restoredRange = startDate <= endDate ? { startDate, endDate } : { startDate: endDate, endDate: startDate };
         setSchedule(restored.schedule);
-        setExcludedBoards(new Set());
+        setExcludedBoards(restored.excludedBoards);
         loadedScheduleKey.current = loadKey;
         editingIdRef.current = queryPayrollId;
         failedDraft.current = "";
         setAutosaveError("");
-        savedDraft.current = JSON.stringify({ schedule: restored.schedule, range: restoredRange });
+        savedDraft.current = JSON.stringify({ schedule: restored.schedule, range: restoredRange, excludedBoards: Array.from(restored.excludedBoards).sort() });
         setRange(restoredRange);
         if (restored.selectedRole) {
           setSelectedRole(restored.selectedRole);
@@ -1419,7 +1429,7 @@ export default function SalaryEstimatePage() {
     item => displayedScheduleRoles.includes(item.role),
   );
 
-  const selectedRoleSummaries = estimateSummaries.filter(
+  const selectedRoleSummaries = displayedSummaries.filter(
     (item) => item.assignedRoles.includes(selectedRole),
   );
 
@@ -1577,8 +1587,7 @@ export default function SalaryEstimatePage() {
 
   function handleCreateSchedule() {
     if (saving || loadingSavedEstimate) return;
-    const draft = JSON.stringify({ schedule, range: normalizedRange });
-    if ((editingPayrollId || Object.values(schedule).some(employees => employees.length > 0)) && draft !== savedDraft.current) setConfirmNewSchedule(true);
+    if ((editingPayrollId || Object.values(schedule).some(employees => employees.length > 0)) && currentDraft !== savedDraft.current) setConfirmNewSchedule(true);
     else createNewSchedule();
   }
 
@@ -1608,7 +1617,7 @@ export default function SalaryEstimatePage() {
     const generation = saveGeneration.current;
     const isCurrent = () => generation === saveGeneration.current && activeStore.current === storeId;
     const requestPayrollId = editingIdRef.current;
-    const draft = JSON.stringify({ schedule, range: normalizedRange });
+    const draft = currentDraft;
 
     if (estimateSummaries.length === 0 && !requestPayrollId) {
       setSubmitError("Chưa có lịch phân ca để ước lượng.");
@@ -1636,11 +1645,14 @@ export default function SalaryEstimatePage() {
       const payrollName = `Ước tính lương ${shortDateFormatter.format(
         parseDateKey(normalizedRange.startDate),
       )} - ${shortDateFormatter.format(parseDateKey(normalizedRange.endDate))}`;
+      const includedByEmployee = new Map(displayedSummaries.map(item => [item.employeeKey, item]));
       const nextEntries = estimateSummaries.map((item) =>
         buildEstimateEntryPayload(
           item,
           normalizedRange.startDate,
           normalizedRange.endDate,
+          includedByEmployee.get(item.employeeKey),
+          shift => excludedBoards.has(getBoardKey(shift.role, visibleWeeksByDate.get(shift.date)!)),
         ),
       );
 
@@ -1723,7 +1735,7 @@ export default function SalaryEstimatePage() {
     }
   }
 
-  const currentDraft = JSON.stringify({ schedule, range: normalizedRange });
+  const currentDraft = JSON.stringify({ schedule, range: normalizedRange, excludedBoards: Array.from(excludedBoards).sort() });
   const hasSchedule = Boolean(editingPayrollId) || estimateSummaries.length > 0;
   const hasUnsavedChanges = hasSchedule && currentDraft !== savedDraft.current;
 
