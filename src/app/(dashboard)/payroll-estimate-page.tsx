@@ -628,9 +628,9 @@ function RoleScheduleTable({
       >
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70">Lịch phân ca</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-lg font-bold">{role}</h3>
-            <div className="flex flex-col items-center" data-html2canvas-ignore="true">
+          <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
+            <h3 className="flex min-h-8 min-w-0 items-center text-lg font-bold leading-tight">{role}</h3>
+            <div className="flex shrink-0 flex-col items-start" data-html2canvas-ignore="true">
               <button
                 type="button"
                 role="switch"
@@ -652,7 +652,7 @@ function RoleScheduleTable({
                   <span className="size-4 rounded-full bg-white shadow-sm" />
                 </span>
               </button>
-              <span className={cn("text-xs font-semibold tabular-nums", !includedInTotals && "text-slate-600")}>
+              <span className={cn("whitespace-nowrap text-xs font-semibold leading-4 tabular-nums", !includedInTotals && "text-emerald-950/75")}>
                 <span className="sr-only">Ước tính của bảng: </span>
                 {formatCurrency(boardEstimate)}
               </span>
