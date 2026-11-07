@@ -69,8 +69,9 @@ const raw=reopened.getWorksheet('Dữ liệu gốc');let originalProfit;raw.each
 assert.equal(originalProfit,658500,'Original precision is retained without compounding rounded amounts');
 assert.ok(rowFor(summary,'LÃI GỘP ƯỚC TÍNH'));
 assert.equal(summary.getCell(rowFor(summary,'DÒNG TIỀN THỰC VỀ'),2).value,'Chưa có bàn giao đã chốt');
-const cashBook=buildProfitWorkbook({...options,days:[{...days[0],source:{...days[0].source,handover:{amount:800000,provisional:false,shiftCount:1}}}],inputsByDate:{'2026-11-03':{...inputs,salaryPaid:300000,taxPaid:20000}}}).getWorksheet('Tổng hợp');
-assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).result,430000);
+const cashBook=buildProfitWorkbook({...options,days:[{...days[0],source:{...days[0].source,transferRevenue:100000,handover:{amount:800000,provisional:false,shiftCount:1}}}],inputsByDate:{'2026-11-03':{...inputs,salaryPaid:300000,taxPaid:20000}}}).getWorksheet('Tổng hợp');
+assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).result,530000);
+assert.equal(cashBook.getCell(rowFor(cashBook,'Tiền khách chuyển khoản'),2).result,100000);
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC TẾ'),1).fill.fgColor.argb,'FF064E3B');
 assert.equal(cashBook.getCell(rowFor(cashBook,'DÒNG TIỀN THỰC VỀ'),2).font.color.argb,'FFF6C85F');
 assert.equal(cashBook.getCell(rowFor(cashBook,'LÃI GỘP ƯỚC TÍNH'),1).font.bold,true);

@@ -1,6 +1,6 @@
 export type ProfitSale = { key: string; code: string; name: string; quantity: number; unitCost: number | null; netSales?: number | null; costSource?: 'catalog' | 'recipe' | null };
 export type ProfitVoucher = { id: string; code: string; category: string; amount: number; note?: string };
-export type ProfitData = { revenue: number; billCount: number; sales: ProfitSale[]; vouchers: ProfitVoucher[]; handover?: {amount:number|null; provisional:boolean; shiftCount:number} | null; salaryEstimate?: { amount: number | null; payrollId: string; name: string } | null };
+export type ProfitData = { revenue: number; transferRevenue?: number; billCount: number; sales: ProfitSale[]; vouchers: ProfitVoucher[]; handover?: {amount:number|null; provisional:boolean; shiftCount:number} | null; salaryEstimate?: { amount: number | null; payrollId: string; name: string } | null };
 export type ProfitInputs = {
   salary: number | null; electricity: number | null; water: number | null; other: number | null; marketing: number | null;
   thienExpense: number | null; ingredientInventory: number | null; debt: number | null;
@@ -93,8 +93,9 @@ export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
     : (costRows.every(row=>row.grossProfit!==null) ? costRows.reduce((sum,row)=>sum+row.grossProfit!,0) : null);
   const profit = complete ? data.revenue - totalCosts : null;
   const cashReceived = data.handover?.amount ?? null;
+  const transferRevenue = data.transferRevenue ?? 0;
   const cashFlow = complete && cashReceived !== null && !data.handover?.provisional
-    ? cashReceived - inputs.other! - inputs.salary! - tax : null;
-  return { complete, missingFields, costRows, materialCost, enteredCosts, operatingCosts, voucherCost, tax, totalCosts, grossProfit, netProfit:profit, cashReceived, cashFlow, profit,
+    ? cashReceived + transferRevenue - inputs.other! - inputs.salary! - tax : null;
+  return { complete, missingFields, costRows, materialCost, enteredCosts, operatingCosts, voucherCost, tax, totalCosts, grossProfit, netProfit:profit, cashReceived, transferRevenue, cashFlow, profit,
     margin: profit !== null && data.revenue > 0 ? profit / data.revenue * 100 : null };
 }
