@@ -12,6 +12,8 @@ const INVOICE_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 function invoice_public_url(string $relativePath): string
 {
+    // Linked bill evidence is kept as an HTTPS URL; uploaded files remain relative paths.
+    if (filter_var($relativePath, FILTER_VALIDATE_URL) && strtolower((string)parse_url($relativePath, PHP_URL_SCHEME)) === 'https') return $relativePath;
     return '/' . ltrim(str_replace('\\', '/', $relativePath), '/');
 }
 
@@ -382,6 +384,7 @@ function invoice_delete_file(?string $relativePath): void
     if (!$relativePath) {
         return;
     }
+    if (preg_match('~^https://~i', $relativePath)) return;
 
     $absolutePath = invoice_absolute_path($relativePath);
     if (is_file($absolutePath)) {

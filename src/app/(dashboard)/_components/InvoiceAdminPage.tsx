@@ -1,6 +1,9 @@
 import InternalInvoiceImportPreview from "./InternalInvoiceImportPreview";
 import { previewInternalInvoiceImport, type InternalImportPreviewRow } from "@/services/invoiceEntryService";
 import InternalInvoiceWarehouse from "./InternalInvoiceWarehouse";
+import InternalInvoicePartnerInput from "./InternalInvoicePartnerInput";
+import InternalInvoiceSheetSync from "./InternalInvoiceSheetSync";
+import InvoiceLinkedEvidence from "./InvoiceLinkedEvidence";
 import InternalInvoiceMaterialInput from "./InternalInvoiceMaterialInput";
 import { createInternalInvoiceRows, internalInvoicePayload } from "@/lib/internalInvoiceDraft";
 import { InventoryDateFilter } from "@/components/ui/InventoryDateFilter";
@@ -1236,6 +1239,8 @@ export default function InvoiceAdminPage({
           </div>
         </div>
 
+        {scope === "internal" && <InternalInvoiceSheetSync onSynced={()=>void loadEntries()}/>}
+
         {selectedEntryIds.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
             <div className="text-sm text-emerald-900">
@@ -1450,7 +1455,7 @@ export default function InvoiceAdminPage({
                               <span className="text-slate-400">Chưa có</span>
                             ) : (
                               <div className="space-y-2">
-                                {entry.evidences.map((evidence) => (
+                                {entry.evidences.map((evidence) => evidence.mimeType === "text/uri-list" ? <InvoiceLinkedEvidence key={evidence.id} evidence={evidence}/> : (
                                   <a
                                     key={evidence.id}
                                     href={evidence.fileUrl}
@@ -1585,12 +1590,12 @@ export default function InvoiceAdminPage({
                   value={invoiceDate}
                   onChange={(event) => setInvoiceDate(event.target.value)}
                 />
-                <Input
+                {scope === "internal" ? <InternalInvoicePartnerInput value={partnerName} onChange={setPartnerName}/> : <Input
                   label="Đơn vị / người bán"
                   value={partnerName}
                   onChange={(event) => setPartnerName(event.target.value)}
                   placeholder="Ví dụ: Nhà cung cấp A"
-                />
+                />}
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-xs font-semibold uppercase text-slate-500">
                     Tổng hóa đơn

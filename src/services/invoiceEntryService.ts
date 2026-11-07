@@ -220,3 +220,19 @@ export async function previewInternalInvoiceImport(rows:InternalImportIncoming[]
 export function applyInternalInvoiceImport(payload:{operationId:string;action:"create"|"category"|"update";incoming:InternalImportIncoming;targetId?:string;expectedVersion?:string;forceNew?:boolean}) {
   return apiRequest<{id:string;action:string}>("/internal-invoice-import.php",{method:"POST",body:JSON.stringify({mode:"apply",...payload}),timeoutMs:60000});
 }
+
+export function searchInternalInvoicePartners(search:string) {
+  return apiRequest<{items:string[]}>(`/internal-invoice-partners.php?search=${encodeURIComponent(search)}`);
+}
+export type InternalInvoiceSheetStatus = {
+  spreadsheetUrl:string;
+  lastAttemptAt:number|null;
+  lastSyncedAt:number|null;
+  result:{created:number;updated:number;unchanged:number;tabs:number;errors:string[]}|null;
+};
+export function getInternalInvoiceSheetStatus() {
+  return apiRequest<InternalInvoiceSheetStatus>("/internal-invoice-sheets.php");
+}
+export function syncInternalInvoiceSheet(automatic=false) {
+  return apiRequest<InternalInvoiceSheetStatus>("/internal-invoice-sheets.php",{method:"POST",body:JSON.stringify({automatic}),timeoutMs:120000});
+}

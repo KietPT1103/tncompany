@@ -118,3 +118,34 @@ try{applyImport($body,$user);throw new RuntimeException('duplicate create');}cat
 $body['forceNew']=true;
 check(applyImport($body,$user)['id']!==$created['id'],'explicit distinct purchase remains possible');
 echo "PASS import apply: category-only, quantity replacement, evidence, idempotency, stale and duplicate guards\n";
+
+require __DIR__.'/../public/api/_lib/internal_invoice_sheets.php';
+require __DIR__.'/../public/api/_lib/internal_invoice_sheet_sync.php';
+$testDb->exec('CREATE TABLE internal_invoice_sheet_bills (spreadsheet_id TEXT,source_key TEXT,invoice_id TEXT,source_hash TEXT,invoice_version TEXT,PRIMARY KEY(spreadsheet_id,source_key))');
+$bill=['sourceKey'=>str_repeat('a',64),'invoiceDate'=>'2026-11-02','billUrl'=>'https://drive.google.com/file/d/testbill/view','partnerName'=>'Nhà cung cấp cũ','locations'=>['Tuần 1 · dòng 2'],'items'=>[['name'=>'Gỗ đồng bộ','quantity'=>3.0,'unit'=>'khối','unitPrice'=>100.0]]];
+$bill['items'][]=['name'=>'Phát sinh – Gỗ đồng bộ','quantity'=>1.0,'unit'=>'khoản','unitPrice'=>50.0,'categoryName'=>'Chi phí phát sinh'];
+$result=internal_sheets_save_bill('test-sheet',$bill,$user);
+check($result['action']==='created','sheet creates bill');$sheetId=$result['id'];
+$entry=invoice_get_entry_or_null($sheetId);
+check($entry['partnerName']===$bill['partnerName'] && count($entry['evidences'])===1,'seller and bill evidence saved');
+check($entry['evidences'][0]['fileUrl']===$bill['billUrl'],'external evidence URL preserved');
+check($entry['totalAmount']===350.0 && $entry['items'][1]['categoryName']==='Chi phí phát sinh','expense line contributes to invoice total and retains category');
+check(internal_sheets_save_bill('test-sheet',$bill,$user)['action']==='unchanged','repeat sync creates no duplicates');
+$bill['items'][0]['quantity']=4.0;
+check(internal_sheets_save_bill('test-sheet',$bill,$user)['action']==='updated','source change replaces original invoice');
+check(invoice_get_entry_or_null($sheetId)['items'][0]['quantity']===4.0,'replacement quantity');
+$testDb->prepare('UPDATE invoice_entries SET note=? WHERE id=?')->execute(['Manually edited',$sheetId]);
+$bill['items'][0]['quantity']=5.0;
+try{internal_sheets_save_bill('test-sheet',$bill,$user);throw new RuntimeException('local edits overwritten');}catch(RuntimeException $e){check(str_contains($e->getMessage(),'đã sửa'),'manual edit conflict');}
+check(invoice_get_entry_or_null($sheetId)['items'][0]['quantity']===4.0,'conflict retains saved quantity');
+$testDb->prepare('DELETE FROM invoice_entries WHERE id=?')->execute([$sheetId]);
+try{internal_sheets_save_bill('test-sheet',$bill,$user);throw new RuntimeException('deleted bill recreated');}catch(RuntimeException $e){check(str_contains($e->getMessage(),'đã xóa'),'deleted bill not recreated');}
+echo "PASS Sheets persistence, external evidence, idempotency, replacement and manual/deletion conflicts\n";
+
+require __DIR__.'/../public/api/_lib/internal_invoice_partners.php';
+function invoice_search_expression(string $column): string { return $column; }
+function invoice_search_value(string $query): string { return '%'.$query.'%'; }
+$testDb->exec("UPDATE invoice_entries SET partner_name='Seller old' WHERE id='old'; UPDATE invoice_entries SET partner_name='Tax only' WHERE id='tax'");
+check(internal_invoice_partners('Seller')===['Seller old'],'seller search includes old history outside visible dates');
+check(internal_invoice_partners('Tax')===[],'seller search excludes tax scope');
+echo "PASS historical seller search and tax scope isolation\n";
