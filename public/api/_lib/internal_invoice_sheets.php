@@ -10,6 +10,7 @@ function internal_sheets_id(): string {
 }
 function internal_sheets_bill_url(string $value): string {
     $value=trim($value);
+    if($value==='')return '';
     if (strlen($value)>500 || preg_match('/[\x00-\x20]/',$value)) throw new InvalidArgumentException('Link bill không hợp lệ hoặc vượt quá 500 ký tự.');
     $u=parse_url($value);
     if (!$u || ($u['scheme'] ?? '')!=='https' || empty($u['host']) || isset($u['user']) || isset($u['pass']) || isset($u['port'])) throw new InvalidArgumentException('Link bill phải là liên kết HTTPS.');
@@ -67,7 +68,8 @@ function internal_sheets_parse(array $tabs): array {
             try {
                 $url=internal_sheets_bill_url($get('Link bill'));
                 $date=internal_sheets_date($get('Ngày nhập'));
-                $key=hash('sha256',$date.'|'.$url);
+                // Without a bill link, keep one invoice per day/seller within its weekly tab.
+                $key=$url!==''?hash('sha256',$date.'|'.$url):hash('sha256',json_encode(['unlinked',$tab,$date,$get('Nguồn cung')],JSON_UNESCAPED_UNICODE));
                 if(!isset($groups[$key]))$groups[$key]=['sourceKey'=>$key,'invoiceDate'=>$date,'billUrl'=>$url,'partnerName'=>$get('Nguồn cung'),'items'=>[],'locations'=>[],'invalid'=>false];
                 $groups[$key]['locations'][]=$location;
                 if($get('Loại vật tư')==='' || $get('Nguồn cung')==='')throw new InvalidArgumentException('Thiếu vật tư hoặc nguồn cung.');

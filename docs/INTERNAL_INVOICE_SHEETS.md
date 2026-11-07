@@ -5,14 +5,14 @@ Nguồn mặc định: https://docs.google.com/spreadsheets/d/1XwdmXbGZwXo3-cSPg
 ## Nhập liệu
 
 1. Tạo tab tuần từ mẫu; thêm đúng tên tab vào cột `Tên tab tuần` của `Danh sách tuần`.
-2. Mỗi dòng điền `Ngày nhập`, `Loại vật tư`, `Số lượng`, `Đơn vị`, `Nguồn cung`, `Đơn giá`, `Link bill`. Bộ đọc xác định cột theo tiêu đề nên có thể thay đổi thứ tự cột.
-3. Các dòng cùng ngày và cùng link bill tạo một hóa đơn. Điền link trên từng dòng; nguồn cung phải thống nhất trong bill. Link file Google Drive dạng `/file/d/ID/view`, `/open?id=ID` và `/uc?id=ID` được nhận diện là cùng file.
+2. Mỗi dòng điền `Ngày nhập`, `Loại vật tư`, `Số lượng`, `Đơn vị`, `Nguồn cung`, `Đơn giá`. `Link bill` có thể để trống. Bộ đọc xác định cột theo tiêu đề nên có thể thay đổi thứ tự cột.
+3. Các dòng cùng ngày và cùng link bill tạo một hóa đơn; nguồn cung phải thống nhất trong bill. Không có link thì gom các dòng cùng ngày và người bán trong từng tab tuần, không tạo minh chứng. Link file Google Drive dạng `/file/d/ID/view`, `/open?id=ID` và `/uc?id=ID` được nhận diện là cùng file.
 4. Nhập đơn giá dưới dạng số, ví dụ `1200000` hoặc `1.200.000`; số lượng có thể là `1,5`. Không nhập ký hiệu tiền vào ô.
 5. Nếu tab có cột `Phát sinh`, số tiền dương sẽ thành một dòng riêng `Phát sinh – [tên vật tư]`, số lượng 1, loại `Chi phí phát sinh`. Để trống hoặc 0 thì bỏ qua. Khoản âm/giảm trừ cần đối chiếu, không tự đồng bộ vì hóa đơn chỉ hỗ trợ dòng tiền dương.
 
 Link bill được lưu trong mục minh chứng. Link ảnh và link file Google Drive có ảnh xem trước nếu quyền truy cập cho phép. Folder/PDF vẫn mở bằng link gốc. Không sao chép file ảnh về máy chủ; quyền truy cập file gốc vẫn áp dụng.
 
-Các dòng lỗi không tạo hóa đơn một phần. Thiếu link khiến các bill cùng ngày tạm dừng để tránh bỏ sót dòng; không xác định được cả ngày/link thì dừng các bill của lần đọc đó. Lỗi có tên tab và số dòng trên trang.
+Các dòng lỗi không tạo hóa đơn một phần. Thiếu link không phải lỗi. Link có nhập nhưng không hợp lệ vẫn được báo để sửa. Lỗi có tên tab và số dòng trong phần “Chi tiết đồng bộ”, mặc định thu gọn.
 
 ## Hoạt động
 

@@ -20,7 +20,15 @@ verify(count(internal_sheets_parse(['one'=>csvRows($next)])['bills'])===0,'confl
 $next=$rows;$next[1][7]='javascript:alert(1)';$next[2][7]='';
 verify(count(internal_sheets_parse(['one'=>csvRows($next)])['bills'])===0,'unsafe and missing links skipped');
 $next=$rows;$next[1][7]='';
-verify(count(internal_sheets_parse(['one'=>csvRows($next)])['bills'])===0,'missing link does not shrink another bill on same day');
+$optional=internal_sheets_parse(['one'=>csvRows($next)]);
+verify(count($optional['bills'])===2 && !$optional['errors'],'missing link imports separately without blocking linked bills');
+$next[2][7]='';
+$optional=internal_sheets_parse(['one'=>csvRows($next)]);
+verify(count($optional['bills'])===1 && count($optional['bills'][0]['items'])===2 && $optional['bills'][0]['billUrl']==='','linkless rows group by tab date and seller');
+$optionalAgain=internal_sheets_parse(['one'=>csvRows([$next[0],$next[2],$next[1]])]);
+verify($optional['bills'][0]['sourceKey']===$optionalAgain['bills'][0]['sourceKey'],'linkless identity survives row reordering');
+$next[2][4]='Other';
+verify(count(internal_sheets_parse(['one'=>csvRows($next)])['bills'])===2,'different sellers without links stay separate');
 $next=$rows;$next[1][0]='31/02/2026';
 verify(count(internal_sheets_parse(['one'=>csvRows($next)])['bills'])===0,'invalid date quarantines same-link group');
 verify(internal_sheets_bill_url('https://example.com/bill.jpg?sig=secret')==='https://example.com/bill.jpg?sig=secret','preserve signed URLs');

@@ -19,7 +19,10 @@ check('historical seller suggestions visible',document.querySelectorAll('[role=o
 input.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));await wait(30);input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await wait(50);
 check('keyboard selects seller',input.value==='Chiêu Thuỷ' && input.getAttribute('aria-expanded')==='false');
 check('automatic sync and refresh',requests.some(r=>r.options.body&&JSON.parse(r.options.body).automatic===true)&&refreshes===1);
-check('sync counts and row errors visible',document.body.textContent.includes('1 hóa đơn mới')&&document.body.textContent.includes('Tuần 1 · dòng 4'));
+check('compact summary and collapsed details',document.body.textContent.includes('1 mới')&&!document.querySelector('details').open&&document.body.textContent.includes('1 lỗi cần kiểm tra'));
+document.querySelector('details summary').click();await wait(30);
+check('details expand to show errors and optional link help',document.querySelector('details').open&&document.body.textContent.includes('Tuần 1 · dòng 4')&&document.body.textContent.includes('Link bill không bắt buộc'));
+document.querySelector('details summary').click();
 document.querySelector('button').click();await wait(200);
 check('manual sync requested',requests.some(r=>r.options.body&&JSON.parse(r.options.body).automatic===false));
 check('no horizontal overflow',document.documentElement.scrollWidth<=innerWidth);

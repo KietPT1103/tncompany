@@ -38,7 +38,7 @@ function internal_sheets_save_bill(string $spreadsheet,array $bill,array $user):
         if($existing){$_POST['action']='update';$_POST['id']=$existing['id'];}
         $_FILES=[];
         $saved=invoice_save_entry($user,false);
-        if(!$existing) {
+        if(!$existing && $bill['billUrl']!=='') {
             $s=db()->prepare('INSERT INTO invoice_entry_evidences(invoice_id,file_path,file_name,original_name,mime_type,file_size) VALUES(?,?,?,?,?,?)');
             $s->execute([$saved['id'],$bill['billUrl'],'google-sheet-bill','Bill từ Google Sheet','text/uri-list',0]);
         }

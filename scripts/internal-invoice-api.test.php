@@ -149,3 +149,8 @@ $testDb->exec("UPDATE invoice_entries SET partner_name='Seller old' WHERE id='ol
 check(internal_invoice_partners('Seller')===['Seller old'],'seller search includes old history outside visible dates');
 check(internal_invoice_partners('Tax')===[],'seller search excludes tax scope');
 echo "PASS historical seller search and tax scope isolation\n";
+
+$unlinked=$bill;$unlinked['sourceKey']=str_repeat('b',64);$unlinked['billUrl']='';
+$unlinkedSaved=internal_sheets_save_bill('test-sheet',$unlinked,$user);
+check(invoice_get_entry_or_null($unlinkedSaved['id'])['evidences']===[],'missing bill link creates invoice without evidence');
+check(internal_sheets_save_bill('test-sheet',$unlinked,$user)['action']==='unchanged','linkless retry does not duplicate invoice');
