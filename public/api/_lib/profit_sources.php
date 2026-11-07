@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/payroll_day_locks.php';
 
 function profit_source_table_exists(PDO $pdo, string $table): bool
 {
@@ -15,12 +16,21 @@ function profit_source_table_exists(PDO $pdo, string $table): bool
 function profit_source_salary(PDO $pdo, string $store, array $dates): array
 {
     $result = array_fill_keys($dates, null);
+    if (!$dates) return $result;
+    if (profit_source_table_exists($pdo, 'payroll_estimate_day_locks')) {
+        $locked = payroll_day_locks_read($pdo, $store, min($dates), max($dates));
+        foreach (array_intersect_key($locked, $result) as $date => $snapshot) {
+            $result[$date] = json_decode($snapshot, true, 512, JSON_THROW_ON_ERROR);
+        }
+        $dates = array_values(array_diff($dates, array_keys($locked)));
+        if (!$dates) return $result;
+    }
     if (!profit_source_table_exists($pdo, 'payrolls') || !profit_source_table_exists($pdo, 'payroll_entries')) return $result;
     $stmt = $pdo->prepare("SELECT id,name,period_start,period_end FROM payrolls
         WHERE store_id=:store AND period_start<=:end AND period_end>=:start
         AND (source='payroll_estimate' OR name LIKE :legacy)
         ORDER BY COALESCE(updated_at,created_at) DESC,created_at DESC,id DESC");
-    $stmt->execute(['store'=>$store,'start'=>$dates[0],'end'=>$dates[count($dates)-1],'legacy'=>'Ước tính lương %']);
+    $stmt->execute(['store'=>$store,'start'=>min($dates),'end'=>max($dates),'legacy'=>'Ước tính lương %']);
     $reports = $stmt->fetchAll();
     if (!$reports) return $result;
     $ids = array_column($reports, 'id');
@@ -36,6 +46,7 @@ function profit_source_salary(PDO $pdo, string $store, array $dates): array
         foreach ($shifts as $shift) {
             if (!is_array($shift)) { $invalid[$entry['payroll_id']] = true; continue; }
             if (isset($shift['isValid']) && !$shift['isValid']) continue;
+            if (($shift['excludedFromEstimate'] ?? false) === true) continue;
             $date = str_replace('/', '-', (string)($shift['date'] ?? ''));
             $hours = $shift['hours'] ?? null;
             if (!is_numeric($hours) || (float)$hours < 0 || !is_finite((float)$hours) || $rate < 0 || !is_finite($rate)) {

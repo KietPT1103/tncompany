@@ -129,7 +129,7 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
         $result['netProfit']=$result['profit'];
         $result['operatingExpense']=$inputs['operatingExpense'];
         $result['cashReceived']=$source['handover']['amount']??null;
-        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['operatingExpense']-$inputs['salary']-$tax:null;
+        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['other']-$inputs['operatingExpense']-$inputs['salary']-$tax:null;
         foreach ($totals as $key=>$_) $totals[$key] += $result[$key];
         $days[] = ['date'=>$date,'inputs'=>$inputs,'result'=>$result];
     }
@@ -171,6 +171,19 @@ function profit_history_delete(PDO $pdo, string $storeId, string $id): bool
     return $query->rowCount() > 0;
 }
 
+function profit_history_snapshot(string $json): array
+{
+    $snapshot = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+    $totals = $snapshot['totals'];
+    // Older snapshots saved revenue and cost of goods without a gross profit field.
+    if (!array_key_exists('grossProfit', $totals)
+        && is_numeric($totals['revenue'] ?? null)
+        && is_numeric($totals['materialCost'] ?? null)) {
+        $snapshot['totals']['grossProfit'] = $totals['revenue'] - $totals['materialCost'];
+    }
+    return $snapshot;
+}
+
 function profit_history(PDO $pdo, string $storeId, int $page, ?string $id = null): array
 {
     if ($id !== null) {
@@ -178,12 +191,12 @@ function profit_history(PDO $pdo, string $storeId, int $page, ?string $id = null
         $stmt->execute(['store'=>$storeId,'id'=>$id]);
         $row = $stmt->fetch();
         if (!$row) throw new InvalidArgumentException('Không tìm thấy báo cáo đã lưu.');
-        return ['id'=>$row['id'],'startDate'=>$row['start_date'],'endDate'=>$row['end_date'],'savedAt'=>$row['saved_at'],'snapshot'=>json_decode($row['snapshot_json'], true, 512, JSON_THROW_ON_ERROR)];
+        return ['id'=>$row['id'],'startDate'=>$row['start_date'],'endDate'=>$row['end_date'],'savedAt'=>$row['saved_at'],'snapshot'=>profit_history_snapshot($row['snapshot_json'])];
     }
     $count = $pdo->prepare('SELECT COUNT(*) FROM profit_report_history WHERE store_id=:store'); $count->execute(['store'=>$storeId]);
     $offset = ($page-1)*20;
     $stmt = $pdo->prepare('SELECT * FROM profit_report_history WHERE store_id=:store ORDER BY saved_at DESC,id DESC LIMIT 20 OFFSET '.$offset);
     $stmt->execute(['store'=>$storeId]);
-    $rows = array_map(static function(array $row): array { $snapshot=json_decode($row['snapshot_json'], true, 512, JSON_THROW_ON_ERROR); return ['id'=>$row['id'],'startDate'=>$row['start_date'],'endDate'=>$row['end_date'],'savedAt'=>$row['saved_at'],'totals'=>$snapshot['totals']]; }, $stmt->fetchAll());
+    $rows = array_map(static function(array $row): array { $snapshot=profit_history_snapshot($row['snapshot_json']); return ['id'=>$row['id'],'startDate'=>$row['start_date'],'endDate'=>$row['end_date'],'savedAt'=>$row['saved_at'],'totals'=>$snapshot['totals']]; }, $stmt->fetchAll());
     return ['rows'=>$rows,'total'=>(int)$count->fetchColumn(),'page'=>$page];
 }

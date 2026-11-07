@@ -4,6 +4,19 @@ import test from "node:test";
 
 const source = readFileSync(new URL("./payroll-estimate-page.tsx", import.meta.url), "utf8");
 
+test("switches filter each role and week while saving and restoring excluded shifts", () => {
+  assert.match(source, /role="switch"\s+aria-checked=\{includedInTotals\}/);
+  assert.match(source, /includedInTotals=\{!excludedBoards.has\(getBoardKey\(role, week.key\)\)\}/);
+  assert.match(source, /if \(excludedBoards\?\.has\(getBoardKey\(roleName, weekKey\)\)\) return/);
+  assert.match(source, /const displayedSummaries = useMemo\(\s*\(\) => excludedBoards.size > 0 \? buildEstimateSummaries\(excludedBoards\) : estimateSummaries/);
+  assert.match(source, /const totalEstimate = displayedSummaries.reduce/);
+  assert.match(source, /const totalHours = displayedSummaries.reduce/);
+  assert.match(source, /const nextEntries = estimateSummaries.map/);
+  assert.match(source, /shifts: item.shifts.map\(shift => isExcluded\(shift\) \? \{ \.\.\.shift, excludedFromEstimate: true \} : shift\)/);
+  assert.match(source, /setExcludedBoards\(restored.excludedBoards\)/);
+  assert.match(source, /const currentDraft = JSON.stringify\(\{ schedule, range: normalizedRange, excludedBoards:/);
+});
+
 test("only shows the payroll back link to users with payroll access", () => {
   assert.match(source, /hasPermission\(user,\s*"payroll\.access"\)/);
   assert.match(source, /canAccessPayroll\s*\?\s*\(/);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/payroll_estimates.php';
+require_once __DIR__ . '/_lib/daily_profit.php';
 
 const PAYROLLS_DEFAULT_HOURLY_RATE = 15000.0;
 
@@ -494,9 +495,97 @@ function payrolls_require_estimate_store(array $user): string
     return $storeId;
 }
 
+function payrolls_hold_store_lock(string $store): void
+{
+    $pdo = db();
+    $lock = payroll_estimates_lock_store($pdo, $store);
+    register_shutdown_function(static fn() => payroll_estimates_unlock_store($pdo, $lock));
+}
+
+function payrolls_lock_target(string $id, bool $entry = false): ?array
+{
+    $sql = $entry
+        ? 'SELECT p.* FROM payrolls p JOIN payroll_entries e ON e.payroll_id=p.id WHERE e.id=?'
+        : 'SELECT * FROM payrolls WHERE id=?';
+    $query = db()->prepare($sql);
+    $query->execute([$id]);
+    $payroll = $query->fetch(PDO::FETCH_ASSOC);
+    if (!$payroll) return null;
+    payrolls_hold_store_lock($payroll['store_id']);
+    $query->execute([$id]);
+    return $query->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+function payrolls_affects_profit(array $payroll): bool
+{
+    return $payroll['source'] === 'payroll_estimate'
+        || str_starts_with($payroll['name'], 'Ước tính lương ');
+}
+
+function payrolls_guard_entry(array $user, ?array $payroll, ?string $entryId, ?array $changes): void
+{
+    if (!$payroll || !payrolls_affects_profit($payroll) || $user['role'] === 'admin') return;
+    $dates = payroll_day_locks_read(db(), $payroll['store_id']);
+    if (!$dates) return;
+    $before = null;
+    if ($entryId !== null) {
+        $query = db()->prepare('SELECT * FROM payroll_entries WHERE id=?');
+        $query->execute([$entryId]);
+        $before = $query->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+    $after = $changes === null ? null : array_replace($before ?? [], $changes);
+    if (payroll_day_locks_entry_projection($before, $dates) != payroll_day_locks_entry_projection($after, $dates)) {
+        respond_error('Lịch có thay đổi trong ngày đã chốt lương. Chỉ admin có thể chỉnh sửa.', 409);
+    }
+}
+
+function payrolls_guard_delete(array $user, string $id, ?string $store = null): void
+{
+    if ($store === null) {
+        $payroll = payrolls_lock_target($id);
+    } else {
+        $query = db()->prepare('SELECT * FROM payrolls WHERE id=? AND store_id=?');
+        $query->execute([$id, $store]);
+        $payroll = $query->fetch(PDO::FETCH_ASSOC);
+    }
+    if ($payroll && payrolls_affects_profit($payroll) && $user['role'] !== 'admin') {
+        try {
+            payroll_day_locks_assert_range(db(), $payroll['store_id'], (string)$payroll['period_start'], (string)$payroll['period_end']);
+        } catch (DomainException $exception) {
+            respond_error($exception->getMessage(), 409);
+        }
+    }
+}
+
 payrolls_ensure_tables();
+payroll_day_locks_ensure(db());
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+if (($_GET['resource'] ?? '') === 'estimate-day-locks' && in_array($method, ['GET', 'PATCH'], true)) {
+    $user = auth_require_permission('payroll_estimate.access');
+    $store = payrolls_require_estimate_store($user);
+    $pdo = db();
+    if ($method === 'PATCH') {
+        if ($user['role'] !== 'admin') respond_error('Chỉ admin có thể khóa hoặc mở khóa ngày.', 403);
+        $body = read_json_body();
+        $date = $body['date'] ?? '';
+        if (!is_string($date) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $date, $parts)
+            || !checkdate((int)$parts[2], (int)$parts[3], (int)$parts[1]) || !is_bool($body['locked'] ?? null)) {
+            respond_error('Ngày hoặc trạng thái khóa không hợp lệ.', 422);
+        }
+        payrolls_hold_store_lock($store);
+        if (!$body['locked']) {
+            $pdo->prepare('DELETE FROM payroll_estimate_day_locks WHERE store_id=? AND work_date=?')->execute([$store, $date]);
+        } elseif (!payroll_day_locks_read($pdo, $store, $date, $date)) {
+            $snapshot = profit_source_salary($pdo, $store, [$date])[$date];
+            if (($snapshot['amount'] ?? null) === null) respond_error('Ngày này chưa có ước tính lương hợp lệ để chốt.', 409);
+            $pdo->prepare('INSERT INTO payroll_estimate_day_locks (store_id, work_date, salary_snapshot, locked_by) VALUES (?, ?, ?, ?)')
+                ->execute([$store, $date, json_encode($snapshot, JSON_THROW_ON_ERROR), $user['id']]);
+        }
+    }
+    respond_ok(['dates' => array_keys(payroll_day_locks_read($pdo, $store))]);
+}
 
 if ($method === 'GET') {
     $user = auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
@@ -570,7 +659,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
+    $user = auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
     $body = read_json_body();
     $resource = trim((string) ($body['resource'] ?? ''));
@@ -582,6 +671,7 @@ if ($method === 'POST') {
             respond_error('Payroll id is required', 422);
         }
 
+        payrolls_guard_entry($user, payrolls_lock_target($payrollId), null, ['shifts_json' => json_encode($seed['shifts'] ?? [])]);
         $entryId = payrolls_insert_entry(
             $payrollId,
             trim((string) ($seed['employeeId'] ?? ('manual_' . time()))),
@@ -606,9 +696,18 @@ if ($method === 'POST') {
     $pdo = db();
     $isEstimate = ($body['source'] ?? '') === 'payroll_estimate'
         || ($entries !== [] && str_starts_with($name, 'Ước tính lương '));
-    $estimateLock = $isEstimate ? payroll_estimates_lock_store($pdo, $storeId) : null;
+    $protectEstimate = $isEstimate || str_starts_with($name, 'Ước tính lương ');
+    $estimateLock = $protectEstimate ? payroll_estimates_lock_store($pdo, $storeId) : null;
 
     try {
+        if ($protectEstimate && $user['role'] !== 'admin') {
+            $dates = payroll_day_locks_read($pdo, $storeId);
+            foreach ($entries as $entry) {
+                if (payroll_day_locks_entry_projection(['shifts_json' => json_encode($entry['shifts'] ?? [])], $dates)) {
+                    throw new DomainException('Không thể tạo ca trong ngày đã chốt lương.');
+                }
+            }
+        }
         if ($isEstimate) payroll_estimates_assert_unique_period($pdo, $storeId, (string)($body['startDate'] ?? ''), (string)($body['endDate'] ?? ''));
         $pdo->beginTransaction();
         $insertPayroll = $pdo->prepare(
@@ -688,7 +787,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PATCH') {
-    auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
+    $user = auth_require_permission(['payroll.access', 'payroll_estimate.access', 'timesheet.access']);
 
     $body = read_json_body();
     $resource = trim((string) ($body['resource'] ?? ''));
@@ -775,6 +874,12 @@ if ($method === 'PATCH') {
             respond_error('No changes provided', 422);
         }
 
+        $changes = [];
+        foreach ($fields as $field) {
+            [$column, $parameter] = explode(' = :', $field, 2);
+            $changes[$column] = $params[$parameter];
+        }
+        payrolls_guard_entry($user, payrolls_lock_target($id, true), $id, $changes);
         $fields[] = 'updated_at = NOW()';
         $statement = db()->prepare(
             sprintf('UPDATE payroll_entries SET %s WHERE id = :id', implode(', ', $fields))
@@ -820,13 +925,20 @@ if ($method === 'PATCH') {
 
     $fields[] = 'updated_at = NOW()';
     $pdo = db();
-    $currentQuery = $pdo->prepare('SELECT store_id, source, name, period_start, period_end FROM payrolls WHERE id=:id');
-    $currentQuery->execute(['id'=>$id]);
-    $current = $currentQuery->fetch(PDO::FETCH_ASSOC);
+    $current = payrolls_lock_target($id);
     $isEstimate = $current && ($current['source'] === 'payroll_estimate'
         || ($current['source'] === 'timesheet_import' && str_starts_with($current['name'], 'Ước tính lương ')));
-    $estimateLock = $isEstimate ? payroll_estimates_lock_store($pdo, $current['store_id']) : null;
     try {
+        if ($current && $user['role'] !== 'admin') {
+            $next = array_replace($current, $params);
+            $classificationChanged = payrolls_affects_profit($current) !== payrolls_affects_profit($next);
+            $rangeChanged = $current['period_start'] !== $next['period_start'] || $current['period_end'] !== $next['period_end'];
+            if ($classificationChanged || ($rangeChanged && payrolls_affects_profit($current))) {
+                foreach ([$current, $next] as $period) {
+                    payroll_day_locks_assert_range($pdo, $current['store_id'], (string)$period['period_start'], (string)$period['period_end']);
+                }
+            }
+        }
         if ($isEstimate) {
             payroll_estimates_assert_unique_period($pdo, $current['store_id'],
                 (string)(array_key_exists('startDate', $body) ? $body['startDate'] : $current['period_start']),
@@ -835,15 +947,9 @@ if ($method === 'PATCH') {
         $statement = $pdo->prepare(sprintf('UPDATE payrolls SET %s WHERE id = :id', implode(', ', $fields)));
         $statement->execute($params);
     } catch (DomainException $exception) {
-        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
-        $estimateLock = null;
         respond_error($exception->getMessage(), 409);
     } catch (InvalidArgumentException $exception) {
-        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
-        $estimateLock = null;
         respond_error($exception->getMessage(), 422);
-    } finally {
-        if ($estimateLock !== null) payroll_estimates_unlock_store($pdo, $estimateLock);
     }
 
     respond_ok([
@@ -859,6 +965,10 @@ if ($method === 'DELETE') {
         $body = read_json_body();
         $ids = $body['ids'] ?? null;
         if (!is_array($ids) || !array_is_list($ids)) respond_error('Danh sách lịch không hợp lệ.',422);
+        payrolls_hold_store_lock($storeId);
+        foreach ($ids as $id) {
+            if (is_string($id)) payrolls_guard_delete($user, $id, $storeId);
+        }
         try {
             $deleted = payroll_estimates_delete_many(db(),$storeId,$ids);
         } catch (InvalidArgumentException $exception) {
@@ -872,12 +982,15 @@ if ($method === 'DELETE') {
         $storeId = payrolls_require_estimate_store($user);
         $id = trim((string)($_GET['id'] ?? ''));
         if ($id === '' || strlen($id)>64) respond_error('Mã lịch không hợp lệ.',422);
+        payrolls_hold_store_lock($storeId);
+        payrolls_guard_delete($user, $id, $storeId);
         if (!payroll_estimates_delete(db(),$storeId,$id)) respond_error('Không tìm thấy lịch phân ca đã lưu tại cửa hàng này.',404);
         respond_ok(['deleted'=>true]);
     }
 
     $entryId = trim((string) ($_GET['entryId'] ?? ''));
     if ($entryId !== '') {
+        payrolls_guard_entry($user, payrolls_lock_target($entryId, true), $entryId, null);
         $statement = db()->prepare('DELETE FROM payroll_entries WHERE id = :id');
         $statement->execute([
             'id' => $entryId,
@@ -893,6 +1006,7 @@ if ($method === 'DELETE') {
         respond_error('Payroll id is required', 422);
     }
 
+    payrolls_guard_delete($user, $id);
     $pdo = db();
     $pdo->beginTransaction();
     try {

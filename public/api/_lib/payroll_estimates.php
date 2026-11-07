@@ -103,6 +103,7 @@ function payroll_estimates_totals(array $entries, string $start, string $end): a
         $rate = $monthly ? (float)(($entry['monthly_salary'] ?? 0) ?: ($entry['fixed_salary'] ?? 0)) / 30 : (float)($entry['hourly_rate'] ?? 0);
         foreach ($shifts as $shiftIndex=>$shift) {
             if (!is_array($shift) || ($shift['isValid'] ?? true) === false) continue;
+            if (($shift['excludedFromEstimate'] ?? false) === true) continue;
             $date = str_replace('/', '-', (string)($shift['date'] ?? substr((string)($shift['inTime'] ?? ''),0,10)));
             if ($date < $start || $date > $end || !is_numeric($shift['hours'] ?? null) || (float)$shift['hours'] <= 0) continue;
             $role = (string)($shift['role'] ?? $entry['role'] ?? '');

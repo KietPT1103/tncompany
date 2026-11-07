@@ -13,6 +13,8 @@ const mocks = {
   '@/services/employees': `export const getEmployees=async store=>store==='cafe'?[{id:'e1',name:'Nhân viên A',role:'Thu ngân',hourlyRate:25000},{id:'e2',name:'Nhân viên B',role:'Thu ngân',hourlyRate:25000}]:[];export const getEmployeeRoleNames=e=>[e.role];`,
   '@/services/payrolls': `
 const api=window.api={creates:[],updates:[],entries:[],loads:0,attempts:0,fail:false,hold:false};
+export const getEstimateDayLocks=async()=>({dates:[]});
+export const setEstimateDayLock=async()=>({dates:[]});
 export const getSavedEstimateSchedules=async()=>api.duplicate?{items:[{id:'duplicate'}],total:1,summary:null}:({items:api.creates.length&&!api.deleted?[{...api.creates[0],id:api.detailId||'schedule1',updatedAt:'2026-10-28 12:00:00',roles:['Thu ngân'],employeeCount:api.entries.length,totalHours:0,totalSalary:0}]:[],total:api.deleted?0:api.creates.length,summary:null});
 export const saveImportedPayroll=async p=>{api.creates.push(p);const id='schedule'+api.creates.length;while(api.hold)await new Promise(r=>setTimeout(r,50));api.entries=p.entries.map((e,i)=>({...e,id:'entry'+i}));return id};
 export const getPayrollEntries=async()=>{api.attempts++;if(api.fail)throw new Error('Mất kết nối');return structuredClone(api.entries)};
@@ -46,6 +48,11 @@ const clickText=(selector,text)=>{const button=[...document.querySelectorAll(sel
  check('queues latest change against returned id',api.creates.length===1&&api.updates.length===1&&api.updates[0].id==='schedule1'&&api.entries.length===1&&api.entries[0].employeeId==='e2');
  check('does not reload or overwrite own created schedule',api.loads===0);
  check('reports saved state',status()?.includes('Đã lưu lịch'));
+ const boardSwitch=document.querySelector('button[role="switch"]');
+ boardSwitch.click();await wait(1400);
+ check('OFF autosaves the assignment with zero salary and the exclusion flag',api.entries.length===1&&api.entries[0].salary===0&&api.entries[0].shifts[0].excludedFromEstimate===true);
+ boardSwitch.click();await wait(1400);
+ check('ON autosaves the included assignment again',api.entries[0].salary>0&&api.entries[0].shifts[0].excludedFromEstimate!==true);
  api.fail=true;clickEmployee('Nhân viên A');await wait(1400);
  check('reports automatic save error',status()?.includes('Mất kết nối'));
  const attempts=api.attempts;await wait(1600);check('does not loop on failure',api.attempts===attempts);
@@ -82,5 +89,5 @@ const p=document.createElement('pre');p.id='result';p.textContent=JSON.stringify
 `;
 const bundled = await build({ stdin: { contents: fixture, resolveDir: process.cwd(), loader: 'jsx' }, bundle: true, write: false, format: 'iife', jsx: 'automatic', alias: { '@': resolve('src'), 'next/link': resolve('src/shims/next-link.tsx'), 'next/navigation': resolve('src/shims/next-navigation.ts') }, define: { 'process.env.NODE_ENV': '"production"', 'import.meta.env': '{}' }, plugins: [{ name: 'mock-services', setup(b) { b.onResolve({ filter: /^@\/(context|services)\// }, args => mocks[args.path] ? { path: args.path, namespace: 'fixture' } : null); b.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents: mocks[args.path], loader: 'js' })); } }], logLevel: 'silent' });
 const html=join(dir,'test.html');writeFileSync(html,`<!doctype html><meta charset="utf-8"><div id="root"></div><script>${bundled.outputFiles[0].text.replaceAll('</script','<\\/script')}</script>`);
-const run=spawnSync('C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless','--disable-gpu','--no-sandbox',`--user-data-dir=${join(dir,'profile')}`,'--virtual-time-budget=20000','--dump-dom',new URL('file:///'+html.replaceAll('\\','/')).href],{encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
+const run=spawnSync('C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless','--disable-gpu','--no-sandbox',`--user-data-dir=${join(dir,'profile')}`,'--virtual-time-budget=24000','--dump-dom',new URL('file:///'+html.replaceAll('\\','/')).href],{encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
 assert.equal(run.status,0,run.stderr);const result=run.stdout.match(/<pre id="result">([^<]+)<\/pre>/);assert.ok(result,'Browser must finish: '+run.stdout.slice(-1200));const checks=JSON.parse(result[1].replaceAll('&amp;','&'));console.log(checks);assert.ok(checks.every(([,ok])=>ok));

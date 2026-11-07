@@ -20,6 +20,7 @@ export interface Shift {
   outTime: string;
   hours: number;
   hourlyRateOverride?: number;
+  excludedFromEstimate?: boolean;
   isWeekend: boolean;
   isValid: boolean;
 }
@@ -88,6 +89,18 @@ export type SavedEstimateSchedule = Payroll & {
 export type SavedEstimateTotals = {
   startDate: string; endDate: string; scheduleCount: number; employeeCount: number; totalHours: number; totalSalary: number;
 };
+export function getEstimateDayLocks(storeId: string) {
+  return apiRequest<{ dates: string[] }>(
+    `/payrolls.php?${new URLSearchParams({ resource: 'estimate-day-locks', storeId })}`,
+  );
+}
+
+export function setEstimateDayLock(storeId: string, date: string, locked: boolean) {
+  return apiRequest<{ dates: string[] }>(
+    `/payrolls.php?${new URLSearchParams({ resource: 'estimate-day-locks', storeId })}`,
+    { method: 'PATCH', body: JSON.stringify({ date, locked }) },
+  );
+}
 export function getSavedEstimateSchedules(storeId: string, page = 1, range?: {startDate: string; endDate: string}) {
   return apiRequest<{ items: SavedEstimateSchedule[]; total: number; page: number; summary: SavedEstimateTotals | null }>(
     `/payrolls.php?${new URLSearchParams({ resource: 'estimates', storeId, page: String(page), ...(range ?? {}) })}`,
