@@ -15,16 +15,19 @@ function profit_period_dates(string $start, string $end): array
 function profit_period_sources(PDO $pdo, string $storeId, string $start, string $end): array
 {
     $days = [];
-    foreach (profit_period_dates($start, $end) as $date) $days[$date] = ['revenue'=>0.0,'billCount'=>0,'sales'=>[],'vouchers'=>[]];
+    foreach (profit_period_dates($start, $end) as $date) $days[$date] = ['revenue'=>0.0,'transferRevenue'=>0.0,'billCount'=>0,'sales'=>[],'vouchers'=>[]];
     foreach (profit_source_salary($pdo, $storeId, array_keys($days)) as $date=>$estimate) $days[$date]['salaryEstimate'] = $estimate;
     foreach (profit_source_handover($pdo,$storeId,array_keys($days)) as $date=>$handover) $days[$date]['handover']=$handover;
     $costs = profit_source_costs($pdo, $storeId);
     $params = ['store'=>$storeId,'start'=>$start.' 00:00:00','end'=>(new DateTimeImmutable($end))->modify('+1 day')->format('Y-m-d').' 00:00:00'];
     $filter = "b.store_id=:store AND b.status='completed' AND b.created_at>=:start AND b.created_at<:end";
-    $stmt = $pdo->prepare("SELECT DATE(b.created_at) AS day, SUM(b.total) AS revenue, COUNT(*) AS bill_count FROM bills b WHERE $filter GROUP BY DATE(b.created_at)");
+    $stmt = $pdo->prepare("SELECT DATE(b.created_at) AS day, SUM(b.total) AS revenue,
+        SUM(CASE WHEN b.payment_method='transfer' THEN b.total ELSE 0 END) AS transfer_revenue,
+        COUNT(*) AS bill_count FROM bills b WHERE $filter GROUP BY DATE(b.created_at)");
     $stmt->execute($params);
     foreach ($stmt->fetchAll() as $row) {
         $days[$row['day']]['revenue'] = daily_profit_money((float)$row['revenue'], 'doanh thu');
+        $days[$row['day']]['transferRevenue'] = daily_profit_money((float)$row['transfer_revenue'], 'doanh thu chuyển khoản');
         $days[$row['day']]['billCount'] = (int)$row['bill_count'];
     }
     $stmt = $pdo->prepare("SELECT DATE(b.created_at) AS day, b.id AS bill_id, b.total AS bill_total, i.menu_id, i.name,
@@ -99,7 +102,7 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
 {
     if (count($sources) !== count($rawInputs)) throw new InvalidArgumentException('Cần nhập đủ chi phí cho tất cả ngày trong kỳ.');
     $totals = ['revenue'=>0,'materialCost'=>0,'salary'=>0,'electricity'=>0,'water'=>0,'other'=>0,'marketing'=>0,'thienExpense'=>0,'ingredientInventory'=>0,'debt'=>0,'voucherCost'=>0,'tax'=>0,'totalCosts'=>0,'profit'=>0];
-    $totals += array_fill_keys(['grossProfit','netProfit','operatingExpense'],0);
+    $totals += array_fill_keys(['grossProfit','netProfit','operatingExpense','transferRevenue'],0);
     $days = [];
     foreach ($sources as $date=>$source) {
         if (!is_array($rawInputs[$date] ?? null)) throw new InvalidArgumentException('Thiếu chi phí ngày '.$date.'.');
@@ -129,7 +132,10 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
         $result['netProfit']=$result['profit'];
         $result['operatingExpense']=$inputs['operatingExpense'];
         $result['cashReceived']=$source['handover']['amount']??null;
-        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional']) ? $result['cashReceived']-$inputs['other']-$inputs['operatingExpense']-$inputs['salary']-$tax:null;
+        $result['transferRevenue']=$source['transferRevenue']??0;
+        $result['cashFlow']=$result['cashReceived']!==null && empty($source['handover']['provisional'])
+            ? $result['cashReceived']+$result['transferRevenue']-$inputs['other']-$inputs['operatingExpense']-$inputs['salary']-$tax
+            : null;
         foreach ($totals as $key=>$_) $totals[$key] += $result[$key];
         $days[] = ['date'=>$date,'inputs'=>$inputs,'result'=>$result];
     }

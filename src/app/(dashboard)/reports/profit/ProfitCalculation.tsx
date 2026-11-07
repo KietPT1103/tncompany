@@ -392,7 +392,7 @@ export function ProfitCalculation({
               {[
                 {label:'Lãi gộp ước tính',value:calculation.grossProfit,note:'Tổng (giá bán thực thu sau giảm giá − cost) × số lượng'},
                 {label:'Lãi ròng ước tính',value:calculation.netProfit,note:'Lãi gộp − lương − chi phí vận hành − thuế'},
-                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao − chi phí khác − lương ước tính ngày − thuế 4,5% doanh thu'},
+                {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao + tiền khách chuyển khoản − chi phí khác − lương ước tính ngày − thuế 4,5% doanh thu'},
               ].map(metric=><div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-sm font-semibold text-slate-500">{metric.label}</p><p className={`mt-2 text-xl font-bold ${metric.value!==null&&metric.value<0?'text-red-700':'text-emerald-800'}`}>{metric.value===null?'Chưa đủ dữ liệu':roundedProfitMoney(metric.value)}</p><p className="mt-1 text-xs text-slate-500">{metric.note}</p></div>)}
             </section>
             <fieldset
@@ -610,6 +610,10 @@ export function ProfitCalculation({
                           {selected.source.handover?.provisional&&<p className="mt-1 text-xs font-normal text-amber-700">Ca chưa chốt hoặc có giao dịch chưa phân ca; chưa xác nhận dòng tiền thực về.</p>}
                         </dt>
                         <dd className="shrink-0 text-right font-semibold tabular-nums text-emerald-800">{selected.result.cashReceived===null?'Chưa có ca bàn giao':roundedProfitMoney(selected.result.cashReceived)}</dd>
+                      </div>
+                      <div className="flex justify-between gap-3 py-3">
+                        <dt>Tiền khách chuyển khoản</dt>
+                        <dd className="shrink-0 text-right font-semibold tabular-nums text-emerald-800">{roundedProfitMoney(selected.result.transferRevenue)}</dd>
                       </div>
                       <div className="flex justify-between gap-3 py-3 font-bold"><dt>Dòng tiền thực về</dt><dd>{selected.result.cashFlow===null?'Chờ dữ liệu bàn giao đã chốt':roundedProfitMoney(selected.result.cashFlow)}</dd></div>
                     </dl>

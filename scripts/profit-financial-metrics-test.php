@@ -16,6 +16,8 @@ $snapshot=profit_period_snapshot(['2026-11-15'=>$source],['2026-11-15'=>$inputs]
 check((float)$snapshot['totals']['grossProfit']===1500000.0,'Gross profit is revenue less system cost of goods sold');
 check($snapshot['totals']['netProfit']===1300000.0,'Net profit excludes informational inventory/payables and cashier payments already accounted for');
 check($snapshot['totals']['cashFlow']===900000.0,'Cash flow deducts system daily estimated salary and automatic 4.5% tax only once');
+$withTransfer = profit_period_snapshot(['2026-11-15'=>$source+['transferRevenue'=>400000.0]],['2026-11-15'=>$inputs]);
+check($withTransfer['totals']['cashFlow']===1300000.0 && $withTransfer['totals']['netProfit']===$snapshot['totals']['netProfit'], 'Completed customer transfers increase cash flow without counting revenue twice');
 daily_profit_ensure_schema($pdo);
 daily_profit_save($pdo,'cafe','2026-11-15',$snapshot['days'][0]['inputs'],'admin');
 $saved=daily_profit_saved_row($pdo->query('SELECT * FROM daily_profit_inputs')->fetch());
