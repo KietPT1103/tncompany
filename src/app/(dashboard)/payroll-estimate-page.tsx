@@ -314,17 +314,17 @@ function getBoardKey(role: EstimateRole, weekKey: string) {
   return `${weekKey}-${role}`;
 }
 
-function getBoardEstimates(summaries: EstimateSummary[], weeksByDate: ReadonlyMap<string, string>) {
+function getDailyRoleEstimates(summaries: EstimateSummary[]) {
   const totals = new Map<string, number>();
   for (const summary of summaries) {
     const shifts = summary.shifts.map(shift => ({
       ...shift,
-      role: getBoardKey(shift.role, weeksByDate.get(shift.date)!),
+      role: getBoardKey(shift.role, shift.date),
     }));
     if (isFixedSalaryEmployee(summary.employee)) {
       const { roleSalaries } = getMonthlyEstimateCosts(summary.employee.monthlySalary || 0, shifts);
-      for (const [boardKey, salary] of Object.entries(roleSalaries)) {
-        totals.set(boardKey, (totals.get(boardKey) ?? 0) + salary);
+      for (const [dateRoleKey, salary] of Object.entries(roleSalaries)) {
+        totals.set(dateRoleKey, (totals.get(dateRoleKey) ?? 0) + salary);
       }
     } else {
       const hourlyRate = getEstimatedHourlyRate(summary.employee);
@@ -485,7 +485,7 @@ function buildScheduleFromEntries(
 }
 
 function RoleScheduleTable({
-  boardEstimate,
+  dailyRoleEstimates,
   includedInTotals,
   onToggleIncludedInTotals,
   lockedDates,
@@ -503,7 +503,7 @@ function RoleScheduleTable({
   schedule,
   week,
 }: {
-  boardEstimate: number;
+  dailyRoleEstimates: ReadonlyMap<string, number>;
   includedInTotals: boolean;
   onToggleIncludedInTotals: () => void;
   activeCell: ActiveCell | null;
@@ -530,6 +530,8 @@ function RoleScheduleTable({
   const selectedMobileDate = week.days.some((day) => day.date === mobileDate && day.inRange)
     ? mobileDate
     : (week.days.find((day) => day.inRange) || week.days[0]).date;
+  const dayEstimates = week.days.map(day => dailyRoleEstimates.get(getBoardKey(role, day.date)) ?? 0);
+  const boardEstimate = dayEstimates.reduce((total, amount) => total + amount, 0);
 
   async function handleCaptureSchedule() {
     const section = captureRef.current;
@@ -745,9 +747,10 @@ function RoleScheduleTable({
               <th className="sticky left-0 z-20 w-24 border-b border-r border-slate-200 bg-white px-3 py-3 md:w-auto md:min-w-[110px] 2xl:min-w-[130px] 2xl:px-4 2xl:py-4">
                 Ca
               </th>
-              {week.days.map((day) => (
+              {week.days.map((day, index) => (
                 <th
                   key={day.date}
+                  scope="col"
                   data-schedule-day={day.date}
                   className={cn(
                     "border-b border-slate-200 px-2.5 py-3 md:min-w-[115px] 2xl:min-w-[135px] 2xl:px-3",
@@ -786,6 +789,14 @@ function RoleScheduleTable({
                       </span>
                     )}
                   </div>
+                  {day.inRange && (
+                    <div className="mt-1 text-xs font-medium normal-case tracking-normal text-slate-600">
+                      <span className="block">Tổng ngày</span>
+                      <span className="block whitespace-nowrap text-sm font-bold tabular-nums text-emerald-900">
+                        {formatCurrency(dayEstimates[index])}
+                      </span>
+                    </div>
+                  )}
                 </th>
               ))}
             </tr>
@@ -1382,15 +1393,15 @@ export default function SalaryEstimatePage() {
     () => excludedBoards.size > 0 ? buildEstimateSummaries(excludedBoards) : estimateSummaries,
     [buildEstimateSummaries, estimateSummaries, excludedBoards],
   );
-  const boardEstimates = useMemo(
-    () => getBoardEstimates(estimateSummaries, visibleWeeksByDate),
-    [estimateSummaries, visibleWeeksByDate],
+  const dailyRoleEstimates = useMemo(
+    () => getDailyRoleEstimates(estimateSummaries),
+    [estimateSummaries],
   );
-  const displayedBoardEstimates = useMemo(
+  const displayedDailyRoleEstimates = useMemo(
     () => displayedSummaries === estimateSummaries
-      ? boardEstimates
-      : getBoardEstimates(displayedSummaries, visibleWeeksByDate),
-    [boardEstimates, displayedSummaries, estimateSummaries, visibleWeeksByDate],
+      ? dailyRoleEstimates
+      : getDailyRoleEstimates(displayedSummaries),
+    [dailyRoleEstimates, displayedSummaries, estimateSummaries],
   );
 
   function toggleBoardInTotals(role: EstimateRole, weekKey: string) {
@@ -2101,8 +2112,8 @@ export default function SalaryEstimatePage() {
                   </div>
 
                   <RoleScheduleTable
-                    boardEstimate={displayedBoardEstimates.get(getBoardKey(role, week.key))
-                      ?? boardEstimates.get(getBoardKey(role, week.key)) ?? 0}
+                    dailyRoleEstimates={excludedBoards.has(getBoardKey(role, week.key))
+                      ? dailyRoleEstimates : displayedDailyRoleEstimates}
                     includedInTotals={!excludedBoards.has(getBoardKey(role, week.key))}
                     onToggleIncludedInTotals={() => toggleBoardInTotals(role, week.key)}
                     activeCell={activeCell}

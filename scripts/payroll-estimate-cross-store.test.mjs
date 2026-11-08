@@ -65,7 +65,8 @@ for (const [storeId, userRole] of [['cafe','admin'], ['restaurant','admin'], ['c
         check('saves monthly daily cost',monthlyEntry()?.salary===300000);
         const amount=new Intl.NumberFormat('vi-VN').format(300000+(other==='restaurant'?150000:125000));
         check('combined total includes monthly daily cost',document.body.textContent.includes(amount));
-        check('schedule cell hides monthly cost',!board.querySelector('[data-schedule-day]').textContent.includes('300.000'));
+        check('day header shows hourly and monthly cost',board.querySelector('th[data-schedule-day]').textContent.includes('Tổng ngày'+amount));
+        check('schedule cell hides monthly cost',!board.querySelector('tbody [data-schedule-day]').textContent.includes('300.000'));
         document.querySelector('[aria-label="Đóng popup"]').click();await wait(80);
         window.navigate('/payroll-estimate?payrollId=reopened');await wait(500);
         check('restores cross-store assignment',document.getElementById('estimate-board-'+encodeURIComponent(role))?.textContent.includes(other+' employee'));
@@ -73,6 +74,7 @@ for (const [storeId, userRole] of [['cafe','admin'], ['restaurant','admin'], ['c
         restoredBoard.querySelectorAll('tbody tr')[1].querySelector('[data-schedule-day] [role="button"]').click();await wait(80);
         [...document.querySelectorAll('[role="dialog"] button[aria-pressed]')].find(b=>b.textContent.includes(other+' monthly employee')).click();await wait(1500);
         check('two shifts on one day count once',monthlyEntry()?.salary===300000&&monthlyEntry()?.shifts.length===2);
+        check('day header counts monthly salary once across shifts',restoredBoard.querySelector('th[data-schedule-day]').textContent.includes('Tổng ngày'+amount));
         document.querySelector('[aria-label="Đóng popup"]').click();await wait(80);
         restoredBoard.querySelectorAll('tbody tr')[0].querySelectorAll('[data-schedule-day] [role="button"]')[1].click();await wait(80);
         [...document.querySelectorAll('[role="dialog"] button[aria-pressed]')].find(b=>b.textContent.includes(other+' monthly employee')).click();await wait(1500);

@@ -18,12 +18,14 @@ const names = ['Nguyễn Thị Hoàng Anh Phương Thảo', 'TênRấtDàiKhông
 const employees = names.map((name, i) => ({id: String(i), name, hourlyRate: 25000, salaryType: 'hourly'}));
 const days = Array.from({length: 7}, (_, i) => ({date: '2026-10-' + (26+i), inRange: true, isToday: i===0, shortDateLabel: String(26+i), dayLabel: 'Ngày '+i}));
 const role='Phục vụ bếp';
-createRoot(document.getElementById('root')).render(<RoleScheduleTable role={role} week={{key:'test',days}} employeeByKey={new Map(employees.map(e=>[e.id,e]))} schedule={{[days[0].date+'__'+role+'__shift_1']:employees.map(e=>e.id)}} activeCell={null} lockedDates={new Set([days[0].date])} lockDisabled={false} onRemoveEmployee={()=>{}} onSelectCell={()=>{}} onDelete={()=>{}} onSave={()=>{}} saving={false} saveDisabled={false}/>);
+createRoot(document.getElementById('root')).render(<RoleScheduleTable role={role} week={{key:'test',days}} dailyRoleEstimates={new Map([[days[0].date+'-'+role,1500000]])} includedInTotals={true} onToggleIncludedInTotals={()=>{}} employeeByKey={new Map(employees.map(e=>[e.id,e]))} schedule={{[days[0].date+'__'+role+'__shift_1']:employees.map(e=>e.id)}} activeCell={null} lockedDates={new Set([days[0].date])} lockDisabled={false} onRemoveEmployee={()=>{}} onSelectCell={()=>{}} onDelete={()=>{}} onSave={()=>{}} saving={false} saveDisabled={false}/>);
 setTimeout(async()=>{
  const checks=[]; const check=(label,ok)=>checks.push([label,!!ok]);
  try {
  const names=[...document.querySelectorAll('[data-employee-name]')];
  check('renders all 12 employees',names.length===12);
+ const header=document.querySelector('th[data-schedule-day]');
+ check('daily total fits the visible column',header.textContent.includes('1.500.000')&&header.clientWidth>0&&header.scrollWidth<=header.clientWidth+1);
  check('locked cards are read-only',names.length>0&&names.every(n=>n.closest('[role=button]').getAttribute('aria-disabled')==='true'&&!n.closest('[role=button]').querySelector('button')));
  check('names wrap without truncation',names.every(n=>getComputedStyle(n).whiteSpace!=='nowrap' && n.scrollWidth<=n.clientWidth+1));
  check('employees stay inside their cards',names.every(n=>n.getBoundingClientRect().bottom<=n.closest('[role="button"]').getBoundingClientRect().bottom));
