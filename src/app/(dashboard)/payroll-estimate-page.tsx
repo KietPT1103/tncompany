@@ -1898,23 +1898,27 @@ export default function SalaryEstimatePage() {
                   </div>
                 </div>
                 <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-                  {workspaceView === "schedule" && <label className="relative block min-w-0 sm:w-36">
-                    <span className="sr-only">Lọc theo ngày</span>
-                    <CalendarDays className="pointer-events-none absolute left-3 top-3.5 size-4 text-sky-700" aria-hidden="true" />
-                    <select
-                      className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-2 text-sm font-semibold text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-700"
+                  {workspaceView === "schedule" && (
+                    <SelectBox
+                      ariaLabel="Lọc theo ngày"
+                      className="w-full min-w-0 sm:w-44"
+                      triggerClassName="h-11 rounded-xl border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 hover:border-sky-700 hover:bg-white focus-visible:border-sky-700 [&_svg:first-child]:text-sky-700"
+                      openTriggerClassName="!border-sky-700"
                       value={filteredDate}
-                      onChange={event => {
-                        setDateFilter(event.target.value);
+                      options={[
+                        { value: "", label: "Tất cả ngày", icon: CalendarDays },
+                        ...Array.from(visibleWeeksByDate.keys(), date => ({
+                          value: date,
+                          label: fullDateFormatter.format(parseDateKey(date)),
+                          icon: CalendarDays,
+                        })),
+                      ]}
+                      onValueChange={date => {
+                        setDateFilter(date);
                         setActiveCell(null);
                       }}
-                    >
-                      <option value="">Tất cả ngày</option>
-                      {Array.from(visibleWeeksByDate.keys(), date => (
-                        <option key={date} value={date}>{fullDateFormatter.format(parseDateKey(date))}</option>
-                      ))}
-                    </select>
-                  </label>}
+                    />
+                  )}
                   <div className="w-full min-w-0 sm:w-36">
                     <SelectBox
                       value={selectedRole}
@@ -1964,7 +1968,7 @@ export default function SalaryEstimatePage() {
               <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-[repeat(auto-fit,minmax(125px,1fr))]">
                 {[
                   {
-                    role: filteredDate ? `Tổng ngày ${fullDateFormatter.format(parseDateKey(filteredDate))}` : "Tổng toàn khoảng",
+                    role: "Tổng tiền",
                     employees: overviewSummaries.length,
                     totalHours,
                     totalSalary: totalEstimate,
