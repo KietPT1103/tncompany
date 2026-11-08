@@ -39,7 +39,10 @@ import { getMonthlyEstimateCosts } from "@/lib/estimateMonthlySalary";
 import { SavedEstimateSchedules } from "./payroll/_components/SavedEstimateSchedules";
 import {
   ArrowLeft,
+  ChartNoAxesColumnIncreasing,
   CalendarDays,
+  ChefHat,
+  Coffee,
   Lock,
   LockOpen,
   CalendarRange,
@@ -48,16 +51,27 @@ import {
   Clock3,
   ImageDown,
   Loader2,
+  PawPrint,
   Plus,
   Search,
   Save,
+  ShoppingCart,
   Trash2,
   Users,
+  Utensils,
   Wallet,
   X,
 } from "lucide-react";
 
 const CAFE_ESTIMATE_ROLES = ["Thu ngân", "Phục vụ", "Pha chế"];
+const ROLE_OVERVIEW_STYLES = {
+  "Phục vụ": { icon: ShoppingCart, color: "bg-sky-100 text-sky-700" },
+  "Pha chế": { icon: Coffee, color: "bg-indigo-100 text-indigo-700" },
+  "Thu ngân": { icon: Wallet, color: "bg-emerald-100 text-emerald-700" },
+  "Chăm sóc thú": { icon: PawPrint, color: "bg-amber-100 text-amber-800" },
+  "Bếp": { icon: ChefHat, color: "bg-rose-100 text-rose-700" },
+  "Phục vụ bếp": { icon: Utensils, color: "bg-blue-100 text-blue-700" },
+};
 const SHIFT_DEFINITIONS = [
   { id: "shift_1", label: "Ca 1", hours: 5 },
   { id: "shift_2", label: "Ca 2", hours: 5 },
@@ -1874,43 +1888,21 @@ export default function SalaryEstimatePage() {
 
         <div className="space-y-5">
           <div className="space-y-5">
-            <section className={cn("border border-slate-200 bg-white p-4 shadow-[5px_7px_12px_rgba(15,23,42,0.16)] rounded", workspaceView === "saved" && "hidden")}>
-              <div className="flex flex-col gap-4">
-                <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
-                  <div className="rounded-lg bg-emerald-50/70 px-4 py-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
-                      <Wallet className="h-4 w-4 text-emerald-600" />
-                      {filteredDate ? `Tổng ngày ${fullDateFormatter.format(parseDateKey(filteredDate))}` : "Tổng toàn khoảng"}
-                    </div>
-                    <div className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-900 xl:text-xl">
-                      {formatCurrency(totalEstimate)}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      {overviewSummaries.length} người •{" "}
-                      {formatHours(totalHours)}
-                    </div>
+            <section aria-labelledby="estimate-overview" className={cn("overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg shadow-sky-900/10", workspaceView === "saved" && "hidden")}>
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 p-4">
+                <div className="flex items-center gap-3">
+                  <ChartNoAxesColumnIncreasing className="size-7 shrink-0 text-sky-700" aria-hidden="true" />
+                  <div>
+                    <h2 id="estimate-overview" className="text-lg font-bold text-slate-950">Tổng quan ước tính lương</h2>
+                    <p className="mt-0.5 text-sm text-slate-600">Chi phí lương, nhân sự và giờ làm theo vai trò.</p>
                   </div>
-
-                  {displayedRoleTotals.map(item => <div key={item.role} className="min-w-0 rounded-lg bg-sky-50/70 px-4 py-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
-                      <Clock3 className="h-4 w-4 shrink-0 text-sky-600" />
-                      {item.role}
-                    </div>
-                    <div className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-900 xl:text-xl">
-                      {formatCurrency(item.totalSalary)}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      {item.employees} người •{" "}
-                      {formatHours(item.totalHours)}
-                    </div>
-                  </div>)}
                 </div>
-
-                <div className="flex min-w-0 flex-col gap-3 border-t border-slate-200 pt-3 sm:flex-row sm:flex-wrap sm:items-end">
-                  {workspaceView === "schedule" && <label className="block min-w-0 sm:w-56">
-                    <span className="mb-2 block text-sm font-medium text-slate-600">Lọc theo ngày</span>
+                <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
+                  {workspaceView === "schedule" && <label className="relative block min-w-0 sm:w-36">
+                    <span className="sr-only">Lọc theo ngày</span>
+                    <CalendarDays className="pointer-events-none absolute left-3 top-3.5 size-4 text-sky-700" aria-hidden="true" />
                     <select
-                      className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700"
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-2 text-sm font-semibold text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-700"
                       value={filteredDate}
                       onChange={event => {
                         setDateFilter(event.target.value);
@@ -1923,10 +1915,7 @@ export default function SalaryEstimatePage() {
                       ))}
                     </select>
                   </label>}
-                  <div className="w-full min-w-0 sm:w-56">
-                    <span className="mb-2 block text-sm font-medium text-slate-600">
-                      Vai trò
-                    </span>
+                  <div className="w-full min-w-0 sm:w-36">
                     <SelectBox
                       value={selectedRole}
                       options={roleOptions}
@@ -1934,13 +1923,12 @@ export default function SalaryEstimatePage() {
                       ariaLabel="Chọn vai trò phân ca và tổng hợp nhân viên"
                       disabled={saving || loadingSavedEstimate}
                       className="w-full"
-                      triggerClassName="h-11 rounded-lg border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 shadow-sm hover:border-[#064E3B] hover:bg-white focus-visible:border-[#064E3B] focus-visible:ring-0 [&_svg:first-child]:text-slate-500"
-                      openTriggerClassName="!border-[#064E3B] !ring-0"
+                      triggerClassName="h-11 rounded-xl border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 hover:border-sky-700 hover:bg-white focus-visible:border-sky-700 [&_svg:first-child]:text-sky-700"
+                      openTriggerClassName="!border-sky-700"
                     />
                   </div>
                   <Button
-                    variant="outline"
-                    className={cn(WEEK_SHORTCUT_BUTTON_CLASS,"h-11 sm:h-11")}
+                    className="h-11 gap-2 rounded-xl bg-sky-950 px-3 text-sm font-semibold text-white hover:bg-sky-900"
                     disabled={!selectedRole || displayedScheduleRoles.includes(selectedRole) || saving || loadingSavedEstimate || employeesLoading}
                     onClick={() => {
                       if (!selectedRole || displayedScheduleRoles.includes(selectedRole)) return;
@@ -1972,6 +1960,44 @@ export default function SalaryEstimatePage() {
                     Xóa lịch
                   </Button> */}
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-[repeat(auto-fit,minmax(125px,1fr))]">
+                {[
+                  {
+                    role: filteredDate ? `Tổng ngày ${fullDateFormatter.format(parseDateKey(filteredDate))}` : "Tổng toàn khoảng",
+                    employees: overviewSummaries.length,
+                    totalHours,
+                    totalSalary: totalEstimate,
+                  },
+                  ...displayedRoleTotals,
+                ].map((item, index) => {
+                  const isTotal = index === 0;
+                  const { icon: Icon, color } = isTotal
+                    ? { icon: Wallet, color: "bg-white/20 text-white" }
+                    : ROLE_OVERVIEW_STYLES[item.role as keyof typeof ROLE_OVERVIEW_STYLES]
+                      ?? { icon: Users, color: "bg-slate-100 text-slate-700" };
+                  return (
+                    <div key={isTotal ? "overview-total" : item.role} className={cn(
+                      "relative isolate flex min-w-0 flex-col overflow-hidden rounded-xl border px-3 pb-7 pt-3",
+                      isTotal ? "border-sky-800 bg-gradient-to-br from-sky-700 to-sky-950 text-white" : "border-slate-200 bg-white text-slate-950",
+                    )}>
+                      <div className="flex min-h-9 items-center gap-2 text-xs font-semibold">
+                        <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg", color)}>
+                          <Icon className="size-4" aria-hidden="true" />
+                        </span>
+                        <span>{item.role}</span>
+                      </div>
+                      <p className="mb-3 mt-2 break-words text-base font-bold tabular-nums xl:text-lg">{formatCurrency(item.totalSalary)}</p>
+                      <div className={cn("mt-auto flex flex-wrap gap-x-2 gap-y-1 border-t pt-2 text-xs tabular-nums", isTotal ? "border-white/35 text-white" : "border-slate-100 text-slate-600")}>
+                        <span className="inline-flex items-center gap-1"><Users className="size-3.5" aria-hidden="true" />{item.employees} người</span>
+                        <span className="inline-flex items-center gap-1"><Clock3 className="size-3.5" aria-hidden="true" />{formatHours(item.totalHours)}</span>
+                      </div>
+                      <svg aria-hidden="true" viewBox="0 0 160 42" preserveAspectRatio="none" className={cn("pointer-events-none absolute bottom-0 right-0 -z-10 h-8 w-3/4 fill-current", isTotal ? "text-sky-300/25" : "text-sky-100/70")}>
+                        <path d="M0 42C35 42 46 20 76 25S123 5 160 0V42Z" />
+                      </svg>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
