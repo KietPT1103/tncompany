@@ -48,6 +48,18 @@ const clickText=(selector,text)=>{const button=[...document.querySelectorAll(sel
  check('queues latest change against returned id',api.creates.length===1&&api.updates.length===1&&api.updates[0].id==='schedule1'&&api.entries.length===1&&api.entries[0].employeeId==='e2');
  check('does not reload or overwrite own created schedule',api.loads===0);
  check('reports saved state',status()?.includes('Đã lưu lịch'));
+ document.querySelector('[aria-label="Đóng popup"]').click();await wait(80);
+ const dateFilter=[...document.querySelectorAll('select')].find(select=>select.closest('label')?.textContent.includes('Lọc theo ngày'));
+ const dayHeaders=()=>[...document.querySelectorAll('th[data-schedule-day]')];
+ const originalColumnCount=dayHeaders().length;
+ const dateToView=dateFilter.options[dateFilter.options.length-1].value;
+ const writesBeforeFilter=api.attempts;
+ dateFilter.value=dateToView;dateFilter.dispatchEvent(new Event('change',{bubbles:true}));await wait(1200);
+ check('date filter limits every role board to the chosen day',dayHeaders().length>0&&dayHeaders().length<originalColumnCount&&dayHeaders().every(header=>header.dataset.scheduleDay===dateToView));
+ check('viewing an empty day updates the overview without saving',document.body.textContent.includes('Tổng ngày')&&api.attempts===writesBeforeFilter&&api.entries.length===1);
+ dateFilter.value='';dateFilter.dispatchEvent(new Event('change',{bubbles:true}));await wait(80);
+ check('clearing the filter restores every date column',dayHeaders().length===originalColumnCount);
+ document.querySelector('[data-schedule-day] [role="button"]').click();await wait(80);
  const boardSwitch=document.querySelector('button[role="switch"]');
  boardSwitch.click();await wait(1400);
  check('OFF autosaves the assignment with zero salary and the exclusion flag',api.entries.length===1&&api.entries[0].salary===0&&api.entries[0].shifts[0].excludedFromEstimate===true);

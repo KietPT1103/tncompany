@@ -485,6 +485,7 @@ function buildScheduleFromEntries(
 }
 
 function RoleScheduleTable({
+  filterDate,
   dailyRoleEstimates,
   includedInTotals,
   onToggleIncludedInTotals,
@@ -503,6 +504,7 @@ function RoleScheduleTable({
   schedule,
   week,
 }: {
+  filterDate?: string;
   dailyRoleEstimates: ReadonlyMap<string, number>;
   includedInTotals: boolean;
   onToggleIncludedInTotals: () => void;
@@ -522,6 +524,7 @@ function RoleScheduleTable({
   week: WeekSegment;
 }) {
   const captureRef = useRef<HTMLElement>(null);
+  const shownDays = filterDate ? week.days.filter(day => day.date === filterDate) : week.days;
   const captureKey = `${role}__${week.key}`;
   const [captureStatus, setCaptureStatus] = useState<"idle" | "capturing" | "done" | "error">("idle");
   const [mobileDate, setMobileDate] = useState(() =>
@@ -530,7 +533,7 @@ function RoleScheduleTable({
   const selectedMobileDate = week.days.some((day) => day.date === mobileDate && day.inRange)
     ? mobileDate
     : (week.days.find((day) => day.inRange) || week.days[0]).date;
-  const dayEstimates = week.days.map(day => dailyRoleEstimates.get(getBoardKey(role, day.date)) ?? 0);
+  const dayEstimates = shownDays.map(day => dailyRoleEstimates.get(getBoardKey(role, day.date)) ?? 0);
   const boardEstimate = dayEstimates.reduce((total, amount) => total + amount, 0);
 
   async function handleCaptureSchedule() {
@@ -551,7 +554,7 @@ function RoleScheduleTable({
       const captureHeight = Math.max(section.scrollHeight,
         (section.firstElementChild?.getBoundingClientRect().height || 0) + 80 +
         SHIFT_DEFINITIONS.reduce((height, shift) => height + 24 + getScheduleCellHeight(Math.max(0,
-          ...week.days.map((day) => (schedule[makeCellKey(day.date, role, shift.id)] || []).length))), 0));
+          ...shownDays.map((day) => (schedule[makeCellKey(day.date, role, shift.id)] || []).length))), 0));
       const canvas = await html2canvas(section, {
         backgroundColor: "#ffffff",
         scale: Math.min(window.devicePixelRatio || 1, 2),
@@ -604,7 +607,7 @@ function RoleScheduleTable({
         },
       });
       const link = document.createElement("a");
-      link.download = `lich-phan-ca-${sanitizeFileName(role)}-${week.days[0].date}-${week.days[week.days.length - 1].date}.png`;
+      link.download = `lich-phan-ca-${sanitizeFileName(role)}-${filterDate || `${week.days[0].date}-${week.days[week.days.length - 1].date}`}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
       setCaptureStatus("done");
@@ -709,23 +712,20 @@ function RoleScheduleTable({
           </div>
           <div className="order-first rounded border border-emerald-900/15 bg-white/75 px-3 py-2 text-left shadow-sm backdrop-blur-sm sm:order-none sm:text-right">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-800/70">
-              Khoảng ngày
+              {filterDate ? "Ngày đang xem" : "Khoảng ngày"}
             </p>
             <div className="mt-0.5 flex items-center gap-1.5 text-sm font-bold tabular-nums text-emerald-950">
               <CalendarDays className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
               <span>
-                {fullDateFormatter.format(parseDateKey(week.days[0].date))}
-                {" – "}
-                {fullDateFormatter.format(
-                  parseDateKey(week.days[week.days.length - 1].date),
-                )}
+                {fullDateFormatter.format(parseDateKey(shownDays[0].date))}
+                {!filterDate && ` – ${fullDateFormatter.format(parseDateKey(shownDays[shownDays.length - 1].date))}`}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="border-b border-slate-200 bg-white p-3 md:hidden" data-mobile-day-picker="true" data-html2canvas-ignore="true">
+      {!filterDate && <div className="border-b border-slate-200 bg-white p-3 md:hidden" data-mobile-day-picker="true" data-html2canvas-ignore="true">
         <p className="mb-2 text-sm font-medium text-slate-600">Chọn ngày phân ca</p>
         <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1" role="group" aria-label={`Ngày phân ca ${role}`}>
           {week.days.filter((day) => day.inRange).map((day) => (
@@ -739,22 +739,22 @@ function RoleScheduleTable({
             </button>
           ))}
         </div>
-      </div>
+      </div>}
       <div data-schedule-scroll="true" className="min-w-0 overflow-x-auto overscroll-x-contain">
-        <table className="w-full table-fixed border-separate border-spacing-0 md:min-w-[920px] 2xl:min-w-[1080px]">
+        <table className={cn("w-full table-fixed border-separate border-spacing-0", !filterDate && "md:min-w-[920px] 2xl:min-w-[1080px]")}>
           <thead className="bg-slate-50/80">
             <tr className="text-left text-xs uppercase tracking-[0.16em] text-slate-500">
-              <th className="sticky left-0 z-20 w-24 border-b border-r border-slate-200 bg-white px-3 py-3 md:w-auto md:min-w-[110px] 2xl:min-w-[130px] 2xl:px-4 2xl:py-4">
+              <th className="sticky left-0 z-20 w-24 border-b border-r border-slate-200 bg-white px-3 py-3 md:w-28 2xl:w-32 2xl:px-4 2xl:py-4">
                 Ca
               </th>
-              {week.days.map((day, index) => (
+              {shownDays.map((day, index) => (
                 <th
                   key={day.date}
                   scope="col"
                   data-schedule-day={day.date}
                   className={cn(
                     "border-b border-slate-200 px-2.5 py-3 md:min-w-[115px] 2xl:min-w-[135px] 2xl:px-3",
-                    day.date !== selectedMobileDate && "hidden md:table-cell",
+                    !filterDate && day.date !== selectedMobileDate && "hidden md:table-cell",
                     day.inRange ? "bg-white" : "bg-slate-50 text-slate-400",
                   )}
                 >
@@ -806,7 +806,7 @@ function RoleScheduleTable({
             {SHIFT_DEFINITIONS.map((shift) => {
               const maxEmployeesInRow = Math.max(
                 0,
-                ...week.days.map(
+                ...shownDays.map(
                   (day) =>
                     (schedule[makeCellKey(day.date, role, shift.id)] || []).length,
                 ),
@@ -843,7 +843,7 @@ function RoleScheduleTable({
                   </div>
                 </td>
 
-                {week.days.map((day) => {
+                {shownDays.map((day) => {
                   const cell: ActiveCell = {
                     date: day.date,
                     role,
@@ -874,7 +874,7 @@ function RoleScheduleTable({
                       style={{ "--schedule-cell-height": `${synchronizedCellHeight}px` } as CSSProperties}
                       className={cn(
                         "h-px border-b border-slate-200 px-2 py-3 align-top",
-                        day.date !== selectedMobileDate && "hidden md:table-cell",
+                        !filterDate && day.date !== selectedMobileDate && "hidden md:table-cell",
                         !day.inRange && "bg-slate-50",
                       )}
                     >
@@ -982,6 +982,7 @@ export default function SalaryEstimatePage() {
   const [saveMessage, setSaveMessage] = useState("");
   const [editingPayrollId, setEditingPayrollId] = useState("");
   const [range, setRange] = useState(getCurrentWeekRange);
+  const [dateFilter, setDateFilter] = useState("");
   const [selectedRole, setSelectedRole] = useState<EstimateRole>(
     CAFE_ESTIMATE_ROLES[0],
   );
@@ -1193,6 +1194,12 @@ export default function SalaryEstimatePage() {
     });
     return next;
   }, [weekSegments]);
+  const filteredDate = workspaceView === "schedule" && visibleWeeksByDate.has(dateFilter) ? dateFilter : "";
+  const displayedWeeks = filteredDate ? weekSegments.filter(week => week.key === visibleWeeksByDate.get(filteredDate)) : weekSegments;
+
+  useEffect(() => {
+    if (dateFilter && !visibleWeeksByDate.has(dateFilter)) setDateFilter("");
+  }, [dateFilter, visibleWeeksByDate]);
 
   useEffect(() => {
     if (activeCell && !visibleWeeksByDate.has(activeCell.date)) {
@@ -1312,10 +1319,11 @@ export default function SalaryEstimatePage() {
     return next;
   }, [estimateRoles, supportedEmployees]);
 
-  const buildEstimateSummaries = useCallback((excludedBoards?: ReadonlySet<string>) => {
+  const buildEstimateSummaries = useCallback((excludedBoards?: ReadonlySet<string>, onlyDate?: string) => {
     const summaryMap = new Map<string, EstimateSummary>();
 
     visibleWeeksByDate.forEach((weekKey, date) => {
+      if (onlyDate && date !== onlyDate) return;
       estimateRoles.forEach((roleName) => {
         if (excludedBoards?.has(getBoardKey(roleName, weekKey))) return;
         SHIFT_DEFINITIONS.forEach((shift) => {
@@ -1414,17 +1422,21 @@ export default function SalaryEstimatePage() {
     });
   }
 
-  const totalEstimate = displayedSummaries.reduce(
+  const overviewSummaries = useMemo(
+    () => filteredDate ? buildEstimateSummaries(excludedBoards, filteredDate) : displayedSummaries,
+    [buildEstimateSummaries, displayedSummaries, excludedBoards, filteredDate],
+  );
+  const totalEstimate = overviewSummaries.reduce(
     (sum, item) => sum + item.totalSalary,
     0,
   );
-  const totalHours = displayedSummaries.reduce(
+  const totalHours = overviewSummaries.reduce(
     (sum, item) => sum + item.totalHours,
     0,
   );
   const totalsByRole = useMemo(() => {
     return estimateRoles.map((roleName) => {
-      const entries = displayedSummaries.filter(
+      const entries = overviewSummaries.filter(
         (item) => item.assignedRoles.includes(roleName),
       );
       return {
@@ -1434,7 +1446,7 @@ export default function SalaryEstimatePage() {
         totalSalary: entries.reduce((sum, item) => sum + (item.roleTotals[roleName]?.salary || 0), 0),
       };
     });
-  }, [estimateRoles, displayedSummaries]);
+  }, [estimateRoles, overviewSummaries]);
 
   const displayedRoleTotals = totalsByRole.filter(
     item => displayedScheduleRoles.includes(item.role),
@@ -1863,18 +1875,18 @@ export default function SalaryEstimatePage() {
         <div className="space-y-5">
           <div className="space-y-5">
             <section className={cn("border border-slate-200 bg-white p-4 shadow-[5px_7px_12px_rgba(15,23,42,0.16)] rounded", workspaceView === "saved" && "hidden")}>
-              <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
-                <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[repeat(auto-fit,minmax(190px,1fr))]">
+              <div className="flex flex-col gap-4">
+                <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
                   <div className="rounded-lg bg-emerald-50/70 px-4 py-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
                       <Wallet className="h-4 w-4 text-emerald-600" />
-                      Tổng toàn khoảng
+                      {filteredDate ? `Tổng ngày ${fullDateFormatter.format(parseDateKey(filteredDate))}` : "Tổng toàn khoảng"}
                     </div>
-                    <div className="mt-3 break-words text-2xl font-semibold tabular-nums text-slate-900">
+                    <div className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-900 xl:text-xl">
                       {formatCurrency(totalEstimate)}
                     </div>
                     <div className="mt-1 text-sm text-slate-500">
-                      {displayedSummaries.length} người •{" "}
+                      {overviewSummaries.length} người •{" "}
                       {formatHours(totalHours)}
                     </div>
                   </div>
@@ -1884,7 +1896,7 @@ export default function SalaryEstimatePage() {
                       <Clock3 className="h-4 w-4 shrink-0 text-sky-600" />
                       {item.role}
                     </div>
-                    <div className="mt-3 break-words text-2xl font-semibold tabular-nums text-slate-900">
+                    <div className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-900 xl:text-xl">
                       {formatCurrency(item.totalSalary)}
                     </div>
                     <div className="mt-1 text-sm text-slate-500">
@@ -1894,8 +1906,24 @@ export default function SalaryEstimatePage() {
                   </div>)}
                 </div>
 
-                <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end 2xl:shrink-0">
-                  <div className="min-w-0 w-full border-slate-200 2xl:w-[280px] 2xl:border-l 2xl:pl-6">
+                <div className="flex min-w-0 flex-col gap-3 border-t border-slate-200 pt-3 sm:flex-row sm:flex-wrap sm:items-end">
+                  {workspaceView === "schedule" && <label className="block min-w-0 sm:w-56">
+                    <span className="mb-2 block text-sm font-medium text-slate-600">Lọc theo ngày</span>
+                    <select
+                      className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700"
+                      value={filteredDate}
+                      onChange={event => {
+                        setDateFilter(event.target.value);
+                        setActiveCell(null);
+                      }}
+                    >
+                      <option value="">Tất cả ngày</option>
+                      {Array.from(visibleWeeksByDate.keys(), date => (
+                        <option key={date} value={date}>{fullDateFormatter.format(parseDateKey(date))}</option>
+                      ))}
+                    </select>
+                  </label>}
+                  <div className="w-full min-w-0 sm:w-56">
                     <span className="mb-2 block text-sm font-medium text-slate-600">
                       Vai trò
                     </span>
@@ -1906,13 +1934,13 @@ export default function SalaryEstimatePage() {
                       ariaLabel="Chọn vai trò phân ca và tổng hợp nhân viên"
                       disabled={saving || loadingSavedEstimate}
                       className="w-full"
-                      triggerClassName="h-14 rounded-xl border-slate-200 bg-white px-4 text-base font-bold text-slate-950 shadow-sm hover:border-[#064E3B] hover:bg-white focus-visible:border-[#064E3B] focus-visible:ring-0 [&_svg]:h-5 [&_svg]:w-5 [&_svg:first-child]:text-slate-500"
+                      triggerClassName="h-11 rounded-lg border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 shadow-sm hover:border-[#064E3B] hover:bg-white focus-visible:border-[#064E3B] focus-visible:ring-0 [&_svg:first-child]:text-slate-500"
                       openTriggerClassName="!border-[#064E3B] !ring-0"
                     />
                   </div>
                   <Button
                     variant="outline"
-                    className={cn(WEEK_SHORTCUT_BUTTON_CLASS,"h-11 sm:h-14")}
+                    className={cn(WEEK_SHORTCUT_BUTTON_CLASS,"h-11 sm:h-11")}
                     disabled={!selectedRole || displayedScheduleRoles.includes(selectedRole) || saving || loadingSavedEstimate || employeesLoading}
                     onClick={() => {
                       if (!selectedRole || displayedScheduleRoles.includes(selectedRole)) return;
@@ -2082,7 +2110,7 @@ export default function SalaryEstimatePage() {
                 </Button>}
               </div>
             ) : (
-              displayedScheduleRoles.flatMap(role => weekSegments.map((week,weekIndex) => (
+              displayedScheduleRoles.flatMap(role => displayedWeeks.map((week,weekIndex) => (
                 <section key={`${role}-${week.key}`} id={weekIndex === 0 ? `estimate-board-${encodeURIComponent(role)}` : undefined} tabIndex={-1} aria-label={`Lịch phân ca ${role}, ${week.label}`} className="scroll-mt-5 space-y-4 focus:outline-none">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     {/* <div>
@@ -2112,6 +2140,7 @@ export default function SalaryEstimatePage() {
                   </div>
 
                   <RoleScheduleTable
+                    filterDate={filteredDate}
                     dailyRoleEstimates={excludedBoards.has(getBoardKey(role, week.key))
                       ? dailyRoleEstimates : displayedDailyRoleEstimates}
                     includedInTotals={!excludedBoards.has(getBoardKey(role, week.key))}
