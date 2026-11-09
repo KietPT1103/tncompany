@@ -14,6 +14,7 @@ const ADMIN_PATHS = [
   "/inventory-receipts",
   "/categories",
   "/accounts",
+  "/stores",
   "/activity-logs",
   "/internal-invoices",
   "/employees",

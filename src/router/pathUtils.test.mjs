@@ -16,6 +16,11 @@ test("the inventory workspace resolves to its protected admin route", () => {
   assert.equal(normalizeAdminHref("/inventory?tab=stock"), "/admin/inventory?tab=stock");
 });
 
+test("the store management menu resolves to the admin route instead of the home fallback", () => {
+  assert.equal(normalizeAdminHref("/stores"), "/admin/stores");
+  assert.equal(normalizeAdminHref("/stores?status=active"), "/admin/stores?status=active");
+});
+
 test("the old root route is not a default fallback for restricted roles", () => {
   assert.equal(
     getDefaultRouteForUser({
