@@ -7,6 +7,8 @@ và chỉ đọc/ghi cửa hàng mà tài khoản được phép truy cập.
 
 ## Cách tính
 
+Admin nhập quỹ lương văn phòng theo tháng tại trang **Ước lượng lương**. Báo cáo **Cà phê** cộng toàn bộ phần phân bổ mỗi ngày vào **Lương nhân viên (1 ngày)**, dựa trên số ngày thực tế của tháng. Màn hình, Excel và bản lưu mới dùng cùng tổng lương. Báo cáo chỉ trả tổng lương đã cộng, còn quỹ lương tháng được xem và sửa qua API dành cho Admin.
+
 Lãi gộp ước tính từng món = (Giá thực thu sau giảm giá / món − Giá nhập/cost / món) × Số lượng đã bán. Tổng lãi gộp ngày = tổng lãi gộp các món. Số thực thu của mỗi bill hoàn tất được phân bổ theo tỷ trọng thành tiền từng món trong chính bill đó, sau đó mới cộng theo món/ngày; không lấy giá danh mục hiện tại làm giá bán lịch sử. Giá thực thu / món hiển thị là giá bình quân khi cùng món có nhiều mức giá hoặc giảm giá. Món miễn phí có doanh thu 0 nhưng vẫn tính cost; bill hủy bị loại. Thiếu dữ liệu giá bán hiện chưa đủ số liệu, không tự coi là 0. Với dữ liệu hợp lệ đầy đủ, tổng vẫn bằng doanh thu thuần trừ giá vốn món đã bán. Dữ liệu API cũ chưa có giá bán từng món giữ cách tính tổng trước đây, chi tiết để trống giá bán.
 
 Lợi nhuận ròng = Doanh thu thuần − Lương nhân viên (1 ngày) − Giá vốn món đã bán − Tiền điện − Tiền nước. Màn hình, file Excel và báo cáo lưu mới dùng công thức này. Chi phí khác, marketing, Anh Thiện chi và thuế được liệt kê riêng. Báo cáo lịch sử hiển thị số liệu tại thời điểm lưu.

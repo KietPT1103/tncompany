@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { removeEstimateRole } from "@/lib/estimateSchedule";
 import { getMonthlyEstimateCosts } from "@/lib/estimateMonthlySalary";
 import { SavedEstimateSchedules } from "./payroll/_components/SavedEstimateSchedules";
+import { OfficePayroll } from "./payroll/_components/OfficePayroll";
 import {
   ArrowLeft,
   ChartNoAxesColumnIncreasing,
@@ -1887,6 +1888,7 @@ export default function SalaryEstimatePage() {
         </header>
 
         <div className="space-y-5">
+          {canViewMonthlyDailySalary && <OfficePayroll initialMonth={range.startDate.slice(0, 7)} />}
           <div className="space-y-5">
             <section aria-labelledby="estimate-overview" className={cn("overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg shadow-sky-900/10", workspaceView === "saved" && "hidden")}>
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 p-4">

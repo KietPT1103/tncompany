@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/profit_sources.php';
 require_once __DIR__ . '/profit_handover.php';
+require_once __DIR__ . '/office_payroll.php';
 
 function profit_period_dates(string $start, string $end): array
 {
@@ -16,7 +17,19 @@ function profit_period_sources(PDO $pdo, string $storeId, string $start, string 
 {
     $days = [];
     foreach (profit_period_dates($start, $end) as $date) $days[$date] = ['revenue'=>0.0,'transferRevenue'=>0.0,'billCount'=>0,'sales'=>[],'vouchers'=>[]];
-    foreach (profit_source_salary($pdo, $storeId, array_keys($days)) as $date=>$estimate) $days[$date]['salaryEstimate'] = $estimate;
+    $officePayroll = $storeId === 'cafe' && profit_source_table_exists($pdo, 'office_payroll_months')
+        ? office_payroll_months($pdo, $start, $end)
+        : [];
+    foreach (profit_source_salary($pdo, $storeId, array_keys($days)) as $date => $estimate) {
+        $monthlyAmount = (int) ($officePayroll[substr($date, 0, 7)] ?? 0);
+        if (isset($estimate['amount']) && $monthlyAmount > 0) {
+            $estimate['amount'] = daily_profit_money(
+                $estimate['amount'] + office_payroll_daily_amount($monthlyAmount, $date),
+                'lương nhân viên'
+            );
+        }
+        $days[$date]['salaryEstimate'] = $estimate;
+    }
     foreach (profit_source_handover($pdo,$storeId,array_keys($days)) as $date=>$handover) $days[$date]['handover']=$handover;
     $costs = profit_source_costs($pdo, $storeId);
     $params = ['store'=>$storeId,'start'=>$start.' 00:00:00','end'=>(new DateTimeImmutable($end))->modify('+1 day')->format('Y-m-d').' 00:00:00'];
