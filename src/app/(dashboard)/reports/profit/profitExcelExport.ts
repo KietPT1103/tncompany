@@ -171,7 +171,7 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   if(rows.some(day=>day.result.costRows.some(item=>item.netSales===null)))costs.getCell(costTotal,8).value=null;
   if(rows.some(day=>day.result.costRows.some(item=>item.grossProfit===null)))costs.getCell(costTotal,9).value=null;
   finish(expenses,6,[6]);
-  const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['LÃI GỘP ƯỚC TÍNH','R'],['Lương nhân viên (phân bổ trong ngày)','D'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['TỔNG CHI PHÍ PHÁT SINH','M'],['LỢI NHUẬN RÒNG','N'],['Biên lợi nhuận','O'],['Tiền thực thu (tiền bàn giao trong hệ thống)','T'],['Tiền khách chuyển khoản','X'],['Chi tại quầy (đã nằm trong bàn giao, không trừ lại)','E'],['Chi phí khác đã trả ngoài bàn giao','H'],['Lương ước tính (1 ngày)','U'],['Thuế (4,5% doanh thu)','V'],['DÒNG TIỀN THỰC VỀ','W'],['Tồn kho nguyên liệu (theo dõi)','K'],['Công nợ nhà cung cấp (theo dõi)','L']];
+  const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['LÃI GỘP ƯỚC TÍNH','R'],['Lương nhân viên (phân bổ trong ngày)','D'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['TỔNG CHI PHÍ PHÁT SINH','M'],['Tiền thực thu (tiền bàn giao trong hệ thống)','T'],['Tiền khách chuyển khoản','X'],['Chi tại quầy (đã nằm trong bàn giao, không trừ lại)','E'],['Chi phí khác đã trả ngoài bàn giao','H'],['Lương ước tính (1 ngày)','U'],['Thuế (4,5% doanh thu)','V'],['DÒNG TIỀN THỰC VỀ','W'],['Tồn kho nguyên liệu (theo dõi)','K'],['Công nợ nhà cung cấp (theo dõi)','L']];
   for(const [label,col] of lines){
     if(col==='T'){
       const section=bodyRow(summary,['DÒNG TIỀN THỰC TẾ',null]);
@@ -179,9 +179,9 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
       section.eachCell({includeEmpty:true},cell=>{cell.fill=fill(GREEN);cell.font={name:'Calibri',bold:true,size:11,color:{argb:GOLD}};});
     }
     const n=summary.rowCount+1;const cached=daily.getCell(`${col}${total}`).result as number;
-    bodyRow(summary,[label,typeof cached==='number'?{formula:`'Theo ngày'!${col}${total}`,result:cached}:col==='R'?'Chưa đủ giá bán/cost':'Chưa có bàn giao đã chốt']);summary.getCell(n,2).numFmt=col==='O'?'0.0%':MONEY;
+    bodyRow(summary,[label,typeof cached==='number'?{formula:`'Theo ngày'!${col}${total}`,result:cached}:col==='R'?'Chưa đủ giá bán/cost':'Chưa có bàn giao đã chốt']);summary.getCell(n,2).numFmt=MONEY;
     if(col==='B'){summary.getRow(n).height=30;summary.getRow(n).eachCell(cell=>{cell.font={name:'Calibri',bold:true,size:13,color:{argb:'FF4472C4'}};});}
-    if(['M','N','R','W'].includes(col)){const prominent=col==='N'||col==='W';summary.getRow(n).height=34;summary.getRow(n).eachCell({includeEmpty:true},cell=>{cell.fill=fill(prominent?GREEN:PALE);cell.font={name:'Calibri',bold:true,size:prominent?15:12,color:{argb:prominent?GOLD:GREEN}};});}
+    if(['M','R','W'].includes(col)){const prominent=col==='W';summary.getRow(n).height=34;summary.getRow(n).eachCell({includeEmpty:true},cell=>{cell.fill=fill(prominent?GREEN:PALE);cell.font={name:'Calibri',bold:true,size:prominent?15:12,color:{argb:prominent?GOLD:GREEN}};});}
     if(col==='H'&&label==='Chi phí khác trong ngày')for(const item of otherExpenseRefs){
       const detailRow=bodyRow(summary,[`${rows.length>1?dateLabel(item.date)+' · ':''}${item.name}`,{formula:`'Các khoản chi'!F${item.row}`,result:item.amount}]);
       detailRow.getCell(1).alignment={indent:1,vertical:'middle',wrapText:true};

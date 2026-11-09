@@ -26,7 +26,7 @@ export async function renderProfitSummaryImage(options: Parameters<typeof buildP
   const frame = document.createElement("div");
   Object.assign(frame.style, {
     position: "absolute", left: "-10000px", top: "0", width: "1320px",
-    background: "#ffffff", color: "#0f172a", fontFamily: "Arial, sans-serif",
+    background: "#ffffff", color: "#0f172a", fontFamily: "Arial, sans-serif", lineHeight: "1.25",
   });
   frame.setAttribute("aria-hidden", "true");
   const caption = document.createElement("div");
@@ -78,7 +78,17 @@ export async function renderProfitSummaryImage(options: Parameters<typeof buildP
   document.body.append(frame);
   try {
     const scale = Math.min(2, 16000 / frame.offsetHeight, Math.sqrt(32_000_000 / (frame.offsetWidth * frame.offsetHeight)));
-    const canvas = await html2canvas(frame, { backgroundColor: "#ffffff", scale, logging: false });
+    const canvas = await html2canvas(frame, {
+      backgroundColor: "#ffffff",
+      scale,
+      logging: false,
+      onclone(clonedDocument) {
+        // Tailwind's block images shift html2canvas's inline font baseline probe.
+        const style = clonedDocument.createElement("style");
+        style.textContent = 'body > div[style*="visibility: hidden"] > img[width="1"][height="1"] { display: inline-block !important; }';
+        clonedDocument.head.append(style);
+      },
+    });
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Không tạo được ảnh Tổng hợp.")), "image/png");
     });

@@ -32,8 +32,8 @@ assert.equal(expenses.getCell('D7').value,'Dung dịch tuyết');
 assert.equal(expenses.getCell('F13').result,240000);
 const summary=workbook.getWorksheet('Tổng hợp');
 const rowFor=(ws,label)=>{let found;ws.eachRow(row=>{if(row.getCell(1).value===label)found=row.number});return found;};
-const profitRow=rowFor(summary,'LỢI NHUẬN RÒNG');
-assert.equal(summary.getCell(profitRow,2).result,833000);
+assert.equal(rowFor(summary,'LỢI NHUẬN RÒNG'),undefined);
+assert.equal(rowFor(summary,'Biên lợi nhuận'),undefined);
 assert.equal(summary.getCell(rowFor(summary,'03/11/2026 · Dung dịch tuyết'),2).result,50000,'Summary shows named other expenses with dates');
 assert.equal(summary.getCell(rowFor(summary,'03/11/2026 · Dung dịch bong bóng'),2).result,75000);
 assert.ok(summary.headerFooter.oddHeader.includes('chưa lưu'));
@@ -54,7 +54,7 @@ assert.equal(summary.getCell('B3').font.color.argb,'FF4472C4');
 assert.equal(summary.views[0].ySplit,2);
 const bytes=await workbook.xlsx.writeBuffer();
 const reopened=new ExcelJS.Workbook();await reopened.xlsx.load(bytes);
-assert.equal(reopened.getWorksheet('Tổng hợp').getCell(profitRow,2).result,833000,'Rounded formula results survive serialization');
+assert.equal(reopened.getWorksheet('Tổng hợp').getCell('E21').result,833000,'Rounded formula results survive serialization');
 assert.ok(Math.abs(reopened.getWorksheet('Tổng hợp').getCell('E24').result-833000/1100000)<1e-12,'Analysis percentages survive XLSX serialization');
 assert.equal(reopened.getWorksheet('Các khoản chi').getCell('F7').result,50000,'Amounts remain numeric formula results');
 assert.equal(reopened.getWorksheet('Theo ngày').getCell('B6').border.right.color.argb,'FFD1D5DB','Gray borders persist in the downloaded file');
@@ -65,7 +65,7 @@ assert.equal(single.getCell(rowFor(single,'Dung dịch tuyết'),1).alignment.in
 for(const ws of reopened.worksheets.filter(s=>s.state==='visible'))ws.eachRow(row=>row.eachCell(cell=>{
   if(cell.numFmt?.includes('" đ"')&&typeof cell.result==='number')assert.equal(cell.result%1000,0,'Every exported monetary value rounds to whole thousands');
 }));
-const raw=reopened.getWorksheet('Dữ liệu gốc');let originalProfit;raw.eachRow(row=>{if(row.getCell(1).value==='Tổng hợp'&&row.getCell(2).value===`B${profitRow}`)originalProfit=row.getCell(3).value;});
+const raw=reopened.getWorksheet('Dữ liệu gốc');let originalProfit;raw.eachRow(row=>{if(row.getCell(1).value==='Theo ngày'&&row.getCell(2).value===`N${daily.rowCount}`)originalProfit=row.getCell(3).value;});
 assert.equal(originalProfit,833000,'Original precision is retained without compounding rounded amounts');
 assert.ok(rowFor(summary,'LÃI GỘP ƯỚC TÍNH'));
 assert.equal(summary.getCell(rowFor(summary,'DÒNG TIỀN THỰC VỀ'),2).value,'Chưa có bàn giao đã chốt');
