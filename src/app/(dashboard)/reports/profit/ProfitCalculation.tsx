@@ -370,7 +370,7 @@ export function ProfitCalculation({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-500">
-                  Tổng chi phí
+                  Tổng chi phí phát sinh
                 </p>
                 <p className="mt-2 break-words text-2xl font-bold text-slate-800 tabular-nums">
                   {calculation.complete
@@ -391,7 +391,7 @@ export function ProfitCalculation({
             <section aria-label="Lãi và dòng tiền" className="grid gap-4 sm:grid-cols-3">
               {[
                 {label:'Lãi gộp ước tính',value:calculation.grossProfit,note:'Tổng (giá bán thực thu sau giảm giá − cost) × số lượng'},
-                {label:'Lãi ròng ước tính',value:calculation.netProfit,note:'Lãi gộp − lương − chi phí vận hành − thuế'},
+                {label:'Lãi ròng ước tính',value:calculation.netProfit,note:'Doanh thu thuần − lương nhân viên − giá vốn − tiền điện − tiền nước'},
                 {label:'Dòng tiền thực về',value:calculation.cashFlow,note:'Tiền bàn giao + tiền khách chuyển khoản − chi phí khác − lương ước tính ngày − thuế 4,5% doanh thu'},
               ].map(metric=><div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-sm font-semibold text-slate-500">{metric.label}</p><p className={`mt-2 text-xl font-bold ${metric.value!==null&&metric.value<0?'text-red-700':'text-emerald-800'}`}>{metric.value===null?'Chưa đủ dữ liệu':roundedProfitMoney(metric.value)}</p><p className="mt-1 text-xs text-slate-500">{metric.note}</p></div>)}
             </section>
@@ -579,7 +579,7 @@ export function ProfitCalculation({
                         <dd className="shrink-0 text-right font-semibold tabular-nums">{roundedProfitMoney(selected.result.tax)}</dd>
                       </div>
                       <div className="flex min-w-0 justify-between gap-3 py-3 font-bold">
-                        <dt>Tổng chi phí ngày</dt>
+                        <dt>Tổng chi phí phát sinh trong ngày</dt>
                         <dd className="text-right tabular-nums">
                           {selected.result.complete
                             ? roundedProfitMoney(selected.result.totalCosts)
@@ -638,7 +638,7 @@ export function ProfitCalculation({
                           {[
                             "Ngày",
                             "Doanh thu",
-                            "Tổng chi phí",
+                            "Tổng chi phí phát sinh",
                             "Lợi nhuận",
                             "Trạng thái",
                             "",

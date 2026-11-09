@@ -126,7 +126,8 @@ function profit_period_snapshot(array $sources, array $rawInputs): array
         $tax = round($source['revenue'] * 0.045, 2);
         $operating=$inputs['electricity']+$inputs['water']+$inputs['other']+$inputs['marketing']+$inputs['thienExpense']+$inputs['operatingExpense'];
         $total = $cost + $inputs['salary'] + $operating + $tax;
-        $result = ['revenue'=>$source['revenue'],'materialCost'=>$cost,'salary'=>$inputs['salary'],'electricity'=>$inputs['electricity'],'water'=>$inputs['water'],'other'=>$inputs['other'],'marketing'=>$inputs['marketing'],'thienExpense'=>$inputs['thienExpense'],'ingredientInventory'=>$inputs['ingredientInventory'],'debt'=>$inputs['debt'],'voucherCost'=>$cashier,'totalCosts'=>$total,'profit'=>$source['revenue']-$total];
+        $profit = $source['revenue'] - $inputs['salary'] - $cost - $inputs['electricity'] - $inputs['water'];
+        $result = ['revenue'=>$source['revenue'],'materialCost'=>$cost,'salary'=>$inputs['salary'],'electricity'=>$inputs['electricity'],'water'=>$inputs['water'],'other'=>$inputs['other'],'marketing'=>$inputs['marketing'],'thienExpense'=>$inputs['thienExpense'],'ingredientInventory'=>$inputs['ingredientInventory'],'debt'=>$inputs['debt'],'voucherCost'=>$cashier,'totalCosts'=>$total,'profit'=>$profit];
         $result['tax'] = $tax;
         $result['grossProfit']=$legacySales ? $source['revenue']-$cost : ($grossComplete ? $gross : null);
         $result['netProfit']=$result['profit'];

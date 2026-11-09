@@ -96,6 +96,15 @@ function addProfitAnalysis(ws: ExcelJS.Worksheet, values: Record<string,number|n
     const a=values[numerator],b=values[denominator],aRef=source(numerator),bRef=source(denominator);
     note(n,aRef&&bRef?`TEXT(${aRef},"#,##0.00")&" ÷ "&TEXT(${bRef},"#,##0.00")&" × 100%"`:null,a!==null&&b!==null?`${number(a)} ÷ ${number(b)} × 100%`:'Chưa đủ số liệu để tính tỷ lệ.');
   };
+  const netProfitInputs={revenue:source('B'),salary:source('D'),cost:source('C'),electricity:source('F'),water:source('G')};
+  const netProfit=values.B===null||values.D===null||values.C===null||values.F===null||values.G===null
+    ? null : values.B-values.D-values.C-values.F-values.G;
+  const netProfitFormula=netProfit===null||Object.values(netProfitInputs).some(ref=>!ref)
+    ? null : `(${netProfitInputs.revenue!}-${netProfitInputs.salary!}-${netProfitInputs.cost!}-${netProfitInputs.electricity!}-${netProfitInputs.water!})`;
+  const includedCosts=values.D===null||values.C===null||values.F===null||values.G===null
+    ? null : values.D+values.C+values.F+values.G;
+  const includedCostsFormula=includedCosts===null||[netProfitInputs.salary,netProfitInputs.cost,netProfitInputs.electricity,netProfitInputs.water].some(ref=>!ref)
+    ? null : `(${netProfitInputs.salary!}+${netProfitInputs.cost!}+${netProfitInputs.electricity!}+${netProfitInputs.water!})`;
   band(1,'LỢI NHUẬN GỘP');header(2);
   money(3,'Giá bán thực thu sau giảm giá (tổng)','B');
   money(4,'Giá nhập/cost hàng đã bán (tổng)','C');
@@ -105,43 +114,44 @@ function addProfitAnalysis(ws: ExcelJS.Worksheet, values: Record<string,number|n
   percentage(10,'Biên lợi nhuận gộp (GM)','R','B');ratioNote(11,'R','B');
 
   band(13,'LỢI NHUẬN RÒNG');header(14);
-  money(15,'Lợi nhuận gộp ước tính','R');emphasis(15);
-  money(16,'− Lương nhân viên (1 ngày)','D');
-  amount(17,'− Tiền điện, tiền nước',values.F!+values.G!,`(${source('F')}+${source('G')})`);
-  money(18,'− Chi phí khác trong ngày','H');money(19,'− Chi phí marketing','I');
-  money(20,'− Anh Thiện chi','J');money(21,'− Thuế (4,5% doanh thu)','Q');
-  const operating=values.M!-values.C!,operatingRef=`(${source('M')}-${source('C')})`;
-  amount(22,'Tổng chi phí trừ tiếp sau giá vốn',operating,operatingRef);emphasis(22);
-  money(23,'Lợi nhuận ròng ước tính','N');emphasis(23,true);
-  note(24,source('R')?`TEXT(${source('R')},"#,##0.00")&" − "&TEXT(${operatingRef},"#,##0.00")&" = "&TEXT(${source('N')},"#,##0.00")&" đ"`:null,values.R!==null?`${number(values.R)} − ${number(operating)} = ${number(values.N!)} đ`:'Lợi nhuận ròng = Doanh thu − Giá vốn − Các chi phí trong ngày.');
-  band(25,'PHÂN TÍCH TỶ LỆ');percentage(26,'Biên lợi nhuận ròng','N','B');ratioNote(27,'N','B');
+  money(15,'Doanh thu thuần','B');emphasis(15);
+  money(16,'− Tổng lương nhân viên (1 ngày)','D');
+  money(17,'− Giá vốn/cost món đã bán','C');
+  money(18,'− Tiền điện','F');
+  money(19,'− Tiền nước','G');
+  amount(20,'Tổng chi phí tính vào lợi nhuận ròng',includedCosts,includedCostsFormula);emphasis(20);
+  amount(21,'Lợi nhuận ròng ước tính',netProfit,netProfitFormula);emphasis(21,true);
+  note(22,netProfitFormula?`TEXT(${netProfitInputs.revenue!},"#,##0.00")&" − "&TEXT(${netProfitInputs.salary!},"#,##0.00")&" − "&TEXT(${netProfitInputs.cost!},"#,##0.00")&" − "&TEXT(${netProfitInputs.electricity!},"#,##0.00")&" − "&TEXT(${netProfitInputs.water!},"#,##0.00")&" = "&TEXT(${netProfitFormula},"#,##0.00")&" đ"`:null,netProfit!==null?`${number(values.B!)} − ${number(values.D!)} − ${number(values.C!)} − ${number(values.F!)} − ${number(values.G!)} = ${number(netProfit)} đ`:'Chưa đủ số liệu để tính lợi nhuận ròng.');
+  band(23,'PHÂN TÍCH TỶ LỆ');percentage(24,'Biên lợi nhuận ròng','N','B');ratioNote(25,'N','B');
 }
 
 export function buildProfitWorkbook(options: {storeName: string; startDate: string; endDate: string; days: ProfitDay[]; inputsByDate: Record<string,ProfitInputs>; unsaved?: boolean}) {
   const calculation=calculateProfitPeriod(options.days,options.inputsByDate);
   if(!calculation.complete)throw new Error('Cần nhập đủ chi phí và cost của tất cả ngày trong kỳ trước khi xuất Excel.');
   const rows=[...calculation.rows].sort((a,b)=>a.date.localeCompare(b.date));
+  const netProfitTotal=calculation.netProfit!;
   const workbook=new ExcelJS.Workbook();workbook.creator='TN Services';workbook.created=new Date();workbook.calcProperties.fullCalcOnLoad=true;
   const subtitle=`${options.storeName} · ${dateLabel(options.startDate)} – ${dateLabel(options.endDate)} · Đơn vị: VND${options.unsaved?' · Dữ liệu đang chỉnh sửa, chưa lưu':''}`;
   const reportDateLabel = options.startDate === options.endDate
     ? dateLabel(options.startDate)
     : `${dateLabel(options.startDate)} – ${dateLabel(options.endDate)}`;
   const summary=sheet(workbook,'Tổng hợp',`TN SERVICES | BÁO CÁO LỢI NHUẬN ${reportDateLabel}`,subtitle,[80,24],['Chỉ tiêu','Giá trị'],true);
-  const daily=sheet(workbook,'Theo ngày','CHI TIẾT LỢI NHUẬN THEO NGÀY',subtitle,[15,21,21,21,21,19,19,21,21,21,23,21,23,23,15,13,22,23,23,23,23,23,24,25],['Ngày','Doanh thu','Giá vốn món','Lương nhân viên','Chi tại quầy','Tiền điện','Tiền nước','Chi phí khác','Marketing','Anh Thiện chi','Tồn kho nguyên liệu','Công nợ','Tổng chi phí','Lợi nhuận ròng','Biên lợi nhuận','Số hóa đơn','Thuế (4,5%)','Lãi gộp ước tính','Lãi ròng','Tiền bàn giao','Lương ước tính (1 ngày)','Thuế (4,5% doanh thu)','Dòng tiền thực về','Tiền khách chuyển khoản']);
+  const daily=sheet(workbook,'Theo ngày','CHI TIẾT LỢI NHUẬN THEO NGÀY',subtitle,[15,21,21,21,21,19,19,21,21,21,23,21,23,23,15,13,22,23,23,23,23,23,24,25],['Ngày','Doanh thu','Giá vốn món','Lương nhân viên','Chi tại quầy','Tiền điện','Tiền nước','Chi phí khác','Marketing','Anh Thiện chi','Tồn kho nguyên liệu','Công nợ','Tổng chi phí phát sinh','Lợi nhuận ròng','Biên lợi nhuận','Số hóa đơn','Thuế (4,5%)','Lãi gộp ước tính','Lãi ròng','Tiền bàn giao','Lương ước tính (1 ngày)','Thuế (4,5% doanh thu)','Dòng tiền thực về','Tiền khách chuyển khoản']);
   const costs=sheet(workbook,'Giá vốn món','CHI TIẾT GIÁ VỐN VÀ LÃI GỘP MÓN ĐÃ BÁN',subtitle,[15,21,44,16,23,24,24,26,26],['Ngày','Mã món','Tên món','Số lượng','Cost / món','Tổng giá vốn','Giá thực thu / món','Doanh thu sau giảm giá','Lãi gộp ước tính']);
   const expenses=sheet(workbook,'Các khoản chi','CHI TIẾT CÁC KHOẢN CHI',subtitle,[15,26,27,44,48,23],['Ngày','Loại chi phí','Mã phiếu','Tên / nội dung','Ghi chú','Số tiền']);
   const otherExpenseRefs: {date:string;name:string;amount:number;row:number}[]=[];
   for(const day of rows){
     const n=daily.rowCount+1;const {inputs,result,source}=day;
+    const netProfit=result.netProfit!;
     const row=bodyRow(daily,[excelDate(day.date),source.revenue,result.materialCost,inputs.salary, result.voucherCost,inputs.electricity,inputs.water,inputs.other,inputs.marketing,inputs.thienExpense,inputs.ingredientInventory,inputs.debt,
       {formula:`SUM(C${n}:D${n},F${n}:J${n})+Q${n}`,result:result.totalCosts},
-      {formula:`B${n}-M${n}`,result:result.profit!},
-      {formula:`IF(B${n}>0,N${n}/B${n},0)`,result:result.margin===null?0:result.margin/100},source.billCount,
+      {formula:`B${n}-D${n}-C${n}-F${n}-G${n}`,result:netProfit},
+      {formula:`IF(B${n}>0,N${n}/B${n},0)`,result:source.revenue>0?netProfit/source.revenue:0},source.billCount,
       {formula:`ROUND(B${n}*4.5%,2)`,result:result.tax},
-      result.grossProfit,result.netProfit,result.cashReceived,inputs.salary,result.tax,result.cashFlow,result.transferRevenue]);
+      result.grossProfit,netProfit,result.cashReceived,inputs.salary,result.tax,result.cashFlow,result.transferRevenue]);
     for(const col of [18,19,20,21,22,23,24])row.getCell(col).numFmt=MONEY;
     row.getCell(15).numFmt='0.0%;[Red](0.0%);"—"';row.getCell(16).numFmt='#,##0';
-    row.getCell(14).font={name:'Calibri',bold:true,color:{argb:result.profit!<0?'FFB91C1C':GREEN}};
+    row.getCell(14).font={name:'Calibri',bold:true,color:{argb:netProfit<0?'FFB91C1C':GREEN}};
     for(const item of result.costRows){
       const r=costs.rowCount+1;const line=bodyRow(costs,[excelDate(day.date),item.code,item.name,item.quantity,item.unitCost,{formula:`D${r}*E${r}`,result:item.cost!},item.unitSalePrice,item.netSales,item.grossProfit===null?null:{formula:`H${r}-F${r}`,result:item.grossProfit}]);line.getCell(4).numFmt='#,##0.###';
     }
@@ -156,12 +166,12 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
   const total=finish(daily,24,[2,3,4,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24]);daily.getCell(total,16).numFmt='#,##0';
   for(const [col,key] of [[20,'cashReceived'],[23,'cashFlow']] as const)if(rows.some(day=>day.result[key]===null))daily.getCell(total,col).value=null;
   if(rows.some(day=>day.result.grossProfit===null))daily.getCell(total,18).value=null;
-  daily.getCell(total,15).value={formula:`IF(B${total}>0,N${total}/B${total},0)`,result:calculation.margin===null?0:calculation.margin/100};daily.getCell(total,15).numFmt='0.0%';
+  daily.getCell(total,15).value={formula:`IF(B${total}>0,N${total}/B${total},0)`,result:calculation.revenue>0?netProfitTotal/calculation.revenue:0};daily.getCell(total,15).numFmt='0.0%';
   const costTotal=finish(costs,9,[6,8,9]);
   if(rows.some(day=>day.result.costRows.some(item=>item.netSales===null)))costs.getCell(costTotal,8).value=null;
   if(rows.some(day=>day.result.costRows.some(item=>item.grossProfit===null)))costs.getCell(costTotal,9).value=null;
   finish(expenses,6,[6]);
-  const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['LÃI GỘP ƯỚC TÍNH','R'],['Lương nhân viên (phân bổ trong ngày)','D'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['TỔNG CHI PHÍ','M'],['LỢI NHUẬN RÒNG','N'],['Biên lợi nhuận','O'],['Tiền thực thu (tiền bàn giao trong hệ thống)','T'],['Tiền khách chuyển khoản','X'],['Chi tại quầy (đã nằm trong bàn giao, không trừ lại)','E'],['Chi phí khác đã trả ngoài bàn giao','H'],['Lương ước tính (1 ngày)','U'],['Thuế (4,5% doanh thu)','V'],['DÒNG TIỀN THỰC VỀ','W'],['Tồn kho nguyên liệu (theo dõi)','K'],['Công nợ nhà cung cấp (theo dõi)','L']];
+  const lines:[string,string][]=[['Doanh thu thuần','B'],['Giá vốn món đã bán','C'],['LÃI GỘP ƯỚC TÍNH','R'],['Lương nhân viên (phân bổ trong ngày)','D'],['Tiền điện','F'],['Tiền nước','G'],['Chi phí khác trong ngày','H'],['Chi phí marketing','I'],['Anh Thiện chi','J'],['Thuế (4,5% doanh thu)','Q'],['TỔNG CHI PHÍ PHÁT SINH','M'],['LỢI NHUẬN RÒNG','N'],['Biên lợi nhuận','O'],['Tiền thực thu (tiền bàn giao trong hệ thống)','T'],['Tiền khách chuyển khoản','X'],['Chi tại quầy (đã nằm trong bàn giao, không trừ lại)','E'],['Chi phí khác đã trả ngoài bàn giao','H'],['Lương ước tính (1 ngày)','U'],['Thuế (4,5% doanh thu)','V'],['DÒNG TIỀN THỰC VỀ','W'],['Tồn kho nguyên liệu (theo dõi)','K'],['Công nợ nhà cung cấp (theo dõi)','L']];
   for(const [label,col] of lines){
     if(col==='T'){
       const section=bodyRow(summary,['DÒNG TIỀN THỰC TẾ',null]);
@@ -198,6 +208,13 @@ export function buildProfitWorkbook(options: {storeName: string; startDate: stri
     rawRefs.set(`${ws.name}!${cell.address}`,`'Dữ liệu gốc'!C${source.number}`);
     cell.value={formula:`CEILING('Dữ liệu gốc'!C${source.number},1000)`,result:Math.ceil(amount/1000)*1000};
   }));
+  rows.forEach((day,index)=>{
+    const rowNumber=index+6;
+    const revenueRef=rawRefs.get(`Theo ngày!B${rowNumber}`),profitRef=rawRefs.get(`Theo ngày!N${rowNumber}`);
+    if(revenueRef&&profitRef)daily.getCell(rowNumber,15).value={formula:`IF(${revenueRef}>0,${profitRef}/${revenueRef},0)`,result:(day.result.margin??0)/100};
+  });
+  const revenueTotalRef=rawRefs.get(`Theo ngày!B${total}`),profitTotalRef=rawRefs.get(`Theo ngày!N${total}`);
+  if(revenueTotalRef&&profitTotalRef)daily.getCell(total,15).value={formula:`IF(${revenueTotalRef}>0,${profitTotalRef}/${revenueTotalRef},0)`,result:calculation.revenue>0?netProfitTotal/calculation.revenue:0};
   addProfitAnalysis(summary,preciseTotals,column=>rawRefs.get(`Theo ngày!${column}${total}`)??null);
   summary.pageSetup.printArea=`A1:E${summary.rowCount}`;
   summary.pageSetup.paperSize=8;
