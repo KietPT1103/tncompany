@@ -91,7 +91,9 @@ export function calculateDailyProfit(data: ProfitData, inputs: ProfitInputs) {
   const grossProfit = legacySales
     ? (costRows.every(row=>row.cost!==null) ? data.revenue - materialCost : null)
     : (costRows.every(row=>row.grossProfit!==null) ? costRows.reduce((sum,row)=>sum+row.grossProfit!,0) : null);
-  const profit = complete ? data.revenue - totalCosts : null;
+  const profit = complete
+    ? data.revenue - inputs.salary! - materialCost - inputs.electricity! - inputs.water!
+    : null;
   const cashReceived = data.handover?.amount ?? null;
   const transferRevenue = data.transferRevenue ?? 0;
   const cashFlow = complete && cashReceived !== null && !data.handover?.provisional
