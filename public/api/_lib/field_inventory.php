@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/ingredients.php';
+require_once __DIR__ . '/stores.php';
 
 auth_ensure_column('inventory_receipts', 'evidence_receipt_id', 'VARCHAR(64) NULL');
 
@@ -87,23 +88,28 @@ function field_inventory_require_store(array $user, string $storeId): string
     if (!field_inventory_can_access_store($user, $normalized)) {
         respond_error('Bạn không có quyền thao tác tại khu vực này.', 403);
     }
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        try { stores_require_available(db(), $normalized); }
+        catch (DomainException $e) { respond_error($e->getMessage(), $e->getCode()); }
+    }
     return $normalized;
 }
 
-function field_inventory_allowed_stores(array $user): array
+function field_inventory_allowed_stores(array $user, bool $activeOnly = false): array
 {
+    stores_ensure_schema(db());
+    $activeFilter = $activeOnly ? ' AND s.deleted_at IS NULL AND s.is_active=1' : '';
     if (($user['role'] ?? '') === 'admin') {
         $statement = db()->query(
-            "SELECT id, name FROM stores WHERE id IN ('cafe','restaurant','farm','warehouse') ORDER BY FIELD(id,'cafe','restaurant','farm','warehouse')"
+            "SELECT s.id, s.name FROM stores s WHERE 1=1 $activeFilter ORDER BY s.name,s.id"
         );
     } else {
         $statement = db()->prepare(
             "SELECT DISTINCT s.id, s.name
              FROM stores s
              LEFT JOIN user_store_access usa ON usa.store_id = s.id AND usa.user_id = :user_id
-             WHERE s.id IN ('cafe','restaurant','farm','warehouse')
-               AND (s.id = :primary_store OR usa.user_id IS NOT NULL)
-             ORDER BY FIELD(s.id,'cafe','restaurant','farm','warehouse')"
+             WHERE (s.id = :primary_store OR usa.user_id IS NOT NULL) $activeFilter
+             ORDER BY s.name,s.id"
         );
         $statement->execute([
             'user_id' => $user['id'],

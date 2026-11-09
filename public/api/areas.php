@@ -10,4 +10,4 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
 }
 
 $user = field_inventory_require_permission('inventory_receipts.view');
-respond_ok(['items' => field_inventory_allowed_stores($user)]);
+respond_ok(['items' => field_inventory_allowed_stores($user, true)]);

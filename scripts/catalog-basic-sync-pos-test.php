@@ -4,6 +4,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../public/api/_lib/catalog_basic_sync.php';
 
 $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+$pdo->exec('CREATE TABLE stores(id TEXT PRIMARY KEY,name TEXT,created_at DATETIME DEFAULT CURRENT_TIMESTAMP,updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+$pdo->exec("INSERT INTO stores(id,name) VALUES ('restaurant','Bếp')");
 function db(): PDO { global $pdo; return $pdo; }
 function check(bool $condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
 

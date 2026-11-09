@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useStore, StoreType } from "@/context/StoreContext";
 import { clearApiToken, loginApi, seedDefaultUsersApi, setApiToken } from "@/lib/api";
 import { getDefaultRouteForUser } from "@/lib/permissions";
+import { getStores } from "@/services/stores.api";
 import { AppUser, normalizeUserRole } from "@/types/auth";
 
 const CASHIER_ACCOUNTS = [
@@ -48,7 +49,7 @@ const serviceToEmail = (account: string) => `${account}@service.local`;
 const adminToEmail = (account: string) => `${account}@admin.local`;
 
 const isValidStoreId = (value: string | null | undefined): value is StoreType =>
-  value === "cafe" || value === "restaurant" || value === "bakery" || value === "farm" || value === "warehouse";
+  typeof value === "string" && value.trim().length > 0;
 
 const getRedirectAfterLogin = (user: AppUser) =>
   getDefaultRouteForUser({
@@ -175,16 +176,21 @@ export default function LoginPage() {
         throw new Error("Tài khoản thu ngân/phục vụ/pha chế chưa được quản trị viên gán quầy.");
       }
       setApiToken(token);
+      const availableStores = await getStores();
+      const targetStoreId = isStoreLockedRole && isValidStoreId(user.storeId) ? user.storeId : selectedStore;
+      if (isStoreLockedRole && !availableStores.some(item => item.id === targetStoreId)) {
+        clearApiToken();
+        throw new Error("Quầy được gán đã ngừng hoạt động hoặc bị xoá. Vui lòng liên hệ quản trị viên.");
+      }
       await refreshUser();
       setStoreId(
-        isStoreLockedRole && isValidStoreId(user.storeId)
-          ? user.storeId
-          : selectedStore
+        availableStores.some(item => item.id === targetStoreId) ? targetStoreId : availableStores[0]?.id || selectedStore
       );
       const returnTo = loginRevenueTarget(new URLSearchParams(window.location.search).get("returnTo"));
       const nextPath = returnTo || getRedirectAfterLogin(user);
       router.replace(nextPath);
     } catch (err: unknown) {
+      clearApiToken();
       console.error(err);
       setError(
         err instanceof Error && err.message.trim()

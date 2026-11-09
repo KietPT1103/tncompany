@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/stores.php';
 require_once __DIR__ . '/_lib/daily_profit.php';
 $user = auth_require_permission(['reports.access', 'reports.profit.access']);
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -9,7 +10,7 @@ if (!in_array($method, ['GET','POST','DELETE'], true)) respond_error('Method not
 $body = $method === 'POST' ? read_json_body() : $_GET;
 try {
     $storeId = $body['storeId'] ?? '';
-    if (!is_string($storeId) || !in_array($storeId, ['cafe','restaurant','farm','bakery','warehouse'], true)) throw new InvalidArgumentException('Cửa hàng không hợp lệ.');
+    if (!is_string($storeId) || !stores_find(db(), $storeId)) throw new InvalidArgumentException('Cửa hàng không hợp lệ.');
     $mode = $body['mode'] ?? 'day';
     if (!in_array($mode, ['day','range','history'], true)) throw new InvalidArgumentException('Chế độ báo cáo không hợp lệ.');
     $pdo = db();

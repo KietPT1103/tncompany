@@ -709,9 +709,8 @@ export function canSwitchStore(user: AppUser | null | undefined): boolean {
 }
 
 // null means unrestricted for the existing admin/manager selector.
-export function getSelectableStoreIds(user: AppUser | null | undefined): string[] | null {
+export function getSelectableStoreIds(user: AppUser | null | undefined, availableIds?: string[]): string[] | null {
   if (user?.role === "admin" || user?.role === "manager") return null;
-  const validIds = ["cafe", "restaurant", "bakery", "farm", "warehouse"];
   const assignedIds = user?.storeIds?.length ? user.storeIds : user?.storeId ? [user.storeId] : [];
-  return [...new Set(assignedIds.filter((id) => validIds.includes(id)))];
+  return [...new Set(assignedIds.filter((id) => !!id && (!availableIds || availableIds.includes(id))))];
 }

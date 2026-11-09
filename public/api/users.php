@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/stores.php';
 
 function users_map_row(array $row): array
 {
@@ -35,7 +36,8 @@ function users_map_row(array $row): array
 
 function users_normalize_store_ids($value, string $primaryStoreId = ''): array
 {
-    $allowed = ['cafe', 'restaurant', 'bakery', 'farm', 'warehouse'];
+    stores_ensure_schema(db());
+    $allowed = db()->query('SELECT id FROM stores WHERE deleted_at IS NULL')->fetchAll(PDO::FETCH_COLUMN);
     $source = is_array($value) ? $value : [];
     if ($primaryStoreId !== '') {
         $source[] = $primaryStoreId;

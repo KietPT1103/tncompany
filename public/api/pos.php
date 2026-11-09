@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
+require_once __DIR__ . '/_lib/stores.php';
 require_once __DIR__ . '/_lib/realtime.php';
 require_once __DIR__ . '/_lib/ingredient_usage.php';
 require_once __DIR__ . '/_lib/shift_management.php';
@@ -68,9 +69,11 @@ function pos_offset($value): int
 
 function pos_ensure_default_tables(string $storeId): void
 {
-    if (!in_array($storeId, ['cafe', 'restaurant', 'bakery'], true)) {
+    if (in_array($storeId, ['farm', 'warehouse'], true)) {
         return;
     }
+    $store = stores_find(db(), $storeId);
+    if (!$store || !$store['isActive'] || $store['deletedAt'] !== null) return;
 
     $statement = db()->prepare(
         'INSERT IGNORE INTO cafe_tables (id,store_id,name,area)
@@ -607,6 +610,9 @@ cash_transfers_ensure_schema(db());
 pos_ensure_shift_device_columns();
 $requestedStoreId = trim((string) ($_GET['storeId'] ?? ($body['storeId'] ?? '')));
 $posStoreId = pos_resolve_store_id($user, $requestedStoreId);
+try {
+    if ($method !== 'GET') stores_require_available(db(), $posStoreId);
+} catch (DomainException $e) { respond_error($e->getMessage(), $e->getCode()); }
 $_GET['storeId'] = $posStoreId;
 $body['storeId'] = $posStoreId;
 if ($resource === 'bills') pos_ensure_bill_order_source_column();

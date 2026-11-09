@@ -70,7 +70,7 @@ type InvoiceDateQuery = {
 
 type InvoiceStoreFilter = "all" | StoreType;
 
-const STORE_FILTER_OPTIONS: Array<{ value: InvoiceStoreFilter; label: string }> = [
+const DEFAULT_STORE_FILTER_OPTIONS: Array<{ value: InvoiceStoreFilter; label: string }> = [
   { value: "all", label: "Tất cả store" },
   { value: "cafe", label: "Cafe" },
   { value: "restaurant", label: "Lẩu / Bếp" },
@@ -460,7 +460,10 @@ export default function InvoiceAdminPage({
   description,
   accentClassName,
 }: InvoiceAdminPageProps) {
-  const { storeId, storeName } = useStore();
+  const { storeId, storeName, stores } = useStore();
+  const STORE_FILTER_OPTIONS: Array<{ value: InvoiceStoreFilter; label: string }> = stores
+    ? [{ value: "all", label: "Tất cả quầy" }, ...stores.map(item => ({ value: item.id, label: item.name + (item.deletedAt ? " (Đã xoá)" : !item.isActive ? " (Ngừng hoạt động)" : "") }))]
+    : DEFAULT_STORE_FILTER_OPTIONS;
   const [internalTab,setInternalTab]=useState<"invoices"|"warehouse">("invoices");
   const [warehouseRevision,setWarehouseRevision]=useState(0);
   const importInputRef = useRef<HTMLInputElement | null>(null);

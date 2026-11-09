@@ -1,5 +1,5 @@
 import { normalizeSearchText } from "@/lib/utils";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   ChevronDown,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useStore } from "@/context/StoreContext";
 import {
   getAccountPermissionCount,
   getAccountPermissionGroups,
@@ -41,6 +42,17 @@ export const INVENTORY_AREA_OPTIONS = [
   { value: "farm", label: "Farm" },
   { value: "warehouse", label: "Kho thợ" },
 ];
+
+export function useAccountStoreOptions() {
+  const { stores } = useStore();
+  const options = useMemo(() => stores.filter(item => !item.deletedAt).map(item => ({ value: item.id, label: item.name + (item.isActive ? "" : " (Ngừng hoạt động)") })), [stores]);
+  const summarize = useCallback((user: Pick<ManagedUser, "storeId" | "storeIds">) => storeSummary(user, options), [options]);
+  return {
+    STORE_OPTIONS: [{ value: "", label: "Không gắn cửa hàng" }, ...options],
+    INVENTORY_AREA_OPTIONS: options,
+    storeSummary: summarize,
+  };
+}
 
 export const ROLE_OPTIONS: Array<{
   value: UserRole;
@@ -88,7 +100,7 @@ export function roleLabel(role: ManagedUser["role"]) {
   return ROLE_OPTIONS.find((item) => item.value === role)?.label || role;
 }
 
-export function storeSummary(user: Pick<ManagedUser, "storeId" | "storeIds">) {
+export function storeSummary(user: Pick<ManagedUser, "storeId" | "storeIds">, options = INVENTORY_AREA_OPTIONS) {
   const storeIds = user.storeIds?.length
     ? user.storeIds
     : user.storeId
@@ -98,7 +110,7 @@ export function storeSummary(user: Pick<ManagedUser, "storeId" | "storeIds">) {
   return storeIds
     .map(
       (id) =>
-        INVENTORY_AREA_OPTIONS.find((option) => option.value === id)?.label || id,
+        options.find((option) => option.value === id)?.label || id,
     )
     .join(", ");
 }
@@ -215,6 +227,7 @@ export function AccountDetails({
   onEditPermissions,
   onDelete,
 }: AccountDetailsProps) {
+  const { storeSummary } = useAccountStoreOptions();
   const permissionGroups = getAccountPermissionGroups(item)
     .map((group) => ({
       ...group,
@@ -549,6 +562,10 @@ export function AccountEditorModal({
   onRoleChange,
   onSave,
 }: AccountEditorProps) {
+  const { STORE_OPTIONS: availableOptions, INVENTORY_AREA_OPTIONS } = useAccountStoreOptions();
+  const STORE_OPTIONS = form.storeId && !availableOptions.some(item => item.value === form.storeId)
+    ? [...availableOptions, { value: form.storeId, label: `${form.storeId} (Không khả dụng)` }]
+    : availableOptions;
   const requiresAreas = form.role === "bartender" || form.permissions.some((permission) =>
     permission === "stores.switch"
     || permission.startsWith("inventory_")

@@ -7,6 +7,8 @@ function rejected(callable $fn, int $code): void {
     throw new RuntimeException('Request should have been rejected');
 }
 $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+$pdo->exec('CREATE TABLE stores(id TEXT PRIMARY KEY,name TEXT,created_at DATETIME DEFAULT CURRENT_TIMESTAMP,updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+$pdo->exec("INSERT INTO stores(id,name) VALUES ('restaurant','Bếp'),('cafe','Cafe')");
 $admin = ['role'=>'admin'];
 $data = [['product_code'=>'SP1','product_name'=>'Tên mới','price'=>89000],['product_code'=>'COMBO1','product_name'=>'Combo mới','price'=>0]];
 rejected(fn()=>catalog_basic_sync($pdo,['role'=>'manager'],'restaurant',$data,false,null,fn()=>'new'),403);
@@ -58,4 +60,9 @@ $newData=[['product_code'=>'NEW2','product_name'=>'X','price'=>10],['product_cod
 $newPreview=catalog_basic_sync($pdo,$admin,'restaurant',$newData,false,null,fn()=>'same-id');
 try { catalog_basic_sync($pdo,$admin,'restaurant',$newData,true,$newPreview['previewToken'],fn()=>'same-id'); throw new LogicException('Expected duplicate id'); } catch (PDOException $e) {}
 check((int)$pdo->query("SELECT COUNT(*) FROM products WHERE product_code IN ('NEW2','NEW3')")->fetchColumn()===0,'Whole import rolls back on failure');
+$newStore = stores_save($pdo,$admin,null,['name'=>'Quầy mới','isTakeAway'=>true]);
+$newPreview = catalog_basic_sync($pdo,$admin,$newStore['id'],$data,false,null,fn()=>'unused');
+check($newPreview['createdCount']===2,'New dynamic store accepts product catalog');
+stores_save($pdo,$admin,$newStore['id'],['isActive'=>false]);
+rejected(fn()=>catalog_basic_sync($pdo,$admin,$newStore['id'],$data,false,null,fn()=>'unused'),409);
 echo "PASS preview, validation, admin access, three-field sync, preservation, stale preview and transaction rollback\n";

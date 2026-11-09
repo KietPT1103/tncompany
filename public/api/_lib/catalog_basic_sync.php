@@ -1,11 +1,12 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/stores.php';
 
 /** Preview or apply a catalog sync. Existing records retain every field except name and price. */
 function catalog_basic_sync(PDO $pdo, array $actor, string $storeId, array $items, bool $apply, ?string $previewToken, callable $createId): array
 {
     if (($actor['role'] ?? '') !== 'admin') throw new DomainException('Chỉ quản trị viên được đồng bộ danh mục.', 403);
-    if (!in_array($storeId, ['cafe','restaurant','bakery','farm','warehouse'], true)) throw new DomainException('Khu vực không hợp lệ.', 422);
+    stores_require_available($pdo, $storeId);
     if ($items === [] || count($items) > 5000) throw new DomainException('File phải có từ 1 đến 5.000 món.', 422);
     $normalized = [];
     $seen = [];

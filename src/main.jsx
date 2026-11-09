@@ -21,11 +21,11 @@ const prerenderedPath = rootElement.dataset.prerenderPath;
 const app = (
   <React.StrictMode>
     <BrowserRouter>
-      <StoreProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <StoreProvider>
           <App />
-        </AuthProvider>
-      </StoreProvider>
+        </StoreProvider>
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

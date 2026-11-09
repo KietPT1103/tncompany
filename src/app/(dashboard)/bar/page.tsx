@@ -128,13 +128,7 @@ const getInitialBarSidebarCollapsedPreference = () => {
 export default function BarBoardPage() {
   const { role, user } = useAuth();
   const { storeId: selectedStoreId, storeName } = useStore();
-  const assignedStore =
-    user?.storeId === "cafe" ||
-    user?.storeId === "restaurant" ||
-    user?.storeId === "bakery" ||
-    user?.storeId === "farm"
-      ? user.storeId
-      : null;
+  const assignedStore = user?.storeId || null;
   const storeId =
     (role === "user" || role === "server" || role === "bartender") &&
     assignedStore

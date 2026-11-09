@@ -1,6 +1,8 @@
 import React from "react";
 import RevenuePage from "./features/revenue/RevenuePage";
 import OutsideExpensesPage from "./features/outside-expenses/OutsideExpensesPage";
+import StoresPage from "./features/stores/StoresPage";
+import StoreSalesGuard from "./components/StoreSalesGuard";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { pages } from "./data/siteData";
 import LandingApp from "./LandingApp";
@@ -131,8 +133,8 @@ export function App() {
             />
           }
         >
-          <Route path="/pos" element={<RoleGuard permission={["bills.access", "bar.checkout"]}><PosPage /></RoleGuard>} />
-          <Route path="/bar" element={<BarBoardPage />} />
+          <Route path="/pos" element={<RoleGuard permission={["bills.access", "bar.checkout"]}><StoreSalesGuard><PosPage /></StoreSalesGuard></RoleGuard>} />
+          <Route path="/bar" element={<StoreSalesGuard><BarBoardPage /></StoreSalesGuard>} />
         </Route>
         <Route path="/gesture-studio" element={<GestureStudioPage />} />
         <Route path="/dust-ritual" element={<DustRitualPage />} />
@@ -235,6 +237,7 @@ export function App() {
               <Route element={<ProtectedLayout allowedRoles={["admin"]} inferPermission={false} />}>
                 <Route path="employees" element={<EmployeesPage />} />
                 <Route path="outside-expenses" element={<OutsideExpensesPage />} />
+                <Route path="stores" element={<StoresPage />} />
               </Route>
               <Route path="bills" element={<BillsPage />} />
               <Route path="payroll-estimate" element={<SalaryEstimatePage />} />

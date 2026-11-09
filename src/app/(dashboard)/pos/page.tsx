@@ -270,14 +270,8 @@ const getLocalDayRange = (dateValue: string) => {
 
 export default function CafePosPage() {
   const { role, user, logout } = useAuth();
-  const { storeId: selectedStoreId, setStoreId } = useStore();
-  const assignedStoreId =
-    user?.storeId === "cafe" ||
-    user?.storeId === "restaurant" ||
-    user?.storeId === "bakery" ||
-    user?.storeId === "farm"
-      ? user.storeId
-      : null;
+  const { storeId: selectedStoreId, setStoreId, stores } = useStore();
+  const assignedStoreId = user?.storeId || null;
   const storeId =
     (role === "user" || role === "server" || role === "bartender") && assignedStoreId
       ? assignedStoreId
@@ -1599,7 +1593,13 @@ export default function CafePosPage() {
     cashierName?: string;
     isBarOrder?: boolean;
   }) => {
-    const storeInfo = RECEIPT_STORE_INFO[storeId] || RECEIPT_STORE_INFO.cafe;
+    const currentStore = stores.find(item => item.id === storeId);
+    const defaults = RECEIPT_STORE_INFO[storeId];
+    const storeInfo = {
+      title: currentStore?.name || defaults?.title || storeId,
+      address: currentStore?.address ? `ĐC: ${currentStore.address}` : defaults?.address || "",
+      phone: defaults?.phone || "",
+    };
     const printAt = new Date();
     const printTime = printAt.toLocaleString("vi-VN");
     const itemRows = buildReceiptItemsHtml(options.items);
@@ -1653,9 +1653,9 @@ export default function CafePosPage() {
         </head>
         <body>
           <div class="header">
-            <p class="title">${storeInfo.title}</p>
-            <p class="sub">${storeInfo.address}</p>
-            <p class="sub"><strong>${storeInfo.phone}</strong></p>
+            <p class="title">${escapeHtml(storeInfo.title)}</p>
+            <p class="sub">${escapeHtml(storeInfo.address)}</p>
+            <p class="sub"><strong>${escapeHtml(storeInfo.phone)}</strong></p>
           </div>
           <p class="section-title">${options.title}</p>
           ${options.billCode ? `<p class="bill-code">${options.billCode}</p>` : ""}
@@ -5100,7 +5100,7 @@ export default function CafePosPage() {
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Báo cáo cuối ngày</h3>
                 <p className="text-sm text-slate-500">
-                  {RECEIPT_STORE_INFO[storeId]?.title || storeId}
+                  {stores.find(item => item.id === storeId)?.name || RECEIPT_STORE_INFO[storeId]?.title || storeId}
                 </p>
               </div>
               <div className="flex flex-wrap items-end gap-2">

@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { canSwitchStore, getSelectableStoreIds, hasPermission } from "@/lib/permissions";
 import {
   Activity,
+  Settings,
+  Store,
   BarChart3,
   Boxes,
   CakeSlice,
@@ -65,29 +67,11 @@ const isNavItemActive = (pathname: string, item: NavItem) =>
 
 const standaloneNavItems: NavItem[] = [
   {
-    href: "/outside-expenses",
-    label: "Liên kết sheet chi",
-    icon: FileSpreadsheet,
-    roles: ["admin"],
-  },
-  {
     href: "/overview",
     label: "Tổng quan",
     icon: Gauge,
     permission: "dashboard.access",
     roles: ["admin"],
-  },
-  {
-    href: "/activity-logs",
-    label: "Nhật ký máy",
-    icon: Activity,
-    permission: "activity_logs.access",
-  },
-  {
-    href: "/accounts",
-    label: "Tài khoản",
-    icon: KeyRound,
-    permission: "accounts.access",
   },
   {
     href: "/employees",
@@ -99,6 +83,15 @@ const standaloneNavItems: NavItem[] = [
 ];
 
 const navGroups: NavGroup[] = [
+  {
+    key: "administration", label: "Quản trị", icon: Settings,
+    items: [
+      { href: "/outside-expenses", label: "Liên kết sheet chi", icon: FileSpreadsheet, roles: ["admin"] },
+      { href: "/activity-logs", label: "Nhật ký máy", icon: Activity, permission: "activity_logs.access" },
+      { href: "/accounts", label: "Tài khoản", icon: KeyRound, permission: "accounts.access" },
+      { href: "/stores", label: "Quản lý quầy", icon: Store, roles: ["admin"] },
+    ],
+  },
   {
     key: "dashboard",
     label: "Sổ quỹ",
@@ -316,7 +309,7 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const storeOptions: {
+const defaultStoreOptions: {
   id: StoreType;
   icon: typeof Coffee;
   label: string;
@@ -344,7 +337,12 @@ export default function AdminSidebar({
   const pathname = usePathname();
   const { logout, user, loading } = useAuth();
   const userRole = user?.role || null;
-  const { setStoreId, storeId, storeName } = useStore();
+  const { storeId, storeName, stores, storesLoading, setStoreId } = useStore();
+  const storeOptions = stores.map(item => ({
+    id: item.id, label: item.name,
+    icon: defaultStoreOptions.find(option => option.id === item.id)?.icon || Store,
+    note: item.deletedAt ? "Đã xoá · Chỉ xem lịch sử" : !item.isActive ? "Ngừng hoạt động · Chỉ xem lịch sử" : item.isTakeAway ? "Take away" : item.address || defaultStoreOptions.find(option => option.id === item.id)?.note || "Quầy bán hàng",
+  }));
   const isStoreLocked = !canSwitchStore(user);
   const selectableStoreIds = getSelectableStoreIds(user);
   const availableStoreOptions = storeOptions.filter((option) =>
@@ -353,25 +351,6 @@ export default function AdminSidebar({
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const storeMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const assignedStoreId = isStoreLocked
-      ? user?.storeId
-      : availableStoreOptions.some((option) => option.id === storeId)
-        ? storeId
-        : availableStoreOptions[0]?.id;
-    if (
-      !loading &&
-      (assignedStoreId === "cafe" ||
-        assignedStoreId === "restaurant" ||
-        assignedStoreId === "bakery" ||
-        assignedStoreId === "farm" ||
-        assignedStoreId === "warehouse") &&
-      assignedStoreId !== storeId
-    ) {
-      setStoreId(assignedStoreId);
-    }
-  }, [isStoreLocked, loading, setStoreId, storeId, user?.storeId, user?.storeIds]);
 
   useEffect(() => {
     if (!showStoreMenu) return;
@@ -460,7 +439,7 @@ export default function AdminSidebar({
   }
 
   const currentStore =
-    storeOptions.find((option) => option.id === storeId) || storeOptions[0];
+    storeOptions.find((option) => option.id === storeId) || { id: storeId, icon: Store, label: storesLoading ? "Đang tải quầy..." : "Quầy không khả dụng", note: "" };
   const CurrentStoreIcon = currentStore.icon;
   const mobileHeaderAction = getAdminMobileHeaderAction(pathname);
   const storeSelector = (
@@ -470,7 +449,7 @@ export default function AdminSidebar({
         onClick={() => {
           if (!isStoreLocked) setShowStoreMenu((value) => !value);
         }}
-        disabled={isStoreLocked}
+        disabled={isStoreLocked || storesLoading || !availableStoreOptions.length}
         className={cn(
           "flex h-14 w-full items-center justify-between rounded-lg bg-white/[0.06] px-2.5 text-left ring-1 ring-inset ring-white/15 transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C85F] active:scale-[0.96] motion-reduce:transition-none",
           collapsed &&
@@ -508,7 +487,7 @@ export default function AdminSidebar({
           role="listbox"
           aria-label="Chọn khu vực"
           className={cn(
-            "absolute left-0 top-[calc(100%+8px)] z-50 w-full animate-in rounded-lg bg-[#073D31] p-1.5 text-white shadow-[0_4px_8px_rgba(0,25,18,0.28)] ring-1 ring-white/15 duration-150 fade-in-0 zoom-in-95 motion-reduce:animate-none",
+            "absolute left-0 top-[calc(100%+8px)] z-50 max-h-[60vh] w-full overflow-y-auto animate-in rounded-lg bg-[#073D31] p-1.5 text-white shadow-[0_4px_8px_rgba(0,25,18,0.28)] ring-1 ring-white/15 duration-150 fade-in-0 zoom-in-95 motion-reduce:animate-none",
             collapsed && "lg:left-[calc(100%+12px)] lg:top-0 lg:w-60",
           )}
         >

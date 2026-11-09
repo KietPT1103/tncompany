@@ -484,8 +484,9 @@ function payrolls_insert_entry(string $payrollId, string $employeeId, array $ent
 
 function payrolls_require_estimate_store(array $user): string
 {
+    require_once __DIR__ . '/_lib/stores.php';
     $storeId = trim((string)($_GET['storeId'] ?? ''));
-    if (!in_array($storeId,['cafe','restaurant','farm','bakery','warehouse'],true)) respond_error('Cửa hàng không hợp lệ.',422);
+    if (!stores_find(db(),$storeId)) respond_error('Cửa hàng không hợp lệ.',422);
     // Match the unrestricted store selector for admin and manager accounts.
     if (!in_array($user['role'] ?? '', ['admin', 'manager'], true) && ($user['storeId'] ?? '') !== $storeId) {
         $access = db()->prepare('SELECT 1 FROM user_store_access WHERE user_id=:user AND store_id=:store');

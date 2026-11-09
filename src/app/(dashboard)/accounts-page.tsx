@@ -37,12 +37,10 @@ import {
   AccountEditorModal,
   type AccountDetailTab,
   type AccountFormState,
-  INVENTORY_AREA_OPTIONS,
+  useAccountStoreOptions,
   PermissionEditorModal,
   ROLE_OPTIONS,
-  STORE_OPTIONS,
   roleLabel,
-  storeSummary,
 } from "@/features/accounts/account-management-ui";
 
 const INVENTORY_ACCOUNT_PERMISSIONS = new Set<AppPermission>([
@@ -101,7 +99,7 @@ function requiresAssignedStore(role: UserRole, permissions: AppPermission[]) {
   return role === "bartender" || permissions.some((permission) => INVENTORY_ACCOUNT_PERMISSIONS.has(permission));
 }
 
-function formFromUser(item: ManagedUser): AccountFormState {
+function formFromUser(item: ManagedUser, areaOptions: { value: string; label: string }[]): AccountFormState {
   // The former combined preparation permission is expanded by the API. Remove
   // the hidden legacy flag so an admin can revoke each new permission separately.
   let permissions = normalizePermissionList(item.permissions).filter(
@@ -117,7 +115,7 @@ function formFromUser(item: ManagedUser): AccountFormState {
     : item.storeId
       ? [item.storeId]
       : requiresAssignedStore(item.role, permissions)
-        ? INVENTORY_AREA_OPTIONS.map((option) => option.value)
+        ? areaOptions.map((option) => option.value)
         : [];
   return {
     email: item.email,
@@ -137,6 +135,7 @@ function permissionCount(user: Pick<ManagedUser, "role" | "permissions">) {
 }
 
 export default function AccountManagementPage() {
+  const { INVENTORY_AREA_OPTIONS, storeSummary } = useAccountStoreOptions();
   const { user } = useAuth();
   const { storeId } = useStore();
   const canManageAccess = user?.role === "admin";
@@ -189,7 +188,7 @@ export default function AccountManagementPage() {
         .filter(Boolean)
         .some((value) => adminSearchText(String(value)).includes(keyword));
     });
-  }, [items, search, statusFilter]);
+  }, [items, search, statusFilter, storeSummary]);
 
   const counts = useMemo(() => ({
     total: items.length,
@@ -213,7 +212,7 @@ export default function AccountManagementPage() {
 
   function openEdit(item: ManagedUser) {
     setEditingId(item.id);
-    setForm(formFromUser(item));
+    setForm(formFromUser(item, INVENTORY_AREA_OPTIONS));
     setError("");
     setMessage("");
     setAccountModalOpen(true);
@@ -222,7 +221,7 @@ export default function AccountManagementPage() {
   function openPermissionEditor(item: ManagedUser) {
     setPermissionTargetId(item.id);
     setEditingId(item.id);
-    setForm(formFromUser(item));
+    setForm(formFromUser(item, INVENTORY_AREA_OPTIONS));
     setError("");
     setPermissionModalOpen(true);
   }
@@ -237,7 +236,7 @@ export default function AccountManagementPage() {
       ...current,
       role: nextRole,
       permissions: getDefaultPermissionsForRole(nextRole),
-      ...(nextRole === "bartender" ? { storeId: "cafe", storeIds: ["cafe"] } : {}),
+      ...(nextRole === "bartender" ? { storeId, storeIds: [storeId] } : {}),
     }));
   }
 
