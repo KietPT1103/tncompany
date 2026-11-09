@@ -37,10 +37,12 @@ import { cn } from "@/lib/utils";
 import { removeEstimateRole } from "@/lib/estimateSchedule";
 import { getMonthlyEstimateCosts } from "@/lib/estimateMonthlySalary";
 import { SavedEstimateSchedules } from "./payroll/_components/SavedEstimateSchedules";
-import { OfficePayroll } from "./payroll/_components/OfficePayroll";
+import { OfficePayroll, OfficePayrollOverview } from "./payroll/_components/OfficePayroll";
 import {
   ArrowLeft,
   ChartNoAxesColumnIncreasing,
+  ChevronLeft,
+  ChevronRight,
   CalendarDays,
   ChefHat,
   Coffee,
@@ -976,6 +978,11 @@ function RoleScheduleTable({
 export default function SalaryEstimatePage() {
   const { user, loading } = useAuth();
   const canViewMonthlyDailySalary = user?.role === "admin";
+  const [officeSelected, setOfficeSelected] = useState(false);
+  const [officeDialogOpen, setOfficeDialogOpen] = useState(false);
+  const [officeRevision, setOfficeRevision] = useState(0);
+  const overviewRail = useRef<HTMLDivElement>(null);
+  const showOfficeActions = canViewMonthlyDailySalary && officeSelected;
   const { storeId, storeName } = useStore();
   const canScheduleAcrossCafeAndKitchen = storeId === "cafe" || storeId === "restaurant";
   const router = useRouter();
@@ -1210,6 +1217,7 @@ export default function SalaryEstimatePage() {
     return next;
   }, [weekSegments]);
   const filteredDate = workspaceView === "schedule" && visibleWeeksByDate.has(dateFilter) ? dateFilter : "";
+  const officeMonth = (filteredDate || range.startDate).slice(0, 7);
   const displayedWeeks = filteredDate ? weekSegments.filter(week => week.key === visibleWeeksByDate.get(filteredDate)) : weekSegments;
 
   useEffect(() => {
@@ -1888,7 +1896,10 @@ export default function SalaryEstimatePage() {
         </header>
 
         <div className="space-y-5">
-          {canViewMonthlyDailySalary && <OfficePayroll initialMonth={range.startDate.slice(0, 7)} />}
+          {canViewMonthlyDailySalary && officeDialogOpen && (
+            <OfficePayroll initialMonth={officeMonth} onClose={() => setOfficeDialogOpen(false)}
+              onSaved={() => setOfficeRevision((revision) => revision + 1)} />
+          )}
           <div className="space-y-5">
             <section aria-labelledby="estimate-overview" className={cn("overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg shadow-sky-900/10", workspaceView === "saved" && "hidden")}>
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 p-4">
@@ -1923,9 +1934,13 @@ export default function SalaryEstimatePage() {
                   )}
                   <div className="w-full min-w-0 sm:w-36">
                     <SelectBox
-                      value={selectedRole}
-                      options={roleOptions}
-                      onValueChange={setSelectedRole}
+                      value={showOfficeActions ? "office-payroll" : selectedRole}
+                      options={canViewMonthlyDailySalary ? [...roleOptions, { value: "office-payroll", label: "Văn phòng", icon: Wallet }] : roleOptions}
+                      onValueChange={(value) => {
+                        const isOffice = canViewMonthlyDailySalary && value === "office-payroll";
+                        setOfficeSelected(isOffice);
+                        if (!isOffice) setSelectedRole(value);
+                      }}
                       ariaLabel="Chọn vai trò phân ca và tổng hợp nhân viên"
                       disabled={saving || loadingSavedEstimate}
                       className="w-full"
@@ -1935,16 +1950,28 @@ export default function SalaryEstimatePage() {
                   </div>
                   <Button
                     className="h-11 gap-2 rounded-xl bg-sky-950 px-3 text-sm font-semibold text-white hover:bg-sky-900"
-                    disabled={!selectedRole || displayedScheduleRoles.includes(selectedRole) || saving || loadingSavedEstimate || employeesLoading}
+                    disabled={saving || loadingSavedEstimate || (!showOfficeActions && (!selectedRole || displayedScheduleRoles.includes(selectedRole) || employeesLoading))}
                     onClick={() => {
+                      if (showOfficeActions) {
+                        setOfficeDialogOpen(true);
+                        return;
+                      }
                       if (!selectedRole || displayedScheduleRoles.includes(selectedRole)) return;
                       pendingBoardRole.current = selectedRole;
                       setScheduleBoardRoles(current => [...current, selectedRole]);
                       setWorkspaceView("schedule");
                     }}
                   >
-                    <Plus className="h-4 w-4" />Thêm lịch phân ca
+                    <Plus className="h-4 w-4" />{showOfficeActions ? "Nhập lương văn phòng" : "Thêm lịch phân ca"}
                   </Button>
+                  {canViewMonthlyDailySalary && (
+                    <div className="flex items-center gap-1 self-end" aria-label="Cuộn các thẻ tổng quan">
+                      <Button type="button" variant="outline" className="size-11 p-0" aria-label="Xem thẻ phía trước"
+                        onClick={() => overviewRail.current?.scrollBy({ left: -440, behavior: "smooth" })}><ChevronLeft className="size-4" /></Button>
+                      <Button type="button" variant="outline" className="size-11 p-0" aria-label="Xem thẻ phía sau"
+                        onClick={() => overviewRail.current?.scrollBy({ left: 440, behavior: "smooth" })}><ChevronRight className="size-4" /></Button>
+                    </div>
+                  )}
 
                   {/* <Button
                     variant="outline"
@@ -1967,7 +1994,12 @@ export default function SalaryEstimatePage() {
                   </Button> */}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-[repeat(auto-fit,minmax(125px,1fr))]">
+              <div ref={overviewRail} tabIndex={canViewMonthlyDailySalary ? 0 : undefined}
+                role={canViewMonthlyDailySalary ? "region" : undefined}
+                aria-label={canViewMonthlyDailySalary ? "Các thẻ tổng quan ước tính lương" : undefined}
+                className={cn("gap-2.5 p-4", canViewMonthlyDailySalary
+                  ? "flex snap-x snap-proximity overflow-x-auto scroll-px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-700"
+                  : "grid grid-cols-2 sm:grid-cols-[repeat(auto-fit,minmax(125px,1fr))]")}>
                 {[
                   {
                     role: "Tổng tiền",
@@ -1985,6 +2017,7 @@ export default function SalaryEstimatePage() {
                   return (
                     <div key={isTotal ? "overview-total" : item.role} className={cn(
                       "relative isolate flex min-w-0 flex-col overflow-hidden rounded-xl border px-3 pb-7 pt-3",
+                      canViewMonthlyDailySalary && "w-52 shrink-0 snap-start",
                       isTotal ? "border-sky-800 bg-gradient-to-br from-sky-700 to-sky-950 text-white" : "border-slate-200 bg-white text-slate-950",
                     )}>
                       <div className="flex min-h-9 items-center gap-2 text-xs font-semibold">
@@ -2004,6 +2037,10 @@ export default function SalaryEstimatePage() {
                     </div>
                   );
                 })}
+                {canViewMonthlyDailySalary && (
+                  <OfficePayrollOverview key={officeMonth} month={officeMonth} revision={officeRevision}
+                    onEdit={() => setOfficeDialogOpen(true)} />
+                )}
               </div>
             </section>
 
