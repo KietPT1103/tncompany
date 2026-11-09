@@ -95,6 +95,10 @@ jobs:
         run: npm run test:bar-print-agent
 
       - name: Build production bundle
+        env:
+          # Keep esbuild's Go runtime within the Windows runner's memory budget.
+          GOGC: "50"
+          GOMAXPROCS: "2"
         run: npm run build
         
 
