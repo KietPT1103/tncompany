@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Calculator, FileDown, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, Calculator, FileDown, Image, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { paginateItems } from "@/lib/listPagination";
 import { SelectBox } from "@/components/ui/SelectBox";
 import { SingleDatePicker } from "@/components/ui/SingleDatePicker";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
+import { ProfitSummaryPreview } from "./ProfitSummaryPreview";
 import {
   getProfitPeriod,
   saveProfitPeriod,
@@ -82,6 +83,8 @@ export function ProfitCalculation({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting,setExporting] = useState(false);
+  const [renderingImage, setRenderingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState<{ image: Blob; filename: string } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [reload, setReload] = useState(0);
   const [error, setError] = useState("");
@@ -174,6 +177,22 @@ export function ProfitCalculation({
       setError(reason instanceof Error ? reason.message : 'Không xuất được file Excel.');
     } finally { setExporting(false); }
   }
+  async function previewSummaryImage() {
+    if (!data || !calculation.complete || renderingImage) return;
+    setRenderingImage(true);
+    setError("");
+    setMessage("");
+    const options = { storeName, startDate: range.startDate, endDate: range.endDate, days: data.days, inputsByDate: inputs, unsaved: dirty };
+    try {
+      const { renderProfitSummaryImage } = await import("./profitSummaryImage");
+      const image = await renderProfitSummaryImage(options);
+      setImagePreview({ image, filename: `Tong-hop-loi-nhuan_${options.startDate}_${options.endDate}.png` });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Không xuất được ảnh Tổng hợp.");
+    } finally {
+      setRenderingImage(false);
+    }
+  }
   async function save() {
     if (!data || !calculation.complete || saving) return;
     const savingScope = scope;
@@ -216,6 +235,7 @@ export function ProfitCalculation({
 
   return (
     <div className="space-y-5">
+      {imagePreview && <ProfitSummaryPreview {...imagePreview} onClose={() => setImagePreview(null)} />}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <fieldset
           disabled={saving}
@@ -283,6 +303,9 @@ export function ProfitCalculation({
           </Button>
           <Button variant="outline" disabled={!calculation.complete || loading || saving || exporting} isLoading={exporting} onClick={() => void exportExcel()} className={`gap-2 ${control}`}>
             <FileDown className="h-4 w-4"/>Xuất Excel
+          </Button>
+          <Button variant="outline" disabled={!calculation.complete || loading || saving || renderingImage} isLoading={renderingImage} onClick={() => void previewSummaryImage()} className={`gap-2 ${control}`}>
+            <Image className="h-4 w-4" aria-hidden="true" />Xem ảnh báo cáo
           </Button>
           <Button
             disabled={!calculation.complete || loading || saving}
