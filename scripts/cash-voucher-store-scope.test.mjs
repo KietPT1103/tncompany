@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+let source=readFileSync('src/services/cashVoucherService.ts','utf8');
+source=source.replace('import { ApiTimestamp, posRequest } from "@/services/posApi";','const posRequest=(...args)=>globalThis.voucherRequest(...args);');
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2020}}).outputText;
+const service=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+let body;
+globalThis.voucherRequest=async(resource,options)=>{assert.equal(resource,'vouchers');body=JSON.parse(options.body);return {};};
+await service.cancelCashVoucher('voucher-bau','Nhập nhầm','store_bau');
+assert.deepEqual(body,{id:'voucher-bau',action:'cancel',reason:'Nhập nhầm',storeId:'store_bau'});
+await service.updateCashVoucherBasic('voucher-bau',{category:'Chi phí',amount:13000},'store_bau');
+assert.equal(body.storeId,'store_bau');assert.equal(body.amount,13000);
+await service.cancelCashVoucher('voucher-cafe','Test','cafe');assert.equal(body.storeId,'cafe');
+await assert.rejects(()=>service.cancelCashVoucher('voucher','Test',''),/quầy/);
+console.log('PASS voucher mutations always carry owning store; cafe preserved; empty scope rejected');

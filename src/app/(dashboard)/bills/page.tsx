@@ -784,7 +784,7 @@ export default function BillsPage() {
         ...(editingVoucher.type === "expense" ? {
           inventoryReceiptId: voucherEditForm.inventoryReceiptId || null,
         } : {}),
-      });
+      }, editingVoucher.storeId);
       setEditingVoucher(null);
       await loadData();
       alert("Đã cập nhật phiếu thành công.");
@@ -804,7 +804,7 @@ export default function BillsPage() {
 
     setCancellingVoucherId(voucher.id);
     try {
-      await cancelCashVoucher(voucher.id, reason);
+      await cancelCashVoucher(voucher.id, reason, voucher.storeId);
       await loadData();
       alert("Đã hủy phiếu và lưu đầy đủ dấu vết.");
     } catch (error) {
