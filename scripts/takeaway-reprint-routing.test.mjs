@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
+let source=readFileSync('src/services/takeawayReprintService.ts','utf8');
+source=source.replace('import { apiRequest } from "@/lib/api";','const apiRequest=(...args)=>globalThis.testTakeawayReprint(...args);');
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2020}}).outputText;
+const {takeawayReprintMode}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+let calls=0;
+globalThis.testTakeawayReprint=async url=>{calls++;const query=new URL(url,'https://test.invalid').searchParams;assert.equal(query.get('storeId'),'cart');assert.equal(query.get('billId'),'OLD 1');return {hasReceipt:false};};
+assert.equal(await takeawayReprintMode(false,'cafe','OLD 1'),'browser');assert.equal(calls,0,'old stores must not call takeaway API');
+assert.equal(await takeawayReprintMode(true,'cart','OLD 1'),'browser','historical bills retain browser reprint');
+globalThis.testTakeawayReprint=async()=>({hasReceipt:true});
+assert.equal(await takeawayReprintMode(true,'cart','NEW'),'queue','queued bills reprint through queue');
+console.log('PASS reprint routing: old stores unchanged, historical bills preserved, queued bills routed');

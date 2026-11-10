@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/stores.php';
+require_once __DIR__ . '/_lib/takeaway_print_jobs.php';
 require_once __DIR__ . '/_lib/realtime.php';
 require_once __DIR__ . '/_lib/ingredient_usage.php';
 require_once __DIR__ . '/_lib/shift_management.php';
@@ -756,6 +757,9 @@ if ($method === 'GET' && $resource === 'bills') {
 }
 
 if ($method === 'POST' && $resource === 'bills') {
+    $checkoutStore=stores_find(db(),$posStoreId);
+    $takeawayQueueStore=!empty($checkoutStore['isTakeAway']);
+    if($takeawayQueueStore) takeaway_print_ensure_schema(db());
     if (($user['role'] ?? '') === 'bartender' && !auth_has_permission($user, 'bar.checkout')) {
         respond_error('Tài khoản pha chế chưa được cấp quyền bấm bill', 403);
     }
@@ -765,7 +769,7 @@ if ($method === 'POST' && $resource === 'bills') {
     }
     $existingBillId = pos_find_bill_by_checkout_request($posStoreId, $checkoutRequestId);
     if ($existingBillId !== null) {
-        respond_ok(['id' => $existingBillId, 'idempotent' => true], 200);
+        respond_ok(['id' => $existingBillId, 'idempotent' => true, 'printQueued'=>$takeawayQueueStore && takeaway_print_has_receipt(db(),$posStoreId,$existingBillId)], 200);
     }
 
     db()->beginTransaction();
@@ -794,17 +798,24 @@ if ($method === 'POST' && $resource === 'bills') {
         ]);
         pos_replace_bill_children($id, $posStoreId, is_array($body['items'] ?? null) ? $body['items'] : [], is_array($body['appliedSurcharges'] ?? null) ? $body['appliedSurcharges'] : []);
         ingredient_usage_capture_bill($posStoreId, $id, ingredient_usage_recipe_resolver());
+        $printQueued=false;
+        if($takeawayQueueStore && !empty($checkoutStore['takeawayPrintingEnabled'])) {
+            $savedBillQuery=db()->prepare('SELECT * FROM bills WHERE id=? AND store_id=?');
+            $savedBillQuery->execute([$id,$posStoreId]);
+            $savedBill=pos_map_bills($savedBillQuery->fetchAll())[0];
+            $printQueued=takeaway_print_enqueue(db(),$checkoutStore,$savedBill);
+        }
         db()->commit();
     } catch (Throwable $exception) {
         if (db()->inTransaction()) db()->rollBack();
         $existingBillId = pos_find_bill_by_checkout_request($posStoreId, $checkoutRequestId);
         if ($existingBillId !== null) {
-            respond_ok(['id' => $existingBillId, 'idempotent' => true], 200);
+            respond_ok(['id' => $existingBillId, 'idempotent' => true, 'printQueued'=>$takeawayQueueStore && takeaway_print_has_receipt(db(),$posStoreId,$existingBillId)], 200);
         }
         throw $exception;
     }
     realtime_publish($posStoreId, 'bill-created', ['id' => $id]);
-    respond_ok(['id' => $id], 201);
+    respond_ok(['id' => $id, 'printQueued'=>$printQueued], 201);
 }
 
 if ($method === 'PATCH' && $resource === 'bills') {

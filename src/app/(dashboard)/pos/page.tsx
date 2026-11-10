@@ -47,7 +47,7 @@ import {
   getBills,
   getBillsByShift,
   PaymentMethod,
-  saveBill,
+  saveBillWithPrintResult,
 } from "@/services/billService";
 import {
   CashVoucher,
@@ -69,6 +69,8 @@ import { Category, getCategories, updateCategory } from "@/services/categoryServ
 import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
+import TakeawayPrintQueue from "@/features/stores/TakeawayPrintQueue";
+import { takeawayReprintMode } from "@/services/takeawayReprintService";
 import { normalizeSearchText } from "@/lib/utils";
 import { businessDate, isPreviousDayShift, hasShiftAcknowledgement, acknowledgePreviousDayShift, shiftAcknowledgementKey } from "@/lib/shiftDay";
 import { getOrCreatePosDevice, PosDeviceIdentity } from "@/lib/posDevice";
@@ -288,6 +290,7 @@ export default function CafePosPage() {
     .endsWith("@service.local");
   const isServerAccount = role === "server" || isServiceAccountEmail;
   const isBartenderAccount = role === "bartender";
+  const usesTakeawayPrintQueue = stores.some(store => store.id === storeId && store.isTakeAway && store.takeawayPrintingEnabled);
   const isCashierAccount = role === "user";
   const isRestaurantServer = isServerAccount && isHotpotStore;
   const canUseKitchenAutoPrint = isHotpotStore && !isRestaurantServer;
@@ -2061,7 +2064,7 @@ export default function CafePosPage() {
           ? crypto.randomUUID()
           : `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
       checkoutRequestIdRef.current = checkoutRequestId;
-      const billId = await saveBill({
+      const checkoutResult = await saveBillWithPrintResult({
         tableNumber: isFarmStore ? FARM_ORDER_KEY : receiptData.table,
         subtotalBeforeSurcharge: receiptData.subtotal,
         surchargeTotal: receiptData.surchargeTotal,
@@ -2092,7 +2095,9 @@ export default function CafePosPage() {
         })),
       });
 
+      const billId = checkoutResult.id;
       const billCode = billId;
+      if (checkoutResult.printQueued) window.dispatchEvent(new Event('takeaway-print-queued'));
       const isTakeawayOrder =
         receiptData.table === TAKEAWAY_NAME || receiptData.table === FARM_ORDER_LABEL;
       const orderLabel = isTakeawayOrder ? "Mang về" : receiptData.table;
@@ -2124,7 +2129,7 @@ export default function CafePosPage() {
         }
       }
 
-      if (!isBartenderAccount) {
+      if (!isBartenderAccount && !checkoutResult.printQueued) {
         // Browser printing blocks React from painting pending state updates. Commit
         // the closed modal first so an Enter used in the print dialog cannot submit it again.
         flushSync(() => setShowReceipt(false));
@@ -3115,7 +3120,18 @@ export default function CafePosPage() {
     return new Date(bill.createdAt.seconds * 1000).toLocaleString("vi-VN");
   };
 
-  const handleReprintBill = (bill: Bill) => {
+  const handleReprintBill = async (bill: Bill) => {
+    if (usesTakeawayPrintQueue) {
+      try {
+        if (await takeawayReprintMode(true, storeId, bill.id) === 'queue') {
+          window.dispatchEvent(new CustomEvent('takeaway-print-queue', { detail: bill.id }));
+          return;
+        }
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Không kiểm tra được lệnh in. Vui lòng thử lại.');
+        return;
+      }
+    }
     const isTakeawayOrder =
       !bill.tableNumber ||
       bill.tableNumber === TAKEAWAY_ID ||
@@ -3440,6 +3456,7 @@ export default function CafePosPage() {
     >
       <main className="min-h-screen bg-slate-50 p-3 sm:p-6">
         <div className="mx-auto max-w-[1400px] overflow-hidden rounded-2xl border bg-white shadow-xl">
+          {usesTakeawayPrintQueue && <TakeawayPrintQueue key={storeId} storeId={storeId} />}
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-3">
               {role === "admin" && (

@@ -91,6 +91,23 @@ jobs:
           node --test src/app/download-inventory-print-helper/downloadConfig.test.ts
           if ($LASTEXITCODE -ne 0) { throw "Inventory Print Helper download tests failed" }
 
+      - name: Test takeaway printing and build setup
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          php scripts/takeaway-print-jobs-test.php
+          if ($LASTEXITCODE -ne 0) { throw "Takeaway queue tests failed" }
+          php scripts/takeaway-checkout-isolation-test.php
+          if ($LASTEXITCODE -ne 0) { throw "Existing checkout isolation tests failed" }
+          node scripts/takeaway-reprint-routing.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Historical bill reprint tests failed" }
+          php scripts/takeaway-downloads-test.php
+          if ($LASTEXITCODE -ne 0) { throw "Takeaway download tests failed" }
+          dotnet run --project agent/windows/TakeawayPrintHelper.Tests/TakeawayPrintHelper.Tests.csproj
+          if ($LASTEXITCODE -ne 0) { throw "Takeaway helper tests failed" }
+          & ./agent/windows/TakeawayPrintHelper/publish.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Takeaway setup publish failed" }
+
       - name: Test print agent
         run: npm run test:bar-print-agent
 
@@ -150,6 +167,34 @@ jobs:
             -o ConnectTimeout=10 -o "UserKnownHostsFile=$knownHostsPath" `
             -p $env:SSH_PORT "$env:SSH_USER@$env:SSH_HOST" "echo SSH_CONNECTION_OK"
           if ($LASTEXITCODE -ne 0) { throw "SSH connection failed with exit code $LASTEXITCODE" }
+
+      - name: Upload takeaway setup before activating website
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:GITHUB_SHA -notmatch '^[0-9a-f]{40}$') { throw "Invalid revision" }
+          $sshDirectory = Join-Path $env:RUNNER_TEMP "tncompany-ssh"
+          $sshTarget = "$env:SSH_USER@$env:SSH_HOST"
+          $sshOptions = @("-i", (Join-Path $sshDirectory "id_ed25519"), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes", "-o", "UserKnownHostsFile=$(Join-Path $sshDirectory 'known_hosts')")
+          $remoteHelperDirectory = "/tmp/tncompany-takeaway-$env:GITHUB_SHA"
+          & ssh.exe @sshOptions -p $env:SSH_PORT $sshTarget "mkdir -p '$remoteHelperDirectory' && chmod 700 '$remoteHelperDirectory'"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot prepare helper upload directory" }
+          $helperArtifacts = @(
+            "artifacts/TN-Company-Takeaway-Print-Helper-Setup.exe",
+            "artifacts/TN-Company-Takeaway-Print-Helper-Setup.exe.sha256",
+            "artifacts/tn-company-takeaway-print-helper-windows-x64.zip",
+            "artifacts/tn-company-takeaway-print-helper-windows-x64.zip.sha256",
+            "scripts/upload-takeaway-print-helper.php",
+            "public/api/_lib/takeaway_print_downloads.php"
+          )
+          & scp.exe @sshOptions -P $env:SSH_PORT @helperArtifacts "${sshTarget}:$remoteHelperDirectory/"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot upload takeaway artifacts" }
+          $uploadCommand = "php '$remoteHelperDirectory/upload-takeaway-print-helper.php' --bootstrap=/var/www/tnservice.vn/public/api/_lib/bootstrap.php --manifest='$remoteHelperDirectory/takeaway_print_downloads.php' --artifact-dir='$remoteHelperDirectory' --helper-only"
+          & ssh.exe @sshOptions -p $env:SSH_PORT $sshTarget $uploadCommand
+          if ($LASTEXITCODE -ne 0) { throw "Takeaway artifact upload/checksum verification failed; website was not activated" }
+          $cleanupCommand = "rm -f -- '$remoteHelperDirectory/TN-Company-Takeaway-Print-Helper-Setup.exe' '$remoteHelperDirectory/TN-Company-Takeaway-Print-Helper-Setup.exe.sha256' '$remoteHelperDirectory/tn-company-takeaway-print-helper-windows-x64.zip' '$remoteHelperDirectory/tn-company-takeaway-print-helper-windows-x64.zip.sha256' '$remoteHelperDirectory/upload-takeaway-print-helper.php' '$remoteHelperDirectory/takeaway_print_downloads.php' && rmdir '$remoteHelperDirectory'"
+          & ssh.exe @sshOptions -p $env:SSH_PORT $sshTarget $cleanupCommand
+          if ($LASTEXITCODE -ne 0) { throw "Cannot remove verified helper upload staging files" }
 
       - name: Package release
         shell: powershell

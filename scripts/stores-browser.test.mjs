@@ -35,8 +35,12 @@ const fixture = `
     setInput(document.querySelector('dialog input:not([type])'),'Quầy mới');
     setInput(document.querySelector('dialog textarea'),'123 Đường A');await wait(20);
     document.querySelector('dialog input[type=checkbox]').click();await wait(20);
+    const printSetting=[...document.querySelectorAll('dialog label')].find(label=>label.textContent.includes('In hóa đơn và tem qua laptop'));
+    check('takeaway exposes opt-in laptop printing setting',!!printSetting && !printSetting.querySelector('input').checked);
+    printSetting.querySelector('input').click();await wait(20);
     document.querySelector('dialog form').requestSubmit();await wait(100);
     check('creates store with address and take-away classification',storeRows[1]?.name==='Quầy mới' && storeRows[1].address==='123 Đường A' && storeRows[1].isTakeAway);
+    check('saves shared laptop printing configuration',storeRows[1].takeawayPrintingEnabled===true);
     check('new store is rendered',document.querySelector('tbody').textContent.includes('Quầy mới') && document.querySelector('tbody').textContent.includes('Take away'));
     document.querySelector('[aria-label="Sửa Quầy mới"]').click();await wait(30);
     setInput(document.querySelector('dialog input:not([type])'),'Quầy đã sửa');await wait(20);

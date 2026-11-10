@@ -25,7 +25,8 @@ const getBillsPage = async (options: GetBillsOptions = {}, limit = 100, offset =
   })).items;
 
 const notifyStockChange = () => { if (typeof window !== "undefined") window.dispatchEvent(new Event("pos-stock-changed")); };
-export async function saveBill(data: NewBill) { const result=await posRequest<{ id: string }>("bills", { method: "POST", body: JSON.stringify(data) }); notifyStockChange(); return result.id; }
+export async function saveBillWithPrintResult(data: NewBill) { const result=await posRequest<{ id: string; printQueued?: boolean }>("bills", { method: "POST", body: JSON.stringify(data) }); notifyStockChange(); return result; }
+export async function saveBill(data: NewBill) { return (await saveBillWithPrintResult(data)).id; }
 export async function getBills(options: GetBillsOptions = {}) {
   return getBillsPage(options, options.limitCount || 100);
 }

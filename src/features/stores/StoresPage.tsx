@@ -6,12 +6,12 @@ import { useStore } from "@/context/StoreContext";
 import { deleteStore, getStores, saveStore, type StoreInput, type StoreRecord } from "@/services/stores.api";
 import { normalizeSearchText } from "@/lib/utils";
 
-const emptyForm: StoreInput = { name: "", address: "", isTakeAway: false, isActive: true };
+const emptyForm: StoreInput = { name: "", address: "", isTakeAway: false, isActive: true, takeawayPrintingEnabled: false };
 const fieldClass = "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
 
 function StoreEditor({ item, onClose, onSaved }: { item: StoreRecord | null; onClose: () => void; onSaved: () => Promise<void> }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [form, setForm] = useState<StoreInput>(() => item ? { name: item.name, address: item.address, isTakeAway: item.isTakeAway, isActive: item.isActive } : { ...emptyForm });
+  const [form, setForm] = useState<StoreInput>(() => item ? { name: item.name, address: item.address, isTakeAway: item.isTakeAway, isActive: item.isActive, takeawayPrintingEnabled: item.takeawayPrintingEnabled ?? false } : { ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -43,6 +43,7 @@ function StoreEditor({ item, onClose, onSaved }: { item: StoreRecord | null; onC
         <label className="block text-sm font-semibold">Địa chỉ<textarea maxLength={500} rows={3} value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Nhập địa chỉ quầy" className={fieldClass} /></label>
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4"><input type="checkbox" checked={form.isTakeAway} onChange={e => setForm({ ...form, isTakeAway: e.target.checked })} className="mt-0.5 h-4 w-4 accent-emerald-700" /><span><span className="block text-sm font-semibold">Quầy take away</span><span className="mt-1 block text-xs text-slate-500">Đánh dấu để phân loại quầy bán mang đi.</span></span></label>
         <label className="flex cursor-pointer items-center gap-3 text-sm font-semibold"><input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} className="h-4 w-4 accent-emerald-700" />Quầy đang hoạt động</label>
+        {form.isTakeAway && <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"><input type="checkbox" checked={form.takeawayPrintingEnabled} onChange={e => setForm({ ...form, takeawayPrintingEnabled: e.target.checked })} className="mt-1 h-4 w-4" /><span><span className="block text-sm font-semibold">In hóa đơn và tem qua laptop</span><span className="block text-xs text-slate-600">Thanh toán trên điện thoại hoặc laptop đều gửi về chương trình in Windows. Chỉ bật sau khi đã cấu hình máy in bill và máy in tem.</span></span></label>}
       </fieldset>
       <div className="flex justify-end gap-2 border-t border-slate-100 p-5"><Button type="button" variant="outline" disabled={saving} onClick={onClose}>Huỷ</Button><Button type="submit" disabled={saving || !form.name.trim()}>{saving ? "Đang lưu..." : "Lưu quầy"}</Button></div>
     </form>

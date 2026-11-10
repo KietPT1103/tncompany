@@ -5,10 +5,11 @@ export type StoreRecord = {
   name: string;
   address: string;
   isTakeAway: boolean;
+  takeawayPrintingEnabled: boolean;
   isActive: boolean;
   deletedAt: string | null;
 };
-export type StoreInput = Pick<StoreRecord, "name" | "address" | "isTakeAway" | "isActive">;
+export type StoreInput = Pick<StoreRecord, "name" | "address" | "isTakeAway" | "isActive" | "takeawayPrintingEnabled">;
 
 export async function getStores(management = false, history = false) {
   const data = await apiRequest<{ items: StoreRecord[] }>(`/stores.php${management ? "?management=1" : history ? "?history=1" : ""}`);

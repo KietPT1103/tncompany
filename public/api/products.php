@@ -7,6 +7,7 @@ require_once __DIR__ . '/_lib/bootstrap.php';
 require_once __DIR__ . '/_lib/auth.php';
 require_once __DIR__ . '/_lib/products_inventory.php';
 require_once __DIR__ . '/_lib/product_code_generation.php';
+require_once __DIR__ . '/_lib/product_duplicates.php';
 
 function products_find_category_id(string $storeId, ?string $rawCategory): ?string
 {
@@ -442,17 +443,7 @@ if ($method === 'POST') {
     try {
         if ($productCode === '') $productCode = products_next_sp_code();
         $normalizedName = products_normalized_name($productName);
-        $duplicate = db()->prepare(
-            'SELECT id,store_id,product_code,product_name,unit FROM products
-             WHERE LOWER(product_code)=LOWER(:code)
-                OR (item_type=:item_type AND (
-                    normalized_name=:normalized
-                    OR LOWER(TRIM(product_name))=LOWER(TRIM(:name))
-                ))
-             LIMIT 1'
-        );
-        $duplicate->execute(['code' => $productCode, 'item_type' => $itemType, 'normalized' => $normalizedName, 'name' => $productName]);
-        if ($similar = $duplicate->fetch()) {
+        if ($similar = products_find_create_duplicate(db(), $storeId, $productCode, $itemType, $normalizedName, $productName)) {
             db()->query("SELECT RELEASE_LOCK('tn_company_products_sp_code')")->fetchColumn();
             respond_error('Sản phẩm tương tự đã tồn tại.', 409, ['similarProduct' => $similar]);
         }

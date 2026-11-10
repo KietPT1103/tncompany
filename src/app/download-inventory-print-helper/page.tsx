@@ -1,5 +1,6 @@
 import { Archive, Download, MonitorDown, Power, Printer, ShieldCheck, Usb } from "lucide-react";
 import { INVENTORY_PRINT_HELPER_COPY, inventoryPrintHelperDownloads } from "./downloadConfig";
+import TakeawayDownloadSection from './TakeawayDownloadSection';
 
 const steps = [
   "Cắm máy in A4/A5 qua USB, cài driver và in thử từ Windows.",
@@ -14,13 +15,14 @@ export default function DownloadInventoryPrintHelperPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100 sm:py-16">
+      <TakeawayDownloadSection />
       <div className="mx-auto max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl shadow-emerald-950/30">
         <section className="grid gap-10 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,.22),transparent_42%)] p-6 sm:p-10 lg:grid-cols-[1.15fr_.85fr] lg:p-14">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-extrabold uppercase tracking-[.16em] text-emerald-300">
               <MonitorDown className="h-4 w-4" /> Windows Print Helper
             </div>
-            <h1 className="mt-6 text-3xl font-black tracking-tight sm:text-5xl">Cài máy in phiếu xuất kho A4/A5</h1>
+            <h2 className="mt-6 text-3xl font-black tracking-tight sm:text-5xl">Cài máy in phiếu xuất kho A4/A5</h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300">
               Ứng dụng dành riêng cho phiếu xuất kho. Chức năng in bill của thu ngân vẫn dùng máy in bill mặc định như hiện tại.
             </p>

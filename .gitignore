@@ -13,12 +13,17 @@ public/api/config.local.php
 tmp-opt/
 dist-ssr/
 artifacts/
+kpos_driver.exe
 agent/windows/CashierMonitor/bin/
 agent/windows/CashierMonitor/obj/
 agent/windows/InventoryPrintHelper/bin/
 agent/windows/InventoryPrintHelper/obj/
 agent/windows/InventoryPrintHelper.Tests/bin/
 agent/windows/InventoryPrintHelper.Tests/obj/
+agent/windows/TakeawayPrintHelper/bin/
+agent/windows/TakeawayPrintHelper/obj/
+agent/windows/TakeawayPrintHelper.Tests/bin/
+agent/windows/TakeawayPrintHelper.Tests/obj/
 public/uploads/activity-screenshots/
 public/uploads/invoices/
 .codegraph
