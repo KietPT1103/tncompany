@@ -638,7 +638,10 @@ function pos_validate_shift_for_write(array $body, array $user, string $storeId)
 {
     $id = trim((string)($body['shiftId'] ?? ''));
     if ($id === '') {
-        if (($user['role'] ?? '') === 'user' && in_array($storeId, ['cafe','restaurant','bakery'], true)) {
+        if (($user['role'] ?? '') === 'user' && (
+            in_array($storeId, ['cafe','restaurant','bakery'], true)
+            || !empty(stores_find(db(), $storeId)['isTakeAway'])
+        )) {
             respond_error('Vui lòng mở ca trước khi ghi hóa đơn hoặc phiếu thu/chi.', 409);
         }
         return;

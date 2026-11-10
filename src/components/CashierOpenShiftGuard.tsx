@@ -4,11 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { hasPermission } from "@/lib/permissions";
 import { useAuth } from "@/context/AuthContext";
+import { useStore } from "@/context/StoreContext";
+import { supportsCashierShifts } from "@/lib/cashierShiftPolicy";
 import { getOpenShiftByCashier } from "@/services/shiftService";
 
 import { isPreviousDayShift, hasShiftAcknowledgement } from "@/lib/shiftDay";
 
-const SHIFT_ENABLED_STORES = new Set(["cafe", "restaurant", "bakery"]);
 const SHIFT_EXEMPT_ADMIN_PATHS = [
   "/admin/product/checks",
   "/admin/product/issues",
@@ -24,6 +25,7 @@ export const isShiftExemptAdminPath = (pathname: string) =>
 
 export default function CashierOpenShiftGuard() {
   const { user, role, loading: authLoading } = useAuth();
+  const { stores, storesLoading } = useStore();
   const location = useLocation();
   const [checking, setChecking] = useState(true);
   const [hasOpenShift, setHasOpenShift] = useState(false);
@@ -33,10 +35,11 @@ export default function CashierOpenShiftGuard() {
     role === "user" &&
     hasPermission(user, "bills.access") &&
     !!user?.storeId &&
-    SHIFT_ENABLED_STORES.has(user.storeId) &&
+    supportsCashierShifts(user.storeId, stores.find(store => store.id === user.storeId)) &&
     !isShiftExemptAdminPath(location.pathname);
 
   const checkShift = useCallback(async () => {
+    if (storesLoading) { setChecking(true); return; }
     if (!mustHaveOpenShift || !user?.storeId || !user.uid) {
       setHasOpenShift(true);
       setChecking(false);
@@ -55,7 +58,7 @@ export default function CashierOpenShiftGuard() {
     } finally {
       setChecking(false);
     }
-  }, [mustHaveOpenShift, user?.storeId, user?.uid]);
+  }, [mustHaveOpenShift, storesLoading, user?.storeId, user?.uid]);
 
   useEffect(() => {
     void checkShift();
@@ -74,7 +77,7 @@ export default function CashierOpenShiftGuard() {
     };
   }, [checkShift, mustHaveOpenShift]);
 
-  if (authLoading || checking) {
+  if (authLoading || storesLoading || checking) {
     return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-600">Đang kiểm tra ca làm việc...</div>;
   }
 

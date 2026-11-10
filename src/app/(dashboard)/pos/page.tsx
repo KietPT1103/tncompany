@@ -71,6 +71,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import TakeawayPrintQueue from "@/features/stores/TakeawayPrintQueue";
 import { takeawayReprintMode } from "@/services/takeawayReprintService";
+import { supportsCashierShifts } from "@/lib/cashierShiftPolicy";
 import { normalizeSearchText } from "@/lib/utils";
 import { businessDate, isPreviousDayShift, hasShiftAcknowledgement, acknowledgePreviousDayShift, shiftAcknowledgementKey } from "@/lib/shiftDay";
 import { getOrCreatePosDevice, PosDeviceIdentity } from "@/lib/posDevice";
@@ -126,7 +127,6 @@ const BAKERY_STORE_ID = "bakery";
 const FARM_STORE_ID = "farm";
 const FARM_ORDER_KEY = "__farm_no_table";
 const FARM_ORDER_LABEL = "Farm - no table";
-const SHIFT_ENABLED_STORES = new Set(["cafe", "restaurant", "bakery"]);
 const THREE_SHIFT_STORES = new Set(["cafe", "restaurant"]);
 const CASH_ROUNDING_STEPS = [5000, 10000, 20000, 50000];
 const CASH_NOTE_VALUES = [50000, 100000, 200000, 500000];
@@ -283,7 +283,7 @@ export default function CafePosPage() {
   const isHotpotStore = storeId === HOTPOT_STORE_ID;
   const isBakeryStore = storeId === BAKERY_STORE_ID;
   const isFarmStore = storeId === FARM_STORE_ID;
-  const isShiftEnabledStore = SHIFT_ENABLED_STORES.has(storeId);
+  const isShiftEnabledStore = supportsCashierShifts(storeId, stores.find(store => store.id === storeId));
   const isServiceAccountEmail = (user?.email || "")
     .trim()
     .toLowerCase()
