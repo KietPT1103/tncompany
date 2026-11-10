@@ -3675,11 +3675,11 @@ export default function CafePosPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.7fr)_minmax(380px,1fr)]">
             <section className="border-r bg-white">
-              <div className="flex items-center justify-between border-b px-4 py-3">
-                <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                   {!isFarmStore && <button
                     onClick={() => setActiveTab("tables")}
-                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    className={`flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold transition sm:px-4 ${
                       activeTab === "tables"
                         ? "bg-sky-600 text-white shadow-sm"
                         : "bg-slate-100 text-slate-600 hover:text-slate-900"
@@ -3691,7 +3691,7 @@ export default function CafePosPage() {
                   <button
                     onClick={() => setActiveTab(!isFarmStore && !tableNumber ? "tables" : "menu")}
                     title={!isFarmStore && !tableNumber ? "Vui lòng chọn bàn trước" : "Mở thực đơn"}
-                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    className={`flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold transition sm:px-4 ${
                       activeTab === "menu"
                         ? "bg-sky-600 text-white shadow-sm"
                         : "bg-slate-100 text-slate-600 hover:text-slate-900"
@@ -3703,7 +3703,7 @@ export default function CafePosPage() {
                   {hasPermission(user, "inventory_receipts.view") && (
                     <Link
                       href="/admin/inventory?tab=receipts"
-                      className="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-emerald-100 hover:text-emerald-800"
+                      className="flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-emerald-100 hover:text-emerald-800 sm:px-4"
                     >
                       <PackagePlus className="h-4 w-4" />
                       Nhập kho
@@ -3712,14 +3712,14 @@ export default function CafePosPage() {
                   {hasPermission(user, "inventory_issues.access") && (
                     <Link
                       href="/admin/inventory?tab=issues"
-                      className="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-emerald-100 hover:text-emerald-800"
+                      className="flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-emerald-100 hover:text-emerald-800 sm:px-4"
                     >
                       <PackageMinus className="h-4 w-4" />
                       Xuất kho
                     </Link>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
+                <div className="hidden shrink-0 items-center gap-2 text-xs text-slate-500 sm:flex">
                   <Search className="h-4 w-4" />
                   <span className="hidden sm:inline">
                     {activeTab === "tables"
