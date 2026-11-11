@@ -13,7 +13,10 @@ export function getShiftHandoverAmount(summary: ShiftSummary): number {
 export async function getOpenShiftByCashier(storeId: string, cashierUid: string) { return (await posRequest<{ item: CashierShift | null }>("shifts", {}, { storeId, cashierUid })).item; }
 export async function getShiftsForReport(options: { storeId: string; startDate: Date; endDate: Date; shiftType: ShiftType }) { return (await posRequest<{ items: CashierShift[] }>("shifts", {}, options)).items; }
 export async function openShift(input: ShiftOpenInput) { return posRequest<{item:CashierShift;alreadyOpen:boolean}>("shifts",{method:"POST",body:JSON.stringify(input)}); }
-export async function closeShift(id: string, payload: { closingCash: number; closeNote?: string; expectedOpenedAt?: Date; summary: ShiftSummary }) { await posRequest("shifts",{method:"PATCH",body:JSON.stringify({id,...payload})}); }
+export async function closeShift(id: string, payload: { storeId: string; closingCash: number; closeNote?: string; expectedOpenedAt?: Date; summary: ShiftSummary }) {
+  if (!payload.storeId.trim()) throw new Error("Chưa xác định quầy kết ca.");
+  await posRequest("shifts",{method:"PATCH",body:JSON.stringify({id,...payload})});
+}
 
 export async function getShiftReopenWarning(storeId: string, cashierUid: string, shiftType: ShiftType) {
   return (await posRequest<{ item: CashierShift | null }>('shifts', {}, { storeId, cashierUid, shiftType, checkReopen: 1 })).item;

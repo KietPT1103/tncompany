@@ -38,5 +38,8 @@ export const getAllBills = (options: Omit<GetBillsOptions, "limitCount"> = {}) =
 export const getRecentBills = (storeId = "cafe", limitCount = 20, includeCancelled = false) => getBills({ storeId, limitCount, includeCancelled });
 export async function updateBill(id: string, data: Partial<NewBill> & { createdAt?: Date; cancelledAt?: Date }) { await posRequest("bills", { method: "PATCH", body: JSON.stringify({ id, ...data }) }); notifyStockChange(); }
 export async function cancelBill(id: string, cancelledBy?: string, cancelNote?: string) { await posRequest("bills", { method: "PATCH", body: JSON.stringify({ id, action: "cancel", cancelledBy, note: cancelNote }) }); notifyStockChange(); }
-export const getBillsByShift = (shiftId: string) => getBills({ shiftId, includeCancelled: true, limitCount: 2000 });
+export const getBillsByShift = (shiftId: string, storeId: string) => {
+  if (!storeId.trim()) throw new Error("Chưa xác định quầy kết ca.");
+  return getBills({ storeId, shiftId, includeCancelled: true, limitCount: 2000 });
+};
 export async function deleteBill(id: string) { await posRequest("bills", { method: "DELETE" }, { id }); notifyStockChange(); }

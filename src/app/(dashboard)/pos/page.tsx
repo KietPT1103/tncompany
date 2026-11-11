@@ -2360,9 +2360,9 @@ export default function CafePosPage() {
     }
     setIsPreparingCloseShift(true);
     try {
-      const bills = await getBillsByShift(activeShift.id);
+      const bills = await getBillsByShift(activeShift.id, activeShift.storeId);
       const vouchers = await getCashVouchers({
-        storeId,
+        storeId: activeShift.storeId,
         shiftId: activeShift.id,
         limitCount: 1000,
       });
@@ -2496,6 +2496,7 @@ export default function CafePosPage() {
           : "";
       const finalClosingNote = [closingNote.trim(), surplusNote].filter(Boolean).join(". ");
       await closeShift(activeShift.id, {
+        storeId: activeShift.storeId,
         closingCash,
         expectedOpenedAt: activeShift.openedAt ? new Date(activeShift.openedAt.seconds * 1000) : undefined,
         closeNote: finalClosingNote,

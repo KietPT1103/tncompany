@@ -2,6 +2,13 @@ using TakeawayPrintHelper;
 using System.Text.Json;
 
 void Check(bool value,string reason) { if(!value) throw new Exception(reason); }
+var fullRoll=new System.Drawing.RectangleF(0,0,315,980);
+var safeReceipt=ReceiptPrintBounds.Calculate(315,980,80,fullRoll);
+Check(safeReceipt.Width<=72*100f/25.4f && safeReceipt.Right<315,"80mm receipt fits 72mm print head even when driver reports full roll");
+var narrowClip=new System.Drawing.RectangleF(10,8,260,950);
+var clippedReceipt=ReceiptPrintBounds.Calculate(315,980,80,fullRoll,narrowClip);
+Check(clippedReceipt.Left>=narrowClip.Left && clippedReceipt.Right<=narrowClip.Right,"receipt respects actual Windows graphics clip and offsets");
+Check(ReceiptPrintBounds.Calculate(228,980,58,new System.Drawing.RectangleF(0,0,228,980)).Width<=48*100f/25.4f,"58mm receipt fits 48mm print head");
 var job = new Job("j1","B1","label","printing",JsonDocument.Parse("{}").RootElement,"");
 var api=new FakeApi(job); var printer=new FakePrinter(); var journal=new MemoryJournal();
 var worker=new Worker(api,printer,journal);

@@ -15,6 +15,7 @@ public sealed class TicketPrinter(int receiptMm,int labelWidthMm,int labelHeight
         var rows=TicketLayout.Lines(job); int index=0;
         var printable=document.DefaultPageSettings.PrintableArea;
         var measureWidth=Math.Max(1,Math.Min(width-12,(int)Math.Floor(printable.Width)));
+        if(!label)measureWidth=(int)Math.Floor(ReceiptPrintBounds.Calculate(width,height,receiptMm,printable).Width);
         // Measure at 100 DPI because Windows print coordinates use hundredths of an inch.
         using(var bitmap=new Bitmap(1,1)) {
             bitmap.SetResolution(100,100);using var measure=Graphics.FromImage(bitmap);
@@ -31,6 +32,9 @@ public sealed class TicketPrinter(int receiptMm,int labelWidthMm,int labelHeight
             float bottom=Math.Min(height-6,area.Bottom);
             int contentWidth=Math.Max(1,(int)Math.Floor(Math.Min(width-6,area.Right)-left));
             if(label){TicketRenderer.DrawLabel(g,new RectangleF(left,top,contentWidth,bottom-top),rows);e.HasMorePages=false;return;}
+            var receiptBounds=ReceiptPrintBounds.Calculate(width,height,receiptMm,area,g.VisibleClipBounds);
+            left=receiptBounds.Left;top=receiptBounds.Top;y=top;bottom=receiptBounds.Bottom;
+            contentWidth=(int)Math.Floor(receiptBounds.Width);
             while(index<rows.Count) {
                 var row=rows[index];var h=TicketRenderer.RowHeight(g,row,contentWidth);
                 if(y+h>bottom) {
