@@ -1614,8 +1614,8 @@ export default function BillsPage() {
 
         {canEditBill && editing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b px-5 py-4">
+            <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-5 py-4">
                 <div>
                   <p className="text-sm text-slate-500">Cập nhật hóa đơn</p>
                   <h3 className="text-lg font-semibold text-slate-900">{editing.id}</h3>
@@ -1625,7 +1625,7 @@ export default function BillsPage() {
                 </Button>
               </div>
 
-              <div className="space-y-4 px-5 py-4">
+              <div className="min-h-0 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
                 <div className="grid grid-cols-1 gap-3">
                   {!canEditBillDetails && (
                     <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
@@ -1762,7 +1762,7 @@ export default function BillsPage() {
                 ) : null}
               </div>
 
-              <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-5 py-4">
                 <Button variant="outline" onClick={() => setEditing(null)}>
                   Hủy
                 </Button>

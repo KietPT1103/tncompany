@@ -4953,8 +4953,8 @@ export default function CafePosPage() {
 
       {showCloseShiftModal && closeShiftSummary && activeShift && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b px-5 py-4">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-5 py-4">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Phiếu bàn giao ca</h3>
                 <p className="text-sm text-slate-500">
@@ -4982,7 +4982,7 @@ export default function CafePosPage() {
                 </Button>
               </div>
             </div>
-            <div className="space-y-3 px-5 py-4 text-sm">
+            <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain px-5 py-4 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-slate-50 p-3">
                   <p className="text-slate-500">Tiền mặt đầu ca</p>
@@ -5098,7 +5098,7 @@ export default function CafePosPage() {
                 placeholder="Ghi chú (tùy chọn)"
               />
             </div>
-            <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-5 py-4">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-slate-50 px-5 py-4">
               <Button
                 className="bg-sky-600 hover:bg-sky-700"
                 onClick={handleCloseShiftAndPrint}
