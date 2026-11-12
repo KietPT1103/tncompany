@@ -40,5 +40,21 @@ try{
  assert.equal((await request(query,token)).status,403);
  assert.equal((await request('/revenue-access.php',undefined,{code:generated.data.code})).status,403,'Old code denied');
  assert.equal((await request('/revenue-access.php',undefined,{code:'My-Code-123'})).status,200,'Custom code accepted');
+ assert.equal((await request('/revenue-access-code.php',undefined,{action:'link'})).status,401,'Anonymous visitors cannot generate a link');
+ assert.equal((await request('/revenue-access-code.php','user-token',{action:'link'})).status,403,'Regular accounts cannot generate a link');
+ const share=await request('/revenue-access-code.php','admin-token',{action:'link'});
+ assert.equal(share.status,200,JSON.stringify(share));assert.match(share.data.path,/^\/d\/[A-Za-z0-9_-]{16}$/);
+ assert.equal(share.data.code,undefined,'Link creation does not reveal or change shared code');
+ const link=share.data.path.split('/').pop();
+ const opened=await request('/revenue-access.php',undefined,{link});assert.equal(opened.status,200,JSON.stringify(opened));
+ assert.equal((await request(query,opened.data.token)).status,422,'Link session reaches report validation');
+ assert.equal((await request('/revenue-access-code.php',opened.data.token,{action:'link'})).status,401,'Link session cannot generate links');
+ assert.equal((await request('/revenue-access.php',undefined,{link:[]})).status,422,'Non-string link rejected');
+ assert.equal((await request('/revenue-access.php',undefined,{link:'bad'})).status,403,'Invalid link denied');
+ const codeSession=await request('/revenue-access.php',undefined,{code:'My-Code-123'});
+ await request('/revenue-access-code.php','admin-token',{action:'link'});
+ assert.equal((await request('/revenue-access.php',undefined,{link})).status,403,'Old link revoked');
+ assert.equal((await request('/revenue-access.php',opened.data.token)).data.unlocked,false,'Old link session revoked');
+ assert.equal((await request('/revenue-access.php',codeSession.data.token)).data.unlocked,true,'Code session survives link rotation');
  console.log('Revenue access HTTP: PASS');
 }finally{server.kill();await new Promise(r=>server.exitCode!==null?r():server.once('exit',r));const target=resolve(directory);assert.ok(target.startsWith(resolve(tmpdir())+'\\')||target.startsWith(resolve(tmpdir())+'/'));rmSync(target,{recursive:true,force:true});}

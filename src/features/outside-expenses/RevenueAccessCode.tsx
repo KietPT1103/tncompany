@@ -4,11 +4,12 @@ import { apiRequest } from '@/lib/api';
 export default function RevenueAccessCode() {
   const [custom, setCustom] = useState('');
   const [code, setCode] = useState('');
+  const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   async function create(customCode?: string) {
-    setBusy(true); setError(''); setMessage('');
+    setBusy(true); setError(''); setMessage(''); setLink(''); setCode('');
     try {
       const result = await apiRequest<{ code: string }>('/revenue-access-code.php', { method: 'POST', body: JSON.stringify(customCode === undefined ? {} : { code: customCode }) });
       setCode(result.code); setCustom(''); setMessage('Đã lưu mã mới. Hãy sao chép để chia sẻ.');
@@ -18,6 +19,19 @@ export default function RevenueAccessCode() {
   async function copy() {
     try { await navigator.clipboard.writeText(code); setMessage('Đã sao chép mã.'); }
     catch { setMessage('Hãy chọn mã bên dưới để sao chép.'); }
+  }
+  async function createLink() {
+    setBusy(true); setError(''); setMessage(''); setLink('');
+    try {
+      const result = await apiRequest<{ path: string }>('/revenue-access-code.php', { method: 'POST', body: JSON.stringify({ action: 'link' }) });
+      setLink(new URL(result.path, window.location.origin).href);
+      setMessage('Đã tạo link mới. Link cũ và các phiên mở bằng link cũ đã được thu hồi.');
+    } catch (e) { setError(e instanceof Error ? e.message : 'Chưa tạo được link.'); }
+    finally { setBusy(false); }
+  }
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(link); setMessage('Đã sao chép link.'); }
+    catch { setMessage('Hãy chọn link bên dưới để sao chép.'); }
   }
   return <section aria-label="Mã xem doanh thu" className="space-y-3 rounded-2xl border bg-white p-4">
     <h2 className="font-semibold text-slate-900">Mã xem doanh thu</h2>
@@ -29,6 +43,16 @@ export default function RevenueAccessCode() {
       </label>
       <button disabled={busy} className="min-h-11 rounded-xl border px-4 text-sm font-semibold disabled:opacity-50">Lưu mã tự nhập</button>
     </form>
+    <div className="space-y-2 border-t pt-3">
+      <h3 className="font-semibold text-slate-900">Link xem doanh thu</h3>
+      <p className="text-sm text-slate-600">Bấm link là xem được, không cần nhập mã. Người có link có thể chia sẻ tiếp. Tạo lại link sẽ thu hồi link cũ; đổi mã doanh thu cũng thu hồi link.</p>
+      <button type="button" disabled={busy} onClick={createLink} className="min-h-11 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50">Tạo link xem doanh thu</button>
+      {link && <div className="space-y-2 rounded-xl bg-emerald-50 p-3">
+        <p className="text-xs text-slate-600">Link vừa tạo · hãy sao chép trước khi tải lại trang</p>
+        <a data-revenue-share-link href={link} rel="noreferrer" className="block break-all font-semibold text-emerald-900 underline select-all">{link}</a>
+        <button type="button" onClick={copyLink} className="min-h-11 rounded-lg border border-emerald-200 bg-white px-3 text-sm font-semibold">Sao chép link</button>
+      </div>}
+    </div>
     <div aria-live="polite" className="space-y-2">
       {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
       {message && <p className="text-sm text-emerald-800">{message}</p>}

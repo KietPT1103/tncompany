@@ -12,6 +12,12 @@ import {MemoryRouter,Routes,Route,useLocation} from 'react-router-dom';
 import RevenuePage from './src/features/revenue/RevenuePage.tsx';
 import RevenueAccessCode from './src/features/outside-expenses/RevenueAccessCode.tsx';
 import {DateRangePicker} from './src/components/ui/DateRangePicker.tsx';
+// Keep quick ranges and the calendar in the same month as this fixture's assertions.
+const RealDate=Date;
+window.Date=class extends RealDate {
+ constructor(...args){super(...(args.length?args:['2026-10-25T05:00:00Z']));}
+ static now(){return new RealDate('2026-10-25T05:00:00Z').getTime();}
+};
 const metrics={revenue:1234567,cash:1000000,transfer:234567,cups:150,bakery:42,expense:50000,income:10000,bills:65};
 const mo={room:4000000,retail:200000,surcharge:121000,collected:4321000,cash:1000000,transfer:3321000,expense:200000,other:0,bookings:8};
 window.testAuth={user:null,loading:false};

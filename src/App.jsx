@@ -1,5 +1,6 @@
 import React from "react";
 import RevenuePage from "./features/revenue/RevenuePage";
+import RevenueLinkPage from "./features/revenue/RevenueLinkPage";
 import OutsideExpensesPage from "./features/outside-expenses/OutsideExpensesPage";
 import StoresPage from "./features/stores/StoresPage";
 import StoreSalesGuard from "./components/StoreSalesGuard";
@@ -123,6 +124,7 @@ export function App() {
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/doanh-thu" element={<RevenuePage />} />
+        <Route path="/d/:link" element={<RevenueLinkPage />} />
         <Route path="/revenue" element={<LegacyRevenueRedirect />} />
         <Route path="/bills" element={<Navigate to="/admin/bills" replace />} />
         <Route

@@ -215,11 +215,11 @@ export function getSeoForPath(pathname) {
     return null;
   }
 
-  if (pathname === "/doanh-thu" || pathname === "/revenue" || pathname === "/login" || pathname.startsWith("/admin") || pathname.startsWith("/api")) {
+  if (pathname === "/doanh-thu" || pathname === "/revenue" || pathname.startsWith("/d/") || pathname === "/login" || pathname.startsWith("/admin") || pathname.startsWith("/api")) {
     return {
       title: `${company.shortName} | Trang n\u1ed9i b\u1ed9`,
       description: "Khu v\u1ef1c qu\u1ea3n tr\u1ecb n\u1ed9i b\u1ed9 c\u1ee7a T&N Company.",
-      canonical: toAbsoluteUrl(pathname),
+      canonical: toAbsoluteUrl(pathname.startsWith("/d/") ? "/doanh-thu" : pathname),
       image: DEFAULT_OG_IMAGE,
       siteName: company.shortName,
       openGraphType: "website",

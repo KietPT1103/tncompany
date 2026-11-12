@@ -1,6 +1,6 @@
 # Revenue hub
 
-URL: `/doanh-thu` (legacy `/revenue` redirects here, preserving filters). Uses the existing TN login. There is deliberately no navigation link.
+URL: `/doanh-thu` (legacy `/revenue` redirects here, preserving filters). Access uses a shared revenue code or short link, independent of TN account login. There is deliberately no navigation link.
 
 ## Access
 The public `/doanh-thu` page uses a shared code, independent of TN account login or role. Both TN and Mo reports require a separate revenue bearer token on every API call. Admin tokens and the legacy `revenue_hub.view` grant do not bypass this gate.
@@ -10,6 +10,16 @@ Admins create a random code or save their own (6–64 characters, case-sensitive
 After unlocking, the browser stores a random token in `localStorage` with no application expiry. Clearing site storage or replacing the code requires entering the code again. Only token digests are stored server-side. Temporary connectivity failures retain the remembered token and offer retry. Unlocking is limited to ten attempts per client IP per 15-minute window. When running behind a reverse proxy, ensure `REMOTE_ADDR` identifies the client appropriately.
 
 The token permits revenue reads only; it does not grant account, sheet-management, POS or booking access. No guest names, contact details or door codes are exposed.
+
+### Short share link
+
+In **Liên kết sheet chi → Mã xem doanh thu**, admins can choose **Tạo link xem doanh thu** and **Sao chép link**. The resulting URL is `/d/<16 URL-safe characters>` (96 random bits). It is returned only at creation; save it before leaving or reloading. It can be created before any shared code exists. Anyone holding the link can open the revenue reports without entering a code or signing in, and can forward it to others.
+
+The browser exchanges the link for a separate revenue token, then replaces the address with `/doanh-thu`. Browser storage remembers the token; when storage is blocked, a one-time router handoff permits the current visit. The gate consumes and clears that handoff so an old token cannot override a later code login. Link routes use `noindex,nofollow` and canonicalize to `/doanh-thu`; the initial HTML sets a no-referrer policy. Link exchange requests are POST requests and access responses use `Cache-Control: no-store`.
+
+Only the link digest is stored in `revenue_access_links`, which is created automatically by the access schema. Generating another link immediately revokes the previous link and its browser sessions, preserving sessions opened with the shared code. Changing the shared code revokes all links and all previous revenue sessions. Links do not expire automatically. Link guesses have a separate limit of ten attempts per IP per 15-minute window.
+
+Checks: `php scripts/revenue-access-test.php`, `node scripts/revenue-access-http.test.mjs`, `node scripts/revenue-short-link-browser.test.mjs` (requires built CSS and Microsoft Edge on Windows).
 
 ## Connect MoHomestay
 Deploy both code changes. Set server-only configuration (never use VITE_ variables):

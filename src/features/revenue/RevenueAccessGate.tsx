@@ -1,19 +1,32 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { LockKeyhole, RefreshCw } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const storageKey = 'tn_revenue_access_token';
 const readToken = () => { try { return localStorage.getItem(storageKey) || ''; } catch { return ''; } };
 const remember = (token: string) => { try { if (token) localStorage.setItem(storageKey, token); else localStorage.removeItem(storageKey); } catch { /* Still allow this visit when browser storage is unavailable. */ } };
+export const rememberRevenueToken = remember;
 export const revenueHeaders = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 export default function RevenueAccessGate({ children }: { children: (token: string, lock: () => void) => ReactNode }) {
-  const [token, setToken] = useState(readToken);
-  const [state, setState] = useState<'checking' | 'locked' | 'open'>(() => readToken() ? 'checking' : 'locked');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const initialToken = () => {
+    const incoming = location.state?.revenueAccessToken;
+    return typeof incoming === 'string' && /^[a-f0-9]{64}$/.test(incoming) ? incoming : readToken();
+  };
+  const [token, setToken] = useState(initialToken);
+  const [state, setState] = useState<'checking' | 'locked' | 'open'>(() => initialToken() ? 'checking' : 'locked');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!location.state?.revenueAccessToken) return;
+    // Consume the handoff once: a stale history token must not override a later code login.
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: null });
+  }, [location, navigate]);
   const lock = useCallback(() => {
     remember(''); setToken(''); setCode(''); setState('locked'); setError('Vui lòng nhập lại mã xem doanh thu.');
   }, []);
