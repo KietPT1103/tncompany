@@ -24,6 +24,10 @@ function shift_validate_active_use(array $shift, array $user, bool $confirmed, ?
     if (($user['role'] ?? '') === 'user' && (string)$shift['cashier_uid'] !== (string)$user['id']) {
         throw new ShiftManagementError('Ca không thuộc thu ngân hiện tại.', 403);
     }
+    if (!empty($shift['business_cycle_id'])) {
+        if (!empty($shift['cycle_closed_at'])) throw new ShiftManagementError('Ngày kinh doanh của ca đã chốt.', 409);
+        return;
+    }
     if (shift_is_previous_day((string)$shift['opened_at'], $businessDate) && !$confirmed) {
         throw new ShiftManagementError('Ca còn mở từ ngày trước. Hãy đóng ca cũ hoặc xác nhận tiếp tục ca qua đêm trước khi bán hàng.', 409);
     }
@@ -54,6 +58,10 @@ function shift_management_find(PDO $pdo, string $storeId, string $id, bool $lock
     $s->execute([$id, $storeId]);
     $row = $s->fetch();
     if (!$row) throw new ShiftManagementError('Không tìm thấy ca trong chi nhánh này.', 404);
+    if (function_exists('takeaway_shift_info')) {
+        $cycle=takeaway_shift_info($pdo,$id);
+        if ($cycle) $row=array_merge($row,['business_cycle_id'=>$cycle['cycle_id'],'cycle_closed_at'=>$cycle['cycle_closed_at']]);
+    }
     return $row;
 }
 
@@ -125,8 +133,9 @@ function shift_validate_cash_transfer_times(PDO $pdo, string $storeId, string $i
     foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $transfer) {
         $sourceOpened = $transfer['source_shift_id'] === $id ? $openedAt : $transfer['source_opened'];
         $receiverOpened = $transfer['shift_id'] === $id ? $openedAt : $transfer['receiver_opened'];
+        $sameDay=cash_transfers_same_business_day($pdo,['id'=>$transfer['source_shift_id'],'opened_at'=>$sourceOpened],['id'=>$transfer['shift_id'],'opened_at'=>$receiverOpened]);
         if ($transfer['source_store'] !== $storeId || $transfer['receiver_store'] !== $storeId
-            || substr($sourceOpened, 0, 10) !== substr($receiverOpened, 0, 10) || $sourceOpened >= $receiverOpened) {
+            || !$sameDay || $sourceOpened >= $receiverOpened) {
             throw new ShiftManagementError('Giờ mở ca mới làm sai ngày hoặc thứ tự ca của phiếu thu từ ca trước. Hủy phiếu chuyển ca trước khi điều chỉnh.');
         }
     }
@@ -178,6 +187,13 @@ function shift_management_correct(PDO $pdo, string $storeId, array $user, array 
         foreach ($targets as $billId => $targetId) {
             $bill = $byId[$billId] ?? null;
             $target = $shifts[$targetId];
+            if (function_exists('takeaway_shift_info')) {
+                $sourceCycle=takeaway_shift_info($pdo,$id);
+                $targetCycle=takeaway_shift_info($pdo,$targetId);
+                if (($sourceCycle || $targetCycle) && (!$sourceCycle || !$targetCycle || $sourceCycle['cycle_id']!==$targetCycle['cycle_id'])) {
+                    throw new ShiftManagementError('Không chuyển hóa đơn giữa hai vòng kinh doanh khác nhau.');
+                }
+            }
             if (!$bill || $bill['store_id'] !== $storeId) throw new ShiftManagementError('Hóa đơn không còn thuộc ca đang sửa.');
             if ($bill['created_at'] < $target['opened_at'] || (!empty($target['closed_at']) && $bill['created_at'] > $target['closed_at'])) {
                 throw new ShiftManagementError('Hóa đơn ' . $billId . ' nằm ngoài thời gian ca đích.');

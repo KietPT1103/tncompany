@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
 require __DIR__.'/shift-management-test.php';
+require_once __DIR__.'/../public/api/_lib/takeaway_shifts.php';
+$pdo->exec("CREATE TABLE stores(id TEXT PRIMARY KEY,is_active INTEGER,deleted_at TEXT,takeaway_shift_enabled INTEGER); INSERT INTO stores VALUES('cafe',1,NULL,0)");
+function stores_find($database,string $store): array { return ['id'=>$store,'takeawayShiftEnabled'=>false,'isTakeAway'=>false]; }
 class ShiftTestResponse extends RuntimeException {
     public function __construct(public int $status, public array $data=[]) { parent::__construct('Response '.$status); }
 }
@@ -17,6 +20,7 @@ class ShiftLockStatement {
 }
 class ShiftOpenDatabase {
     public function __construct(private PDO $pdo) {}
+    public function __call(string $method,array $arguments) { return $this->pdo->$method(...$arguments); }
     public function prepare($sql) {
         if (str_contains($sql,'GET_LOCK') || str_contains($sql,'RELEASE_LOCK')) return new ShiftLockStatement();
         return $this->pdo->prepare($sql);
@@ -64,4 +68,8 @@ check((int)$pdo->query("SELECT COUNT(*) FROM cashier_shifts WHERE id='opened-tes
 endpoint($openHandler,$open+['confirmReopen'=>true],201);
 $result=endpoint($openHandler,$open,200);
 check($result['alreadyOpen']===true,'Existing open shift was duplicated');
-echo "PASS: close endpoint rejects stale preview, recomputes totals; write guard; confirmed reopen; shared open shift\n";
+$pdo->exec("UPDATE stores SET takeaway_shift_enabled=1 WHERE id='cafe'");
+$countBefore=(int)$pdo->query('SELECT COUNT(*) FROM cashier_shifts')->fetchColumn();
+endpoint($openHandler,['storeId'=>'cafe','cashierUid'=>'cashier5','cashierName'=>'Cashier','shiftType'=>'shift_1','openingCash'=>100,'deviceId'=>'device'],409);
+check((int)$pdo->query('SELECT COUNT(*) FROM cashier_shifts')->fetchColumn()===$countBefore,'Locked configuration recheck prevents legacy opening after policy changes');
+echo "PASS: close endpoint rejects stale preview, recomputes totals; write guard; confirmed reopen; shared open shift; configuration race guard\n";

@@ -64,9 +64,13 @@ export async function loadOverviewShiftRevenue(options: {
   startDate: Date;
   endDate: Date;
   cupProductCodes?: ReadonlySet<string>;
+  includeSingleShifts?: boolean;
 }) {
+  const shiftTypes: ShiftType[] = options.includeSingleShifts
+    ? [...OVERVIEW_SHIFT_TYPES, 'single']
+    : OVERVIEW_SHIFT_TYPES;
   const shiftGroups = await Promise.all(
-    OVERVIEW_SHIFT_TYPES.map((shiftType) =>
+    shiftTypes.map((shiftType) =>
       getShiftsForReport({ ...options, shiftType }),
     ),
   );

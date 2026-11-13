@@ -27,6 +27,7 @@ function users_map_row(array $row): array
         'role' => (string) $row['role'],
         'storeId' => $row['store_id'] !== null ? (string) $row['store_id'] : null,
         'storeIds' => array_values($storeIds),
+        'takeawayShiftAssignments' => (object) takeaway_assignments_read(db(), (string) $row['id']),
         'isActive' => (bool) ($row['is_active'] ?? false),
         'permissions' => auth_effective_permissions($row),
         'createdAt' => null,
@@ -158,6 +159,14 @@ if ($method === 'POST') {
     }
 
     $id = uuidv4();
+    if (array_key_exists('takeawayShiftAssignments', $body) && !$canManageAccess) {
+        respond_error('Chỉ admin mới được sửa phân ca take away.', 403);
+    }
+    try {
+        $assignments = takeaway_assignments_validate(db(), $body['takeawayShiftAssignments'] ?? [], $storeIds);
+    } catch (InvalidArgumentException $exception) {
+        respond_error($exception->getMessage(), 422);
+    }
     db()->beginTransaction();
     try {
         $statement = db()->prepare(
@@ -179,6 +188,7 @@ if ($method === 'POST') {
             'permissions_json' => json_encode($permissions, JSON_UNESCAPED_UNICODE),
         ]);
         users_sync_store_access($id, $storeIds);
+        takeaway_assignments_write(db(), $id, $assignments);
         db()->commit();
     } catch (Throwable $exception) {
         if (db()->inTransaction()) db()->rollBack();
@@ -283,7 +293,11 @@ if ($method === 'PATCH') {
     }
 
     $storeAccessChanged = array_key_exists('storeIds', $body);
-    if ($fields === [] && !$storeAccessChanged) {
+    $assignmentsChanged = array_key_exists('takeawayShiftAssignments', $body);
+    if ($assignmentsChanged && !$canManageAccess) {
+        respond_error('Chỉ admin mới được sửa phân ca take away.', 403);
+    }
+    if ($fields === [] && !$storeAccessChanged && !$assignmentsChanged) {
         respond_error('Không có dữ liệu cần cập nhật.', 422);
     }
 
@@ -318,12 +332,21 @@ if ($method === 'PATCH') {
         $params['store_id'] = $nextStoreIds[0] ?? null;
     }
 
+    $nextAssignments = null;
+    if ($assignmentsChanged) {
+        try {
+            $nextAssignments = takeaway_assignments_validate(db(), $body['takeawayShiftAssignments'], $nextStoreIds);
+        } catch (InvalidArgumentException $exception) {
+            respond_error($exception->getMessage(), 422);
+        }
+    }
     db()->beginTransaction();
     try {
-        $statement = db()->prepare(
-            sprintf('UPDATE users SET %s WHERE id = :id', implode(', ', $fields))
-        );
-        $statement->execute($params);
+        if ($fields !== []) {
+            $statement = db()->prepare(sprintf('UPDATE users SET %s WHERE id = :id', implode(', ', $fields)));
+            $statement->execute($params);
+        }
+        if ($nextAssignments !== null) takeaway_assignments_write(db(), $id, $nextAssignments);
         if ($storeAccessChanged) {
             users_sync_store_access($id, $nextStoreIds);
         }
@@ -363,6 +386,7 @@ if ($method === 'DELETE') {
         $deleteTokens = db()->prepare('DELETE FROM api_tokens WHERE user_id = :user_id');
         $deleteTokens->execute(['user_id' => $id]);
         db()->prepare('DELETE FROM user_store_access WHERE user_id=:user_id')->execute(['user_id' => $id]);
+        db()->prepare('DELETE FROM user_takeaway_shifts WHERE user_id=:user_id')->execute(['user_id' => $id]);
         $statement = db()->prepare('DELETE FROM users WHERE id = :id');
         $statement->execute(['id' => $id]);
         db()->commit();

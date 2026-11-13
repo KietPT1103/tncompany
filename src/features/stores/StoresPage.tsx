@@ -6,12 +6,12 @@ import { useStore } from "@/context/StoreContext";
 import { deleteStore, getStores, saveStore, type StoreInput, type StoreRecord } from "@/services/stores.api";
 import { normalizeSearchText } from "@/lib/utils";
 
-const emptyForm: StoreInput = { name: "", address: "", isTakeAway: false, isActive: true, takeawayPrintingEnabled: false };
+const emptyForm: StoreInput = { name: "", address: "", isTakeAway: false, isActive: true, takeawayPrintingEnabled: false, takeawayShiftEnabled: false, takeawayShiftCount: 1, takeawayFinalShift: 1 };
 const fieldClass = "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
 
 function StoreEditor({ item, onClose, onSaved }: { item: StoreRecord | null; onClose: () => void; onSaved: () => Promise<void> }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [form, setForm] = useState<StoreInput>(() => item ? { name: item.name, address: item.address, isTakeAway: item.isTakeAway, isActive: item.isActive, takeawayPrintingEnabled: item.takeawayPrintingEnabled ?? false } : { ...emptyForm });
+  const [form, setForm] = useState<StoreInput>(() => item ? { name: item.name, address: item.address, isTakeAway: item.isTakeAway, isActive: item.isActive, takeawayPrintingEnabled: item.takeawayPrintingEnabled ?? false, takeawayShiftEnabled: item.takeawayShiftEnabled ?? false, takeawayShiftCount: item.takeawayShiftCount ?? 1, takeawayFinalShift: item.takeawayFinalShift ?? 1 } : { ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -31,7 +31,7 @@ function StoreEditor({ item, onClose, onSaved }: { item: StoreRecord | null; onC
       setError(err instanceof Error ? err.message : "Không lưu được quầy.");
     } finally { setSaving(false); }
   }
-  return <dialog ref={dialog} aria-labelledby="store-editor-title" onCancel={event => { event.preventDefault(); if (!saving) onClose(); }} className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-emerald-950/40">
+  return <dialog ref={dialog} aria-labelledby="store-editor-title" onCancel={event => { event.preventDefault(); if (!saving) onClose(); }} className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-emerald-950/40">
     <form onSubmit={submit}>
       <div className="flex items-center justify-between border-b border-slate-100 p-5">
         <h2 id="store-editor-title" className="text-xl font-bold text-emerald-950">{item ? "Sửa thông tin quầy" : "Thêm quầy"}</h2>
@@ -41,9 +41,17 @@ function StoreEditor({ item, onClose, onSaved }: { item: StoreRecord | null; onC
         {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
         <label className="block text-sm font-semibold">Tên quầy <span className="text-rose-600">*</span><input autoFocus required maxLength={255} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Nhập tên quầy" className={fieldClass} /></label>
         <label className="block text-sm font-semibold">Địa chỉ<textarea maxLength={500} rows={3} value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Nhập địa chỉ quầy" className={fieldClass} /></label>
-        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4"><input type="checkbox" checked={form.isTakeAway} onChange={e => setForm({ ...form, isTakeAway: e.target.checked })} className="mt-0.5 h-4 w-4 accent-emerald-700" /><span><span className="block text-sm font-semibold">Quầy take away</span><span className="mt-1 block text-xs text-slate-500">Đánh dấu để phân loại quầy bán mang đi.</span></span></label>
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4"><input type="checkbox" checked={form.isTakeAway} onChange={e => setForm({ ...form, isTakeAway: e.target.checked, takeawayShiftEnabled: e.target.checked && form.takeawayShiftEnabled })} className="mt-0.5 h-4 w-4 accent-emerald-700" /><span><span className="block text-sm font-semibold">Quầy take away</span><span className="mt-1 block text-xs text-slate-500">Đánh dấu để phân loại quầy bán mang đi.</span></span></label>
         <label className="flex cursor-pointer items-center gap-3 text-sm font-semibold"><input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} className="h-4 w-4 accent-emerald-700" />Quầy đang hoạt động</label>
         {form.isTakeAway && <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"><input type="checkbox" checked={form.takeawayPrintingEnabled} onChange={e => setForm({ ...form, takeawayPrintingEnabled: e.target.checked })} className="mt-1 h-4 w-4" /><span><span className="block text-sm font-semibold">In hóa đơn và tem qua laptop</span><span className="block text-xs text-slate-600">Thanh toán trên điện thoại hoặc laptop đều gửi về chương trình in Windows. Chỉ bật sau khi đã cấu hình máy in bill và máy in tem.</span></span></label>}
+        {form.isTakeAway && <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <label className="flex cursor-pointer items-center gap-3 text-sm font-semibold"><input type="checkbox" checked={form.takeawayShiftEnabled} onChange={e => setForm({ ...form, takeawayShiftEnabled: e.target.checked })} className="h-4 w-4 accent-emerald-700" />Bật chia ca take away</label>
+          {form.takeawayShiftEnabled && <>
+            <label className="block text-sm font-semibold">Số ca<input type="number" required min={1} max={24} step={1} value={form.takeawayShiftCount} onChange={e => { const count=Number(e.target.value); setForm({ ...form, takeawayShiftCount: count, takeawayFinalShift: Math.min(form.takeawayFinalShift, Math.max(1,count)) }); }} className={fieldClass} /></label>
+            <label className="block text-sm font-semibold">Ca kết thúc ngày kinh doanh<select value={form.takeawayFinalShift} onChange={e => setForm({ ...form, takeawayFinalShift: Number(e.target.value) })} className={fieldClass}>{Array.from({ length: Math.min(24,Math.max(1,Math.floor(form.takeawayShiftCount))) }, (_, index) => <option key={index+1} value={index+1}>Ca {index+1}</option>)}</select></label>
+            <p className="text-xs text-slate-600">Ngày kinh doanh kết thúc khi đóng ca cuối, kể cả khi qua nửa đêm. Cần đóng vòng và các ca đang mở trước khi đổi cấu hình.</p>
+          </>}
+        </div>}
       </fieldset>
       <div className="flex justify-end gap-2 border-t border-slate-100 p-5"><Button type="button" variant="outline" disabled={saving} onClick={onClose}>Huỷ</Button><Button type="submit" disabled={saving || !form.name.trim()}>{saving ? "Đang lưu..." : "Lưu quầy"}</Button></div>
     </form>

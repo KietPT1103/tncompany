@@ -4,8 +4,11 @@ import ts from 'typescript';
 
 async function load(path) {
   const source = readFileSync(path, 'utf8').replace(/^import .*;\r?\n/gm, '');
+  const pagination = ts.transpileModule(readFileSync('src/services/billPagination.ts','utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const { BILL_API_PAGE_SIZE, collectAllBillPages } = await import('data:text/javascript;base64,'+Buffer.from(pagination).toString('base64'));
+  globalThis.shiftPagination = { BILL_API_PAGE_SIZE, collectAllBillPages };
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
-  return import('data:text/javascript;base64,' + Buffer.from('const posRequest=(...args)=>globalThis.shiftScopeRequest(...args);\n' + js).toString('base64'));
+  return import('data:text/javascript;base64,' + Buffer.from('const {BILL_API_PAGE_SIZE,collectAllBillPages}=globalThis.shiftPagination;const posRequest=(...args)=>globalThis.shiftScopeRequest(...args);\n' + js).toString('base64'));
 }
 const bills = await load('src/services/billService.ts');
 const shifts = await load('src/services/shiftService.ts');

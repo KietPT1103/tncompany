@@ -9,6 +9,7 @@ export type ManagedUser = {
   role: UserRole;
   storeId?: string | null;
   storeIds: string[];
+  takeawayShiftAssignments?: Record<string, number>;
   isActive: boolean;
   permissions: AppPermission[];
   createdAt?: string | null;
@@ -31,6 +32,7 @@ export async function createManagedUser(payload: {
   role: UserRole;
   storeId?: string;
   storeIds?: string[];
+  takeawayShiftAssignments?: Record<string, number>;
   isActive?: boolean;
   permissions?: AppPermission[];
 }) {
@@ -52,6 +54,7 @@ export async function updateManagedUser(
     role: UserRole;
     storeId: string;
     storeIds: string[];
+    takeawayShiftAssignments: Record<string, number>;
     isActive: boolean;
     permissions: AppPermission[];
   }>

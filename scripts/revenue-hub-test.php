@@ -35,4 +35,8 @@ check($r['days'][0]['shifts']['unassigned']['revenue'] === 200.0, 'Unassigned pr
 for ($i=0;$i<2100;$i++) $p->exec("INSERT INTO bills VALUES('bulk$i','cafe','s1',1,'completed','cash','2026-10-25 12:00:00')");
 check(revenue_tn($p,'2026-10-25','2026-10-25','cafe')['totals']['revenue'] === 2400.0, 'No 2000 bill cap');
 check(revenue_tn($p,'2026-10-26','2026-10-26','cafe')['totals']['revenue'] === 0.0, 'Empty day');
+$p->exec("CREATE TABLE takeaway_shift_sessions(shift_id TEXT,shift_number INTEGER); INSERT INTO takeaway_shift_sessions VALUES('s1',10)");
+$dynamic=revenue_tn($p,'2026-10-25','2026-10-25','cafe');
+check(($dynamic['days'][0]['shifts']['shift_10']['revenue'] ?? 0)===2200.0,'Configured Ca 10 remains visible in transaction-date reporting');
+check($dynamic['days'][0]['shifts']['shift_10']['expense']===20.0,'Configured voucher uses the same dynamic slot');
 echo "TN revenue: PASS\n";

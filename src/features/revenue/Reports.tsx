@@ -60,7 +60,7 @@ export function TnReport({ data, allStores = false }: { data: RevenueReport; all
       </summary>
       <div className="space-y-3 border-t border-slate-100 p-3">
         {Object.entries(day.shifts || {}).filter(([key, values]) => key.startsWith('shift_') || Object.values(values).some(Boolean)).map(([key, values]) => <section key={key} className="rounded-xl bg-slate-50 p-3">
-          <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-slate-800">{labels[key] || key}</h3><strong className="text-sm tabular-nums">{money(values.revenue)}</strong></div>
+          <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-slate-800">{labels[key] || (/^shift_\d+$/.test(key) ? `Ca ${key.slice(6)}` : key)}</h3><strong className="text-sm tabular-nums">{money(values.revenue)}</strong></div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
             {([['Ly nước', values.cups, true], ['Bánh', values.bakery, true], ['Tiền mặt', values.cash], ['Chuyển khoản', values.transfer], ['Tổng chi', values.expense], ['Thu khác', values.income]] as const).map(([label, value, count]) => <div key={label} className="flex flex-wrap justify-between gap-1"><dt className="text-slate-500">{label}</dt><dd className="font-semibold text-slate-800 tabular-nums">{count ? number(value) : money(value)}</dd></div>)}
           </dl>

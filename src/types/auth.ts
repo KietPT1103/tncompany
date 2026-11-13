@@ -70,6 +70,7 @@ export type AppUser = {
   role: UserRole;
   storeId?: string | null;
   storeIds?: string[];
+  takeawayShiftAssignments?: Record<string, number>;
   permissions?: AppPermission[];
 };
 

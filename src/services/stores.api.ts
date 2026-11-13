@@ -6,10 +6,13 @@ export type StoreRecord = {
   address: string;
   isTakeAway: boolean;
   takeawayPrintingEnabled: boolean;
+  takeawayShiftEnabled: boolean;
+  takeawayShiftCount: number;
+  takeawayFinalShift: number;
   isActive: boolean;
   deletedAt: string | null;
 };
-export type StoreInput = Pick<StoreRecord, "name" | "address" | "isTakeAway" | "isActive" | "takeawayPrintingEnabled">;
+export type StoreInput = Pick<StoreRecord, "name" | "address" | "isTakeAway" | "isActive" | "takeawayPrintingEnabled" | "takeawayShiftEnabled" | "takeawayShiftCount" | "takeawayFinalShift">;
 
 export async function getStores(management = false, history = false) {
   const data = await apiRequest<{ items: StoreRecord[] }>(`/stores.php${management ? "?management=1" : history ? "?history=1" : ""}`);

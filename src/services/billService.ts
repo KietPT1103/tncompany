@@ -40,6 +40,6 @@ export async function updateBill(id: string, data: Partial<NewBill> & { createdA
 export async function cancelBill(id: string, cancelledBy?: string, cancelNote?: string) { await posRequest("bills", { method: "PATCH", body: JSON.stringify({ id, action: "cancel", cancelledBy, note: cancelNote }) }); notifyStockChange(); }
 export const getBillsByShift = (shiftId: string, storeId: string) => {
   if (!storeId.trim()) throw new Error("Chưa xác định quầy kết ca.");
-  return getBills({ storeId, shiftId, includeCancelled: true, limitCount: 2000 });
+  return getAllBills({ storeId, shiftId, includeCancelled: true });
 };
 export async function deleteBill(id: string) { await posRequest("bills", { method: "DELETE" }, { id }); notifyStockChange(); }

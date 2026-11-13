@@ -61,7 +61,7 @@ export function buildOverviewRangeWorkbook(options: {
     const totals = totalsByDay.get(key) ?? Array<number>(9).fill(0);
     values.forEach((value, index) => { totals[index] += value; });
     totalsByDay.set(key, totals);
-    return [parseDay(key), shift.shiftType === "single" ? "Ca đơn" : `Ca ${shift.shiftType.slice(-1)}`,
+    return [parseDay(key), shift.shiftNumber ? `Ca ${shift.shiftNumber}` : shift.shiftType === "single" ? "Ca đơn" : `Ca ${shift.shiftType.replace('shift_', '')}`,
       shift.status === "closed" ? "Đã chốt" : "Đang mở", shift.cashierName || "",
       ...values.slice(0, 8), summary.expectedClosingCash, shift.closingCash ?? null, variance];
   });

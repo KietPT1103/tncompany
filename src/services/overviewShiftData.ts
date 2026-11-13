@@ -1,4 +1,5 @@
 export type OverviewShiftData = {
+  shiftNumber?: number | null;
   id: string;
   cashierName?: string;
   shiftType: "shift_1" | "shift_2" | "shift_3" | "single";

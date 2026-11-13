@@ -83,6 +83,7 @@ const DEFAULT_FORM: AccountFormState = {
   role: "manager",
   storeId: "cafe",
   storeIds: [],
+  takeawayShiftAssignments: {},
   isActive: true,
   permissions: getDefaultPermissionsForRole("manager"),
 };
@@ -125,6 +126,7 @@ function formFromUser(item: ManagedUser, areaOptions: { value: string; label: st
     role: item.role,
     storeId: item.storeId || "",
     storeIds,
+    takeawayShiftAssignments: item.takeawayShiftAssignments ?? {},
     isActive: item.isActive,
     permissions,
   };
@@ -137,7 +139,7 @@ function permissionCount(user: Pick<ManagedUser, "role" | "permissions">) {
 export default function AccountManagementPage() {
   const { INVENTORY_AREA_OPTIONS, storeSummary } = useAccountStoreOptions();
   const { user } = useAuth();
-  const { storeId } = useStore();
+  const { storeId, stores } = useStore();
   const canManageAccess = user?.role === "admin";
   const [items, setItems] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -301,6 +303,14 @@ export default function AccountManagementPage() {
       return;
     }
     setSaving(true);
+    const takeawayShiftAssignments = Object.fromEntries(
+      Object.entries(form.takeawayShiftAssignments).filter(([id, number]) => {
+        const store = stores.find(item => item.id === id);
+        return (form.storeIds.includes(id) || id === form.storeId)
+          && store?.isTakeAway && store.takeawayShiftEnabled
+          && number >= 1 && number <= store.takeawayShiftCount;
+      }),
+    );
     try {
       if (editingId) {
         const updated = await updateManagedUser(editingId, {
@@ -309,6 +319,7 @@ export default function AccountManagementPage() {
           displayName: form.displayName,
           storeId: form.storeId,
           storeIds: form.storeIds,
+          ...(canManageAccess ? { takeawayShiftAssignments } : {}),
           isActive: form.isActive,
           ...(canManageAccess ? { role: form.role, permissions: form.permissions } : {}),
           ...(form.password ? { password: form.password } : {}),
@@ -324,6 +335,7 @@ export default function AccountManagementPage() {
           role: form.role,
           storeId: form.storeId,
           storeIds: form.storeIds,
+          ...(canManageAccess ? { takeawayShiftAssignments } : {}),
           isActive: form.isActive,
           permissions: form.permissions,
         });

@@ -55,7 +55,16 @@ function revenue_tn(PDO $pdo, string $from, string $to, string $store): array
         $params[] = $store;
     }
     $shift = "COALESCE(s.shift_type,'unassigned')";
+    $sessionsExist=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite'
+        ? (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='takeaway_shift_sessions'")->fetchColumn()
+        : (bool)$pdo->query("SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='takeaway_shift_sessions'")->fetchColumn();
+    $sessionJoin=$sessionsExist ? ' LEFT JOIN takeaway_shift_sessions ts ON ts.shift_id=s.id ' : '';
+    if ($sessionsExist) {
+        $numberLabel=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite' ? "'shift_' || ts.shift_number" : "CONCAT('shift_',ts.shift_number)";
+        $shift="CASE WHEN ts.shift_number IS NOT NULL THEN $numberLabel ELSE $shift END";
+    }
     $join = ' LEFT JOIN cashier_shifts s ON s.id=b.shift_id AND s.store_id=b.store_id ';
+    $join .= $sessionJoin;
     $statement = $pdo->prepare("SELECT DATE(b.created_at) AS day,$shift AS shift_type,
         SUM(b.total) AS revenue,COUNT(*) AS bills,
         SUM(CASE WHEN b.payment_method='transfer' THEN b.total ELSE 0 END) AS transfer,
@@ -63,6 +72,7 @@ function revenue_tn(PDO $pdo, string $from, string $to, string $store): array
         FROM bills b $join WHERE $filter AND b.status='completed' GROUP BY DATE(b.created_at),$shift");
     $statement->execute($params);
     foreach ($statement->fetchAll() as $row) {
+        $days[$row['day']]['shifts'][$row['shift_type']] ??= revenue_empty();
         foreach (['revenue', 'bills', 'transfer', 'cash'] as $key) {
             $days[$row['day']]['shifts'][$row['shift_type']][$key] += (float)$row[$key];
         }
@@ -89,14 +99,16 @@ function revenue_tn(PDO $pdo, string $from, string $to, string $store): array
     }
     $voucherFilter = 'v.happened_at>=? AND v.happened_at<?';
     if ($store !== 'all') $voucherFilter .= ' AND v.store_id=?';
-    $statement = $pdo->prepare("SELECT DATE(v.happened_at) AS day,COALESCE(s.shift_type,'unassigned') AS shift_type,
+    $statement = $pdo->prepare("SELECT DATE(v.happened_at) AS day,$shift AS shift_type,
         v.voucher_type,SUM(v.amount) AS amount FROM cash_vouchers v
         LEFT JOIN cashier_shifts s ON s.id=v.shift_id AND s.store_id=v.store_id
+        $sessionJoin
         WHERE $voucherFilter AND v.cancelled_at IS NULL AND v.include_in_cash_flow=1
-        GROUP BY DATE(v.happened_at),COALESCE(s.shift_type,'unassigned'),v.voucher_type");
+        GROUP BY DATE(v.happened_at),$shift,v.voucher_type");
     $statement->execute($params);
     foreach ($statement->fetchAll() as $row) {
         if (in_array($row['voucher_type'], ['income', 'expense'], true)) {
+            $days[$row['day']]['shifts'][$row['shift_type']] ??= revenue_empty();
             $days[$row['day']]['shifts'][$row['shift_type']][$row['voucher_type']] += (float)$row['amount'];
         }
     }

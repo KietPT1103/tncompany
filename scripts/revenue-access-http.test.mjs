@@ -18,6 +18,9 @@ writeFileSync(router,`<?php require_once ${phpString(root+'/_lib/bootstrap.php')
 const seed=join(directory,'seed.php');
 writeFileSync(seed,`<?php $p=new PDO('sqlite:'.${phpString(database)});$p->exec("CREATE TABLE users(id TEXT,email TEXT,username TEXT,display_name TEXT,role TEXT,store_id TEXT,permissions_json TEXT,is_active INTEGER); CREATE TABLE api_tokens(user_id TEXT,token_hash TEXT,expires_at TEXT);CREATE TABLE user_store_access(user_id TEXT,store_id TEXT);INSERT INTO users VALUES('admin','admin@example.test','admin','Admin','admin',NULL,'[]',1),('user','user@example.test','user','User','user',NULL,'[]',1);");$s=$p->prepare('INSERT INTO api_tokens VALUES(?,?,?)');foreach(['admin','user'] as $id)$s->execute([$id,hash('sha256',$id.'-token'),'2099-01-01 00:00:00']);`);
 const init=spawnSync('php',[seed],{encoding:'utf8'});assert.equal(init.status,0,init.stderr);
+const assignmentSeed=join(directory,'assignments.php');
+writeFileSync(assignmentSeed,`<?php require ${phpString(root+'/_lib/takeaway_assignments.php')};takeaway_assignments_ensure_schema(new PDO('sqlite:'.${phpString(database)}));`);
+const assignmentInit=spawnSync('php',[assignmentSeed],{encoding:'utf8'});assert.equal(assignmentInit.status,0,assignmentInit.stderr);
 const socket=createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
 const server=spawn('php',['-S','127.0.0.1:'+port,router],{stdio:'ignore',windowsHide:true});
 async function request(path,token,body){const response=await fetch('http://127.0.0.1:'+port+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,...await response.json()};}

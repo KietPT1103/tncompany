@@ -74,6 +74,7 @@ export type AccountFormState = {
   role: UserRole;
   storeId: string;
   storeIds: string[];
+  takeawayShiftAssignments: Record<string, number>;
   isActive: boolean;
   permissions: AppPermission[];
 };
@@ -563,6 +564,8 @@ export function AccountEditorModal({
   onSave,
 }: AccountEditorProps) {
   const { STORE_OPTIONS: availableOptions, INVENTORY_AREA_OPTIONS } = useAccountStoreOptions();
+  const { stores } = useStore();
+  const takeawayStores = stores.filter((store) => !store.deletedAt && store.isTakeAway && store.takeawayShiftEnabled && (form.storeIds.includes(store.id) || form.storeId === store.id));
   const STORE_OPTIONS = form.storeId && !availableOptions.some(item => item.value === form.storeId)
     ? [...availableOptions, { value: form.storeId, label: `${form.storeId} (Không khả dụng)` }]
     : availableOptions;
@@ -628,6 +631,22 @@ export function AccountEditorModal({
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{INVENTORY_AREA_OPTIONS.map((option) => { const checked = form.storeIds.includes(option.value); return <label key={option.value} className={`flex cursor-pointer items-center gap-2 border px-3 py-2.5 text-sm ${checked ? "border-emerald-400 bg-white text-emerald-900" : "border-slate-200 bg-white/70 text-slate-600"}`}><input type="checkbox" checked={checked} onChange={() => onChange({ storeIds: checked ? form.storeIds.filter((id) => id !== option.value) : [...form.storeIds, option.value] })} className="h-4 w-4 accent-emerald-700" />{option.label}</label>; })}</div>
           </fieldset>
         ) : null}
+
+        {takeawayStores.length ? <fieldset className="space-y-3 rounded-sm border border-emerald-200 p-4">
+          <legend className="px-1 text-sm font-semibold text-emerald-950">Phân ca take away</legend>
+          <p className="text-xs text-slate-500">Ca cố định được áp dụng từ lần mở ca tiếp theo. Ca đang mở giữ nguyên phân công.</p>
+          {takeawayStores.map((store) => <label key={store.id} className="flex items-center justify-between gap-3 text-sm">
+            <span>{store.name}</span>
+            <select aria-label={`Ca take away tại ${store.name}`} disabled={!canManageAccess} value={form.takeawayShiftAssignments[store.id] ?? ""} onChange={(event) => {
+              const assignments = { ...form.takeawayShiftAssignments };
+              if (event.target.value) assignments[store.id] = Number(event.target.value); else delete assignments[store.id];
+              onChange({ takeawayShiftAssignments: assignments });
+            }} className="h-10 rounded-sm border border-slate-300 bg-white px-3">
+              <option value="">Chưa phân ca</option>
+              {Array.from({ length: store.takeawayShiftCount }, (_, index) => index + 1).map((number) => <option key={number} value={number}>Ca {number}{number === store.takeawayFinalShift ? " · Ca cuối" : ""}</option>)}
+            </select>
+          </label>)}
+        </fieldset> : null}
 
         <div className="rounded-sm border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-slate-900">Phân quyền chức năng</h3><p className="mt-1 text-sm text-slate-500">Chỉnh sửa chi tiết trong tab Phân quyền sau khi lưu tài khoản.</p></div><span className="whitespace-nowrap bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">{permissionCount} tính năng</span></div>

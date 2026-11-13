@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/../public/api/_lib/takeaway_assignments.php';
 $source = file_get_contents(__DIR__ . '/../public/api/_lib/auth.php');
 $start = strpos($source, 'function auth_normalize_role(');
 $end = strpos($source, 'function auth_current_user(', $start);
@@ -12,6 +13,7 @@ function check(bool $condition, string $message): void {
     if (!$condition) throw new RuntimeException($message);
 }
 db()->exec('CREATE TABLE user_store_access(user_id TEXT, store_id TEXT)');
+takeaway_assignments_ensure_schema(db());
 db()->exec("INSERT INTO user_store_access VALUES ('test','farm'),('test','warehouse'),('other','restaurant')");
 $row = ['id'=>'test', 'email'=>'test@example.com', 'username'=>'test', 'display_name'=>'Test', 'role'=>'server', 'store_id'=>'cafe', 'permissions_json'=>'["stores.switch"]'];
 $user = auth_map_user($row);

@@ -70,6 +70,7 @@ import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import TakeawayPrintQueue from "@/features/stores/TakeawayPrintQueue";
+import { takeawayShiftReportHtml } from '@/features/stores/takeawayShiftReport';
 import { takeawayReprintMode } from "@/services/takeawayReprintService";
 import { supportsCashierShifts } from "@/lib/cashierShiftPolicy";
 import { normalizeSearchText } from "@/lib/utils";
@@ -80,6 +81,7 @@ import {
   closeShift,
   getOpenShiftByCashier,
   getShiftReopenWarning,
+  getTakeawayClosingReport,
   getShiftHandoverAmount,
   getDailyAdjustedHandover,
   getShiftsForReport,
@@ -297,6 +299,13 @@ export default function CafePosPage() {
   const canUseBarAutoPrint = storeId === CAFE_STORE_ID;
   const isShiftEnabledForUser = isShiftEnabledStore && isCashierAccount;
   const usesThreeShiftByAccount = THREE_SHIFT_STORES.has(storeId);
+  const usesTakeawayShifts = stores.some(store => store.id === storeId && store.isTakeAway && store.takeawayShiftEnabled);
+  const assignedTakeawayShift = user?.takeawayShiftAssignments?.[storeId];
+  const [lastTakeawayShift, setLastTakeawayShift] = useState('');
+  useEffect(() => {
+    try { setLastTakeawayShift(localStorage.getItem(`takeaway-last-close:${user?.uid}:${storeId}`) || ''); }
+    catch { setLastTakeawayShift(''); }
+  }, [storeId, user?.uid]);
   const posTitle = isBartenderAccount
     ? "Bấm bill tại quầy pha chế"
     : isBakeryStore
@@ -591,6 +600,7 @@ export default function CafePosPage() {
   }, [user?.displayName, user?.email]);
 
   const resolveShiftType = (): ShiftType => {
+    if (usesTakeawayShifts) return 'single';
     if (!usesThreeShiftByAccount) return "single";
     const prefix = (user?.email?.split("@")[0] || "").toLowerCase();
     if (prefix.includes("thungan1") || prefix.includes("bep1")) return "shift_1";
@@ -2308,8 +2318,12 @@ export default function CafePosPage() {
       alert("Chưa nhận diện được thiết bị. Vui lòng tải lại trang.");
       return;
     }
+    if (usesTakeawayShifts && !assignedTakeawayShift) {
+      alert('Tài khoản chưa được phân ca tại quầy này. Vui lòng liên hệ quản trị viên.');
+      return;
+    }
     const shiftType = resolveShiftType();
-    if (usesThreeShiftByAccount && shiftType === "single") {
+    if (!usesTakeawayShifts && usesThreeShiftByAccount && shiftType === "single") {
       alert("Mô hình này yêu cầu đăng nhập bằng tài khoản được gán Ca 1/2/3.");
       return;
     }
@@ -2322,7 +2336,7 @@ export default function CafePosPage() {
     setIsOpeningShift(true);
     try {
       const previous = await getShiftReopenWarning(storeId, user.uid, shiftType);
-      if (previous && !window.confirm(`${getShiftLabel(shiftType)} của bạn đã được mở và đóng trong hôm nay. Bạn có chắc muốn mở thêm ca?`)) return;
+      if (previous && !window.confirm(`Ca ${previous.shiftNumber || getShiftLabel(shiftType)} đã được mở và đóng. Bạn có chắc muốn mở thêm ca?`)) return;
       const result = await openShift({
         storeId,
         cashierUid: user.uid,
@@ -2361,10 +2375,9 @@ export default function CafePosPage() {
     setIsPreparingCloseShift(true);
     try {
       const bills = await getBillsByShift(activeShift.id, activeShift.storeId);
-      const vouchers = await getCashVouchers({
+      const vouchers = await getAllCashVouchers({
         storeId: activeShift.storeId,
         shiftId: activeShift.id,
-        limitCount: 1000,
       });
       const summary = summarizeBillsForShift(
         bills,
@@ -2407,6 +2420,37 @@ export default function CafePosPage() {
       return;
     }
     const closingCash = parseMoney(closingCashInput);
+    if (activeShift.businessCycleId) {
+      setIsClosingShift(true);
+      try {
+        const payload = {
+          storeId: activeShift.storeId,
+          closingCash,
+          closeNote: closingNote.trim(),
+          expectedOpenedAt: activeShift.openedAt ? new Date(activeShift.openedAt.seconds * 1000) : undefined,
+          summary: closeShiftSummary,
+        };
+        let result;
+        try { result = await closeShift(activeShift.id, payload); }
+        catch (error) {
+          if (!(error instanceof Error) || !error.message.includes('xác nhận chốt vòng thiếu ca') || !window.confirm(`${error.message}\nBạn có muốn chốt ngày kinh doanh?`)) throw error;
+          result = await closeShift(activeShift.id, { ...payload, confirmMissingShifts: true });
+        }
+        if (!result.report) throw new Error('Chưa nhận được phiếu kết ca. Vui lòng thử lại.');
+        setLastTakeawayShift(activeShift.id);
+        try { localStorage.setItem(`takeaway-last-close:${user?.uid}:${storeId}`, activeShift.id); }
+        catch { /* Keep reprint available in this visit. */ }
+        setShowCloseShiftModal(false);
+        setCloseShiftSummary(null);
+        setActiveShift(null);
+        setClosingCashInput('');
+        setClosingNote('');
+        setShowOpenShiftModal(true);
+        printHtml(takeawayShiftReportHtml(result.report));
+      } catch (error) { alert(error instanceof Error ? error.message : 'Không thể kết ca.'); }
+      finally { setIsClosingShift(false); }
+      return;
+    }
     setIsClosingShift(true);
     try {
       const handoverAmount = getShiftHandoverAmount(closeShiftSummary);
@@ -4107,7 +4151,7 @@ export default function CafePosPage() {
                   </div>
                   {isShiftEnabledForUser && activeShift && (
                     <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
-                      {getShiftLabel(activeShift.shiftType)} · {cashierName}
+                      {activeShift.shiftNumber ? `Ca ${activeShift.shiftNumber}` : getShiftLabel(activeShift.shiftType)} · {cashierName}
                     </span>
                   )}
                 </div>
@@ -4868,6 +4912,10 @@ export default function CafePosPage() {
         </div>
       )}
 
+      {usesTakeawayShifts && lastTakeawayShift && <button type="button" className="fixed bottom-20 right-4 z-50 rounded-xl border bg-white px-4 py-3 text-sm font-semibold shadow" onClick={async () => {
+        try { printHtml(takeawayShiftReportHtml(await getTakeawayClosingReport(storeId, lastTakeawayShift))); }
+        catch (error) { alert(error instanceof Error ? error.message : 'Không tải được phiếu kết ca.'); }
+      }}>In lại phiếu kết ca gần nhất</button>}
       {shiftSyncNotice && (
         <button
           type="button"
@@ -4906,11 +4954,11 @@ export default function CafePosPage() {
                   {new Date().toLocaleString("vi-VN")}
                 </p>
               </div>
-              {usesThreeShiftByAccount && (
+              {(usesThreeShiftByAccount || usesTakeawayShifts) && (
                 <div className="grid grid-cols-[140px_1fr] items-center gap-2">
                   <p className="text-sm font-semibold text-slate-700">Loại ca</p>
                   <p className="text-sm text-slate-900">
-                    {getShiftLabel(resolveShiftType())}
+                    {usesTakeawayShifts ? (assignedTakeawayShift ? `Ca ${assignedTakeawayShift}` : 'Chưa được phân ca') : getShiftLabel(resolveShiftType())}
                   </p>
                 </div>
               )}
@@ -4958,8 +5006,9 @@ export default function CafePosPage() {
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Phiếu bàn giao ca</h3>
                 <p className="text-sm text-slate-500">
-                  {getShiftLabel(activeShift.shiftType)} · {activeShift.cashierName}
+                  {activeShift.shiftNumber ? `Ca ${activeShift.shiftNumber}${activeShift.isFinalShift ? ' · Ca cuối' : ''}` : getShiftLabel(activeShift.shiftType)} · {activeShift.cashierName}
                 </p>
+                {activeShift.businessDate && <p className="text-sm text-emerald-700">Ngày kinh doanh {activeShift.businessDate}</p>}
               </div>
               <div className="flex items-center gap-2">
                 <Button

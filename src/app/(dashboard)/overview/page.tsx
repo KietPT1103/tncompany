@@ -105,7 +105,8 @@ const getCupProductCodes = (products: Product[], categories: Category[]) => {
 };
 
 export default function OverviewPage() {
-  const { storeId, storeName } = useStore();
+  const { storeId, storeName, stores } = useStore();
+  const includeSingleShifts = stores.some(store => store.id === storeId && store.isTakeAway && store.takeawayShiftEnabled);
   const [rangePreset, setRangePreset] = useState<OverviewRangePreset>("today");
   const [customRange, setCustomRange] = useState<OverviewCustomRange>({ startDate: new Date(), endDate: new Date() });
   const ranges = useMemo(() => {
@@ -149,7 +150,7 @@ export default function OverviewPage() {
         getCategories(storeId),
       ]);
       const cups = getCupProductCodes(products, categories);
-      const shifts = await loadOverviewShiftRevenue({ ...options, cupProductCodes: cups });
+      const shifts = await loadOverviewShiftRevenue({ ...options, cupProductCodes: cups, includeSingleShifts });
       const [{ buildOverviewRangeWorkbook, writeOverviewRangeWorkbook }, { downloadExcelBuffer }] = await Promise.all([
         import("./overviewExcelExport"),
         import("../bills/billExcelExport"),
@@ -235,8 +236,9 @@ export default function OverviewPage() {
       startDate: ranges.startDate,
       endDate: ranges.endDate,
       cupProductCodes: cupProductCodes || new Set(),
+      includeSingleShifts,
     }),
-    [cupProductCodes, ranges.endDate, ranges.startDate, storeId],
+    [cupProductCodes, ranges.endDate, ranges.startDate, storeId, includeSingleShifts],
   );
 
   useEffect(() => {

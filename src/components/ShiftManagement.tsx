@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { businessDate } from "@/lib/shiftDay";
 import { assignUnassignedBills, getUnassignedBills, type ShiftReviewBill, correctShift, getManagedShifts, getShiftReview, type CashierShift, type ShiftReview } from "@/services/shiftService";
 
-const shiftLabel = (shift: CashierShift) => `${shift.shiftType === "single" ? "Ca chung" : `Ca ${shift.shiftType.slice(-1)}`} · ${shift.cashierName}`;
+const shiftLabel = (shift: CashierShift) => `${shift.shiftNumber ? `Ca ${shift.shiftNumber}` : shift.shiftType === "single" ? "Ca chung" : `Ca ${shift.shiftType.replace('shift_', '')}`} · ${shift.cashierName}`;
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Không thể tải dữ liệu ca.";
 const money = (value: number) => Number(value).toLocaleString("vi-VN") + " đ";
 const timestampInput = (seconds?: number) => {

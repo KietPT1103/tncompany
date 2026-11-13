@@ -38,7 +38,7 @@ function ShiftRow({ row }: { row: ShiftRevenue }) {
     <div className={`grid grid-cols-2 gap-x-4 gap-y-5 px-4 py-4 transition-colors md:grid-cols-3 md:gap-y-4 xl:grid-cols-[minmax(145px,1.1fr)_minmax(125px,0.9fr)_minmax(135px,0.9fr)_minmax(145px,1fr)_minmax(130px,0.9fr)_minmax(155px,1fr)] xl:items-center ${isOpen ? "bg-emerald-50/45" : "hover:bg-slate-50"}`}>
       <div className="col-span-2 min-w-0 md:col-span-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-bold text-slate-950">{getShiftLabel(row.shift.shiftType)}</p>
+          <p className="font-bold text-slate-950">{row.shift.shiftNumber ? `Ca ${row.shift.shiftNumber}` : getShiftLabel(row.shift.shiftType)}</p>
           {isOpen ? (
             <span className="rounded-sm bg-emerald-800 px-2 py-0.5 text-[11px] font-bold text-white">Đang mở</span>
           ) : (

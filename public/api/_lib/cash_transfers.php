@@ -59,7 +59,7 @@ function cash_transfers_lock(PDO $pdo): string
 function cash_transfers_label(array $shift): string
 {
     $type = (string)($shift['shift_type'] ?? '');
-    return ($type === 'single' ? 'Ca đơn' : 'Ca ' . str_replace('shift_', '', $type))
+    return (!empty($shift['shift_number']) ? 'Ca '.$shift['shift_number'] : ($type === 'single' ? 'Ca đơn' : 'Ca ' . str_replace('shift_', '', $type)))
         . ' (' . substr((string)($shift['opened_at'] ?? ''), 0, 16) . ')';
 }
 
@@ -135,7 +135,7 @@ function cash_transfers_prepare(PDO $pdo, array $body, array $user, string $stor
     $statement = $pdo->prepare('SELECT * FROM cashier_shifts WHERE id=? AND store_id=?' . cash_transfers_lock($pdo));
     $statement->execute([$source, $storeId]);
     $shift = $statement->fetch(PDO::FETCH_ASSOC);
-    if (!$shift || substr($shift['opened_at'], 0, 10) !== substr($receiver['opened_at'], 0, 10)
+    if (!$shift || !cash_transfers_same_business_day($pdo,$shift,$receiver)
         || $shift['opened_at'] >= $receiver['opened_at']) {
         throw new CashTransferError('Chọn ca nguồn đã mở trước, cùng quầy và ngày kinh doanh.');
     }
@@ -166,4 +166,14 @@ function cash_transfers_prepare(PDO $pdo, array $body, array $user, string $stor
         'sourceShiftId' => $source, 'transferRequestId' => $request, 'shiftId' => $receiver['id'],
         'sourceShiftLabel' => cash_transfers_label($shift), 'receiverShiftLabel' => cash_transfers_label($receiver),
     ];
+}
+
+function cash_transfers_same_business_day(PDO $pdo,array $source,array $receiver): bool
+{
+    if (function_exists('takeaway_shift_info')) {
+        $first=takeaway_shift_info($pdo,$source['id']);
+        $second=takeaway_shift_info($pdo,$receiver['id']);
+        if ($first || $second) return $first && $second && $first['cycle_id']===$second['cycle_id'];
+    }
+    return substr($source['opened_at'],0,10)===substr($receiver['opened_at'],0,10);
 }

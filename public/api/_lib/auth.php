@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/response.php';
+require_once __DIR__ . '/takeaway_assignments.php';
 
 function auth_ensure_column(string $table, string $column, string $definition): void
 {
@@ -96,6 +97,7 @@ function auth_ensure_tables(): void
              ENUM('admin','manager','user','server','bartender') NOT NULL DEFAULT 'user'"
         );
     }
+    takeaway_assignments_ensure_schema(db());
 }
 
 auth_ensure_tables();
@@ -363,6 +365,7 @@ function auth_map_user(array $row): array
         'role' => auth_normalize_role($row),
         'storeId' => $row['store_id'] ?: null,
         'storeIds' => array_values($storeIds),
+        'takeawayShiftAssignments' => (object) takeaway_assignments_read(db(), (string) $row['id']),
         'permissions' => auth_effective_permissions($row),
     ];
 }

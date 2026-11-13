@@ -9,6 +9,7 @@ require_once __DIR__ . '/_lib/takeaway_print_jobs.php';
 require_once __DIR__ . '/_lib/realtime.php';
 require_once __DIR__ . '/_lib/ingredient_usage.php';
 require_once __DIR__ . '/_lib/shift_management.php';
+require_once __DIR__ . '/_lib/takeaway_shifts.php';
 require_once __DIR__ . '/_lib/cash_transfers.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -356,6 +357,7 @@ function pos_filter_preparation_print_items(string $storeId, array $items): arra
 
 function pos_shift_payload(array $row): array
 {
+    $cycle = takeaway_shift_info(db(), (string)$row['id']);
     return [
         'id' => (string) $row['id'],
         'storeId' => (string) $row['store_id'],
@@ -368,7 +370,12 @@ function pos_shift_payload(array $row): array
         'openedByDeviceId' => $row['opened_by_device_id'] ?: '',
         'openedByDeviceName' => $row['opened_by_device_name'] ?: '',
         'openedAt' => pos_timestamp($row['opened_at']),
-        'isPreviousDay' => shift_is_previous_day((string)$row['opened_at']),
+        'isPreviousDay' => !$cycle && shift_is_previous_day((string)$row['opened_at']),
+        'businessCycleId' => $cycle['cycle_id'] ?? null,
+        'businessDate' => $cycle['business_date'] ?? null,
+        'shiftNumber' => $cycle['shift_number'] ?? null,
+        'isFinalShift' => (bool)($cycle['is_final'] ?? false),
+        'cycleShiftCount' => $cycle['shift_count'] ?? null,
         'closedAt' => pos_timestamp($row['closed_at']),
         'closingCash' => $row['closing_cash'] !== null ? (float) $row['closing_cash'] : null,
         'expectedClosingCash' => $row['expected_closing_cash'] !== null ? (float) $row['expected_closing_cash'] : null,
@@ -609,6 +616,7 @@ pos_ensure_voucher_cancellation_columns();
 pos_ensure_voucher_inventory_receipt_column();
 cash_transfers_ensure_schema(db());
 pos_ensure_shift_device_columns();
+takeaway_shifts_schema(db());
 $requestedStoreId = trim((string) ($_GET['storeId'] ?? ($body['storeId'] ?? '')));
 $posStoreId = pos_resolve_store_id($user, $requestedStoreId);
 try {
@@ -964,8 +972,14 @@ if ($method === 'GET' && $resource === 'transfer-sources') {
     $s=db()->prepare("SELECT * FROM cashier_shifts WHERE store_id=? AND cashier_uid=? AND status='open' ORDER BY opened_at DESC,id DESC LIMIT 1");
     $s->execute([$posStoreId,(string)$user['id']]);$receiver=$s->fetch();
     if (!$receiver) respond_error('Vui lòng mở ca hiện tại của bạn trước.',409);
-    $s=db()->prepare('SELECT * FROM cashier_shifts WHERE store_id=? AND opened_at>=? AND opened_at<? ORDER BY opened_at,id');
-    $s->execute([$posStoreId,substr($receiver['opened_at'],0,10).' 00:00:00',$receiver['opened_at']]);
+    $cycle=takeaway_shift_info(db(),$receiver['id']);
+    if ($cycle) {
+        $s=db()->prepare('SELECT s.*,t.shift_number FROM cashier_shifts s JOIN takeaway_shift_sessions t ON t.shift_id=s.id WHERE s.store_id=? AND t.cycle_id=? AND s.opened_at<? ORDER BY s.opened_at,s.id');
+        $s->execute([$posStoreId,$cycle['cycle_id'],$receiver['opened_at']]);
+    } else {
+        $s=db()->prepare('SELECT * FROM cashier_shifts WHERE store_id=? AND opened_at>=? AND opened_at<? ORDER BY opened_at,id');
+        $s->execute([$posStoreId,substr($receiver['opened_at'],0,10).' 00:00:00',$receiver['opened_at']]);
+    }
     respond_ok(['receiverId'=>$receiver['id'],'items'=>array_map(static fn(array $row):array=>['id'=>$row['id'],'label'=>cash_transfers_label($row)],$s->fetchAll())]);
 }
 
@@ -1150,8 +1164,18 @@ if ($method === 'PATCH' && $resource === 'vouchers') {
 }
 
 if ($method === 'GET' && $resource === 'shifts') {
+    if (($_GET['closingReport'] ?? '') === '1') {
+        try { respond_ok(['report'=>takeaway_shift_report(db(),$posStoreId,trim((string)($_GET['id']??'')),$user)]); }
+        catch (ShiftManagementError $e) { respond_error($e->getMessage(),$e->status); }
+    }
     if (($_GET['checkReopen'] ?? '') === '1') {
         $cashierUid = ($user['role'] ?? '') === 'user' ? (string)$user['id'] : trim((string)($_GET['cashierUid'] ?? ''));
+        $config=stores_find(db(),$posStoreId);
+        if (!empty($config['takeawayShiftEnabled'])) {
+            $statement=db()->prepare("SELECT s.* FROM cashier_shifts s JOIN takeaway_shift_sessions t ON t.shift_id=s.id JOIN takeaway_business_cycles c ON c.id=t.cycle_id JOIN user_takeaway_shifts a ON a.store_id=s.store_id AND a.shift_number=t.shift_number WHERE s.store_id=? AND a.user_id=? AND c.closed_at IS NULL AND s.status='closed' ORDER BY s.opened_at DESC LIMIT 1");
+            $statement->execute([$posStoreId,$cashierUid]);$row=$statement->fetch();
+            respond_ok(['item'=>$row?pos_shift_payload($row):null]);
+        }
         $statement = db()->prepare("SELECT * FROM cashier_shifts WHERE store_id=? AND cashier_uid=? AND shift_type=? AND status='closed' AND opened_at>=? AND opened_at<? ORDER BY opened_at DESC LIMIT 1");
         $statement->execute([$posStoreId,$cashierUid,(string)($_GET['shiftType'] ?? ''),date('Y-m-d 00:00:00'),date('Y-m-d 00:00:00',strtotime('+1 day'))]);
         $row=$statement->fetch();
@@ -1195,6 +1219,16 @@ if ($method === 'POST' && $resource === 'shifts') {
     }
     $openingCash = (float) $body['openingCash'];
 
+    $storeConfig=stores_find(db(),$storeId);
+    if (!empty($storeConfig['isTakeAway']) && !empty($storeConfig['takeawayShiftEnabled'])) {
+        if ($cashierUid !== (string)$user['id']) respond_error('Chỉ được mở ca được phân cho tài khoản hiện tại.',403);
+        try {
+            $result=takeaway_shift_open(db(),$storeId,$cashierUid,$cashierName,$body);
+            realtime_publish($storeId,'shifts-updated',['id'=>$result['item']['id'],'action'=>'opened']);
+            respond_ok(['item'=>pos_shift_payload($result['item']),'alreadyOpen'=>$result['alreadyOpen']],$result['alreadyOpen']?200:201);
+        } catch (ShiftManagementError $e) { respond_error($e->getMessage(),$e->status); }
+    }
+
     $lockName = 'pos_shift_' . substr(hash('sha256', $storeId . '|' . $cashierUid), 0, 48);
     $lockStatement = db()->prepare('SELECT GET_LOCK(:lock_name, 5)');
     $lockStatement->execute(['lock_name' => $lockName]);
@@ -1205,6 +1239,18 @@ if ($method === 'POST' && $resource === 'shifts') {
     $alreadyOpen = false;
     $shiftRow = null;
     try {
+        db()->beginTransaction();
+        $storeLock=db()->prepare('SELECT * FROM stores WHERE id=?'.(db()->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?' FOR UPDATE':''));
+        $storeLock->execute([$storeId]);
+        $lockedConfig=$storeLock->fetch();
+        if (!$lockedConfig || !$lockedConfig['is_active'] || $lockedConfig['deleted_at']!==null) {
+            db()->rollBack();
+            respond_error('Quầy không còn hoạt động.',409);
+        }
+        if (!empty($lockedConfig['takeaway_shift_enabled'])) {
+            db()->rollBack();
+            respond_error('Cấu hình ca đã thay đổi. Vui lòng tải lại POS để mở ca được phân.',409);
+        }
         $find = db()->prepare(
             "SELECT * FROM cashier_shifts
              WHERE store_id=:store_id AND cashier_uid=:cashier_uid AND status='open'
@@ -1244,7 +1290,9 @@ if ($method === 'POST' && $resource === 'shifts') {
             $find->execute(['store_id' => $storeId, 'cashier_uid' => $cashierUid]);
             $shiftRow = $find->fetch();
         }
+        db()->commit();
     } finally {
+        if (db()->inTransaction()) db()->rollBack();
         $release = db()->prepare('SELECT RELEASE_LOCK(:lock_name)');
         $release->execute(['lock_name' => $lockName]);
     }
@@ -1262,6 +1310,14 @@ if ($method === 'POST' && $resource === 'shifts') {
 if ($method === 'PATCH' && $resource === 'shifts') {
     $id = trim((string)($body['id'] ?? ''));
     pos_assert_record_store('cashier_shifts', $id, $user, $posStoreId);
+    if (takeaway_shift_info(db(),$id)) {
+        try {
+            if (isset($body['expectedOpenedAt'])) $body['expectedOpenedAt']=pos_mysql_datetime($body['expectedOpenedAt']);
+            $result=takeaway_shift_close(db(),$posStoreId,$id,$user,$body);
+            realtime_publish($posStoreId,'shifts-updated',['id'=>$id,'action'=>'closed']);
+            respond_ok(['updated'=>true]+$result);
+        } catch (ShiftManagementError $e) { respond_error($e->getMessage(),$e->status); }
+    }
     if (!isset($body['closingCash']) || !is_numeric($body['closingCash']) || (float)$body['closingCash'] < 0) {
         respond_error('Tiền mặt cuối ca không hợp lệ.', 422);
     }

@@ -1,9 +1,10 @@
 import { ApiTimestamp, posRequest } from "@/services/posApi";
 import { Bill } from "./billService";
 import { CashVoucher, transferOutForShifts } from "./cashVoucherService";
+import type { TakeawayShiftReport } from '@/features/stores/takeawayShiftReport';
 export type ShiftType = "shift_1" | "shift_2" | "shift_3" | "single";
 export type ShiftStatus = "open" | "closed";
-export type CashierShift = { id: string; storeId: string; cashierUid: string; cashierName: string; shiftType: ShiftType; status: ShiftStatus; isPreviousDay?: boolean; openedAt?: ApiTimestamp; openingCash: number; openNote?: string; openedByDeviceId?: string; openedByDeviceName?: string; closedAt?: ApiTimestamp; closingCash?: number | null; closeNote?: string; expectedClosingCash?: number | null; cashSales?: number; transferSales?: number; totalSales?: number; completedBills?: number; cancelledBills?: number; cancelledAmount?: number };
+export type CashierShift = { id: string; storeId: string; cashierUid: string; cashierName: string; shiftType: ShiftType; status: ShiftStatus; businessCycleId?: string | null; businessDate?: string | null; shiftNumber?: number | null; isFinalShift?: boolean; cycleShiftCount?: number | null; isPreviousDay?: boolean; openedAt?: ApiTimestamp; openingCash: number; openNote?: string; openedByDeviceId?: string; openedByDeviceName?: string; closedAt?: ApiTimestamp; closingCash?: number | null; closeNote?: string; expectedClosingCash?: number | null; cashSales?: number; transferSales?: number; totalSales?: number; completedBills?: number; cancelledBills?: number; cancelledAmount?: number };
 export type ShiftOpenInput = { storeId: string; cashierUid: string; cashierName: string; shiftType: ShiftType; openingCash: number; openNote?: string; deviceId: string; deviceName: string; confirmReopen?: boolean };
 export type ShiftSummary = { cashSales: number; transferSales: number; totalSales: number; completedBills: number; cancelledBills: number; cancelledAmount: number; incomeVouchers: number; expenseVouchers: number; netCashFlow: number; expectedClosingCash: number };
 export function summarizeBillsForShift(bills: Bill[], openingCash: number, vouchers: CashVoucher[] = []): ShiftSummary { const completed=bills.filter(b=>b.status!=="cancelled"),cancelled=bills.filter(b=>b.status==="cancelled");const cashSales=completed.filter(b=>b.paymentMethod!=="transfer").reduce((s,b)=>s+(b.total||0),0);const transferSales=completed.filter(b=>b.paymentMethod==="transfer").reduce((s,b)=>s+(b.total||0),0);const totalSales=completed.reduce((s,b)=>s+(b.total||0),0),cancelledAmount=cancelled.reduce((s,b)=>s+(b.total||0),0);const included=vouchers.filter(v=>!v.isCancelled&&v.includeInCashFlow!==false);const incomeVouchers=included.filter(v=>v.type==="income").reduce((s,v)=>s+(v.amount||0),0);const expenseVouchers=included.filter(v=>v.type==="expense").reduce((s,v)=>s+(v.amount||0),0);return{cashSales,transferSales,totalSales,completedBills:completed.length,cancelledBills:cancelled.length,cancelledAmount,incomeVouchers,expenseVouchers,netCashFlow:totalSales+incomeVouchers-expenseVouchers,expectedClosingCash:openingCash+cashSales+incomeVouchers-expenseVouchers}; }
@@ -13,9 +14,12 @@ export function getShiftHandoverAmount(summary: ShiftSummary): number {
 export async function getOpenShiftByCashier(storeId: string, cashierUid: string) { return (await posRequest<{ item: CashierShift | null }>("shifts", {}, { storeId, cashierUid })).item; }
 export async function getShiftsForReport(options: { storeId: string; startDate: Date; endDate: Date; shiftType: ShiftType }) { return (await posRequest<{ items: CashierShift[] }>("shifts", {}, options)).items; }
 export async function openShift(input: ShiftOpenInput) { return posRequest<{item:CashierShift;alreadyOpen:boolean}>("shifts",{method:"POST",body:JSON.stringify(input)}); }
-export async function closeShift(id: string, payload: { storeId: string; closingCash: number; closeNote?: string; expectedOpenedAt?: Date; summary: ShiftSummary }) {
+export async function closeShift(id: string, payload: { storeId: string; closingCash: number; closeNote?: string; expectedOpenedAt?: Date; summary: ShiftSummary; confirmMissingShifts?: boolean }) {
   if (!payload.storeId.trim()) throw new Error("Chưa xác định quầy kết ca.");
-  await posRequest("shifts",{method:"PATCH",body:JSON.stringify({id,...payload})});
+  return posRequest<{ report?: TakeawayShiftReport }>("shifts",{method:"PATCH",body:JSON.stringify({id,...payload})});
+}
+export async function getTakeawayClosingReport(storeId: string, id: string) {
+  return (await posRequest<{ report: TakeawayShiftReport }>('shifts', {}, { storeId, id, closingReport: 1 })).report;
 }
 
 export async function getShiftReopenWarning(storeId: string, cashierUid: string, shiftType: ShiftType) {
