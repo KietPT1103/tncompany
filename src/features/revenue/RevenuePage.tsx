@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { RefreshCw, ChevronDown } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { formatDisplayDate } from '@/components/ui/dateRangePickerUtils';
 import { quickRange, validRange } from './filters';
-import { getRevenueSource, revenueSources } from './sources';
+import { getRevenueSource } from './sources';
 import type { RevenueReport } from './types';
 import RevenueAccessGate, { revenueHeaders } from './RevenueAccessGate';
 
@@ -22,6 +22,7 @@ function RevenueDashboard({ token, onLocked }: { token: string; onLocked: () => 
   const from = params.get('from') || today[0], to = params.get('to') || today[1];
   const store = params.get('store') || 'cafe';
   const [data, setData] = useState<RevenueReport | null>(null);
+  const [stores, setStores] = useState([{ id: 'cafe', name: 'Cà phê' }, { id: 'restaurant', name: 'Bếp' }, { id: 'bakery', name: 'Bánh' }, { id: 'farm', name: 'Farm' }, { id: 'warehouse', name: 'Kho' }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
@@ -57,6 +58,7 @@ function RevenueDashboard({ token, onLocked }: { token: string; onLocked: () => 
       .then(result => {
         if (id !== sequence.current || controller.signal.aborted) return;
         setData(result);
+        if (source.id === 'tnservice' && result.stores) setStores(result.stores);
         setLoadedKey(requestKey);
       })
       .catch(reason => {
@@ -82,8 +84,9 @@ function RevenueDashboard({ token, onLocked }: { token: string; onLocked: () => 
         <button type="button" aria-label="Tải lại" title="Tải lại" onClick={() => setReload(value => value + 1)} disabled={busy || !valid} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 ${focus}`}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin motion-reduce:animate-none' : ''}`} /></button>
       </header>
       <div className="mb-3 space-y-3">
-        <div className="flex gap-1 rounded-2xl border border-slate-200 bg-slate-200/60 p-1" role="group" aria-label="Hệ thống">
-          {revenueSources.map(item => <button key={item.id} type="button" aria-pressed={source.id === item.id} onClick={() => update({ source: item.id })} className={`min-h-11 flex-1 rounded-xl px-3 text-sm font-bold transition ${focus} ${source.id === item.id ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>{item.label}</button>)}
+        <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-200/60 p-1 sm:grid-cols-3" role="group" aria-label="Quầy và hệ thống">
+          {[{ id: 'all', name: 'Tất cả quầy' }, ...stores].map(item => <button key={item.id} type="button" aria-pressed={source.id === 'tnservice' && store === item.id} onClick={() => update({ source: 'tnservice', store: item.id })} className={`min-h-11 min-w-0 whitespace-normal break-words rounded-xl px-3 py-2 text-sm font-bold transition ${focus} ${source.id === 'tnservice' && store === item.id ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>{item.name}</button>)}
+          <button type="button" aria-pressed={source.id === 'mohomestay'} onClick={() => update({ source: 'mohomestay' })} className={`min-h-11 min-w-0 whitespace-normal break-words rounded-xl px-3 py-2 text-sm font-bold transition ${focus} ${source.id === 'mohomestay' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>MoHomestay</button>
         </div>
         <div className="grid grid-cols-4 gap-1.5">
           {([['today', 'Hôm nay'], ['yesterday', 'Hôm qua'], ['week', '7 ngày'], ['month', 'Tháng này']] as const).map(([id, label]) => {
@@ -92,7 +95,6 @@ function RevenueDashboard({ token, onLocked }: { token: string; onLocked: () => 
             return <button key={id} type="button" aria-pressed={active} onClick={() => update({ from: range[0], to: range[1] })} className={`min-h-10 whitespace-nowrap rounded-full border px-2 text-[11px] font-semibold ${focus} ${active ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}>{label}</button>;
           })}
         </div>
-        {source.id === 'tnservice' && <label className="relative block"><span className="sr-only">Quầy</span><select aria-label="Quầy" value={store} onChange={event => update({ store: event.target.value })} className={`min-h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-semibold ${focus}`}><option value="all">Tất cả quầy</option>{(visible?.stores || [{ id: 'cafe', name: 'Cà phê' }, { id: 'restaurant', name: 'Bếp' }, { id: 'bakery', name: 'Bánh' }, { id: 'farm', name: 'Farm' }, { id: 'warehouse', name: 'Kho' }]).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" /></label>}
       </div>
       <div className="sticky top-0 z-10 -mx-1 mb-4 bg-[#f4f6f5]/95 px-1 py-2 backdrop-blur" data-revenue-date-bar>
         <DateRangePicker

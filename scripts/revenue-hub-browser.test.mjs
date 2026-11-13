@@ -35,6 +35,7 @@ window.fetch=async(url,options)=>{
  const q=new URL(String(url),'http://test').searchParams;requests.push(q);const source=q.get('source');const from=q.get('from'),to=q.get('to');
  const data={version:1,source,from,to,updatedAt:'2026-10-25T10:30:00Z',totals:source==='tnservice'?metrics:mo,stores:[{id:'cafe',name:'Cà phê'}],days:[{date:from,totals:source==='tnservice'?metrics:mo,shifts:{shift_1:metrics,shift_2:{...metrics,revenue:0},shift_3:{...metrics,revenue:0}},transactions:[{type:'room',code:'MO-1',room:'Phòng Mơ',amount:4000000,time:'2026-10-25T03:00:00Z',payment:'transfer'}]}]};
  if(source==='tnservice') data.cashflow={complete:true,provisional:false,grossHandover:30000000,outsideExpense:15000000,netHandover:15000000,days:[{date:from,grossHandover:30000000,outsideExpense:15000000,netHandover:15000000,complete:true,provisional:false,syncStatus:'ready',lastSyncedAt:'2026-10-25T10:30:00Z',expenses:[{name:'Chi quảng cáo',amount:15000000,storeId:'cafe'}],shifts:[{id:'s1',storeId:'cafe',label:'Ca 1',baseHandover:10000000,transferIn:0,transferOut:10000000,handover:0,outsideExpense:0,netHandover:0,status:'closed'},{id:'s2',storeId:'cafe',label:'Ca 2',baseHandover:10000000,transferIn:0,transferOut:0,handover:10000000,outsideExpense:0,netHandover:10000000,status:'closed'},{id:'s3',storeId:'cafe',label:'Ca 3',baseHandover:20000000,transferIn:10000000,transferOut:0,handover:20000000,outsideExpense:15000000,netHandover:5000000,status:'closed'}]}]};
+ data.stores.push(...Array.from({length:8},(_,index)=>({id:'cart-'+index,name:'Quầy take away '+(index+1)})));
  if(source==='tnservice'&&q.get('store')==='all'){
   data.cashflow.complete=false;data.cashflow.outsideExpense=null;data.cashflow.netHandover=null;
   Object.assign(data.cashflow.days[0],{complete:false,outsideExpense:null,netHandover:null,syncStatus:'missing'});
@@ -60,15 +61,18 @@ const btn=t=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim
  check('formula is above outside expense list',Boolean(cf.querySelector('dl').compareDocumentPosition(costs)&Node.DOCUMENT_POSITION_FOLLOWING));
  costs.querySelector('summary').click();await wait();check('expanded expense shows name and amount',costs.open&&costs.textContent.includes('Chi quảng cáo')&&costs.textContent.includes('15.000.000'));costs.querySelector('summary').click();await wait();
  check('no mobile overflow',document.documentElement.scrollWidth<=innerWidth);
- check('default counter is cafe',requests[0].get('store')==='cafe'&&document.querySelector('select[aria-label="Quầy"]').value==='cafe');
- const select=document.querySelector('select[aria-label="Quầy"]');
- select.value='all';select.dispatchEvent(new Event('change',{bubbles:true}));await wait(250);
+ check('default counter is cafe',requests[0].get('store')==='cafe'&&btn('Cà phê').getAttribute('aria-pressed')==='true');
+ check('counter dropdown is removed',!document.querySelector('select[aria-label="Quầy"]'));
+ const counterBar=document.querySelector('[aria-label="Quầy và hệ thống"]');
+ check('all counters fit without horizontal scrolling',counterBar.scrollWidth<=counterBar.clientWidth);
+ check('counter buttons wrap into visible rows',counterBar.querySelectorAll('button').length===11&&getComputedStyle(counterBar).display==='grid');
+ btn('Tất cả quầy').click();await wait(250);
  const combined=document.querySelector('section[aria-label="Dòng tiền thực tế"]');
  check('all counters retain expense total with missing sources',combined.textContent.includes('15.000.000')&&combined.textContent.includes('Tạm tính'));
  const list=combined.querySelector('details[data-expense-list]');list.querySelector('summary').click();await wait();
  check('all counters show visible counter tag',list.querySelector('[data-store-tag="cafe"]')?.checkVisibility());
  check('all counters no mobile overflow',document.documentElement.scrollWidth<=innerWidth);
- select.value='cafe';select.dispatchEvent(new Event('change',{bubbles:true}));await wait(250);
+ btn('Cà phê').click();await wait(250);
  check('single counter hides counter tags',!document.querySelector('[data-store-tag]'));
  check('one day hides chart' ,!document.querySelector('[aria-label="Doanh thu theo ngày"]'));
  const n=requests.length;document.querySelector('button[aria-label="Tải lại"]').click();await wait(250);check('reload fetches again',requests.length===n+1);
@@ -80,10 +84,10 @@ const btn=t=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim
  check('two date clicks apply automatically',!document.querySelector('[role="dialog"]')&&requests.at(-1).get('from')==='2026-10-25'&&requests.at(-1).get('to')==='2026-10-26');
  document.querySelector('button[aria-haspopup="dialog"]').click();await wait();day(25).click();await wait();day(25).click();await wait(250);check('same date twice hides chart',requests.at(-1).get('from')===requests.at(-1).get('to')&&!document.querySelector('[aria-label="Doanh thu theo ngày"]'));
 
- delay=500;btn('MoHomestay').click();await wait(30);check('old source cleared while loading',!document.getElementById('root').textContent.includes('1.234.567'));btn('TN Service').click();delay=20;await wait(650);check('stale Mo response ignored',!document.getElementById('root').textContent.includes('4.321.000')&&document.getElementById('root').textContent.includes('1.234.567'));
+ delay=500;btn('MoHomestay').click();await wait(30);check('old source cleared while loading',!document.getElementById('root').textContent.includes('1.234.567'));btn('Cà phê').click();delay=20;await wait(650);check('stale Mo response ignored',!document.getElementById('root').textContent.includes('4.321.000')&&document.getElementById('root').textContent.includes('1.234.567'));
  fail=true;btn('MoHomestay').click();await wait(250);check('source error visible',document.querySelector('[role="alert"]')?.textContent.includes('Nguồn tạm ngưng'));fail=false;btn('Thử lại').click();await wait(250);check('retry restores Mo report',document.getElementById('root').textContent.includes('4.321.000'));check('Mo has distinct native fields',document.getElementById('root').textContent.includes('Tiền phòng')&&!document.getElementById('root').textContent.includes('Ly nước'));
  check('mobile Mo no overflow',document.documentElement.scrollWidth<=innerWidth);
- delay=30000;document.querySelector('button[aria-label="Tải lại"]').click();await wait(14300);check('slow source times out with retry',document.querySelector('[role="alert"]')?.textContent.includes('Tải dữ liệu quá lâu'));delay=20;btn('TN Service').click();await wait(250);check('other source remains usable after timeout',document.getElementById('root').textContent.includes('1.234.567'));
+ delay=30000;document.querySelector('button[aria-label="Tải lại"]').click();await wait(14300);check('slow source times out with retry',document.querySelector('[role="alert"]')?.textContent.includes('Tải dữ liệu quá lâu'));delay=20;btn('Cà phê').click();await wait(250);check('other source remains usable after timeout',document.getElementById('root').textContent.includes('1.234.567'));
  accessValid=false;document.querySelector('button[aria-label="Tải lại"]').click();await wait(200);
  check('revoked token returns to code gate',!!document.querySelector('input[type="password"]')&&!document.querySelector('section[aria-label="Dòng tiền thực tế"]'));
  check('revoked token removed',!localStorage.getItem('tn_revenue_access_token'));accessValid=true;
