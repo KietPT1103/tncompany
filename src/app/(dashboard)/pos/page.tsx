@@ -70,6 +70,7 @@ import RoleGuard from "@/components/RoleGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import TakeawayPrintQueue from "@/features/stores/TakeawayPrintQueue";
+import ClosedShiftHistory from '@/features/stores/ClosedShiftHistory';
 import { takeawayShiftReportHtml } from '@/features/stores/takeawayShiftReport';
 import { takeawayReprintMode } from "@/services/takeawayReprintService";
 import { supportsCashierShifts } from "@/lib/cashierShiftPolicy";
@@ -81,7 +82,6 @@ import {
   closeShift,
   getOpenShiftByCashier,
   getShiftReopenWarning,
-  getTakeawayClosingReport,
   getShiftHandoverAmount,
   getDailyAdjustedHandover,
   getShiftsForReport,
@@ -301,11 +301,6 @@ export default function CafePosPage() {
   const usesThreeShiftByAccount = THREE_SHIFT_STORES.has(storeId);
   const usesTakeawayShifts = stores.some(store => store.id === storeId && store.isTakeAway && store.takeawayShiftEnabled);
   const assignedTakeawayShift = user?.takeawayShiftAssignments?.[storeId];
-  const [lastTakeawayShift, setLastTakeawayShift] = useState('');
-  useEffect(() => {
-    try { setLastTakeawayShift(localStorage.getItem(`takeaway-last-close:${user?.uid}:${storeId}`) || ''); }
-    catch { setLastTakeawayShift(''); }
-  }, [storeId, user?.uid]);
   const posTitle = isBartenderAccount
     ? "Bấm bill tại quầy pha chế"
     : isBakeryStore
@@ -2437,9 +2432,6 @@ export default function CafePosPage() {
           result = await closeShift(activeShift.id, { ...payload, confirmMissingShifts: true });
         }
         if (!result.report) throw new Error('Chưa nhận được phiếu kết ca. Vui lòng thử lại.');
-        setLastTakeawayShift(activeShift.id);
-        try { localStorage.setItem(`takeaway-last-close:${user?.uid}:${storeId}`, activeShift.id); }
-        catch { /* Keep reprint available in this visit. */ }
         setShowCloseShiftModal(false);
         setCloseShiftSummary(null);
         setActiveShift(null);
@@ -4912,10 +4904,6 @@ export default function CafePosPage() {
         </div>
       )}
 
-      {usesTakeawayShifts && lastTakeawayShift && <button type="button" className="fixed bottom-20 right-4 z-50 rounded-xl border bg-white px-4 py-3 text-sm font-semibold shadow" onClick={async () => {
-        try { printHtml(takeawayShiftReportHtml(await getTakeawayClosingReport(storeId, lastTakeawayShift))); }
-        catch (error) { alert(error instanceof Error ? error.message : 'Không tải được phiếu kết ca.'); }
-      }}>In lại phiếu kết ca gần nhất</button>}
       {shiftSyncNotice && (
         <button
           type="button"
@@ -4930,8 +4918,9 @@ export default function CafePosPage() {
 
       {isShiftEnabledForUser && showOpenShiftModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="border-b px-5 py-4">
+              <ClosedShiftHistory key={`${storeId}:${user?.uid}`} storeId={storeId} onPrint={printHtml} />
               <h3 className="text-xl font-bold text-slate-900">Mở ca làm việc</h3>
               <p className="mt-1 text-sm text-slate-500">
                 Vui lòng mở ca trước khi thao tác bán hàng.

@@ -10,6 +10,7 @@ require_once __DIR__ . '/_lib/realtime.php';
 require_once __DIR__ . '/_lib/ingredient_usage.php';
 require_once __DIR__ . '/_lib/shift_management.php';
 require_once __DIR__ . '/_lib/takeaway_shifts.php';
+require_once __DIR__ . '/_lib/shift_closing_reports.php';
 require_once __DIR__ . '/_lib/cash_transfers.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -1164,6 +1165,10 @@ if ($method === 'PATCH' && $resource === 'vouchers') {
 }
 
 if ($method === 'GET' && $resource === 'shifts') {
+    if (($_GET['closedHistory'] ?? '') === '1') {
+        try { respond_ok(shift_closing_history(db(), $posStoreId, $user, max(0, (int)($_GET['offset'] ?? 0)))); }
+        catch (ShiftManagementError $e) { respond_error($e->getMessage(), $e->status); }
+    }
     if (($_GET['closingReport'] ?? '') === '1') {
         try { respond_ok(['report'=>takeaway_shift_report(db(),$posStoreId,trim((string)($_GET['id']??'')),$user)]); }
         catch (ShiftManagementError $e) { respond_error($e->getMessage(),$e->status); }
