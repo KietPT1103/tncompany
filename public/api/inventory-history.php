@@ -40,6 +40,27 @@ if (!in_array($type, ['all', 'receipt', 'issue', 'check'], true)) {
 }
 
 $rows = [];
+require_once __DIR__ . '/_lib/prepared_transfers.php';
+prepared_transfers_ensure_schema();
+foreach (['issue', 'receipt'] as $direction) {
+    if (!in_array($type, ['all', $direction], true)) continue;
+    $outgoing = $direction === 'issue';
+    $storeColumn = $outgoing ? 'source_store_id' : 'destination_store_id';
+    $otherColumn = $outgoing ? 'destination_store_id' : 'source_store_id';
+    $beforeColumn = $outgoing ? 'source_before' : 'destination_before';
+    $afterColumn = $outgoing ? 'source_after' : 'destination_after';
+    $sql = "SELECT :direction movement_type,t.id,CONCAT('BTP-',LEFT(t.id,8)) code,
+        DATE(t.created_at) movement_date,'completed' status,t.created_at,t.actor actor_name,
+        CONCAT('Chuyển bán thành phẩm · ',COALESCE(s.name,t.$otherColumn)) counterpart,
+        t.note,0 total_amount,1 item_id,t.ingredient_code,t.ingredient_name,t.unit,t.quantity,
+        0 unit_cost,0 line_total,t.note item_note,t.$beforeColumn stock_before,t.$afterColumn stock_after
+        FROM inventory_prepared_transfers t LEFT JOIN stores s ON s.id=t.$otherColumn
+        WHERE t.$storeColumn=:store";
+    $params = ['direction'=>$direction,'store'=>$storeId];
+    if ($dateFrom !== '') { $sql .= ' AND DATE(t.created_at)>=:date_from'; $params['date_from']=$dateFrom; }
+    if ($dateTo !== '') { $sql .= ' AND DATE(t.created_at)<=:date_to'; $params['date_to']=$dateTo; }
+    $q=db()->prepare($sql); $q->execute($params); $rows=array_merge($rows,$q->fetchAll());
+}
 if (in_array($type, ['all','receipt'], true)) {
     $sql = 'SELECT "receipt" AS movement_type,r.id,r.receipt_code AS code,r.receipt_date AS movement_date,r.status,r.created_at,
                 COALESCE(NULLIF(r.order_creator_name,""),NULLIF(r.created_by,""),"—") AS actor_name,

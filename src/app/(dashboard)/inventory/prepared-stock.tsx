@@ -6,13 +6,18 @@ import { inventoryToday } from "@/lib/inventoryPeriods";
 import { createElement as h, useEffect, useMemo, useRef, useState } from "react";
 import { FlaskConical, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { getPreparedStock, savePreparedStockCount, type PreparedStockOverview } from "@/services/preparedStockService";
+import { getPreparedStock, savePreparedStockCount, transferPreparedStock, type PreparedStockOverview } from "@/services/preparedStockService";
 
 const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 const qty = (value: number | null) => value === null ? "Chưa chốt" : value.toLocaleString("vi-VN", { maximumFractionDigits: 3 });
 
 export default function PreparedStockTab() {
-  const { storeId } = useStore(); const now = new Date();
+  const { storeId, activeStores } = useStore(); const now = new Date();
+  const [transferItem, setTransferItem] = useState("");
+  const [destination, setDestination] = useState("");
+  const [transferQuantity, setTransferQuantity] = useState("");
+  const [transferNote, setTransferNote] = useState("");
+  useEffect(() => { setTransferItem(""); setDestination(""); setTransferQuantity(""); setTransferNote(""); }, [storeId]);
   const [from, setFrom] = useState(inventoryToday);
   const [to, setTo] = useState(inventoryToday);
   const [data, setData] = useState<PreparedStockOverview | null>(null);
@@ -21,6 +26,22 @@ export default function PreparedStockTab() {
   const [search, setSearch] = useState(""); const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
   const [error, setError] = useState(""); const [message, setMessage] = useState("");
+  async function transfer() {
+    const item = data?.items.find(item => item.ingredientId === transferItem);
+    if (!item || saving || loading) return;
+    if (data?.items.some(row => Number((values[row.ingredientId]??"0").replace(",",".")) !== (row.actualQuantity??row.currentQuantity))) {
+      setError("Bạn có thay đổi tồn chưa lưu. Hãy lưu tồn cuối ngày hoặc tải lại trước khi xuất sang quầy.");
+      return;
+    }
+    setSaving(true); setError(""); setMessage("");
+    try {
+      await transferPreparedStock({ storeId, destinationStoreId: destination, ingredientId: item.ingredientId,
+        quantity: Number(transferQuantity.replace(",", ".")), expectedStock: item.currentQuantity, note: transferNote });
+      setMessage("Đã xuất bán thành phẩm, cộng tồn quầy nhận và lưu lịch sử hai quầy.");
+      setTransferQuantity(""); setTransferNote(""); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể xuất bán thành phẩm."); }
+    finally { setSaving(false); }
+  }
   const loadSequence = useRef(0);
   async function load() {
     const sequence = ++loadSequence.current;
@@ -38,7 +59,7 @@ export default function PreparedStockTab() {
   async function save() {
     if (loading || saving || !data || data.items.length === 0 || data.isLocked || data.dateFrom!==from || data.dateTo!==to) return; setSaving(true); setError(""); setMessage("");
     try {
-      await savePreparedStockCount({ storeId, countDate: to, note, items: data.items.map((item)=>({ ingredientId:item.ingredientId, actualQuantity:Math.max(0,Number((values[item.ingredientId]??"0").replace(",","."))||0) })) });
+      await savePreparedStockCount({ storeId, countDate: to, note, items: data.items.map((item)=>({ ingredientId:item.ingredientId, expectedQuantity:item.currentQuantity, actualQuantity:Math.max(0,Number((values[item.ingredientId]??"0").replace(",","."))||0) })) });
       setMessage(`Đã lưu tồn bán thành phẩm ngày ${to}.`); setNote(""); await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể lưu tồn bán thành phẩm."); }
     finally { setSaving(false); }
@@ -58,5 +79,15 @@ export default function PreparedStockTab() {
         h("thead",{className:"bg-emerald-950 text-left text-white"},h("tr",{},...["Mã","Bán thành phẩm","Đơn vị","Đã dùng theo món","Nguyên liệu gốc","Quy đổi tồn nguyên liệu gốc","Tồn cuối ngày"].map((label)=>h("th",{key:label,className:"px-4 py-3 last:text-right"},label)))),
         h("tbody",{className:"divide-y"},...paged.items.map((item)=>{const actual=Math.max(0,Number((values[item.ingredientId]??"0").replace(",","."))||0);return h("tr",{key:item.ingredientId,className:"hover:bg-emerald-50/40"},h("td",{className:"px-4 py-3 font-bold text-emerald-800"},item.ingredientCode),h("td",{className:"px-4 py-3 font-semibold"},item.ingredientName),h("td",{className:"px-4 py-3"},item.unit||"—"),h("td",{className:"px-4 py-3 text-right"},qty(item.usedQuantity)),h("td",{className:"px-4 py-3"},...item.components.map((component)=>h("p",{key:component.ingredientId},`${component.ingredientName} (${component.unit})`))),h("td",{className:"px-4 py-3 text-right font-semibold"},...item.components.map((component)=>h("p",{key:component.ingredientId},`${qty(actual*component.conversionFactor)} ${component.unit}`))),h("td",{className:"px-4 py-2 text-right"},h("input",{disabled:loading||data?.isLocked,inputMode:"decimal",value:values[item.ingredientId]??"",onChange:(event:any)=>setValues({...values,[item.ingredientId]:event.target.value}),className:"h-10 w-32 rounded-lg border px-3 text-right font-bold disabled:bg-slate-100 disabled:text-slate-500"})))})))),
       items.length===0?h("div",{className:"p-14 text-center text-slate-500"},h(FlaskConical,{className:"mx-auto mb-2 text-slate-300"}),"Chưa có bán thành phẩm. Hãy đánh dấu ‘Đây là bán thành phẩm’ tại trang Nguyên liệu."):null,h(InventoryPagination,{page:paged.pagination.currentPage,pageSize,total:items.length,onPageChange:setPage,onPageSizeChange:setPageSize,disabled:loading||saving})),
+    h("section",{className:"rounded-2xl border bg-white p-5 space-y-3"},
+      h("h3",{className:"font-bold text-emerald-950"},"Xuất bán thành phẩm sang quầy khác"),
+      h("p",{className:"text-sm text-slate-500"},"Trừ tồn quầy xuất, cộng tồn quầy nhận theo mã và đơn vị. Xem giao dịch tại Lịch sử kho của hai quầy."),
+      h("fieldset",{disabled:saving||loading||to!==inventoryToday(),className:"flex flex-wrap items-end gap-3 disabled:opacity-50"},
+        h("label",{},"Bán thành phẩm",h("select",{value:transferItem,onChange:(e:any)=>setTransferItem(e.target.value),className:"block h-11 rounded-lg border px-3"},h("option",{value:""},"Chọn bán thành phẩm"),...(data?.items??[]).map(item=>h("option",{key:item.ingredientId,value:item.ingredientId},`${item.ingredientCode} · ${item.ingredientName} (tồn ${qty(item.currentQuantity)} ${item.unit})`)))),
+        h("label",{},"Quầy nhận",h("select",{value:destination,onChange:(e:any)=>setDestination(e.target.value),className:"block h-11 rounded-lg border px-3"},h("option",{value:""},"Chọn quầy nhận"),...activeStores.filter(store=>store.id!==storeId&&store.id!=="warehouse").map(store=>h("option",{key:store.id,value:store.id},store.name)))),
+        h("label",{},"Số lượng xuất",h("input",{value:transferQuantity,inputMode:"decimal",onChange:(e:any)=>setTransferQuantity(e.target.value),className:"block h-11 w-36 rounded-lg border px-3"})),
+        h("label",{},"Ghi chú",h("input",{value:transferNote,onChange:(e:any)=>setTransferNote(e.target.value),className:"block h-11 rounded-lg border px-3"})),
+        h("button",{disabled:!transferItem||!destination||!(Number(transferQuantity.replace(",","."))>0),onClick:()=>void transfer(),className:"h-11 rounded-lg bg-emerald-800 px-5 font-bold text-white disabled:opacity-50"},saving?"Đang xử lý...":"Xuất sang quầy")),
+      to!==inventoryToday()?h("p",{className:"text-sm text-amber-700"},"Chọn ngày hôm nay để xuất bán thành phẩm."):null),
     data?.latestCountDate?h("p",{className:"text-sm text-slate-500"},`Lần chốt gần nhất: ${data.latestCountDate}`):null);
 }

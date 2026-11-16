@@ -40,7 +40,9 @@ function prepared_stock_business_today(): string
     return (new DateTimeImmutable('now', new DateTimeZone('Asia/Ho_Chi_Minh')))->format('Y-m-d');
 }
 
+require_once __DIR__ . '/_lib/prepared_transfers.php';
 prepared_stock_ensure_schema();
+prepared_transfers_ensure_schema();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $user = auth_require_permission('inventory_prepared_closings.access');
 
@@ -48,6 +50,13 @@ if ($method === 'POST') {
     $body = read_json_body();
     $storeId = field_inventory_require_store($user, trim((string) ($body['storeId'] ?? '')));
     if ($storeId === 'warehouse') respond_error('Kho thợ không sử dụng tồn bán thành phẩm.', 422);
+    if (($body['action'] ?? '') === 'transfer') {
+        $destination = field_inventory_require_store($user, trim((string)($body['destinationStoreId'] ?? '')));
+        if ($destination === 'warehouse') respond_error('Không thể chuyển bán thành phẩm đến kho thợ.', 422);
+        try { $id = prepared_transfer(db(), $storeId, $destination, prepared_stock_actor($user), $body); }
+        catch (Throwable $e) { respond_error($e->getMessage(), 422); }
+        respond_ok(['id'=>$id], 201);
+    }
     $today = prepared_stock_business_today();
     $countDate = prepared_stock_date((string) ($body['countDate'] ?? ''), $today);
     if ($countDate > $today) respond_error('Không thể chốt tồn cho ngày tương lai.', 422);
@@ -61,19 +70,24 @@ if ($method === 'POST') {
         $countId = uuidv4();
         $pdo->prepare('INSERT INTO inventory_prepared_counts(id,store_id,count_date,note,created_by) VALUES(:id,:store,:date,:note,:actor)')
             ->execute(['id'=>$countId,'store'=>$storeId,'date'=>$countDate,'note'=>trim((string)($body['note']??'')),'actor'=>prepared_stock_actor($user)]);
-        $find = $pdo->prepare('SELECT i.id FROM ingredients i WHERE i.id=:id AND i.store_id=:store AND i.is_active=1 AND EXISTS(SELECT 1 FROM ingredient_components ic WHERE ic.parent_ingredient_id=i.id) LIMIT 1');
+        $find = $pdo->prepare('SELECT i.preparation_stock_quantity FROM ingredients i WHERE i.id=:id AND i.store_id=:store AND i.is_active=1 AND EXISTS(SELECT 1 FROM ingredient_components ic WHERE ic.parent_ingredient_id=i.id) LIMIT 1 FOR UPDATE');
         $insert = $pdo->prepare('INSERT INTO inventory_prepared_count_items(count_id,ingredient_id,actual_quantity) VALUES(:count,:ingredient,:quantity)');
         $update = $pdo->prepare('UPDATE ingredients SET preparation_stock_quantity=:quantity,updated_at=NOW() WHERE id=:ingredient AND store_id=:store');
         $seen = [];
         foreach ($rawItems as $item) {
             $ingredientId = trim((string) ($item['ingredientId'] ?? ''));
             $quantity = round((float) str_replace(',', '.', (string) ($item['actualQuantity'] ?? 0)), 3);
-            if ($ingredientId === '' || $quantity < 0 || isset($seen[$ingredientId])) throw new RuntimeException('Dữ liệu tồn bán thành phẩm không hợp lệ.');
+            if ($ingredientId === '' || !is_numeric(str_replace(',', '.', (string)($item['actualQuantity']??''))) || !is_finite($quantity) || $quantity < 0 || isset($seen[$ingredientId])) throw new RuntimeException('Dữ liệu tồn bán thành phẩm không hợp lệ.');
             $find->execute(['id'=>$ingredientId,'store'=>$storeId]);
-            if (!$find->fetchColumn()) throw new RuntimeException('Bán thành phẩm không thuộc cửa hàng đang chọn.');
+            $currentStock = $find->fetchColumn();
+            if ($currentStock === false) throw new RuntimeException('Bán thành phẩm không thuộc cửa hàng đang chọn.');
+            if ($countDate === $today && array_key_exists('expectedQuantity', $item)
+                && (!is_numeric($item['expectedQuantity']) || !is_finite((float)$item['expectedQuantity']) || abs((float)$item['expectedQuantity']-(float)$currentStock)>0.0001)) {
+                throw new RuntimeException('Tồn đã thay đổi sau khi mở màn hình. Vui lòng tải lại và kiểm tra số lượng trước khi lưu.');
+            }
             $seen[$ingredientId] = true;
             $insert->execute(['count'=>$countId,'ingredient'=>$ingredientId,'quantity'=>$quantity]);
-            $update->execute(['quantity'=>$quantity,'ingredient'=>$ingredientId,'store'=>$storeId]);
+            if ($countDate === $today) $update->execute(['quantity'=>$quantity,'ingredient'=>$ingredientId,'store'=>$storeId]);
         }
         $pdo->commit();
     } catch (Throwable $exception) {
@@ -125,11 +139,11 @@ $componentStatement=db()->prepare('SELECT source.id,source.ingredient_code,sourc
 foreach ($statement->fetchAll() as $row) {
     $id=(string)$row['id'];$output=max((float)$row['conversion_output_quantity'],0.000001);$componentStatement->execute(['parent'=>$id]);$components=[];
     foreach($componentStatement->fetchAll()as$component)$components[]=['ingredientId'=>(string)$component['id'],'ingredientCode'=>(string)$component['ingredient_code'],'ingredientName'=>(string)$component['ingredient_name'],'unit'=>(string)($component['unit']??''),'inputQuantity'=>(float)$component['input_quantity'],'conversionFactor'=>round((float)$component['input_quantity']/$output,6)];
-    $current=array_key_exists($id,$actual)?$actual[$id]:(float)$row['preparation_stock_quantity'];
+    $current=$to===$today?(float)$row['preparation_stock_quantity']:(array_key_exists($id,$actual)?$actual[$id]:(float)$row['preparation_stock_quantity']);
     $items[]=['ingredientId'=>$id,'ingredientCode'=>(string)$row['ingredient_code'],'ingredientName'=>(string)$row['ingredient_name'],
         'unit'=>(string)($row['unit']??''),'components'=>$components,
         'openingQuantity'=>array_key_exists($id,$opening)?$opening[$id]:null,'usedQuantity'=>round($used[$id]??0,3),
-        'actualQuantity'=>array_key_exists($id,$actual)?$actual[$id]:null,'currentQuantity'=>round($current,3),
+        'actualQuantity'=>$to===$today?$current:(array_key_exists($id,$actual)?$actual[$id]:null),'currentQuantity'=>round($current,3),
         'rawEquivalentQuantity'=>array_sum(array_map(static fn(array$component):float=>round($current*$component['conversionFactor'],3),$components))];
 }
 $canEditPast=($user['role']??'')==='admin'||auth_has_permission($user,'inventory_closings.edit_past');

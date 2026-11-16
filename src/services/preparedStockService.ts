@@ -28,11 +28,20 @@ export function getPreparedStock(storeId: string, dateFrom: string, dateTo: stri
   return apiRequest<PreparedStockOverview>(`/prepared-stock.php?${query}`);
 }
 
+export function transferPreparedStock(payload: {
+  storeId: string; destinationStoreId: string; ingredientId: string;
+  quantity: number; expectedStock: number; note?: string;
+}) {
+  return apiRequest<{ id: string }>("/prepared-stock.php", {
+    method: "POST", body: JSON.stringify({ ...payload, action: "transfer" }),
+  });
+}
+
 export function savePreparedStockCount(payload: {
   storeId: string;
   countDate: string;
   note?: string;
-  items: Array<{ ingredientId: string; actualQuantity: number }>;
+  items: Array<{ ingredientId: string; actualQuantity: number; expectedQuantity: number }>;
 }) {
   return apiRequest<{ id: string }>("/prepared-stock.php", {
     method: "POST",

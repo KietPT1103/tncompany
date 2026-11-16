@@ -7,12 +7,13 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Boxes, Download, Eye, EyeOff, LoaderCircle, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SelectBox, type SelectBoxOption } from "@/components/ui/SelectBox";
 import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import {
   createIngredient, deleteIngredient, getIngredients, getNextIngredientCode, restoreIngredient,
-  updateIngredient, resetIngredientStock, type Ingredient,
+  updateIngredient, resetIngredientStock, copyIngredients, type Ingredient,
 } from "@/services/ingredients";
 import { getSuppliers, type Supplier } from "@/services/suppliers";
 import { exportIngredientsToExcel, parseIngredientWorkbook } from "@/services/catalogExcel";
@@ -48,7 +49,14 @@ const defaultPeriod = () => {
 const kindLabels = { ingredient: "Nguyên liệu", consumable: "Vật liệu tiêu hao", fresh: "Nguyên liệu tươi" } as const;
 
 export default function IngredientsPage() {
-  const { storeId, storeName } = useStore();
+  const { storeId, storeName, activeStores } = useStore();
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyDestination, setCopyDestination] = useState("");
+  const [copyIds, setCopyIds] = useState<string[]>([]);
+  const [copySearch, setCopySearch] = useState("");
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState("");
+  useEffect(() => { setCopyOpen(false); setCopyIds([]); setCopyDestination(""); setCopyError(""); }, [storeId]);
   const { user } = useAuth();
   const canResetIngredientStock = user?.role === "admin" && storeId === "restaurant";
   const isConstructionWarehouse = storeId === "warehouse";
@@ -88,6 +96,17 @@ export default function IngredientsPage() {
 
   function showToast(title: string, variant: ToastVariant, description?: string) {
     setToast({ open: true, title, description, variant });
+  }
+
+  async function submitCopy() {
+    if (copying || !copyDestination || !copyIds.length) return;
+    setCopying(true); setCopyError("");
+    try {
+      const result = await copyIngredients(storeId, copyDestination, copyIds);
+      setCopyOpen(false); setCopyIds([]);
+      showToast("Đã sao chép sang quầy nhận", "success", `Tạo mới ${result.createdCount} nguyên liệu / bán thành phẩm (gồm thành phần còn thiếu); giữ nguyên ${result.skippedCount} mã đã có.`);
+    } catch (reason) { setCopyError(reason instanceof Error ? reason.message : "Không thể sao chép nguyên liệu."); }
+    finally { setCopying(false); }
   }
 
   async function confirmResetStock() {
@@ -322,6 +341,7 @@ export default function IngredientsPage() {
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="text-3xl font-bold">{itemTitle}</h1><p className="mt-1 text-slate-500">{isConstructionWarehouse ? "Danh mục độc lập của kho thợ, phục vụ nhập, xuất và kiểm kê vật tư xây dựng." : "Dữ liệu riêng cho định mức, nhập hàng và kiểm kho."}</p></div>
       <div className="flex flex-wrap gap-2">
+        {!isConstructionWarehouse && hasPermission(user, "products.create") && <button type="button" disabled={loading||saving||copying} onClick={()=>{setCopyError("");setCopyOpen(true);}} className="h-10 rounded-lg border bg-white px-3 text-sm font-semibold disabled:opacity-50">Sao chép sang quầy</button>}
         <button type="button" onClick={startCreate} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[2px] border-2 border-slate-900 bg-emerald-700 px-3 text-sm font-semibold text-white shadow-[4px_4px_0_#0f172a] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-[6px_6px_0_#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#0f172a] disabled:opacity-60">
           <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{`Thêm ${itemLabel}`}</button>
         <SelectBox<IngredientAction>
@@ -347,6 +367,18 @@ export default function IngredientsPage() {
 
       </div>
     </header>
+    {copyOpen && <section className="mt-5 space-y-4 rounded-2xl border bg-white p-5 shadow-sm">
+      <div className="flex justify-between gap-3"><h2 className="text-lg font-bold">Sao chép nguyên liệu / bán thành phẩm</h2><button type="button" disabled={copying} onClick={()=>setCopyOpen(false)} aria-label="Đóng sao chép"><X/></button></div>
+      <p className="text-sm text-slate-500">Giữ mã, đơn vị, giá và công thức; tồn ban đầu bằng 0. Tự thêm nguyên liệu thành phần còn thiếu. Các mã đã có ở quầy nhận được giữ nguyên.</p>
+      <fieldset disabled={copying} className="space-y-3">
+        <label className="block text-sm font-semibold">Quầy nhận<select value={copyDestination} onChange={e=>setCopyDestination(e.target.value)} className="mt-1 block h-10 w-full max-w-md rounded-lg border px-3"><option value="">Chọn quầy nhận</option>{activeStores.filter(store=>store.id!==storeId&&store.id!=="warehouse").map(store=><option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
+        <input aria-label="Tìm nguyên liệu để sao chép" value={copySearch} onChange={e=>setCopySearch(e.target.value)} placeholder="Tìm mã hoặc tên để sao chép..." className="h-10 w-full rounded-lg border px-3"/>
+        <div className="flex gap-4 text-sm"><button type="button" onClick={()=>setCopyIds(current=>Array.from(new Set([...current,...items.filter(item=>item.isActive&&adminSearchText(`${item.ingredientCode} ${item.ingredientName}`).includes(adminSearchText(copySearch))).map(item=>item.id)])))} className="font-semibold text-emerald-800">Chọn tất cả kết quả</button><button type="button" onClick={()=>setCopyIds([])}>Bỏ chọn tất cả</button><span>Đã chọn {copyIds.length}</span></div>
+        <div className="grid max-h-64 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2">{items.filter(item=>item.isActive&&adminSearchText(`${item.ingredientCode} ${item.ingredientName}`).includes(adminSearchText(copySearch))).map(item=><label key={item.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={copyIds.includes(item.id)} onChange={e=>setCopyIds(current=>e.target.checked?[...current,item.id]:current.filter(id=>id!==item.id))}/><span>{item.ingredientCode} · {item.ingredientName}{item.conversionComponents?.length?" (Bán thành phẩm)":""}</span></label>)}</div>
+        {copyError&&<p role="alert" className="text-sm text-rose-700">{copyError}</p>}
+        <button type="button" disabled={!copyDestination||!copyIds.length||copyIds.length>300} onClick={()=>void submitCopy()} className="h-10 rounded-lg bg-emerald-800 px-4 font-bold text-white disabled:opacity-50">{copying?"Đang sao chép...":"Sao chép sang quầy nhận"}</button>
+      </fieldset>
+    </section>}
     <div className="my-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[
       {label:"Tổng số nguyên liệu",value:items.filter(i=>i.isActive).length,tone:"tone-0"},
       {label:"Đang còn hàng",value:items.filter(i=>i.isActive&&i.stockQuantity/(i.purchaseToBaseFactor||1)>1).length,tone:"tone-1"},
