@@ -44,4 +44,18 @@ $extraBill=internal_sheets_parse(['one'=>csvRows($extra)])['bills'][0];
 verify(count($extraBill['items'])===2 && $extraBill['items'][1]['unitPrice']===50.0 && $extraBill['items'][1]['quantity']===1.0 && $extraBill['items'][1]['categoryName']==='Chi phí phát sinh','extra cost creates its own expense line');
 $extra[1][6]='0';
 verify(count(internal_sheets_parse(['one'=>csvRows($extra)])['bills'])===1,'column order and zero extra cost accepted');
+$formatted=[['Ngày nhập','Loại vật tư','Nguồn cung','Số lượng','Đơn vị','Đơn giá','Phát sinh','Thành tiền','Người nhập','Người chi tiền','Ghi chú','Link bill'],
+    ['28/10/2026','Vít vàng 5p','Ánh Nguyệt','0,8','kg','60.000,','','48.000,','Anh Đông','Kiệt','',$url],
+    ['28/10/2026','Vít vàng 1,5p','Ánh Nguyệt','1','kg','60.000,','','60.000,','Anh Đông','Kiệt','',$url]];
+$formattedResult=internal_sheets_parse(['26/10 - 1/11'=>csvRows($formatted)]);
+verify(!$formattedResult['errors'] && count($formattedResult['bills'])===1,'Google Sheets trailing decimal comma imports without errors');
+$formattedItems=$formattedResult['bills'][0]['items'];
+verify($formattedItems[0]['quantity']===0.8 && $formattedItems[0]['unitPrice']===60000.0 && $formattedItems[1]['unitPrice']===60000.0,'formatted Sheet prices retain their value');
+verify(array_sum(array_map(fn($item)=>$item['quantity']*$item['unitPrice'],$formattedItems))===108000.0,'formatted Sheet bill totals 108000');
+verify(internal_sheets_number('60000,')===60000.0,'ungrouped whole number with trailing comma');
+foreach(['60.00,','60.000,,',',','0,'] as $invalidNumber){
+    $rejected=false;
+    try{internal_sheets_number($invalidNumber);}catch(InvalidArgumentException $e){$rejected=true;}
+    verify($rejected,'malformed or zero number remains rejected: '.$invalidNumber);
+}
 echo "PASS sheet parsing, grouping, dates, prices and incomplete bill guards\n";

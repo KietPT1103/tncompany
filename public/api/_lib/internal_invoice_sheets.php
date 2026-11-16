@@ -25,8 +25,9 @@ function internal_sheets_bill_url(string $value): string {
 }
 function internal_sheets_number(string $value): float {
     $value=preg_replace('/[\s\x{00A0}]+/u','',trim($value));
-    if (preg_match('/^\d{1,3}(?:\.\d{3})+(?:,\d+)?$/D',$value)) $value=str_replace(',','.',str_replace('.','',$value));
-    elseif (preg_match('/^\d+(?:,\d+)?$/D',$value)) $value=str_replace(',','.',$value);
+    // Google Sheets may export Vietnamese whole-number formats with a trailing decimal comma (60.000,).
+    if (preg_match('/^\d{1,3}(?:\.\d{3})+(?:,\d*)?$/D',$value)) $value=str_replace(',','.',str_replace('.','',$value));
+    elseif (preg_match('/^\d+(?:,\d*)?$/D',$value)) $value=str_replace(',','.',$value);
     elseif (!preg_match('/^\d+(?:\.\d+)?$/D',$value)) throw new InvalidArgumentException('Số lượng/đơn giá phải là số lớn hơn 0.');
     $number=(float)$value;
     if (!is_finite($number) || $number<=0 || $number>999999999999) throw new InvalidArgumentException('Số lượng/đơn giá phải lớn hơn 0 và trong giới hạn cho phép.');
