@@ -94,7 +94,7 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
 
   const assign = async () => {
     if (!review || !assignmentIds.length || !assignmentReason.trim() || !assignmentReviewed) return;
-    if (!window.confirm(`Gán ${assignmentIds.length} bill chưa có ca vào ${shiftLabel(review.shift)}? Doanh thu ca sẽ được tính lại, kể cả bill ngoài giờ ca.`)) return;
+    if (!window.confirm(`Gán ${assignmentIds.length} bill chưa có ca vào ${shiftLabel(review.shift)}? Doanh thu ca sẽ được tính lại, kể cả bill ngoài giờ ca. Với ca đã đóng, tiền chốt tăng theo bill tiền mặt được gán; chênh lệch dư/thiếu giữ nguyên.`)) return;
     setSaving(true); setAssignmentError(""); setNotice("");
     try {
       const result = await assignUnassignedBills(storeId, { id: review.shift.id, billIds: assignmentIds, reason: assignmentReason.trim(), reviewed: assignmentReviewed });
@@ -157,7 +157,7 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
               <h3 className="font-semibold">{shiftLabel(review.shift)} · {review.shift.status === "open" ? "Đang mở" : "Đã đóng"}</h3>
               <section className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-3" aria-label="Gán bill chưa có ca">
                 <h4 className="font-semibold">Bill chưa có ca</h4>
-                <p className="text-sm">Ca nhận: <strong>{shiftLabel(review.shift)} · {shiftTime(review.shift)}</strong>. Cho phép gán cả bill ngoài giờ ca và ca đã đóng. Doanh thu ca được tính lại; giờ tạo bill và tiền bàn giao thực tế giữ nguyên.</p>
+                <p className="text-sm">Ca nhận: <strong>{shiftLabel(review.shift)} · {shiftTime(review.shift)}</strong>. Cho phép gán cả bill ngoài giờ ca và ca đã đóng. Doanh thu ca được tính lại; giờ tạo bill giữ nguyên. Với ca đã đóng, tiền chốt tăng theo bill tiền mặt được gán, giữ nguyên chênh lệch dư/thiếu. Bill chuyển khoản và bill đã hủy không làm tăng tiền chốt.</p>
                 <label className="block text-sm">Ngày tạo bill chưa có ca<input type="date" className={fieldClass} value={unassignedDate} onChange={event => { if (event.target.value) setUnassignedDate(event.target.value); }} /></label>
                 {loadingUnassigned && <p className="text-sm">Đang tìm bill chưa có ca...</p>}
                 {assignmentError && <p role="alert" className="text-sm text-rose-700">{assignmentError}</p>}

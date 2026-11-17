@@ -91,14 +91,17 @@ rejects(fn()=>shift_management_assign($pdo,'cafe',$admin,array_replace($assign,[
 rejects(fn()=>shift_management_assign($pdo,'cafe',$admin,array_replace($assign,['billIds'=>['late','foreign']])),409);
 check($pdo->query("SELECT shift_id FROM bills WHERE id='late'")->fetchColumn()===null,'Partial assignment must roll back');
 $pdo->exec("CREATE TRIGGER fail_assignment_audit BEFORE INSERT ON cashier_shift_corrections BEGIN SELECT RAISE(ABORT,'audit unavailable'); END");
+$closingBeforeFailure=shift_management_find($pdo,'cafe','correct')['closing_cash'];
 try { shift_management_assign($pdo,'cafe',$admin,$assign); throw new RuntimeException('Audit failure accepted'); } catch(PDOException $e) {}
 check($pdo->query("SELECT shift_id FROM bills WHERE id='late'")->fetchColumn()===null,'Assignment audit rollback failed');
+check(shift_management_find($pdo,'cafe','correct')['closing_cash']===$closingBeforeFailure,'Failed assignment must roll back closing cash');
 $pdo->exec('DROP TRIGGER fail_assignment_audit');
 $before=shift_management_find($pdo,'cafe','correct');
 $result=shift_management_assign($pdo,'cafe',$admin,$assign);
 $after=shift_management_find($pdo,'cafe','correct');
 check($result['movedBills']===2 && (float)$after['total_sales']===309300.0,'Assignment totals incorrect');
-check($before['closed_at']===$after['closed_at'] && $before['closing_cash']===$after['closing_cash'],'Assignment changed actual close');
+check($before['closed_at']===$after['closed_at'] && (float)$after['closing_cash']===(float)$before['closing_cash']+309000,'Assignment must add only completed cash bills to closing cash');
+check((float)$after['closing_cash']-(float)$after['expected_closing_cash']===(float)$before['closing_cash']-(float)$before['expected_closing_cash'],'Assignment changed closed shift difference');
 $bill=$pdo->query("SELECT * FROM bills WHERE id='late'")->fetch();
 check($bill['shift_id']==='correct' && $bill['cashier_id']==='original' && $bill['created_at']==='2026-10-29 22:30:44','Assignment changed invoice provenance');
 $audit=$pdo->query('SELECT * FROM cashier_shift_corrections ORDER BY id DESC LIMIT 1')->fetch();
@@ -106,3 +109,20 @@ check($audit['reason']===$assign['reason'] && count(json_decode($audit['transfer
 rejects(fn()=>shift_management_assign($pdo,'cafe',$admin,$assign),409);
 rejects(fn()=>shift_management_unassigned($pdo,'cafe','2026-02-30'),422);
 echo "PASS: unassigned lookup, arbitrary closed target, authorization, conflicts, rollback, totals and audit\n";
+
+// Adding a missing cash bill preserves the counted surplus, including across repeated assignments.
+$pdo->exec("INSERT INTO cashier_shifts (id,store_id,status,opened_at,closed_at,opening_cash,closing_cash,expected_closing_cash) VALUES ('surplus','cafe','closed','2026-10-29 08:00:00','2026-10-29 16:00:00',10000,10040,10000),('open-target','cafe','open','2026-10-29 08:00:00',NULL,10000,NULL,10000)");
+$pdo->exec("INSERT INTO bills VALUES ('extra-cash','cafe',NULL,'original','T01',60,'completed','cash','2026-10-29 17:00:00'),('extra-transfer','cafe',NULL,'original','T01',90,'completed','transfer','2026-10-29 17:00:00'),('extra-void','cafe',NULL,'original','T01',80,'cancelled','cash','2026-10-29 17:00:00'),('repeat-cash','cafe',NULL,'original','T01',20,'completed','cash','2026-10-29 17:00:00'),('open-cash','cafe',NULL,'original','T01',60,'completed','cash','2026-10-29 17:00:00')");
+shift_management_assign($pdo,'cafe',$admin,array_replace($assign,['id'=>'surplus','billIds'=>['extra-cash','extra-transfer','extra-void']]));
+$surplus=shift_management_find($pdo,'cafe','surplus');
+check((float)$surplus['closing_cash']===10100.0 && (float)$surplus['expected_closing_cash']===10060.0,'10040 closing plus 60 cash must become 10100 with surplus 40');
+check((float)$surplus['total_sales']===150.0,'Transfer must count as revenue without changing closing cash');
+$audit=$pdo->query('SELECT * FROM cashier_shift_corrections ORDER BY id DESC LIMIT 1')->fetch();
+check((float)json_decode($audit['before_json'],true)['surplus']['closing_cash']===10040.0 && (float)json_decode($audit['after_json'],true)['surplus']['closing_cash']===10100.0,'Audit must record closing cash adjustment');
+shift_management_assign($pdo,'cafe',$admin,array_replace($assign,['id'=>'surplus','billIds'=>['repeat-cash']]));
+$surplus=shift_management_find($pdo,'cafe','surplus');
+check((float)$surplus['closing_cash']===10120.0 && (float)$surplus['expected_closing_cash']===10080.0,'Repeated assignment must preserve surplus without double counting');
+shift_management_assign($pdo,'cafe',$admin,array_replace($assign,['id'=>'open-target','billIds'=>['open-cash']]));
+$open=shift_management_find($pdo,'cafe','open-target');
+check($open['closing_cash']===null && (float)$open['expected_closing_cash']===10060.0,'Open shift must not acquire closing cash');
+echo "PASS: closed assignment preserves surplus, mixed payment methods, repeated assignment, audit and open shifts\n";

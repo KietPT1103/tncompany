@@ -263,13 +263,24 @@ function shift_management_assign(PDO $pdo, string $storeId, array $user, array $
         $read = $pdo->prepare('SELECT * FROM bills WHERE id=? AND store_id=?' . shift_lock_suffix($pdo));
         $update = $pdo->prepare("UPDATE bills SET shift_id=? WHERE id=? AND store_id=? AND (shift_id IS NULL OR shift_id='')");
         $moves = [];
+        $addedCash = 0.0;
         foreach ($billIds as $billId) {
             $read->execute([$billId,$storeId]);
             $bill = $read->fetch();
             if (!$bill || !in_array($bill['shift_id'],[null,''],true)) throw new ShiftManagementError('Hóa đơn ' . $billId . ' không còn là bill chưa có ca. Tải lại danh sách.',409);
             $update->execute([$id,$billId,$storeId]);
             if ($update->rowCount() !== 1) throw new ShiftManagementError('Hóa đơn đã thay đổi. Tải lại danh sách.',409);
+            if ($bill['status'] !== 'cancelled' && $bill['payment_method'] !== 'transfer') {
+                $addedCash += (float)$bill['total'];
+            }
             $moves[] = ['billId'=>$billId,'sourceShiftId'=>null,'targetShiftId'=>$id];
+        }
+        // Missing cash bills also add to the closed handover, preserving its surplus/shortage.
+        // Keep this in the assignment transaction so the audit and rollback cover both changes.
+        if ($before['status'] === 'closed' && $before['closing_cash'] !== null) {
+            $pdo->prepare('UPDATE cashier_shifts SET closing_cash=? WHERE id=? AND store_id=?')->execute([
+                (float)$before['closing_cash'] + $addedCash, $id, $storeId,
+            ]);
         }
         shift_management_recalculate($pdo,$before);
         $after = shift_management_find($pdo,$storeId,$id);
