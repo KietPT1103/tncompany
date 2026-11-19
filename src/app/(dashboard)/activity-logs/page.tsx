@@ -399,6 +399,8 @@ function DetailModal({
   );
 }
 
+import ApiMetricsPanel from "@/components/ApiMetricsPanel";
+
 export default function ActivityLogsPage() {
   const [items, setItems] = useState<ActivityLog[]>([]);
   const [machines, setMachines] = useState<ActivityMachine[]>([]);
@@ -758,6 +760,7 @@ export default function ActivityLogsPage() {
   return (
     <main className="min-h-screen bg-slate-50/70 p-4 md:p-6">
       <div className="mx-auto max-w-[1600px] space-y-3">
+        <ApiMetricsPanel />
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl">

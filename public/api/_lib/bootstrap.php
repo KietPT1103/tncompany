@@ -229,3 +229,8 @@ if (!defined('BOOTSTRAP_SKIP_DB') || BOOTSTRAP_SKIP_DB !== true) {
     require_once __DIR__ . '/db.php';
 }
 require_once __DIR__ . '/response.php';
+
+if (PHP_SAPI !== 'cli' && getenv('API_METRICS_ENABLED') === '1' && function_exists('db')) {
+    require_once __DIR__ . '/api_metrics.php';
+    register_shutdown_function('api_metrics_record');
+}

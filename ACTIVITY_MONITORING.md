@@ -367,3 +367,11 @@ tasklist /FI "IMAGENAME eq CashierMonitor.exe"
 schtasks /Query /TN TNCompanyCashierMonitor
 reg query "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v TNCompanyCashierMonitor
 ```
+# Theo dõi lưu lượng API
+
+Chạy `database/api_request_metrics.sql` trên MySQL của môi trường cần theo dõi, rồi đặt `API_METRICS_ENABLED=1` trong cấu hình môi trường PHP. Khi chưa bật, backend không ghi số liệu.
+
+Quản trị viên vào **Nhật ký máy → Lưu lượng API** để xem 15 phút, 1 giờ hoặc 6 giờ gần nhất. Đỉnh lưu lượng là số request cao nhất trong một phút theo đồng hồ máy chủ. Thời gian phản hồi đo ở PHP, trước khi ghi số liệu. Lượt xem báo cáo không được tính vào lưu lượng.
+
+Mỗi dòng lưu thời điểm, tên API, phương thức, mã HTTP và thời gian xử lý. Các dòng quá 7 ngày được dọn theo lô khi có lưu lượng. Lỗi ghi số liệu được gửi vào PHP error log.
+

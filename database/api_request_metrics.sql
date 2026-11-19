@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS api_request_metrics (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    route VARCHAR(191) NOT NULL,
+    method VARCHAR(6) NOT NULL,
+    status SMALLINT UNSIGNED NOT NULL,
+    duration_ms INT UNSIGNED NOT NULL,
+    KEY idx_api_metrics_time (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
