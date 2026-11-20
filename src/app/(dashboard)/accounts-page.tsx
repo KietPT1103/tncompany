@@ -97,7 +97,7 @@ const STATUS_FILTER_OPTIONS: readonly SelectBoxOption<AccountStatusFilter>[] = [
 ];
 
 function requiresAssignedStore(role: UserRole, permissions: AppPermission[]) {
-  return role === "bartender" || permissions.some((permission) => INVENTORY_ACCOUNT_PERMISSIONS.has(permission));
+  return role === "manager" || role === "bartender" || permissions.some((permission) => INVENTORY_ACCOUNT_PERMISSIONS.has(permission));
 }
 
 function formFromUser(item: ManagedUser, areaOptions: { value: string; label: string }[]): AccountFormState {
@@ -354,6 +354,10 @@ export default function AccountManagementPage() {
 
   async function savePermissions() {
     if (!permissionTargetId || !canManageAccess) return;
+    if (requiresAssignedStore(form.role, form.permissions) && form.storeIds.length === 0) {
+      setError("Vui lòng chọn ít nhất một khu vực được truy cập.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -468,7 +472,7 @@ export default function AccountManagementPage() {
         onCancel={() => { if (!saving) { setDeleteTarget(null); setDeleteError(""); } }}
       />
       <AccountEditorModal open={accountModalOpen} editingId={editingId} form={form} canManageAccess={canManageAccess} saving={saving} error={error} onClose={closeAccountEditor} onChange={patchForm} onRoleChange={handleRoleChange} onSave={() => void handleSubmit()} />
-      <PermissionEditorModal open={permissionModalOpen} target={permissionTarget} canManageAccess={canManageAccess} permissions={form.permissions} role={form.role} saving={saving} error={error} onClose={() => setPermissionModalOpen(false)} onRoleChange={handleRoleChange} onToggle={handlePermissionToggle} onReset={handleResetPermissions} onSelectAll={handleSelectAllPermissions} onClear={handleClearPermissions} onSave={() => void savePermissions()} />
+      <PermissionEditorModal open={permissionModalOpen} target={permissionTarget} canManageAccess={canManageAccess} permissions={form.permissions} role={form.role} storeIds={form.storeIds} onStoreIdsChange={(storeIds) => setForm(current => ({ ...current, storeIds }))} saving={saving} error={error} onClose={() => setPermissionModalOpen(false)} onRoleChange={handleRoleChange} onToggle={handlePermissionToggle} onReset={handleResetPermissions} onSelectAll={handleSelectAllPermissions} onClear={handleClearPermissions} onSave={() => void savePermissions()} />
     </div>
   );
 }

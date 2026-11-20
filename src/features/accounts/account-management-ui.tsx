@@ -371,6 +371,8 @@ type PermissionEditorProps = {
   canManageAccess: boolean;
   permissions: AppPermission[];
   role: UserRole;
+  storeIds: string[];
+  onStoreIdsChange: (storeIds: string[]) => void;
   saving: boolean;
   error: string;
   onClose: () => void;
@@ -388,6 +390,8 @@ export function PermissionEditorModal({
   canManageAccess,
   permissions,
   role,
+  storeIds,
+  onStoreIdsChange,
   saving,
   error,
   onClose,
@@ -398,6 +402,7 @@ export function PermissionEditorModal({
   onClear,
   onSave,
 }: PermissionEditorProps) {
+  const { INVENTORY_AREA_OPTIONS: areaOptions } = useAccountStoreOptions();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("");
 
@@ -463,6 +468,20 @@ export function PermissionEditorModal({
               <Button type="button" variant="outline" className="rounded-lg border-rose-200 bg-white px-3 text-sm text-rose-600 shadow-none hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700" onClick={onClear} disabled={!canManageAccess || role === "admin"}>Bỏ hết</Button>
             </div>
           </div>
+
+          {role !== "admin" ? (
+            <fieldset className="mt-4 rounded-sm border border-emerald-200 bg-white p-4" disabled={!canManageAccess}>
+              <legend className="px-1 text-sm font-semibold text-emerald-950">Khu vực được truy cập</legend>
+              <p className="text-xs text-slate-500">Chọn các quầy mà tài khoản được phép xử lý kho.</p>
+              <button type="button" disabled={!canManageAccess} className="mt-2 text-xs font-semibold text-emerald-700" onClick={() => onStoreIdsChange(areaOptions.map(option => option.value))}>Chọn tất cả</button>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">{areaOptions.map(option => (
+                <label key={option.value} className="flex items-center gap-2 border border-slate-200 p-3 text-sm">
+                  <input type="checkbox" checked={storeIds.includes(option.value)} onChange={() => onStoreIdsChange(storeIds.includes(option.value) ? storeIds.filter(id => id !== option.value) : [...storeIds, option.value])} className="h-4 w-4 accent-emerald-700" />
+                  {option.label}
+                </label>
+              ))}</div>
+            </fieldset>
+          ) : null}
 
           {!canManageAccess ? (
             <div className="mt-4 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -569,7 +588,7 @@ export function AccountEditorModal({
   const STORE_OPTIONS = form.storeId && !availableOptions.some(item => item.value === form.storeId)
     ? [...availableOptions, { value: form.storeId, label: `${form.storeId} (Không khả dụng)` }]
     : availableOptions;
-  const requiresAreas = form.role === "bartender" || form.permissions.some((permission) =>
+  const requiresAreas = form.role === "manager" || form.role === "bartender" || form.permissions.some((permission) =>
     permission === "stores.switch"
     || permission.startsWith("inventory_")
     || permission === "products.selling.view"

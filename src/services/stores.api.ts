@@ -5,6 +5,7 @@ export type StoreRecord = {
   name: string;
   address: string;
   isTakeAway: boolean;
+  showInRevenue?: boolean;
   takeawayPrintingEnabled: boolean;
   takeawayShiftEnabled: boolean;
   takeawayShiftCount: number;

@@ -35,7 +35,9 @@ function revenue_category(string $name): string
 function revenue_tn(PDO $pdo, string $from, string $to, string $store): array
 {
     [$start, $end] = revenue_dates($from, $to);
-    $stores = $pdo->query('SELECT id,name FROM stores ORDER BY name')->fetchAll();
+    require_once __DIR__ . '/stores.php';
+    stores_ensure_schema($pdo);
+    $stores = $pdo->query('SELECT id,name FROM stores WHERE show_in_revenue=1 AND deleted_at IS NULL ORDER BY name')->fetchAll();
     if ($store !== 'all' && !in_array($store, array_column($stores, 'id'), true)) {
         throw new InvalidArgumentException('Quầy không hợp lệ.');
     }
@@ -50,7 +52,11 @@ function revenue_tn(PDO $pdo, string $from, string $to, string $store): array
     }
     $params = [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')];
     $filter = 'b.created_at>=? AND b.created_at<?';
-    if ($store !== 'all') {
+    if ($store === 'all') {
+        $ids = array_column($stores, 'id');
+        $filter .= $ids ? ' AND b.store_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')' : ' AND 1=0';
+        array_push($params, ...$ids);
+    } else {
         $filter .= ' AND b.store_id=?';
         $params[] = $store;
     }
@@ -99,6 +105,7 @@ function revenue_tn(PDO $pdo, string $from, string $to, string $store): array
     }
     $voucherFilter = 'v.happened_at>=? AND v.happened_at<?';
     if ($store !== 'all') $voucherFilter .= ' AND v.store_id=?';
+    else $voucherFilter .= $ids ? ' AND v.store_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')' : ' AND 1=0';
     $statement = $pdo->prepare("SELECT DATE(v.happened_at) AS day,$shift AS shift_type,
         v.voucher_type,SUM(v.amount) AS amount FROM cash_vouchers v
         LEFT JOIN cashier_shifts s ON s.id=v.shift_id AND s.store_id=v.store_id

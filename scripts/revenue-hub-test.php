@@ -26,6 +26,9 @@ CREATE TABLE bill_items(bill_id TEXT,menu_id TEXT,quantity REAL,counts_as_cup IN
 INSERT INTO bill_items VALUES('a','coffee',2,NULL),('a','cake',3,1),('b','coffee',1,0),('c','coffee',99,1);
 CREATE TABLE cash_vouchers(store_id TEXT,shift_id TEXT,voucher_type TEXT,amount REAL,include_in_cash_flow INTEGER,cancelled_at TEXT,happened_at TEXT);
 INSERT INTO cash_vouchers VALUES('cafe','s1','expense',20,1,NULL,'2026-10-25 10:00:00'),('cafe','s1','expense',99,0,NULL,'2026-10-25 10:00:00'),('cafe','s1','expense',88,1,'cancelled','2026-10-25 10:00:00');");
+require_once __DIR__ . '/../public/api/_lib/stores.php';
+stores_ensure_schema($p);
+$p->exec("UPDATE stores SET show_in_revenue=1 WHERE id='cafe'");
 $r = revenue_tn($p,'2026-10-25','2026-10-25','cafe');
 check($r['totals']['revenue'] === 300.0, 'Revenue excludes cancelled');
 check($r['totals']['cash'] === 100.0 && $r['totals']['transfer'] === 200.0, 'Payments');
@@ -40,3 +43,14 @@ $dynamic=revenue_tn($p,'2026-10-25','2026-10-25','cafe');
 check(($dynamic['days'][0]['shifts']['shift_10']['revenue'] ?? 0)===2200.0,'Configured Ca 10 remains visible in transaction-date reporting');
 check($dynamic['days'][0]['shifts']['shift_10']['expense']===20.0,'Configured voucher uses the same dynamic slot');
 echo "TN revenue: PASS\n";
+
+$p->exec("INSERT INTO bills VALUES('hidden','bakery',NULL,9999,'completed','cash','2026-10-25 07:00:00')");
+$p->exec("INSERT INTO cash_vouchers VALUES('bakery',NULL,'expense',999,1,NULL,'2026-10-25 10:00:00')");
+$visible=revenue_tn($p,'2026-10-25','2026-10-25','all');
+check(array_column($visible['stores'],'id')===['cafe'],'Only selected stores appear');
+check($visible['totals']['revenue']===2400.0 && $visible['totals']['expense']===20.0,'Hidden bills and vouchers excluded from all stores');
+try { revenue_tn($p,'2026-10-25','2026-10-25','bakery'); throw new RuntimeException('Hidden store accepted'); } catch (InvalidArgumentException $e) {}
+$p->exec('UPDATE stores SET show_in_revenue=0');
+$empty=revenue_tn($p,'2026-10-25','2026-10-25','all');
+check($empty['stores']===[] && $empty['totals']['revenue']===0.0 && $empty['totals']['expense']===0.0,'No selected stores returns zero totals');
+echo "PASS revenue store visibility\n";

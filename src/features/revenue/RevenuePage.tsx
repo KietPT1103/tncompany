@@ -20,9 +20,9 @@ function RevenueDashboard({ token, onLocked }: { token: string; onLocked: () => 
   const today = quickRange('today');
   const source = getRevenueSource(params.get('source'));
   const from = params.get('from') || today[0], to = params.get('to') || today[1];
-  const store = params.get('store') || 'cafe';
+  const store = params.get('store') || 'all';
   const [data, setData] = useState<RevenueReport | null>(null);
-  const [stores, setStores] = useState([{ id: 'cafe', name: 'Cà phê' }, { id: 'restaurant', name: 'Bếp' }, { id: 'bakery', name: 'Bánh' }, { id: 'farm', name: 'Farm' }, { id: 'warehouse', name: 'Kho' }]);
+  const [stores, setStores] = useState<Array<{ id: string; name: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
