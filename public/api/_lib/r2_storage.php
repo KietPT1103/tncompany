@@ -151,6 +151,8 @@ final class R2Storage
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_LOW_SPEED_LIMIT => 1024,
+            CURLOPT_LOW_SPEED_TIME => 60,
             CURLOPT_TIMEOUT => is_resource($uploadHandle) ? 600 : 90,
         ]);
         if (is_resource($uploadHandle)) {

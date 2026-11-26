@@ -7,7 +7,8 @@ $bootstrap=$options['bootstrap']??__DIR__.'/../public/api/_lib/bootstrap.php';
 require_once $bootstrap;
 set_exception_handler(static function(Throwable $error):void {fwrite(STDERR,$error->getMessage().PHP_EOL);exit(1);});
 while(ob_get_level()>0)ob_end_flush();
-require_once dirname($bootstrap).'/r2_storage.php';
+// Use the release's transport fixes before the website itself is activated.
+require_once (is_file(__DIR__.'/r2_storage.php') ? __DIR__.'/r2_storage.php' : dirname($bootstrap).'/r2_storage.php');
 require_once ($options['manifest']??__DIR__.'/../public/api/_lib/takeaway_print_downloads.php');
 $read=static function(string $key,string $env):string {global $config;$v=getenv($env);return trim((string)($v!==false&&trim($v)!==''?$v:($config[$key]??'')));};
 $endpoint=$read('r2_endpoint','R2_ENDPOINT');$account=$read('r2_account_id','R2_ACCOUNT_ID');
@@ -26,14 +27,28 @@ foreach($formats as $format) {
 }
 foreach($formats as $format) {
     $item=$files[$format];$path=$directory.DIRECTORY_SEPARATOR.$item['file'];
+    for ($attempt=1; ; $attempt++) {
+    try {
     echo 'Uploading '.$item['file'].PHP_EOL;flush();
     $storage->putFile($item['key'],$path,$item['type']);
+    echo 'Uploaded '.$item['file'].'; uploading checksum'.PHP_EOL;flush();
     $storage->putFile($files[$format.'-sha256']['key'],$path.'.sha256','text/plain; charset=utf-8');
+    echo 'Verifying remote download '.$item['file'].PHP_EOL;flush();
     $hash=hash_init('sha256');$curl=curl_init($storage->presignedGetUrl($item['key'],900));
-    curl_setopt_array($curl,[CURLOPT_FOLLOWLOCATION=>true,CURLOPT_CONNECTTIMEOUT=>15,CURLOPT_TIMEOUT=>600,
+    curl_setopt_array($curl,[CURLOPT_FOLLOWLOCATION=>true,CURLOPT_CONNECTTIMEOUT=>15,CURLOPT_TIMEOUT=>600,CURLOPT_LOW_SPEED_LIMIT=>1024,CURLOPT_LOW_SPEED_TIME=>60,
         CURLOPT_WRITEFUNCTION=>static function($handle,string $chunk)use($hash):int{hash_update($hash,$chunk);return strlen($chunk);}]);
     $ok=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_RESPONSE_CODE);$error=curl_error($curl);curl_close($curl);
     if($ok!==true||$status!==200)throw new RuntimeException('Download verification failed: '.($error?:'HTTP '.$status));
     if(!hash_equals(hash_file('sha256',$path),hash_final($hash)))throw new RuntimeException('Remote checksum mismatch: '.$item['file']);
     echo 'Verified '.$item['file'].PHP_EOL;flush();
+    break;
+    } catch (RuntimeException $error) {
+        // Repeat PUT safely with a fresh file handle and freshly signed request.
+        // Authentication, validation and checksum failures require intervention.
+        $transient=preg_match('/R2 connection failed:|Download verification failed: (?!HTTP 4)|R2 request failed \\(HTTP (?:408|429|5\\d\\d)\\)/', $error->getMessage());
+        if (!$transient || $attempt>=3) throw $error;
+        fwrite(STDERR,'Attempt '.$attempt.'/3 failed for '.$item['file'].': '.$error->getMessage().'; retrying'.PHP_EOL);
+        sleep($attempt*5);
+    }
+    }
 }
