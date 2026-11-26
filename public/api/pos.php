@@ -364,7 +364,8 @@ function pos_shift_payload(array $row): array
         'storeId' => (string) $row['store_id'],
         'cashierUid' => (string) $row['cashier_uid'],
         'cashierName' => (string) $row['cashier_name'],
-        'shiftType' => (string) $row['shift_type'],
+        'shiftType' => $cycle && $cycle['shift_number'] <= 3
+            ? 'shift_' . $cycle['shift_number'] : (string) $row['shift_type'],
         'status' => (string) $row['status'],
         'openingCash' => (float) $row['opening_cash'],
         'openNote' => $row['open_note'] ?: '',
@@ -1189,15 +1190,22 @@ if ($method === 'GET' && $resource === 'shifts') {
 
     if (!empty($_GET['startDate']) && !empty($_GET['endDate']) && in_array($_GET['shiftType'] ?? '', ['shift_1','shift_2','shift_3','single'], true)) {
         $statement = db()->prepare(
-            'SELECT * FROM cashier_shifts
-             WHERE store_id=:store_id AND shift_type=:shift_type
-               AND opened_at>=:start_date AND opened_at<=:end_date
-             ORDER BY opened_at ASC'
+            "SELECT s.* FROM cashier_shifts s
+             LEFT JOIN takeaway_shift_sessions t ON t.shift_id=s.id AND t.store_id=s.store_id
+             LEFT JOIN takeaway_business_cycles c ON c.id=t.cycle_id AND c.store_id=s.store_id
+             WHERE s.store_id=:store_id
+               AND CASE WHEN t.shift_number=1 THEN 'shift_1'
+                        WHEN t.shift_number=2 THEN 'shift_2'
+                        WHEN t.shift_number=3 THEN 'shift_3'
+                        ELSE s.shift_type END=:shift_type
+               AND COALESCE(c.business_date,s.opened_at)>=:start_date
+               AND COALESCE(c.business_date,s.opened_at)<=:end_date
+             ORDER BY s.opened_at ASC"
         );
         $statement->execute([
             'store_id' => $posStoreId,
             'shift_type' => $_GET['shiftType'],
-            'start_date' => pos_mysql_datetime($_GET['startDate']),
+            'start_date' => substr(pos_mysql_datetime($_GET['startDate']), 0, 10),
             'end_date' => pos_mysql_datetime($_GET['endDate']),
         ]);
         pos_polling_response(array_map('pos_shift_payload', $statement->fetchAll()));

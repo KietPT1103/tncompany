@@ -81,16 +81,12 @@ export async function loadOverviewShiftRevenue(options: {
         getBills({
           storeId: options.storeId,
           shiftId: shift.id,
-          startDate: options.startDate,
-          endDate: options.endDate,
           includeCancelled: true,
           limitCount: 2000,
         }),
         getCashVouchers({
           storeId: options.storeId,
           shiftId: shift.id,
-          startDate: options.startDate,
-          endDate: options.endDate,
           limitCount: 2000,
         }),
       ]);
@@ -131,8 +127,6 @@ export async function loadOverviewWeeklyQuantity(options: {
       bills: await getBills({
         storeId: options.storeId,
         shiftId: shift.id,
-        startDate: options.startDate,
-        endDate: options.endDate,
         includeCancelled: true,
         limitCount: 2000,
       }),
@@ -158,7 +152,7 @@ export async function loadOverviewWeeklyQuantity(options: {
 
   shifts.forEach((shift) => {
     if (shift.shiftType === "single" || !shift.openedAt?.seconds) return;
-    const row = rows.get(toLocalDateKey(new Date(shift.openedAt.seconds * 1000)));
+    const row = rows.get(shift.businessDate || toLocalDateKey(new Date(shift.openedAt.seconds * 1000)));
     if (!row) return;
     const shiftBills = billsByShift.get(shift.id) || [];
     row.shifts[shift.shiftType].revenue += summarizeBillsForShift(shiftBills, 0).totalSales;

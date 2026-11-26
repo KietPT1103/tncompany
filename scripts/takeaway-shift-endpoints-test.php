@@ -8,6 +8,7 @@ function db(): PDO { global $p; return $p; }
 function respond_ok(array $data,int $status=200): never { throw new EndpointResult($status,$data); }
 function respond_error(string $message,int $status=400): never { throw new EndpointResult($status,['error'=>$message]); }
 function realtime_publish(...$args): void {}
+function pos_polling_response(array $items): never { respond_ok(['items'=>$items]); }
 function pos_assert_record_store(string $table,string $id,array $user,string $store): void { takeaway_shift_row(db(),$store,$id); }
 function pos_mysql_datetime(string $value): string { return date('Y-m-d H:i:s',strtotime($value)); }
 function pos_timestamp(?string $value): ?array { return $value ? ['seconds'=>strtotime($value)] : null; }
@@ -44,5 +45,13 @@ $_GET=['checkReopen'=>'1'];
 $getHandler=extract_handler("if (\$method === 'GET' && \$resource === 'shifts') {","if (\$method === 'POST' && \$resource === 'shifts') {");
 $warning=call_handler($getHandler,'GET',[],['id'=>'replacement','role'=>'user'],200);
 check($warning['item']['id']===$id,'Replacement account can confirm reopening an assigned slot closed by another account');
+$_GET=[];
+$_GET=['startDate'=>'2026-11-12 00:00:00','endDate'=>'2026-11-12 23:59:59','shiftType'=>'shift_2'];
+$report=call_handler($getHandler,'GET',[],['id'=>'u2','role'=>'user'],200);
+check(count($report['items'])===1 && $report['items'][0]['id']===$id2,'Report finds overnight takeaway slot by business date');
+check($report['items'][0]['shiftType']==='shift_2','Report payload uses assigned slot instead of stored single type');
+$_GET['shiftType']='single';
+$report=call_handler($getHandler,'GET',[],['id'=>'u2','role'=>'user'],200);
+check(!in_array($id2,array_column($report['items'],'id'),true),'Numbered slot is not duplicated in single report');
 $_GET=[];
 echo "PASS takeaway POS endpoints: authenticated slot, cycle payload, close ownership and retry\n";
