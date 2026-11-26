@@ -35,7 +35,7 @@ export async function getManagedShifts(storeId: string, date: string) {
 export async function getShiftReview(storeId: string, id: string) {
   return posRequest<ShiftReview>('shift-review', {}, { storeId, id });
 }
-export async function correctShift(storeId: string, input: { id: string; openedAt: string; closedAt: string | null; reason: string; reviewed: boolean; reviewToken: string; transfers: { billId: string; targetShiftId: string }[] }) {
+export async function correctShift(storeId: string, input: { id: string; openingCash?: number; openedAt: string; closedAt: string | null; reason: string; reviewed: boolean; reviewToken: string; transfers: { billId: string; targetShiftId: string }[] }) {
   return posRequest<{ updated: boolean; movedBills: number }>('shift-review', { method: 'PATCH', body: JSON.stringify({ storeId, ...input }) });
 }
 

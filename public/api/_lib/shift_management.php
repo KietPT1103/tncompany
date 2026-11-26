@@ -154,6 +154,11 @@ function shift_management_correct(PDO $pdo, string $storeId, array $user, array 
     if ($openedAt > date('Y-m-d H:i:s') || ($closedAt !== null && $closedAt > date('Y-m-d H:i:s'))) {
         throw new ShiftManagementError('Không được đặt thời gian ca trong tương lai.');
     }
+    $openingCash = $input['openingCash'] ?? null;
+    if (array_key_exists('openingCash', $input) &&
+        ((!is_int($openingCash) && !is_float($openingCash)) || !is_finite((float)$openingCash) || $openingCash < 0 || $openingCash > 999999999999.99)) {
+        throw new ShiftManagementError('Tiền mở ca phải là số không âm hợp lệ.');
+    }
     $transfers = $input['transfers'] ?? [];
     if (!is_array($transfers) || count($transfers) > 5000) throw new ShiftManagementError('Danh sách chuyển hóa đơn không hợp lệ.');
     $targets = [];
@@ -201,7 +206,9 @@ function shift_management_correct(PDO $pdo, string $storeId, array $user, array 
         }
         shift_validate_cash_transfer_times($pdo, $storeId, $id, $openedAt);
         $before = $shifts;
-        $pdo->prepare('UPDATE cashier_shifts SET opened_at=?,closed_at=? WHERE id=? AND store_id=?')->execute([$openedAt,$closedAt,$id,$storeId]);
+        $openingCash = $openingCash ?? (float)$source['opening_cash'];
+        $pdo->prepare('UPDATE cashier_shifts SET opened_at=?,closed_at=?,opening_cash=? WHERE id=? AND store_id=?')->execute([$openedAt,$closedAt,$openingCash,$id,$storeId]);
+        $shifts[$id]['opening_cash'] = $openingCash;
         foreach ($targets as $billId => $targetId) {
             $pdo->prepare('UPDATE bills SET shift_id=? WHERE id=? AND shift_id=? AND store_id=?')->execute([$targetId,$billId,$id,$storeId]);
         }

@@ -59,6 +59,19 @@ rejects(fn()=>shift_validate_close_preview($source,['totalSales'=>500],$source['
 rejects(fn()=>shift_validate_close_preview($source,[],'2026-10-21 17:43:26'),409);
 echo "PASS: correction, authorization, review conflicts, rollback, audit, summaries, stale-day acknowledgement\n";
 
+// Opening cash corrections preserve counted cash and record before/after amounts.
+$cashInput=['id'=>'wrong','openedAt'=>$source['opened_at'],'closedAt'=>$source['closed_at'],'openingCash'=>250,'reason'=>'Fix opening cash typo','reviewed'=>true,'reviewToken'=>shift_management_review($pdo,'cafe','wrong')['reviewToken'],'transfers'=>[]];
+rejects(fn()=>shift_management_correct($pdo,'cafe',['role'=>'manager'],$cashInput),403);
+foreach ([-1,null,'250',true,INF] as $invalid) rejects(fn()=>shift_management_correct($pdo,'cafe',$admin,array_replace($cashInput,['openingCash'=>$invalid])),422);
+shift_management_correct($pdo,'cafe',$admin,$cashInput);
+$cashShift=shift_management_find($pdo,'cafe','wrong');
+check((float)$cashShift['opening_cash']===250.0 && (float)$cashShift['expected_closing_cash']===270.0,'Opening cash summary incorrect');
+check((float)$cashShift['closing_cash']===500.0,'Opening correction changed counted cash');
+$cashAudit=$pdo->query('SELECT * FROM cashier_shift_corrections ORDER BY id DESC LIMIT 1')->fetch();
+check((float)json_decode($cashAudit['before_json'],true)['wrong']['opening_cash']===100.0 && (float)json_decode($cashAudit['after_json'],true)['wrong']['opening_cash']===250.0,'Opening cash audit missing');
+rejects(fn()=>shift_management_correct($pdo,'cafe',$admin,$cashInput),409);
+echo "PASS: opening cash permissions, validation, recalculation, audit and stale review\n";
+
 // Transfer-linked shifts cannot be corrected into another business day or reverse order.
 require_once __DIR__.'/../public/api/_lib/cash_transfers.php';
 cash_transfers_ensure_schema($pdo);

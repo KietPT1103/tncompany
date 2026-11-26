@@ -26,6 +26,7 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
   const [review, setReview] = useState<ShiftReview | null>(null);
   const [openedAt, setOpenedAt] = useState("");
   const [closedAt, setClosedAt] = useState("");
+  const [openingCash, setOpeningCash] = useState("");
   const [reason, setReason] = useState("");
   const [reviewed, setReviewed] = useState(false);
   const [transfers, setTransfers] = useState<Record<string, string>>({});
@@ -65,6 +66,7 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
       if (!active) return;
       setUnassignedDate(date); setReview(data); setOpenedAt(timestampInput(data.shift.openedAt?.seconds));
       setClosedAt(timestampInput(data.shift.closedAt?.seconds));
+      setOpeningCash(String(data.shift.openingCash));
       setTargetDate(data.bills[0]?.created_at.slice(0, 10) || date);
     }).catch(error => { if (active) setError(errorText(error)); })
       .finally(() => { if (active) setLoadingReview(false); });
@@ -110,13 +112,16 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
   const movedCount = Object.values(transfers).filter(Boolean).length;
   const save = async () => {
     if (!review) return;
+    if (!openingCash.trim() || !Number.isFinite(Number(openingCash)) || Number(openingCash) < 0) {
+      setError("Tiền mở ca phải là số không âm."); return;
+    }
     if (!openedAt || (review.shift.status === "closed" && !closedAt) || !reason.trim() || !reviewed) {
       setError("Nhập giờ ca, lý do và xác nhận đã kiểm tra trước khi lưu."); return;
     }
-    if (!window.confirm(`Lưu điều chỉnh giờ ca và chuyển ${movedCount} hóa đơn? Tổng tiền các ca liên quan sẽ được tính lại; tiền bàn giao thực tế giữ nguyên.`)) return;
+    if (!window.confirm(`Lưu điều chỉnh tiền mở ca, giờ ca và chuyển ${movedCount} hóa đơn? Tổng tiền các ca liên quan sẽ được tính lại; tiền bàn giao thực tế giữ nguyên.`)) return;
     setSaving(true); setError(""); setNotice("");
     try {
-      const result = await correctShift(storeId, { id: review.shift.id, openedAt: mysqlTime(openedAt), closedAt: closedAt ? mysqlTime(closedAt) : null, reason: reason.trim(), reviewed, reviewToken: review.reviewToken,
+      const result = await correctShift(storeId, { id: review.shift.id, openingCash: Number(openingCash), openedAt: mysqlTime(openedAt), closedAt: closedAt ? mysqlTime(closedAt) : null, reason: reason.trim(), reviewed, reviewToken: review.reviewToken,
         transfers: Object.entries(transfers).filter(([, target]) => target).map(([billId, targetShiftId]) => ({ billId, targetShiftId })) });
       setNotice(`Đã lưu điều chỉnh và chuyển ${result.movedBills} hóa đơn. Tiền bàn giao thực tế được giữ nguyên.`);
       setRevision(value => value + 1); onChanged();
@@ -172,6 +177,12 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
                 <label className="flex items-start gap-2 text-sm"><input type="checkbox" aria-label="Xác nhận gán bill" checked={assignmentReviewed} onChange={event => setAssignmentReviewed(event.target.checked)} /><span>Tôi đã kiểm tra bill và ca nhận, kể cả các bill ngoài giờ ca.</span></label>
                 <Button disabled={loadingUnassigned || !assignmentIds.length || !assignmentReason.trim() || !assignmentReviewed} isLoading={saving} onClick={() => void assign()}>Gán {assignmentIds.length} bill vào ca này</Button>
               </section>
+              <section className="space-y-2 rounded-lg border border-slate-200 p-3" aria-label="Điều chỉnh tiền mở ca">
+                <h4 className="font-semibold">Điều chỉnh tiền mở ca</h4>
+                <p className="text-sm text-slate-500">Hiện tại: {money(review.shift.openingCash)}. Chỉ admin được sửa khi nhập sai đầu ca.</p>
+                <label className="block text-sm">Tiền mở ca đúng (đ)<input aria-label="Tiền mở ca đúng" type="number" min="0" step="1" value={openingCash} className={fieldClass} onChange={event => { setOpeningCash(event.target.value); setReviewed(false); }} /></label>
+                <p className="text-xs text-slate-500">Nhập lý do và xác nhận kiểm tra bên dưới để lưu. Tiền phải bàn giao được tính lại; tiền chốt thực tế của ca đã đóng giữ nguyên.</p>
+              </section>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm">Giờ mở ca<input type="datetime-local" step="1" value={openedAt} className={fieldClass} onChange={event => { setOpenedAt(event.target.value); setReviewed(false); }} /></label>
                 <label className="text-sm">Giờ đóng ca<input type="datetime-local" step="1" value={closedAt} disabled={review.shift.status === "open"} className={fieldClass} onChange={event => { setClosedAt(event.target.value); setReviewed(false); }} />{review.shift.status === "open" && <span className="text-xs text-slate-500">Đóng ca qua quy trình bàn giao tại POS.</span>}</label>
@@ -209,7 +220,8 @@ export default function ShiftManagement({ storeId, onChanged }: { storeId: strin
                   const before = JSON.parse(entry.before_json)[review.shift.id];
                   const after = JSON.parse(entry.after_json)[review.shift.id];
                   const moves = JSON.parse(entry.transfers_json) as { billId: string; targetShiftId: string }[];
-                  return <div key={entry.id} className="border-t pt-2"><p className="font-semibold">{entry.actor_name} · {displayTime(entry.created_at)}</p><p>{entry.reason}</p><p className="text-xs">Mở: {displayTime(before.opened_at)} → {displayTime(after.opened_at)}</p><p className="text-xs">Đóng: {displayTime(before.closed_at || "")} → {displayTime(after.closed_at || "")}</p>{moves.map(move => <p className="break-all text-xs" key={move.billId}>{move.billId} → ca {move.targetShiftId}</p>)}</div>;
+                  const openingChange = <p className="text-xs">Tiền mở ca: {money(before.opening_cash)} → {money(after.opening_cash)}</p>;
+return <div key={entry.id} className="border-t pt-2"><p className="font-semibold">{entry.actor_name} · {displayTime(entry.created_at)}</p><p>{entry.reason}</p>{openingChange}<p className="text-xs">Mở: {displayTime(before.opened_at)} → {displayTime(after.opened_at)}</p><p className="text-xs">Đóng: {displayTime(before.closed_at || "")} → {displayTime(after.closed_at || "")}</p>{moves.map(move => <p className="break-all text-xs" key={move.billId}>{move.billId} → ca {move.targetShiftId}</p>)}</div>;
                 })}{review.history.length === 0 && <p className="text-slate-500">Chưa có điều chỉnh.</p>}</div>
               </details>
             </fieldset>}
