@@ -11,7 +11,7 @@ function stores_ensure_schema(PDO $pdo): void
     $columns = $sqlite
         ? array_column($pdo->query('PRAGMA table_info(stores)')->fetchAll(PDO::FETCH_ASSOC), 'name')
         : $pdo->query('SHOW COLUMNS FROM stores')->fetchAll(PDO::FETCH_COLUMN);
-    foreach (['address'=>"VARCHAR(500) NOT NULL DEFAULT ''", 'show_in_revenue'=>'TINYINT NOT NULL DEFAULT 0', 'is_take_away'=>'TINYINT NOT NULL DEFAULT 0', 'takeaway_printing_enabled'=>'TINYINT NOT NULL DEFAULT 0', 'is_active'=>'TINYINT NOT NULL DEFAULT 1', 'deleted_at'=>'DATETIME NULL'] as $name=>$definition) {
+    foreach (['address'=>"VARCHAR(500) NOT NULL DEFAULT ''", 'show_in_switcher'=>'TINYINT NOT NULL DEFAULT 1', 'show_in_revenue'=>'TINYINT NOT NULL DEFAULT 0', 'is_take_away'=>'TINYINT NOT NULL DEFAULT 0', 'takeaway_printing_enabled'=>'TINYINT NOT NULL DEFAULT 0', 'is_active'=>'TINYINT NOT NULL DEFAULT 1', 'deleted_at'=>'DATETIME NULL'] as $name=>$definition) {
         if (in_array($name, $columns, true)) continue;
         try {
             $pdo->exec("ALTER TABLE stores ADD COLUMN $name $definition");
@@ -30,7 +30,7 @@ function stores_ensure_schema(PDO $pdo): void
 
 function stores_map(array $row): array
 {
-    return ['showInRevenue'=>(bool)($row['show_in_revenue']??false), 'id'=>(string)$row['id'], 'name'=>(string)$row['name'], 'address'=>(string)$row['address'],
+    return ['showInSwitcher'=>(bool)($row['show_in_switcher']??true), 'showInRevenue'=>(bool)($row['show_in_revenue']??false), 'id'=>(string)$row['id'], 'name'=>(string)$row['name'], 'address'=>(string)$row['address'],
         'takeawayShiftEnabled'=>(bool)($row['takeaway_shift_enabled']??false), 'takeawayShiftCount'=>(int)($row['takeaway_shift_count']??1), 'takeawayFinalShift'=>(int)($row['takeaway_final_shift']??1),
         'takeawayPrintingEnabled'=>(bool)$row['takeaway_printing_enabled'], 'isTakeAway'=>(bool)$row['is_take_away'], 'isActive'=>(bool)$row['is_active'], 'deletedAt'=>$row['deleted_at']];
 }
@@ -92,7 +92,7 @@ function stores_save(PDO $pdo, array $user, ?string $id, array $input): array
     }
     $old = $id !== null ? stores_find($pdo,$id) : null;
     if ($id !== null && (!$old || $old['deletedAt'] !== null)) throw new DomainException('Quầy không tồn tại.',404);
-    $values = array_merge($old ?? ['showInRevenue'=>false,'name'=>'', 'address'=>'', 'isTakeAway'=>false, 'isActive'=>true, 'takeawayPrintingEnabled'=>false,'takeawayShiftEnabled'=>false,'takeawayShiftCount'=>1,'takeawayFinalShift'=>1],$input);
+    $values = array_merge($old ?? ['showInSwitcher'=>true,'showInRevenue'=>false,'name'=>'', 'address'=>'', 'isTakeAway'=>false, 'isActive'=>true, 'takeawayPrintingEnabled'=>false,'takeawayShiftEnabled'=>false,'takeawayShiftCount'=>1,'takeawayFinalShift'=>1],$input);
     foreach (['name'=>255,'address'=>500] as $field=>$limit) {
         if (!is_string($values[$field])) throw new DomainException('Tên hoặc địa chỉ quầy không hợp lệ.',422);
         $values[$field] = trim($values[$field]);
@@ -100,7 +100,7 @@ function stores_save(PDO $pdo, array $user, ?string $id, array $input): array
         if ($length === false || $length > $limit) throw new DomainException('Tên tối đa 255 ký tự, địa chỉ tối đa 500 ký tự.',422);
     }
     if ($values['name'] === '') throw new DomainException('Vui lòng nhập tên quầy.',422);
-    foreach (['showInRevenue','isTakeAway','isActive','takeawayPrintingEnabled','takeawayShiftEnabled'] as $field) {
+    foreach (['showInSwitcher','showInRevenue','isTakeAway','isActive','takeawayPrintingEnabled','takeawayShiftEnabled'] as $field) {
         if (!is_bool($values[$field])) throw new DomainException('Trạng thái quầy không hợp lệ.',422);
     }
     foreach (['takeawayShiftCount','takeawayFinalShift'] as $field) {
@@ -128,14 +128,14 @@ function stores_save(PDO $pdo, array $user, ?string $id, array $input): array
         $values['takeawayShiftEnabled']=false;
     }
     if (!$values['isTakeAway']) $values['takeawayPrintingEnabled'] = false;
-    $params = [(int)$values['showInRevenue'],$values['name'],$values['address'],(int)$values['isTakeAway'],(int)$values['isActive'],(int)$values['takeawayPrintingEnabled'],(int)$values['takeawayShiftEnabled'],$values['takeawayShiftCount'],$values['takeawayFinalShift']];
+    $params = [(int)$values['showInSwitcher'],(int)$values['showInRevenue'],$values['name'],$values['address'],(int)$values['isTakeAway'],(int)$values['isActive'],(int)$values['takeawayPrintingEnabled'],(int)$values['takeawayShiftEnabled'],$values['takeawayShiftCount'],$values['takeawayFinalShift']];
     if ($id === null) {
         $id = 'store_' . bin2hex(random_bytes(12));
         $params[] = $id;
-        $pdo->prepare('INSERT INTO stores(show_in_revenue,name,address,is_take_away,is_active,takeaway_printing_enabled,takeaway_shift_enabled,takeaway_shift_count,takeaway_final_shift,id) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute($params);
+        $pdo->prepare('INSERT INTO stores(show_in_switcher,show_in_revenue,name,address,is_take_away,is_active,takeaway_printing_enabled,takeaway_shift_enabled,takeaway_shift_count,takeaway_final_shift,id) VALUES(?,?,?,?,?,?,?,?,?,?,?)')->execute($params);
     } else {
         $params[] = $id;
-        $query = $pdo->prepare('UPDATE stores SET show_in_revenue=?,name=?,address=?,is_take_away=?,is_active=?,takeaway_printing_enabled=?,takeaway_shift_enabled=?,takeaway_shift_count=?,takeaway_final_shift=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND deleted_at IS NULL');
+        $query = $pdo->prepare('UPDATE stores SET show_in_switcher=?,show_in_revenue=?,name=?,address=?,is_take_away=?,is_active=?,takeaway_printing_enabled=?,takeaway_shift_enabled=?,takeaway_shift_count=?,takeaway_final_shift=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND deleted_at IS NULL');
         $query->execute($params);
     }
     $saved = stores_find($pdo,$id);

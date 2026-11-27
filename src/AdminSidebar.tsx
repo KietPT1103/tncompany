@@ -338,7 +338,7 @@ export default function AdminSidebar({
   const { logout, user, loading } = useAuth();
   const userRole = user?.role || null;
   const { storeId, storeName, stores, storesLoading, setStoreId } = useStore();
-  const storeOptions = stores.map(item => ({
+  const storeOptions = stores.filter(item => item.showInSwitcher !== false).map(item => ({
     id: item.id, label: item.name,
     icon: defaultStoreOptions.find(option => option.id === item.id)?.icon || Store,
     note: item.deletedAt ? "Đã xoá · Chỉ xem lịch sử" : !item.isActive ? "Ngừng hoạt động · Chỉ xem lịch sử" : item.isTakeAway ? "Take away" : item.address || defaultStoreOptions.find(option => option.id === item.id)?.note || "Quầy bán hàng",
